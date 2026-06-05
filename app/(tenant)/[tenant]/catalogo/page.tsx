@@ -269,7 +269,7 @@ export default function CatalogoPage() {
                     <XAxis type="number" hide />
                     <YAxis type="category" dataKey="corto" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} width={80} />
                     <Tooltip
-                      formatter={(v: number) => [formatMXN(v), "Ingresos"]}
+                      formatter={(v: any) => [formatMXN(Number(v)), "Ingresos"]}
                       labelFormatter={(label) => topVentasData.find(d => d.corto === label)?.nombre || label}
                     />
                     <Bar dataKey="total" radius={[0, 4, 4, 0]} label={{ position: "right", fontSize: 10, fill: "#64748B", formatter: (v: number) => formatMXN(v) }}>
