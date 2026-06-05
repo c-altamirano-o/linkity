@@ -272,7 +272,7 @@ export default function CatalogoPage() {
                       formatter={(v: any) => [formatMXN(Number(v)), "Ingresos"]}
                       labelFormatter={(label) => topVentasData.find(d => d.corto === label)?.nombre || label}
                     />
-                    <Bar dataKey="total" radius={[0, 4, 4, 0]} label={{ position: "right", fontSize: 10, fill: "#64748B", formatter: (v: number) => formatMXN(v) }}>
+                    <Bar dataKey="total" radius={[0, 4, 4, 0]} label={{ position: "right", fontSize: 10, fill: "#64748B", formatter: (v: any) => formatMXN(Number(v)) }}>
                       {topVentasData.map((entry, i) => (
                         <Cell key={i} fill={entry.color} />
                       ))}
