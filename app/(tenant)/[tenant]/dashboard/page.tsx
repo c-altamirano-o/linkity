@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ShoppingCart, Wrench, AlertTriangle, Clock, ArrowUpRight, ArrowDownRight, CheckCircle, RotateCcw, Receipt, Building2, X, Phone } from "lucide-react";
+import { ShoppingCart, Wrench, AlertTriangle, Clock, ArrowUpRight, ArrowDownRight, CheckCircle, RotateCcw, Receipt, Building2, X, Phone, Settings } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
+// ── Datos ────────────────────────────────────────────────────
 const ventasSemana = [
   { dia: "Lun", ventas: 4200, reparaciones: 1800, total: 6000 },
   { dia: "Mar", ventas: 3800, reparaciones: 2200, total: 6000 },
@@ -14,56 +15,65 @@ const ventasSemana = [
   { dia: "Hoy", ventas: 3240, reparaciones: 1200, total: 4440 },
 ];
 
-const ventasPorCategoria = [
+// Todas las categorías del catálogo del cliente (vendrán de BD en producción)
+const todasLasCategorias = [
   { name: "Celulares",    value: 58, color: "#4F46E5" },
   { name: "Accesorios",   value: 22, color: "#06B6D4" },
   { name: "Reparaciones", value: 15, color: "#10B981" },
   { name: "Refacciones",  value: 5,  color: "#F59E0B" },
+  { name: "Tablets",      value: 0,  color: "#8B5CF6" },
+  { name: "Diagnósticos", value: 0,  color: "#EC4899" },
+];
+
+const coloresDisponibles = [
+  "#4F46E5", "#06B6D4", "#10B981", "#F59E0B",
+  "#EF4444", "#8B5CF6", "#EC4899", "#F97316",
+  "#14B8A6", "#84CC16", "#2563EB", "#DC2626",
 ];
 
 const reparacionesData = [
-  { folio: "REP-0042", cliente: "Carlos Mendoza",  telefono: "614 123 4567", equipo: "iPhone 13 Pro", estado: "en_reparacion", tecnico: "Juan Pérez",  prioridad: "alta" },
-  { folio: "REP-0041", cliente: "María González",  telefono: "614 234 5678", equipo: "Samsung S22",   estado: "listo_taller",  tecnico: "Juan Pérez",  prioridad: "normal" },
-  { folio: "REP-0040", cliente: "Roberto Díaz",    telefono: "614 345 6789", equipo: "iPhone 12",     estado: "listo_tienda",  tecnico: "Juan Pérez",  prioridad: "normal" },
-  { folio: "REP-0039", cliente: "Ana López",       telefono: "614 456 7890", equipo: "Xiaomi 11T",    estado: "recibido",      tecnico: "Sin asignar", prioridad: "baja" },
-  { folio: "REP-0038", cliente: "Jorge Pérez",     telefono: "614 567 8901", equipo: "iPhone 14",     estado: "en_reparacion", tecnico: "Juan Pérez",  prioridad: "alta" },
-  { folio: "REP-0037", cliente: "Laura Soto",      telefono: "614 678 9012", equipo: "Motorola G84",  estado: "en_reparacion", tecnico: "Juan Pérez",  prioridad: "normal" },
-  { folio: "REP-0036", cliente: "Pedro Ruiz",      telefono: "614 789 0123", equipo: "Samsung A54",   estado: "recibido",      tecnico: "Sin asignar", prioridad: "baja" },
-  { folio: "REP-0035", cliente: "Diana Torres",    telefono: "614 890 1234", equipo: "iPhone 12 Mini",estado: "en_reparacion", tecnico: "Juan Pérez",  prioridad: "normal" },
+  { folio: "REP-0042", cliente: "Carlos Mendoza",  telefono: "614 123 4567", equipo: "iPhone 13 Pro",  estado: "en_reparacion", tecnico: "Juan Pérez",  prioridad: "alta" },
+  { folio: "REP-0041", cliente: "María González",  telefono: "614 234 5678", equipo: "Samsung S22",    estado: "listo_taller",  tecnico: "Juan Pérez",  prioridad: "normal" },
+  { folio: "REP-0040", cliente: "Roberto Díaz",    telefono: "614 345 6789", equipo: "iPhone 12",      estado: "listo_tienda",  tecnico: "Juan Pérez",  prioridad: "normal" },
+  { folio: "REP-0039", cliente: "Ana López",       telefono: "614 456 7890", equipo: "Xiaomi 11T",     estado: "recibido",      tecnico: "Sin asignar", prioridad: "baja" },
+  { folio: "REP-0038", cliente: "Jorge Pérez",     telefono: "614 567 8901", equipo: "iPhone 14",      estado: "en_reparacion", tecnico: "Juan Pérez",  prioridad: "alta" },
+  { folio: "REP-0037", cliente: "Laura Soto",      telefono: "614 678 9012", equipo: "Motorola G84",   estado: "en_reparacion", tecnico: "Juan Pérez",  prioridad: "normal" },
+  { folio: "REP-0036", cliente: "Pedro Ruiz",      telefono: "614 789 0123", equipo: "Samsung A54",    estado: "recibido",      tecnico: "Sin asignar", prioridad: "baja" },
+  { folio: "REP-0035", cliente: "Diana Torres",    telefono: "614 890 1234", equipo: "iPhone 12 Mini", estado: "en_reparacion", tecnico: "Juan Pérez",  prioridad: "normal" },
 ];
 
 const ventasHoy = [
-  { folio: "VTA-0089", hora: "2:45 pm", articulos: "Cargador USB-C 20W",       count: 1, metodo: "Efectivo",     total: 280 },
-  { folio: "VTA-0088", hora: "12:10 pm", articulos: "iPhone 14 + Funda + Cable", count: 3, metodo: "Mixto",       total: 13080 },
-  { folio: "VTA-0087", hora: "11:30 am", articulos: "AirPods Pro",              count: 1, metodo: "Tarjeta",      total: 4200 },
-  { folio: "VTA-0086", hora: "10:15 am", articulos: "Funda iPhone + Cargador",  count: 2, metodo: "Efectivo",     total: 430 },
-  { folio: "VTA-0085", hora: "9:40 am",  articulos: "Samsung S23",              count: 1, metodo: "Tarjeta",      total: 10800 },
-  { folio: "VTA-0084", hora: "9:15 am",  articulos: "Batería iPhone 12",        count: 1, metodo: "Efectivo",     total: 450 },
-  { folio: "VTA-0083", hora: "8:50 am",  articulos: "Cable Lightning 2m x2",    count: 2, metodo: "Transferencia",total: 360 },
+  { folio: "VTA-0089", hora: "2:45 pm",  articulos: "Cargador USB-C 20W",        count: 1, metodo: "Efectivo",      total: 280 },
+  { folio: "VTA-0088", hora: "12:10 pm", articulos: "iPhone 14 + Funda + Cable", count: 3, metodo: "Mixto",         total: 13080 },
+  { folio: "VTA-0087", hora: "11:30 am", articulos: "AirPods Pro",               count: 1, metodo: "Tarjeta",       total: 4200 },
+  { folio: "VTA-0086", hora: "10:15 am", articulos: "Funda iPhone + Cargador",   count: 2, metodo: "Efectivo",      total: 430 },
+  { folio: "VTA-0085", hora: "9:40 am",  articulos: "Samsung S23",               count: 1, metodo: "Tarjeta",       total: 10800 },
+  { folio: "VTA-0084", hora: "9:15 am",  articulos: "Batería iPhone 12",         count: 1, metodo: "Efectivo",      total: 450 },
+  { folio: "VTA-0083", hora: "8:50 am",  articulos: "Cable Lightning 2m x2",     count: 2, metodo: "Transferencia", total: 360 },
 ];
 
 const equiposListos = [
-  { folio: "REP-0040", cliente: "Roberto Díaz",  telefono: "614 345 6789", equipo: "iPhone 12",    falla: "Batería",       costo: 650,  espera: "Hace 2 hrs" },
-  { folio: "REP-0033", cliente: "Elena Vargas",  telefono: "614 456 7890", equipo: "Samsung A53",  falla: "Pantalla",      costo: 1200, espera: "Hace 5 hrs" },
-  { folio: "REP-0031", cliente: "Marco Silva",   telefono: "614 567 8901", equipo: "iPhone 11",    falla: "Conector",      costo: 380,  espera: "Ayer" },
+  { folio: "REP-0040", cliente: "Roberto Díaz",  telefono: "614 345 6789", equipo: "iPhone 12",   falla: "Batería",  costo: 650,  espera: "Hace 2 hrs" },
+  { folio: "REP-0033", cliente: "Elena Vargas",  telefono: "614 456 7890", equipo: "Samsung A53", falla: "Pantalla", costo: 1200, espera: "Hace 5 hrs" },
+  { folio: "REP-0031", cliente: "Marco Silva",   telefono: "614 567 8901", equipo: "iPhone 11",   falla: "Conector", costo: 380,  espera: "Ayer" },
 ];
 
 const equiposDev = [
-  { folio: "REP-0039", cliente: "Ana López",    telefono: "614 456 7890", equipo: "Xiaomi 11T",   razon: "Daño irreparable en placa", espera: "Hace 1 día" },
-  { folio: "REP-0029", cliente: "Luis Mora",    telefono: "614 678 9012", equipo: "Motorola G73", razon: "Sin refacciones disponibles", espera: "Hace 2 días" },
+  { folio: "REP-0039", cliente: "Ana López",  telefono: "614 456 7890", equipo: "Xiaomi 11T",   razon: "Daño irreparable en placa",     espera: "Hace 1 día" },
+  { folio: "REP-0029", cliente: "Luis Mora",  telefono: "614 678 9012", equipo: "Motorola G73", razon: "Sin refacciones disponibles",   espera: "Hace 2 días" },
 ];
 
 const alertas = [
-  { tipo: "stock",      texto: "Pantalla iPhone 13 — Stock bajo (2 unidades)", color: "text-amber-600", bg: "bg-amber-50 border-amber-200", icon: AlertTriangle },
-  { tipo: "reparacion", texto: "REP-0038 lleva 5 días sin actualización",       color: "text-red-600",   bg: "bg-red-50 border-red-200",     icon: Clock },
-  { tipo: "stock",      texto: "Batería Samsung S22 — Agotado",                 color: "text-amber-600", bg: "bg-amber-50 border-amber-200", icon: AlertTriangle },
-  { tipo: "stock",      texto: "Xiaomi Redmi Note 12 — Agotado",                color: "text-amber-600", bg: "bg-amber-50 border-amber-200", icon: AlertTriangle },
+  { texto: "Pantalla iPhone 13 — Stock bajo (2 unidades)", color: "text-amber-600", bg: "bg-amber-50 border-amber-200", icon: AlertTriangle },
+  { texto: "REP-0038 lleva 5 días sin actualización",       color: "text-red-600",   bg: "bg-red-50 border-red-200",     icon: Clock },
+  { texto: "Batería Samsung S22 — Agotado",                 color: "text-amber-600", bg: "bg-amber-50 border-amber-200", icon: AlertTriangle },
+  { texto: "Xiaomi Redmi Note 12 — Agotado",                color: "text-amber-600", bg: "bg-amber-50 border-amber-200", icon: AlertTriangle },
 ];
 
 const sucursales = [
-  { id: 1, nombre: "Sucursal Principal", estado: "activa",  color: "border-t-[#4F46E5]",    ventasDia: 8240,  ticketsVenta: 12, ticketsRep: 5, equiposRecibidos: 5, repActivas: 8, listosEntrega: 3, devoluciones: 1, vsAyer: 12 },
-  { id: 2, nombre: "Sucursal Norte",     estado: "activa",  color: "border-t-cyan-500",      ventasDia: 4100,  ticketsVenta: 7,  ticketsRep: 3, equiposRecibidos: 3, repActivas: 4, listosEntrega: 2, devoluciones: 0, vsAyer: 5 },
-  { id: 3, nombre: "Sucursal Plaza",     estado: "prueba",  color: "border-t-emerald-500",   ventasDia: 1800,  ticketsVenta: 3,  ticketsRep: 1, equiposRecibidos: 1, repActivas: 1, listosEntrega: 0, devoluciones: 0, vsAyer: 0 },
+  { id: 1, nombre: "Sucursal Principal", estado: "activa", color: "border-t-[#4F46E5]",  ventasDia: 8240, ticketsVenta: 12, ticketsRep: 5, equiposRecibidos: 5, repActivas: 8, listosEntrega: 3, devoluciones: 1, vsAyer: 12 },
+  { id: 2, nombre: "Sucursal Norte",     estado: "activa", color: "border-t-cyan-500",    ventasDia: 4100, ticketsVenta: 7,  ticketsRep: 3, equiposRecibidos: 3, repActivas: 4, listosEntrega: 2, devoluciones: 0, vsAyer: 5 },
+  { id: 3, nombre: "Sucursal Plaza",     estado: "prueba", color: "border-t-emerald-500", ventasDia: 1800, ticketsVenta: 3,  ticketsRep: 1, equiposRecibidos: 1, repActivas: 1, listosEntrega: 0, devoluciones: 0, vsAyer: 0 },
 ];
 
 const estadoConfig: Record<string, { label: string; classes: string }> = {
@@ -89,6 +99,8 @@ const prioridadDot: Record<string, string> = {
 
 type ModalType = "ventas" | "tickets" | "reparaciones" | "listos" | "devoluciones" | null;
 
+type CatConfig = { name: string; value: number; color: string; visible: boolean };
+
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
@@ -110,16 +122,50 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function TenantDashboard() {
-  const [modalAbierto, setModalAbierto] = useState<ModalType>(null);
+  const [modalAbierto,           setModalAbierto]           = useState<ModalType>(null);
+  const [configurandoCategorias, setConfigurandoCategorias] = useState(false);
+
+  // Estado de categorías — visible y color personalizables
+  const [categoriasConfig, setCategoriasConfig] = useState<CatConfig[]>(
+    todasLasCategorias.map((c) => ({ ...c, visible: c.value > 0 }))
+  );
+  // Copia temporal mientras se edita
+  const [catTemp, setCatTemp] = useState<CatConfig[]>([]);
 
   const totalSemana    = ventasSemana.reduce((s, d) => s + d.ventas + d.reparaciones, 0);
   const promedioVentas = Math.round(ventasSemana.reduce((s, d) => s + d.ventas, 0) / ventasSemana.length);
   const multiSucursal  = sucursales.length > 1;
+  const totalVentasHoy = ventasHoy.reduce((s, v) => s + v.total, 0);
+  const ticketPromedio = Math.round(totalVentasHoy / ventasHoy.length);
 
-  const totalVentasHoy  = ventasHoy.reduce((s, v) => s + v.total, 0);
-  const ticketPromedio  = Math.round(totalVentasHoy / ventasHoy.length);
+  const categoriasVisibles = categoriasConfig.filter((c) => c.visible);
+  const totalVisibles      = categoriasVisibles.length;
 
-  /* ── Modal content ── */
+  // Abrir configurador con copia temporal
+  const abrirConfig = () => {
+    setCatTemp(categoriasConfig.map((c) => ({ ...c })));
+    setConfigurandoCategorias(true);
+  };
+
+  const toggleCategoria = (name: string) => {
+    setCatTemp((prev) => {
+      const cat = prev.find((c) => c.name === name)!;
+      const visibles = prev.filter((c) => c.visible).length;
+      if (!cat.visible && visibles >= 6) return prev; // máximo 6
+      return prev.map((c) => c.name === name ? { ...c, visible: !c.visible } : c);
+    });
+  };
+
+  const cambiarColor = (name: string, color: string) => {
+    setCatTemp((prev) => prev.map((c) => c.name === name ? { ...c, color } : c));
+  };
+
+  const guardarConfig = () => {
+    setCategoriasConfig(catTemp);
+    setConfigurandoCategorias(false);
+  };
+
+  // ── Modal detalle ─────────────────────────────────────────
   const renderModal = () => {
     if (!modalAbierto) return null;
 
@@ -129,76 +175,29 @@ export default function TenantDashboard() {
       content: React.ReactNode;
     }> = {
       ventas: {
-        titulo: "Ventas del día",
-        iconBg: "bg-[#4F46E5]/10", iconColor: "text-[#4F46E5]", icon: ShoppingCart,
+        titulo: "Ventas del día", iconBg: "bg-[#4F46E5]/10", iconColor: "text-[#4F46E5]", icon: ShoppingCart,
         stats: [
-          { label: "Total ventas", value: formatMXN(totalVentasHoy), color: "text-[#4F46E5]" },
-          { label: "Num. de ventas", value: String(ventasHoy.length), color: "text-slate-800" },
-          { label: "Ticket promedio", value: formatMXN(ticketPromedio), color: "text-slate-800" },
+          { label: "Total ventas",    value: formatMXN(totalVentasHoy),       color: "text-[#4F46E5]" },
+          { label: "Num. de ventas",  value: String(ventasHoy.length),         color: "text-slate-800" },
+          { label: "Ticket promedio", value: formatMXN(ticketPromedio),        color: "text-slate-800" },
         ],
-        content: (
-          <>
-            <div className="grid grid-cols-[80px_1fr_90px_75px] px-4 py-2 bg-slate-50 border-b border-slate-100 sticky top-0">
-              {["Folio · Hora", "Artículos", "Método", "Total"].map((h, i) => (
-                <p key={h} className={`text-[10px] font-medium text-slate-400 ${i === 3 ? "text-right" : ""}`}>{h}</p>
-              ))}
-            </div>
-            {ventasHoy.map((v) => (
-              <div key={v.folio} className="grid grid-cols-[80px_1fr_90px_75px] px-4 py-3 border-b border-slate-50 hover:bg-slate-50 items-center">
-                <div>
-                  <p className="text-xs font-semibold text-[#4F46E5]">{v.folio}</p>
-                  <p className="text-[10px] text-slate-400">{v.hora}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-800">{v.articulos}</p>
-                  <p className="text-[10px] text-slate-400">{v.count} {v.count === 1 ? "artículo" : "artículos"}</p>
-                </div>
-                <span className={`text-[9px] font-medium px-2 py-0.5 rounded-full w-fit ${metodoBadge[v.metodo]}`}>{v.metodo}</span>
-                <p className="text-xs font-semibold text-slate-800 text-right">{formatMXN(v.total)}</p>
-              </div>
-            ))}
-          </>
-        ),
+        content: <TablaVentas />,
       },
       tickets: {
-        titulo: "Total de tickets",
-        iconBg: "bg-cyan-50", iconColor: "text-cyan-600", icon: Receipt,
+        titulo: "Total de tickets", iconBg: "bg-cyan-50", iconColor: "text-cyan-600", icon: Receipt,
         stats: [
-          { label: "Tickets hoy", value: String(ventasHoy.length), color: "text-cyan-600" },
-          { label: "Monto total", value: formatMXN(totalVentasHoy), color: "text-[#4F46E5]" },
-          { label: "Ticket promedio", value: formatMXN(ticketPromedio), color: "text-slate-800" },
+          { label: "Tickets hoy",     value: String(ventasHoy.length),         color: "text-cyan-600" },
+          { label: "Monto total",     value: formatMXN(totalVentasHoy),        color: "text-[#4F46E5]" },
+          { label: "Ticket promedio", value: formatMXN(ticketPromedio),        color: "text-slate-800" },
         ],
-        content: (
-          <>
-            <div className="grid grid-cols-[80px_1fr_90px_75px] px-4 py-2 bg-slate-50 border-b border-slate-100 sticky top-0">
-              {["Folio · Hora", "Artículos", "Método", "Total"].map((h, i) => (
-                <p key={h} className={`text-[10px] font-medium text-slate-400 ${i === 3 ? "text-right" : ""}`}>{h}</p>
-              ))}
-            </div>
-            {ventasHoy.map((v) => (
-              <div key={v.folio} className="grid grid-cols-[80px_1fr_90px_75px] px-4 py-3 border-b border-slate-50 hover:bg-slate-50 items-center">
-                <div>
-                  <p className="text-xs font-semibold text-[#4F46E5]">{v.folio}</p>
-                  <p className="text-[10px] text-slate-400">{v.hora}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-800">{v.articulos}</p>
-                  <p className="text-[10px] text-slate-400">{v.count} {v.count === 1 ? "artículo" : "artículos"}</p>
-                </div>
-                <span className={`text-[9px] font-medium px-2 py-0.5 rounded-full w-fit ${metodoBadge[v.metodo]}`}>{v.metodo}</span>
-                <p className="text-xs font-semibold text-slate-800 text-right">{formatMXN(v.total)}</p>
-              </div>
-            ))}
-          </>
-        ),
+        content: <TablaVentas />,
       },
       reparaciones: {
-        titulo: "Reparaciones activas",
-        iconBg: "bg-amber-50", iconColor: "text-amber-600", icon: Wrench,
+        titulo: "Reparaciones activas", iconBg: "bg-amber-50", iconColor: "text-amber-600", icon: Wrench,
         stats: [
-          { label: "Total activas", value: String(reparacionesData.length), color: "text-amber-600" },
-          { label: "En reparación", value: String(reparacionesData.filter(r => r.estado === "en_reparacion").length), color: "text-purple-600" },
-          { label: "Prioridad alta", value: String(reparacionesData.filter(r => r.prioridad === "alta").length), color: "text-red-600" },
+          { label: "Total activas",  value: String(reparacionesData.length),                                          color: "text-amber-600" },
+          { label: "En reparación",  value: String(reparacionesData.filter(r => r.estado === "en_reparacion").length), color: "text-purple-600" },
+          { label: "Prioridad alta", value: String(reparacionesData.filter(r => r.prioridad === "alta").length),       color: "text-red-600" },
         ],
         content: (
           <>
@@ -227,12 +226,11 @@ export default function TenantDashboard() {
         ),
       },
       listos: {
-        titulo: "Equipos listos para entregar",
-        iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: CheckCircle,
+        titulo: "Equipos listos para entregar", iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: CheckCircle,
         stats: [
-          { label: "Equipos listos", value: String(equiposListos.length), color: "text-emerald-600" },
-          { label: "Tiempo máx. espera", value: "Ayer", color: "text-amber-600" },
-          { label: "Total a cobrar", value: formatMXN(equiposListos.reduce((s, e) => s + e.costo, 0)), color: "text-[#4F46E5]" },
+          { label: "Equipos listos",      value: String(equiposListos.length),                            color: "text-emerald-600" },
+          { label: "Tiempo máx. espera",  value: "Ayer",                                                  color: "text-amber-600" },
+          { label: "Total a cobrar",      value: formatMXN(equiposListos.reduce((s, e) => s + e.costo, 0)), color: "text-[#4F46E5]" },
         ],
         content: (
           <>
@@ -262,12 +260,11 @@ export default function TenantDashboard() {
         ),
       },
       devoluciones: {
-        titulo: "Equipos en devolución",
-        iconBg: "bg-red-50", iconColor: "text-red-500", icon: RotateCcw,
+        titulo: "Equipos en devolución", iconBg: "bg-red-50", iconColor: "text-red-500", icon: RotateCcw,
         stats: [
-          { label: "Equipos a devolver", value: String(equiposDev.length), color: "text-red-600" },
-          { label: "Más antiguo", value: "Hace 2 días", color: "text-amber-600" },
-          { label: "Requieren contacto", value: String(equiposDev.length), color: "text-slate-800" },
+          { label: "Equipos a devolver",  value: String(equiposDev.length), color: "text-red-600" },
+          { label: "Más antiguo",         value: "Hace 2 días",             color: "text-amber-600" },
+          { label: "Requieren contacto",  value: String(equiposDev.length), color: "text-slate-800" },
         ],
         content: (
           <>
@@ -308,8 +305,6 @@ export default function TenantDashboard() {
         onClick={() => setModalAbierto(null)}>
         <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl"
           onClick={(e) => e.stopPropagation()}>
-
-          {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${cfg.iconBg}`}>
@@ -325,8 +320,6 @@ export default function TenantDashboard() {
               <X className="w-4 h-4 text-slate-500" />
             </button>
           </div>
-
-          {/* Stats */}
           <div className="grid grid-cols-3 gap-3 px-5 py-3 border-b border-slate-100 flex-shrink-0">
             {cfg.stats.map((s) => (
               <div key={s.label} className="bg-slate-50 rounded-xl p-3 text-center">
@@ -335,15 +328,38 @@ export default function TenantDashboard() {
               </div>
             ))}
           </div>
-
-          {/* Lista con scroll */}
-          <div className="flex-1 overflow-y-auto">
-            {cfg.content}
-          </div>
+          <div className="flex-1 overflow-y-auto">{cfg.content}</div>
         </div>
       </div>
     );
   };
+
+  // ── Tabla ventas (reutilizada en ventas y tickets) ────────
+  function TablaVentas() {
+    return (
+      <>
+        <div className="grid grid-cols-[80px_1fr_90px_75px] px-4 py-2 bg-slate-50 border-b border-slate-100 sticky top-0">
+          {["Folio · Hora", "Artículos", "Método", "Total"].map((h, i) => (
+            <p key={h} className={`text-[10px] font-medium text-slate-400 ${i === 3 ? "text-right" : ""}`}>{h}</p>
+          ))}
+        </div>
+        {ventasHoy.map((v) => (
+          <div key={v.folio} className="grid grid-cols-[80px_1fr_90px_75px] px-4 py-3 border-b border-slate-50 hover:bg-slate-50 items-center">
+            <div>
+              <p className="text-xs font-semibold text-[#4F46E5]">{v.folio}</p>
+              <p className="text-[10px] text-slate-400">{v.hora}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-800">{v.articulos}</p>
+              <p className="text-[10px] text-slate-400">{v.count} {v.count === 1 ? "artículo" : "artículos"}</p>
+            </div>
+            <span className={`text-[9px] font-medium px-2 py-0.5 rounded-full w-fit ${metodoBadge[v.metodo]}`}>{v.metodo}</span>
+            <p className="text-xs font-semibold text-slate-800 text-right">{formatMXN(v.total)}</p>
+          </div>
+        ))}
+      </>
+    );
+  }
 
   return (
     <div className="p-4 space-y-4 overflow-y-auto h-full">
@@ -360,7 +376,7 @@ export default function TenantDashboard() {
         </div>
       </div>
 
-      {/* Métricas principales */}
+      {/* Métricas */}
       <div className="grid grid-cols-5 gap-3">
         {([
           { label: "Ventas del día",       value: "$3,240", sub: "+18% vs ayer",        positive: true,  icon: ShoppingCart, iconBg: "bg-[#4F46E5]/10", iconColor: "text-[#4F46E5]", modal: "ventas"       as ModalType, btnColor: "text-[#4F46E5] bg-[#4F46E5]/10" },
@@ -379,14 +395,11 @@ export default function TenantDashboard() {
             <p className="text-[22px] font-semibold text-slate-800 leading-none mb-1">{m.value}</p>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1">
-                {m.positive
-                  ? <ArrowUpRight className="w-3 h-3 text-emerald-500" />
-                  : <ArrowDownRight className="w-3 h-3 text-red-500" />
-                }
+                {m.positive ? <ArrowUpRight className="w-3 h-3 text-emerald-500" /> : <ArrowDownRight className="w-3 h-3 text-red-500" />}
                 <p className={`text-[10px] ${m.positive ? "text-emerald-500" : "text-red-500"}`}>{m.sub}</p>
               </div>
               <button onClick={() => setModalAbierto(m.modal)}
-                className={`text-[9px] font-medium px-2 py-0.5 rounded-full transition-opacity hover:opacity-80 ${m.btnColor}`}>
+                className={`text-[9px] font-medium px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity ${m.btnColor}`}>
                 Ver →
               </button>
             </div>
@@ -394,7 +407,7 @@ export default function TenantDashboard() {
         ))}
       </div>
 
-      {/* Gráfica principal + Pie */}
+      {/* Gráficas */}
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2 bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-4">
@@ -403,12 +416,9 @@ export default function TenantDashboard() {
               <p className="text-xs text-slate-400">Promedio diario: {formatMXN(promedioVentas)}</p>
             </div>
             <div className="flex items-center gap-4">
-              {[["bg-[#4F46E5]","Ventas"],["bg-[#06B6D4]","Reparaciones"],["border-t-2 border-dashed border-emerald-500 w-3 h-0","Total"]].map(([cls, label]) => (
-                <div key={label} className="flex items-center gap-1.5">
-                  <div className={cls} />
-                  <span className="text-xs text-slate-500">{label}</span>
-                </div>
-              ))}
+              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#4F46E5]" /><span className="text-xs text-slate-500">Ventas</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#06B6D4]" /><span className="text-xs text-slate-500">Reparaciones</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-3 h-0 border-t-2 border-dashed border-emerald-500" /><span className="text-xs text-slate-500">Total</span></div>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={160}>
@@ -438,23 +448,31 @@ export default function TenantDashboard() {
           </ResponsiveContainer>
         </div>
 
+        {/* Pie chart con botón configurar */}
         <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-sm font-medium text-slate-800 mb-1">Ventas por categoría</p>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm font-medium text-slate-800">Ventas por categoría</p>
+            <button onClick={abrirConfig}
+              className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors"
+              title="Configurar categorías">
+              <Settings className="w-3.5 h-3.5 text-slate-500" />
+            </button>
+          </div>
           <p className="text-xs text-slate-400 mb-3">Este mes</p>
           <ResponsiveContainer width="100%" height={120}>
             <PieChart>
-              <Pie data={ventasPorCategoria} cx="50%" cy="50%" innerRadius={35} outerRadius={55}
+              <Pie data={categoriasVisibles} cx="50%" cy="50%" innerRadius={35} outerRadius={55}
                 dataKey="value" paddingAngle={3}>
-                {ventasPorCategoria.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                {categoriasVisibles.map((entry, i) => <Cell key={i} fill={entry.color} />)}
               </Pie>
               <Tooltip formatter={(value) => [`${value}%`, ""]} />
             </PieChart>
           </ResponsiveContainer>
           <div className="space-y-1.5 mt-2">
-            {ventasPorCategoria.map((cat) => (
+            {categoriasVisibles.map((cat) => (
               <div key={cat.name} className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full" style={{ background: cat.color }} />
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: cat.color }} />
                   <span className="text-xs text-slate-600">{cat.name}</span>
                 </div>
                 <span className="text-xs font-medium text-slate-700">{cat.value}%</span>
@@ -565,8 +583,90 @@ export default function TenantDashboard() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal detalle */}
       {renderModal()}
+
+      {/* Modal configurar categorías */}
+      {configurandoCategorias && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setConfigurandoCategorias(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[80vh]"
+            onClick={(e) => e.stopPropagation()}>
+
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Settings className="w-4 h-4 text-[#4F46E5]" />
+                <p className="text-sm font-semibold text-slate-800">Configurar categorías visibles</p>
+              </div>
+              <button onClick={() => setConfigurandoCategorias(false)}
+                className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center">
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="px-5 py-2 border-b border-slate-100 flex-shrink-0">
+              <p className="text-xs text-slate-400">
+                Selecciona hasta 6 categorías · {catTemp.filter(c => c.visible).length} de 6 seleccionadas
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+              {catTemp.map((cat) => {
+                const visibles = catTemp.filter(c => c.visible).length;
+                const disabled = !cat.visible && visibles >= 6;
+                return (
+                  <div key={cat.name}
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                      cat.visible ? "border-[#4F46E5] bg-[#4F46E5]/5" : "border-slate-200 bg-white"
+                    } ${disabled ? "opacity-40" : "cursor-pointer"}`}
+                    onClick={() => !disabled && toggleCategoria(cat.name)}>
+
+                    {/* Checkbox */}
+                    <div className={`w-4 h-4 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${
+                      cat.visible ? "bg-[#4F46E5] border-[#4F46E5]" : "border-slate-300"
+                    }`}>
+                      {cat.visible && <span className="text-white text-[9px] font-bold">✓</span>}
+                    </div>
+
+                    {/* Color dot */}
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: cat.color }} />
+
+                    {/* Nombre */}
+                    <span className="text-xs font-medium text-slate-800 flex-1">{cat.name}</span>
+
+                    {/* Porcentaje */}
+                    <span className="text-[10px] text-slate-400 w-8 text-right">{cat.value}%</span>
+
+                    {/* Paleta de colores */}
+                    {cat.visible && (
+                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                        {coloresDisponibles.slice(0, 6).map((color) => (
+                          <button key={color} onClick={() => cambiarColor(cat.name, color)}
+                            className={`w-4 h-4 rounded-full border-2 transition-all ${
+                              cat.color === color ? "border-slate-800 scale-110" : "border-transparent"
+                            }`}
+                            style={{ background: color }} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100 flex-shrink-0">
+              <button onClick={() => setConfigurandoCategorias(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50">
+                Cancelar
+              </button>
+              <button onClick={guardarConfig}
+                className="px-5 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-lg text-xs font-medium transition-colors">
+                Guardar cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
