@@ -4,13 +4,13 @@ import { ShoppingCart, Wrench, AlertTriangle, Clock, ArrowUpRight, ArrowDownRigh
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 const ventasSemana = [
-  { dia: "Lun", ventas: 4200, reparaciones: 1800 },
-  { dia: "Mar", ventas: 3800, reparaciones: 2200 },
-  { dia: "Mié", ventas: 5100, reparaciones: 1500 },
-  { dia: "Jue", ventas: 4800, reparaciones: 2800 },
-  { dia: "Vie", ventas: 6200, reparaciones: 3100 },
-  { dia: "Sáb", ventas: 8400, reparaciones: 2400 },
-  { dia: "Hoy", ventas: 3240, reparaciones: 1200 },
+  { dia: "Lun", ventas: 4200, reparaciones: 1800, total: 6000 },
+  { dia: "Mar", ventas: 3800, reparaciones: 2200, total: 6000 },
+  { dia: "Mié", ventas: 5100, reparaciones: 1500, total: 6600 },
+  { dia: "Jue", ventas: 4800, reparaciones: 2800, total: 7600 },
+  { dia: "Vie", ventas: 6200, reparaciones: 3100, total: 9300 },
+  { dia: "Sáb", ventas: 8400, reparaciones: 2400, total: 10800 },
+  { dia: "Hoy", ventas: 3240, reparaciones: 1200, total: 4440 },
 ];
 
 const ventasPorCategoria = [
@@ -35,13 +35,13 @@ const alertas = [
 ];
 
 const estadoConfig: Record<string, { label: string; classes: string }> = {
-  en_reparacion:     { label: "En reparación",    classes: "bg-purple-50 text-purple-700" },
-  listo_taller:      { label: "Listo en Taller",  classes: "bg-emerald-50 text-emerald-700" },
-  listo_tienda:      { label: "Listo en Tienda",  classes: "bg-cyan-50 text-cyan-700" },
-  devolucion_taller: { label: "Dev. Taller",      classes: "bg-orange-50 text-orange-700" },
-  devolucion_tienda: { label: "Dev. Tienda",      classes: "bg-red-50 text-red-600" },
-  recibido:          { label: "Recibido",          classes: "bg-blue-50 text-blue-700" },
-  entregado:         { label: "Entregado",         classes: "bg-slate-100 text-slate-500" },
+  en_reparacion:     { label: "En reparación",   classes: "bg-purple-50 text-purple-700" },
+  listo_taller:      { label: "Listo en Taller", classes: "bg-emerald-50 text-emerald-700" },
+  listo_tienda:      { label: "Listo en Tienda", classes: "bg-cyan-50 text-cyan-700" },
+  devolucion_taller: { label: "Dev. Taller",     classes: "bg-orange-50 text-orange-700" },
+  devolucion_tienda: { label: "Dev. Tienda",     classes: "bg-red-50 text-red-600" },
+  recibido:          { label: "Recibido",         classes: "bg-blue-50 text-blue-700" },
+  entregado:         { label: "Entregado",        classes: "bg-slate-100 text-slate-500" },
 };
 
 const prioridadDot: Record<string, string> = {
@@ -58,7 +58,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <p className="text-xs font-medium text-slate-600 mb-1">{label}</p>
         {payload.map((p: any) => (
           <p key={p.name} className="text-xs" style={{ color: p.color }}>
-            {p.name === "ventas" ? "Ventas" : "Reparaciones"}: {formatMXN(p.value)}
+            {p.name === "ventas"
+              ? "Ventas"
+              : p.name === "reparaciones"
+              ? "Reparaciones"
+              : "Total"}
+            : {formatMXN(p.value)}
           </p>
         ))}
       </div>
@@ -68,7 +73,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function TenantDashboard() {
-  const totalSemana   = ventasSemana.reduce((s, d) => s + d.ventas + d.reparaciones, 0);
+  const totalSemana    = ventasSemana.reduce((s, d) => s + d.ventas + d.reparaciones, 0);
   const promedioVentas = Math.round(ventasSemana.reduce((s, d) => s + d.ventas, 0) / ventasSemana.length);
 
   return (
@@ -89,11 +94,11 @@ export default function TenantDashboard() {
       {/* Métricas principales */}
       <div className="grid grid-cols-5 gap-3">
         {[
-          { label: "Ventas del día",        value: "$3,240", sub: "+18% vs ayer",        positive: true,  icon: ShoppingCart, iconBg: "bg-[#4F46E5]/10", iconColor: "text-[#4F46E5]" },
-          { label: "Total de tickets",      value: "24",     sub: "Transacciones hoy",   positive: true,  icon: Receipt,      iconBg: "bg-cyan-50",       iconColor: "text-cyan-600" },
-          { label: "Reparaciones activas",  value: "8",      sub: "En proceso",          positive: true,  icon: Wrench,       iconBg: "bg-amber-50",      iconColor: "text-amber-600" },
-          { label: "Equipos listos",        value: "3",      sub: "Pendientes entregar", positive: true,  icon: CheckCircle,  iconBg: "bg-emerald-50",    iconColor: "text-emerald-600" },
-          { label: "Equipos devolución",    value: "2",      sub: "Sin reparación",      positive: false, icon: RotateCcw,    iconBg: "bg-red-50",        iconColor: "text-red-500" },
+          { label: "Ventas del día",       value: "$3,240", sub: "+18% vs ayer",        positive: true,  icon: ShoppingCart, iconBg: "bg-[#4F46E5]/10", iconColor: "text-[#4F46E5]" },
+          { label: "Total de tickets",     value: "24",     sub: "Transacciones hoy",   positive: true,  icon: Receipt,      iconBg: "bg-cyan-50",       iconColor: "text-cyan-600" },
+          { label: "Reparaciones activas", value: "8",      sub: "En proceso",          positive: true,  icon: Wrench,       iconBg: "bg-amber-50",      iconColor: "text-amber-600" },
+          { label: "Equipos listos",       value: "3",      sub: "Pendientes entregar", positive: true,  icon: CheckCircle,  iconBg: "bg-emerald-50",    iconColor: "text-emerald-600" },
+          { label: "Equipos devolución",   value: "2",      sub: "Sin reparación",      positive: false, icon: RotateCcw,    iconBg: "bg-red-50",        iconColor: "text-red-500" },
         ].map((m) => (
           <div key={m.label} className="bg-white border border-slate-200 rounded-xl p-3.5">
             <div className="flex items-center justify-between mb-2.5">
@@ -117,13 +122,14 @@ export default function TenantDashboard() {
       {/* Gráfica principal + Pie */}
       <div className="grid grid-cols-3 gap-4">
 
+        {/* Gráfica de área con 3 líneas */}
         <div className="col-span-2 bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-sm font-medium text-slate-800">Ventas de la semana</p>
               <p className="text-xs text-slate-400">Promedio diario: {formatMXN(promedioVentas)}</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-[#4F46E5]" />
                 <span className="text-xs text-slate-500">Ventas</span>
@@ -131,6 +137,10 @@ export default function TenantDashboard() {
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-[#06B6D4]" />
                 <span className="text-xs text-slate-500">Reparaciones</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-0.5 bg-emerald-500" style={{ borderTop: "2px dashed #10B981" }} />
+                <span className="text-xs text-slate-500">Total</span>
               </div>
             </div>
           </div>
@@ -145,6 +155,10 @@ export default function TenantDashboard() {
                   <stop offset="5%"  stopColor="#06B6D4" stopOpacity={0.15} />
                   <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
                 </linearGradient>
+                <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#10B981" stopOpacity={0.10} />
+                  <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
               <XAxis dataKey="dia" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
@@ -152,10 +166,12 @@ export default function TenantDashboard() {
               <Tooltip content={<CustomTooltip />} />
               <Area type="monotone" dataKey="ventas"       stroke="#4F46E5" strokeWidth={2} fill="url(#colorVentas)" />
               <Area type="monotone" dataKey="reparaciones" stroke="#06B6D4" strokeWidth={2} fill="url(#colorRep)" />
+              <Area type="monotone" dataKey="total"        stroke="#10B981" strokeWidth={2} strokeDasharray="5 3" fill="url(#colorTotal)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
+        {/* Pie chart */}
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <p className="text-sm font-medium text-slate-800 mb-1">Ventas por categoría</p>
           <p className="text-xs text-slate-400 mb-3">Este mes</p>

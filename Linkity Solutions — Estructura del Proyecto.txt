@@ -1,0 +1,130 @@
+# Linkity Solutions — Estructura del Proyecto
+**Fecha:** 2026-06-05
+**Stack:** Next.js 16.2 (App Router) + TypeScript + Tailwind CSS + shadcn/ui + Prisma v7 + Supabase
+**Raíz:** `C:\linkity\`
+
+---
+
+## Archivos raíz
+
+```
+C:\linkity\proxy.ts                  ← Middleware (Next.js 16 usa proxy.ts)
+C:\linkity\prisma.config.ts          ← Config Prisma v7 (DB URL aquí)
+C:\linkity\next.config.ts
+C:\linkity\package.json
+C:\linkity\tsconfig.json
+C:\linkity\postcss.config.mjs
+C:\linkity\eslint.config.mjs
+C:\linkity\components.json           ← Config shadcn/ui
+C:\linkity\CLAUDE.md
+C:\linkity\AGENTS.md
+C:\linkity\.env
+```
+
+---
+
+## App Router — Rutas y Páginas
+
+```
+C:\linkity\app\
+├── favicon.ico
+├── globals.css                      ← Estilos globales
+├── layout.tsx                       ← Layout raíz
+├── page.tsx                         ← Página raíz (/)
+│
+├── (admin)\maestro\
+│   ├── layout.tsx                   ← Layout admin
+│   ├── dashboard\page.tsx           ← M0 Panel Maestro
+│   └── tenants\nuevo\page.tsx       ← Crear nuevo tenant
+│
+├── (auth)\
+│   ├── login\page.tsx               ← M3 Login
+│   └── register\                    ← (vacía por ahora)
+│
+└── (tenant)\[tenant]\
+    ├── layout.tsx                   ← Layout tenant (TenantShell)
+    ├── dashboard\page.tsx           ← M13 Dashboard tenant
+    ├── pos\page.tsx                 ← M8 Punto de Venta
+    ├── reparaciones\page.tsx        ← M9 Reparaciones/Taller
+    ├── catalogo\page.tsx            ← M6 Catálogo
+    ├── inventario\page.tsx          ← M12 Inventario
+    ├── clientes\page.tsx            ← M7 Clientes/Lealtad
+    ├── caja\page.tsx                ← M10 Control de Caja
+    ├── compras\page.tsx             ← Compras/Órdenes
+    ├── personal\page.tsx            ← M11 Personal/Nómina
+    ├── facturacion\page.tsx         ← M14 CFDI Facturación
+    └── sucursales\page.tsx          ← M5 Multi-Sucursal
+```
+
+---
+
+## Componentes
+
+```
+C:\linkity\components\
+├── MobileDashboard.tsx              ← (creado previamente, pendiente)
+├── tenant\
+│   └── TenantShell.tsx              ← Shell/wrapper del tenant
+└── ui\
+    └── button.tsx                   ← shadcn/ui button
+```
+
+---
+
+## Utilidades y Servicios
+
+```
+C:\linkity\lib\
+├── prisma.ts                        ← Cliente Prisma
+├── utils.ts                         ← Utilidades generales
+└── supabase\
+    ├── client.ts                    ← Supabase client-side
+    └── server.ts                    ← Supabase server-side
+```
+
+---
+
+## Base de Datos
+
+```
+C:\linkity\prisma\
+├── schema.prisma                    ← 21 tablas, todos los módulos
+└── migrations\
+    └── 20260528000633_init\
+        └── migration.sql
+```
+
+---
+
+## Assets Públicos
+
+```
+C:\linkity\public\
+├── file.svg, globe.svg, next.svg, vercel.svg, window.svg
+└── images\
+    ├── favicon.svg
+    ├── Linikity-alt.svg
+    ├── logo-full.png / .svg
+    ├── logo-icon.png
+    └── logo-white.png / .svg
+```
+
+---
+
+## Rutas completas para optimización móvil (en orden del menú)
+
+| # | Módulo | Ruta completa del archivo |
+|---|--------|--------------------------|
+| 1 | Dashboard tenant | `C:\linkity\app\(tenant)\[tenant]\dashboard\page.tsx` |
+| 2 | POS | `C:\linkity\app\(tenant)\[tenant]\pos\page.tsx` |
+| 3 | Reparaciones | `C:\linkity\app\(tenant)\[tenant]\reparaciones\page.tsx` |
+| 4 | Catálogo | `C:\linkity\app\(tenant)\[tenant]\catalogo\page.tsx` |
+| 5 | Inventario | `C:\linkity\app\(tenant)\[tenant]\inventario\page.tsx` |
+| 6 | Clientes | `C:\linkity\app\(tenant)\[tenant]\clientes\page.tsx` |
+| 7 | Caja | `C:\linkity\app\(tenant)\[tenant]\caja\page.tsx` |
+| 8 | Compras | `C:\linkity\app\(tenant)\[tenant]\compras\page.tsx` |
+| 9 | Personal | `C:\linkity\app\(tenant)\[tenant]\personal\page.tsx` |
+| 10 | Facturación | `C:\linkity\app\(tenant)\[tenant]\facturacion\page.tsx` |
+| 11 | Sucursales | `C:\linkity\app\(tenant)\[tenant]\sucursales\page.tsx` |
+| 12 | Layout tenant | `C:\linkity\app\(tenant)\[tenant]\layout.tsx` |
+| 13 | Estilos globales | `C:\linkity\app\globals.css` |
