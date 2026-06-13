@@ -156,7 +156,7 @@ export default function CajaPage() {
     const GR = "F8FAFC", GN = "16A34A", RD = "DC2626";
     const BD = { style: "thin" as const, color: { argb: "E2E8F0" } };
     const bdr = { top: BD, bottom: BD, left: BD, right: BD };
-    ws.columns = [{ wch:15},{wch:13},{wch:11},{wch:40},{wch:18},{wch:14},{wch:16}];
+    ws.columns = [{ width:15},{width:13},{width:11},{width:40},{width:18},{width:14},{width:16}];
     const addMerged = (range: string, text: string, bg: string, fc: string, sz: number, bold = false, align: any = "center") => {
       ws.mergeCells(range);
       const c = ws.getCell(range.split(":")[0]);
