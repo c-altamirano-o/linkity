@@ -36,6 +36,17 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Windows folder metadata (aparece en cualquier carpeta sincronizada/con atributos especiales)
+desktop.ini
+
+# Copias/entregas generadas por Claude (Cowork) hacia el chat, no son código del proyecto
+/Claude outputs/
+
+# Notas/volcados de referencia de Carlos, no son código del proyecto
+/proyecto.txt
+/tree.txt
+/Linkity Solutions — Estructura del Proyecto.txt
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

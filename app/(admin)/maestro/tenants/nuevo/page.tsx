@@ -2,47 +2,85 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Building2, User, Mail, Phone, MapPin, Package, Check } from "lucide-react";
+import { ArrowLeft, Building2, User, Package, Check, Copy } from "lucide-react";
+import { createTenantAction } from "./actions";
 
 const modulosDisponibles = [
   { code: "M1", name: "Acceso Universal", desc: "Acceso desde cualquier dispositivo" },
-  { code: "M2", name: "Bóveda de Datos", desc: "Aislamiento multi-tenant" },
-  { code: "M3", name: "Login Seguro", desc: "Autenticación de usuarios" },
+  { code: "M2", name: "Boveda de Datos", desc: "Aislamiento multi-tenant" },
+  { code: "M3", name: "Login Seguro", desc: "Autenticacion de usuarios" },
   { code: "M4", name: "Permisos", desc: "Roles y permisos granulares" },
-  { code: "M5", name: "Multi-Sucursal", desc: "Gestión de múltiples locales" },
-  { code: "M6", name: "Catálogo", desc: "Productos, refacciones y servicios" },
-  { code: "M7", name: "Clientes", desc: "Fidelización y garantías" },
-  { code: "M8", name: "Punto de Venta", desc: "POS ultra rápido" },
+  { code: "M5", name: "Multi-Sucursal", desc: "Gestion de multiples locales" },
+  { code: "M6", name: "Catalogo", desc: "Productos, refacciones y servicios" },
+  { code: "M7", name: "Clientes", desc: "Fidelizacion y garantias" },
+  { code: "M8", name: "Punto de Venta", desc: "POS ultra rapido" },
   { code: "M9", name: "Reparaciones", desc: "Taller con WhatsApp" },
   { code: "M10", name: "Control de Caja", desc: "Caja blindada" },
   { code: "M11", name: "Personal", desc: "Empleados y comisiones" },
-  { code: "M12", name: "Inventario", desc: "Logística y almacén" },
-  { code: "M13", name: "Dashboard", desc: "Métricas del negocio" },
-  { code: "M14", name: "Facturación CFDI", desc: "Facturas electrónicas" },
+  { code: "M12", name: "Inventario", desc: "Logistica y almacen" },
+  { code: "M13", name: "Dashboard", desc: "Metricas del negocio" },
+  { code: "M14", name: "Facturacion CFDI", desc: "Facturas electronicas" },
 ];
 
-const planes = ["Básico", "Pro", "Enterprise"];
+const planes = ["Basico", "Pro", "Enterprise"];
 
 export default function NuevoTenantPage() {
+  const [form, setForm] = useState({
+    businessName: "",
+    rfc: "",
+    phone: "",
+    city: "",
+    state: "",
+    ownerName: "",
+    ownerEmail: "",
+    ownerPhone: "",
+  });
   const [modulosActivos, setModulosActivos] = useState<string[]>(["M1", "M2", "M3", "M4"]);
   const [plan, setPlan] = useState("Pro");
+  const [trialDays, setTrialDays] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{
+    success: boolean;
+    error?: string;
+    tenantSlug?: string;
+    tempPassword?: string;
+  } | null>(null);
+
+  const setField = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  };
 
   const toggleModulo = (code: string) => {
-    setModulosActivos(prev =>
-      prev.includes(code) ? prev.filter(m => m !== code) : [...prev, code]
+    setModulosActivos((prev) =>
+      prev.includes(code) ? prev.filter((m) => m !== code) : [...prev, code]
     );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => setLoading(false), 1500);
+    setResult(null);
+
+    const res = await createTenantAction({
+      businessName: form.businessName,
+      rfc: form.rfc,
+      phone: form.phone,
+      city: form.city,
+      state: form.state,
+      ownerName: form.ownerName,
+      ownerEmail: form.ownerEmail,
+      ownerPhone: form.ownerPhone,
+      plan,
+      trialDays,
+      modules: modulosActivos,
+    });
+
+    setLoading(false);
+    setResult(res);
   };
 
   return (
     <>
-      {/* Topbar */}
       <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3">
         <Link href="/maestro/dashboard" className="text-slate-400 hover:text-slate-600 transition-colors">
           <ArrowLeft className="w-4 h-4" />
@@ -50,15 +88,36 @@ export default function NuevoTenantPage() {
         <h1 className="text-[15px] font-medium text-slate-800">Registrar nuevo negocio</h1>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto p-5">
+        {result && (
+          <div
+            className={`mb-4 p-4 rounded-lg border text-[13px] ${
+              result.success
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                : "bg-red-50 border-red-200 text-red-800"
+            }`}
+          >
+            {result.success ? (
+              <div className="space-y-1">
+                <p className="font-medium">Negocio creado correctamente.</p>
+                <p>Tenant: <span className="font-mono">{result.tenantSlug}</span></p>
+                <p>Password temporal: <span className="font-mono">{result.tempPassword}</span></p>
+                <Link
+                  href={`/${result.tenantSlug}/dashboard`}
+                  className="inline-block mt-2 text-[#4F46E5] underline"
+                >
+                  Ir al negocio
+                </Link>
+              </div>
+            ) : (
+              <p>Error: {result.error}</p>
+            )}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-3 gap-4">
-
-            {/* Columna izquierda — datos del negocio */}
             <div className="col-span-2 space-y-4">
-
-              {/* Datos del negocio */}
               <div className="bg-white border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-4">
                   <Building2 className="w-4 h-4 text-[#4F46E5]" />
@@ -68,61 +127,67 @@ export default function NuevoTenantPage() {
                   <div className="col-span-2">
                     <label className="block text-[11px] font-medium text-slate-500 mb-1">Nombre del negocio *</label>
                     <input type="text" placeholder="Ej. Cell Express Delicias" required
+                      value={form.businessName} onChange={setField("businessName")}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
                     <label className="block text-[11px] font-medium text-slate-500 mb-1">RFC</label>
                     <input type="text" placeholder="XAXX010101000"
+                      value={form.rfc} onChange={setField("rfc")}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Teléfono</label>
+                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Telefono</label>
                     <input type="tel" placeholder="614 000 0000"
+                      value={form.phone} onChange={setField("phone")}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
                     <label className="block text-[11px] font-medium text-slate-500 mb-1">Ciudad</label>
                     <input type="text" placeholder="Cd. Delicias"
+                      value={form.city} onChange={setField("city")}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
                     <label className="block text-[11px] font-medium text-slate-500 mb-1">Estado</label>
                     <input type="text" placeholder="Chihuahua"
+                      value={form.state} onChange={setField("state")}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                 </div>
               </div>
 
-              {/* Datos del dueño */}
               <div className="bg-white border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-4">
                   <User className="w-4 h-4 text-[#4F46E5]" />
-                  <h2 className="text-[13px] font-medium text-slate-700">Datos del dueño</h2>
+                  <h2 className="text-[13px] font-medium text-slate-700">Datos del dueno</h2>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-medium text-slate-500 mb-1">Nombre completo *</label>
-                    <input type="text" placeholder="Juan Pérez García" required
+                    <input type="text" placeholder="Juan Perez Garcia" required
+                      value={form.ownerName} onChange={setField("ownerName")}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Correo electrónico *</label>
+                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Correo electronico *</label>
                     <input type="email" placeholder="juan@negocio.com" required
+                      value={form.ownerEmail} onChange={setField("ownerEmail")}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Teléfono</label>
+                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Telefono</label>
                     <input type="tel" placeholder="614 000 0000"
+                      value={form.ownerPhone} onChange={setField("ownerPhone")}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                 </div>
               </div>
 
-              {/* Módulos */}
               <div className="bg-white border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-4">
                   <Package className="w-4 h-4 text-[#4F46E5]" />
-                  <h2 className="text-[13px] font-medium text-slate-700">Módulos activos</h2>
+                  <h2 className="text-[13px] font-medium text-slate-700">Modulos activos</h2>
                   <span className="ml-auto text-[11px] text-slate-400">{modulosActivos.length}/14 seleccionados</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -146,7 +211,7 @@ export default function NuevoTenantPage() {
                         </div>
                         <div>
                           <p className={`text-[11px] font-medium ${isActive ? "text-[#4F46E5]" : "text-slate-600"}`}>
-                            {m.code} — {m.name}
+                            {m.code} - {m.name}
                           </p>
                           <p className="text-[10px] text-slate-400">{m.desc}</p>
                         </div>
@@ -157,12 +222,9 @@ export default function NuevoTenantPage() {
               </div>
             </div>
 
-            {/* Columna derecha — plan y acciones */}
             <div className="space-y-4">
-
-              {/* Plan */}
               <div className="bg-white border border-slate-200 rounded-lg p-4">
-                <h2 className="text-[13px] font-medium text-slate-700 mb-3">Plan de suscripción</h2>
+                <h2 className="text-[13px] font-medium text-slate-700 mb-3">Plan de suscripcion</h2>
                 <div className="space-y-2">
                   {planes.map((p) => (
                     <button
@@ -184,21 +246,22 @@ export default function NuevoTenantPage() {
                 </div>
               </div>
 
-              {/* Periodo de prueba */}
               <div className="bg-white border border-slate-200 rounded-lg p-4">
                 <h2 className="text-[13px] font-medium text-slate-700 mb-3">Periodo de prueba</h2>
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-500 mb-1">Días de prueba</label>
-                  <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]">
-                    <option>Sin periodo de prueba</option>
-                    <option>7 días</option>
-                    <option>14 días</option>
-                    <option>30 días</option>
+                  <label className="block text-[11px] font-medium text-slate-500 mb-1">Dias de prueba</label>
+                  <select
+                    value={trialDays}
+                    onChange={(e) => setTrialDays(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]">
+                    <option value={0}>Sin periodo de prueba</option>
+                    <option value={7}>7 dias</option>
+                    <option value={14}>14 dias</option>
+                    <option value={30}>30 dias</option>
                   </select>
                 </div>
               </div>
 
-              {/* Resumen */}
               <div className="bg-[#4F46E5]/5 border border-[#4F46E5]/20 rounded-lg p-4">
                 <h2 className="text-[13px] font-medium text-[#4F46E5] mb-2">Resumen</h2>
                 <div className="space-y-1.5">
@@ -207,7 +270,7 @@ export default function NuevoTenantPage() {
                     <span className="text-[11px] font-medium text-slate-700">{plan}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[11px] text-slate-500">Módulos</span>
+                    <span className="text-[11px] text-slate-500">Modulos</span>
                     <span className="text-[11px] font-medium text-slate-700">{modulosActivos.length}/14</span>
                   </div>
                   <div className="flex justify-between">
@@ -217,7 +280,6 @@ export default function NuevoTenantPage() {
                 </div>
               </div>
 
-              {/* Botones */}
               <button
                 type="submit"
                 disabled={loading}
@@ -225,14 +287,13 @@ export default function NuevoTenantPage() {
               >
                 {loading ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : "Crear negocio y enviar invitación"}
+                ) : "Crear negocio y enviar invitacion"}
               </button>
 
               <Link href="/maestro/dashboard"
                 className="w-full block text-center text-[12px] text-slate-400 hover:text-slate-600 transition-colors py-1">
                 Cancelar
               </Link>
-
             </div>
           </div>
         </form>

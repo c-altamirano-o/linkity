@@ -1,0 +1,703 @@
+"use client";
+
+import { useState, useTransition, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Search, Plus, Users, UserCheck, Clock, Wallet, LogIn, LogOut, Pencil,
+  Banknote, X, Check, Ban, Link2,
+} from "lucide-react";
+import type { PersonalData, EmpleadoUI, EsquemaPago, BaseComision, Frecuencia, EstadoPago } from "@/lib/personal-data";
+import { label, type LabelDictionary } from "@/lib/labels";
+import {
+  crearEmpleadoAction, editarEmpleadoAction, cambiarEstadoEmpleadoAction,
+  registrarAsistenciaAction, generarPagoAction, actualizarEstadoPagoAction,
+  obtenerSugerenciaComisionAction, type DatosEmpleado,
+} from "@/app/actions/personal-actions";
+
+interface BranchOption {
+  id: string;
+  name: string;
+}
+
+interface PersonalClientProps {
+  data: PersonalData;
+  labels: LabelDictionary;
+  branches: BranchOption[];
+  tenantSlug: string;
+}
+
+const ESQUEMA_TEXTO: Record<EsquemaPago, string> = { FIJO: "Sueldo fijo", COMISION: "Solo comisión", MIXTO: "Fijo + comisión" };
+const COMISION_BASE_TEXTO: Record<BaseComision, string> = { VENTAS: "Ventas", REPARACIONES: "Reparaciones", UTILIDAD: "Utilidad" };
+const FRECUENCIA_TEXTO: Record<Frecuencia, string> = { SEMANAL: "Semanal", QUINCENAL: "Quincenal", MENSUAL: "Mensual" };
+const ESTADO_PAGO_TEXTO: Record<EstadoPago, string> = { PENDING: "Pendiente", PAID: "Pagado", CANCELLED: "Cancelado" };
+const ESTADO_PAGO_BADGE: Record<EstadoPago, string> = {
+  PENDING: "bg-amber-50 text-amber-700",
+  PAID: "bg-emerald-50 text-emerald-700",
+  CANCELLED: "bg-muted text-muted-foreground",
+};
+
+const formatMXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
+const formatFecha = (iso: string) => new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
+const formatHora = (iso: string) => new Date(iso).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" });
+
+function iniciales(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean);
+  return ((partes[0]?.[0] ?? "") + (partes[1]?.[0] ?? "")).toUpperCase() || "?";
+}
+
+function periodoPorDefecto(frecuencia: Frecuencia): { inicio: string; fin: string } {
+  const hoy = new Date();
+  const dias = frecuencia === "SEMANAL" ? 7 : frecuencia === "MENSUAL" ? 30 : 15;
+  const inicioDate = new Date(hoy.getTime() - (dias - 1) * 86_400_000);
+  return { inicio: inicioDate.toISOString().slice(0, 10), fin: hoy.toISOString().slice(0, 10) };
+}
+
+interface FormEmpleado {
+  branchId: string;
+  name: string;
+  phone: string;
+  email: string;
+  position: string;
+  paymentScheme: EsquemaPago;
+  baseSalary: string;
+  commissionRate: string;
+  commissionBase: BaseComision;
+  paymentFrequency: Frecuencia;
+  clabe: string;
+  userId: string;
+}
+
+function formVacio(branchId: string): FormEmpleado {
+  return {
+    branchId, name: "", phone: "", email: "", position: "",
+    paymentScheme: "FIJO", baseSalary: "", commissionRate: "0", commissionBase: "VENTAS",
+    paymentFrequency: "QUINCENAL", clabe: "", userId: "",
+  };
+}
+
+function formDeEmpleado(e: EmpleadoUI): FormEmpleado {
+  return {
+    branchId: e.branchId, name: e.name, phone: e.phone ?? "", email: e.email ?? "", position: e.position ?? "",
+    paymentScheme: e.esquemaPago, baseSalary: String(e.sueldoBase), commissionRate: String(e.comisionRate),
+    commissionBase: e.comisionBase, paymentFrequency: e.frecuencia, clabe: e.clabe ?? "", userId: e.userId ?? "",
+  };
+}
+
+export default function PersonalClient({ data, labels, branches, tenantSlug }: PersonalClientProps) {
+  const router = useRouter();
+  const { empleados, usuariosDisponibles } = data;
+
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroSucursal, setFiltroSucursal] = useState("todas");
+  const [filtroActivo, setFiltroActivo] = useState<"activos" | "todos">("activos");
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(empleados[0]?.id ?? null);
+
+  const [pending, startAccion] = useTransition();
+  const [accionError, setAccionError] = useState<string | null>(null);
+
+  const [modalEmpleado, setModalEmpleado] = useState<{ modo: "crear" | "editar"; id: string | null } | null>(null);
+  const [form, setForm] = useState<FormEmpleado>(formVacio(branches[0]?.id ?? ""));
+  const [formError, setFormError] = useState<string | null>(null);
+  const [guardando, startGuardar] = useTransition();
+
+  const [modalPagoStaffId, setModalPagoStaffId] = useState<string | null>(null);
+  const [pagoInicio, setPagoInicio] = useState("");
+  const [pagoFin, setPagoFin] = useState("");
+  const [pagoBase, setPagoBase] = useState("");
+  const [pagoComision, setPagoComision] = useState("");
+  const [pagoNotas, setPagoNotas] = useState("");
+  const [pagoAdvertencia, setPagoAdvertencia] = useState<string | null>(null);
+  const [pagoError, setPagoError] = useState<string | null>(null);
+  const [cargandoSugerencia, setCargandoSugerencia] = useState(false);
+  const [generandoPago, startGenerarPago] = useTransition();
+
+  const empleadosFiltrados = useMemo(() => {
+    return empleados.filter((e) => {
+      const matchBusqueda = e.name.toLowerCase().includes(busqueda.toLowerCase()) || (e.position ?? "").toLowerCase().includes(busqueda.toLowerCase());
+      const matchSucursal = filtroSucursal === "todas" || e.branchId === filtroSucursal;
+      const matchActivo = filtroActivo === "todos" || e.isActive;
+      return matchBusqueda && matchSucursal && matchActivo;
+    });
+  }, [empleados, busqueda, filtroSucursal, filtroActivo]);
+
+  const seleccionado = empleados.find((e) => e.id === seleccionadoId) ?? null;
+
+  const totalActivos = empleados.filter((e) => e.isActive).length;
+  const activosHoy = empleados.filter((e) => e.asistenciaHoy?.checkIn).length;
+  const horasSemana = Math.round(empleados.reduce((s, e) => s + e.horasSemana, 0) * 10) / 10;
+  const nominaPendiente = empleados.reduce((s, e) => s + e.pagos.filter((p) => p.estado === "PENDING").reduce((s2, p) => s2 + p.total, 0), 0);
+
+  const refrescar = () => router.refresh();
+
+  // ── Asistencia ──────────────────────────────────────────
+  const handleAsistencia = (staffId: string, accion: "entrada" | "salida") => {
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await registrarAsistenciaAction({ tenantSlug, staffId, accion });
+      if (res.ok) refrescar();
+      else setAccionError(res.error);
+    });
+  };
+
+  const handleToggleActivo = (emp: EmpleadoUI) => {
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await cambiarEstadoEmpleadoAction({ tenantSlug, staffId: emp.id, activo: !emp.isActive });
+      if (res.ok) refrescar();
+      else setAccionError(res.error);
+    });
+  };
+
+  // ── Modal empleado (crear/editar) ────────────────────────
+  const abrirNuevoEmpleado = () => {
+    setForm(formVacio(branches[0]?.id ?? ""));
+    setFormError(null);
+    setModalEmpleado({ modo: "crear", id: null });
+  };
+
+  const abrirEditarEmpleado = (emp: EmpleadoUI) => {
+    setForm(formDeEmpleado(emp));
+    setFormError(null);
+    setModalEmpleado({ modo: "editar", id: emp.id });
+  };
+
+  const usuariosParaSelector = useMemo(() => {
+    if (modalEmpleado?.modo === "editar") {
+      const actual = empleados.find((e) => e.id === modalEmpleado.id);
+      if (actual?.userId && actual.usuarioVinculado) {
+        return [{ id: actual.userId, name: actual.usuarioVinculado, email: actual.email ?? "" }, ...usuariosDisponibles];
+      }
+    }
+    return usuariosDisponibles;
+  }, [modalEmpleado, usuariosDisponibles, empleados]);
+
+  const handleGuardarEmpleado = () => {
+    if (!form.name.trim()) { setFormError("El nombre es obligatorio"); return; }
+    if (!form.branchId) { setFormError("Selecciona una sucursal"); return; }
+    const baseSalary = parseFloat(form.baseSalary || "0");
+    const commissionRate = parseFloat(form.commissionRate || "0");
+    if (!Number.isFinite(baseSalary) || baseSalary < 0) { setFormError("El sueldo base no es válido"); return; }
+    if (!Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 100) { setFormError("El % de comisión debe estar entre 0 y 100"); return; }
+    setFormError(null);
+
+    const datos: DatosEmpleado = {
+      branchId: form.branchId,
+      name: form.name,
+      phone: form.phone || null,
+      email: form.email || null,
+      position: form.position || null,
+      paymentScheme: form.paymentScheme as any,
+      baseSalary,
+      commissionRate,
+      commissionBase: form.commissionBase as any,
+      paymentFrequency: form.paymentFrequency as any,
+      clabe: form.clabe || null,
+      userId: form.userId || null,
+    };
+
+    startGuardar(async () => {
+      const res = modalEmpleado?.modo === "editar" && modalEmpleado.id
+        ? await editarEmpleadoAction({ tenantSlug, staffId: modalEmpleado.id, ...datos })
+        : await crearEmpleadoAction({ tenantSlug, ...datos });
+      if (res.ok) {
+        setModalEmpleado(null);
+        refrescar();
+      } else {
+        setFormError(res.error);
+      }
+    });
+  };
+
+  // ── Modal generar pago ───────────────────────────────────
+  const abrirModalPago = (emp: EmpleadoUI) => {
+    const periodo = periodoPorDefecto(emp.frecuencia);
+    setModalPagoStaffId(emp.id);
+    setPagoInicio(periodo.inicio);
+    setPagoFin(periodo.fin);
+    setPagoBase(emp.esquemaPago === "COMISION" ? "0" : String(emp.sueldoBase));
+    setPagoComision("0");
+    setPagoAdvertencia(null);
+    setPagoError(null);
+    if (emp.esquemaPago !== "FIJO") {
+      cargarSugerencia(emp.id, periodo.inicio, periodo.fin);
+    }
+  };
+
+  const cargarSugerencia = (staffId: string, inicio: string, fin: string) => {
+    setCargandoSugerencia(true);
+    obtenerSugerenciaComisionAction({ tenantSlug, staffId, periodoInicio: inicio, periodoFin: fin })
+      .then((res) => {
+        if (res.ok) {
+          setPagoComision(String(res.monto));
+          setPagoAdvertencia(res.advertencia);
+        } else {
+          setPagoAdvertencia(res.error);
+        }
+      })
+      .finally(() => setCargandoSugerencia(false));
+  };
+
+  const handleCambiarPeriodoPago = (campo: "inicio" | "fin", valor: string) => {
+    const nuevoInicio = campo === "inicio" ? valor : pagoInicio;
+    const nuevoFin = campo === "fin" ? valor : pagoFin;
+    if (campo === "inicio") setPagoInicio(valor); else setPagoFin(valor);
+    if (modalPagoStaffId && seleccionadoParaPago?.esquemaPago !== "FIJO") {
+      cargarSugerencia(modalPagoStaffId, nuevoInicio, nuevoFin);
+    }
+  };
+
+  const seleccionadoParaPago = empleados.find((e) => e.id === modalPagoStaffId) ?? null;
+
+  const handleGenerarPago = () => {
+    if (!modalPagoStaffId) return;
+    const montoBase = parseFloat(pagoBase || "0");
+    const montoComision = parseFloat(pagoComision || "0");
+    if (!Number.isFinite(montoBase) || montoBase < 0) { setPagoError("El monto base no es válido"); return; }
+    if (!Number.isFinite(montoComision) || montoComision < 0) { setPagoError("El monto de comisión no es válido"); return; }
+    if (!pagoInicio || !pagoFin) { setPagoError("Define el período"); return; }
+    setPagoError(null);
+
+    startGenerarPago(async () => {
+      const res = await generarPagoAction({
+        tenantSlug, staffId: modalPagoStaffId, periodoInicio: pagoInicio, periodoFin: pagoFin,
+        montoBase, montoComision, notas: pagoNotas || null,
+      });
+      if (res.ok) {
+        setModalPagoStaffId(null);
+        setPagoNotas("");
+        refrescar();
+      } else {
+        setPagoError(res.error);
+      }
+    });
+  };
+
+  const handleActualizarPago = (paymentId: string, estado: "PAID" | "CANCELLED") => {
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await actualizarEstadoPagoAction({ tenantSlug, paymentId, estado });
+      if (res.ok) refrescar();
+      else setAccionError(res.error);
+    });
+  };
+
+  const moduloNombre = label(labels, "module.staff.name");
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-4 sm:px-6 pt-4 pb-2">
+        <h1 className="text-xl font-bold tracking-tight text-foreground">{moduloNombre}</h1>
+        <p className="text-sm text-muted-foreground">Directorio, asistencia y nómina de tu equipo.</p>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-4 sm:px-6 pb-3">
+        {[
+          { label: "Total empleados", value: String(totalActivos), sub: "Activos", icon: Users, color: "text-primary" },
+          { label: "Activos hoy", value: String(activosHoy), sub: "Con entrada registrada", icon: UserCheck, color: "text-emerald-600" },
+          { label: "Horas registradas", value: String(horasSemana), sub: "Últimos 8 días", icon: Clock, color: "text-foreground" },
+          { label: "Nómina pendiente", value: nominaPendiente === 0 ? "Al día" : formatMXN(nominaPendiente), sub: "Pagos por procesar", icon: Wallet, color: nominaPendiente === 0 ? "text-emerald-600" : "text-amber-600" },
+        ].map((m) => (
+          <div key={m.label} className="bg-card border border-border rounded-xl p-3">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[10px] text-muted-foreground">{m.label}</p>
+              <m.icon className={`w-3.5 h-3.5 ${m.color}`} />
+            </div>
+            <p className={`text-lg font-semibold ${m.color}`}>{m.value}</p>
+            <p className="text-[10px] text-muted-foreground">{m.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {accionError && (
+        <div className="mx-4 sm:mx-6 mb-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{accionError}</div>
+      )}
+
+      <div className="flex-1 overflow-hidden flex border-t border-border">
+        {/* Lista */}
+        <div className="w-full md:w-80 flex-col bg-card border-r border-border flex-shrink-0 hidden md:flex">
+          <div className="px-3 py-2 border-b border-border space-y-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+              <input type="text" value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar por nombre o puesto..."
+                className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+            </div>
+            <div className="flex gap-2">
+              {branches.length > 1 && (
+                <select value={filtroSucursal} onChange={(e) => setFiltroSucursal(e.target.value)}
+                  className="flex-1 text-[11px] border border-border rounded-lg px-2 py-1 bg-card text-foreground">
+                  <option value="todas">Todas las sucursales</option>
+                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              )}
+              <div className="flex gap-1">
+                {(["activos", "todos"] as const).map((f) => (
+                  <button key={f} onClick={() => setFiltroActivo(f)}
+                    className={`px-2 py-1 rounded-full text-[10px] font-medium capitalize transition-colors ${
+                      filtroActivo === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}>
+                    {f === "activos" ? "Activos" : "Todos"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button onClick={abrirNuevoEmpleado}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium rounded-lg">
+              <Plus className="w-3.5 h-3.5" /> Nuevo empleado
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {empleadosFiltrados.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-xs">Sin resultados</div>
+            ) : empleadosFiltrados.map((e) => (
+              <div key={e.id} onClick={() => setSeleccionadoId(e.id)}
+                className={`px-3 py-3 border-b border-border/60 cursor-pointer transition-all border-l-2 ${
+                  seleccionado?.id === e.id ? "bg-primary/5 border-l-primary" : "hover:bg-muted border-l-transparent"
+                }`}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${
+                    e.isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                  }`}>
+                    {iniciales(e.name)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground truncate">{e.name}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{e.position || "Sin puesto"} · {e.branchName}</p>
+                  </div>
+                  {!e.isActive && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground flex-shrink-0">Inactivo</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Detalle */}
+        <div className="flex-1 overflow-y-auto bg-muted">
+          {!seleccionado ? (
+            <div className="flex flex-col items-center justify-center h-full p-10 text-center">
+              <Users className="w-8 h-8 text-muted-foreground/40 mb-2" />
+              <p className="text-sm font-medium text-foreground mb-1">Sin empleados registrados</p>
+              <button onClick={abrirNuevoEmpleado} className="text-xs text-primary mt-1">+ Registrar el primero</button>
+            </div>
+          ) : (
+            <>
+              <div className="bg-card border-b border-border px-4 sm:px-5 py-3">
+                <div className="flex items-start justify-between mb-2 flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-semibold flex-shrink-0 ${
+                      seleccionado.isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                    }`}>
+                      {iniciales(seleccionado.name)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{seleccionado.name}</p>
+                      <p className="text-xs text-muted-foreground">{seleccionado.position || "Sin puesto"} · {seleccionado.branchName}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap justify-end">
+                    {seleccionado.isActive && (!seleccionado.asistenciaHoy?.checkIn ? (
+                      <button disabled={pending} onClick={() => handleAsistencia(seleccionado.id, "entrada")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-lg text-xs font-medium">
+                        <LogIn className="w-3 h-3" /> Registrar entrada
+                      </button>
+                    ) : !seleccionado.asistenciaHoy?.checkOut ? (
+                      <button disabled={pending} onClick={() => handleAsistencia(seleccionado.id, "salida")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg text-xs font-medium">
+                        <LogOut className="w-3 h-3" /> Registrar salida
+                      </button>
+                    ) : (
+                      <span className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-medium">
+                        <Check className="w-3 h-3" /> Asistencia completa
+                      </span>
+                    ))}
+                    <button onClick={() => abrirEditarEmpleado(seleccionado)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted rounded-lg text-xs font-medium text-foreground">
+                      <Pencil className="w-3 h-3" /> Editar
+                    </button>
+                    <button onClick={() => abrirModalPago(seleccionado)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-xs font-medium">
+                      <Banknote className="w-3 h-3" /> Generar pago
+                    </button>
+                    <button disabled={pending} onClick={() => handleToggleActivo(seleccionado)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted disabled:opacity-50 rounded-lg text-xs font-medium text-muted-foreground">
+                      {seleccionado.isActive ? <><Ban className="w-3 h-3" /> Desactivar</> : <><Check className="w-3 h-3" /> Reactivar</>}
+                    </button>
+                  </div>
+                </div>
+                {seleccionado.asistenciaHoy?.checkIn && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Hoy: entrada {formatHora(seleccionado.asistenciaHoy.checkIn)}
+                    {seleccionado.asistenciaHoy.checkOut ? ` · salida ${formatHora(seleccionado.asistenciaHoy.checkOut)}` : " · sin salida registrada"}
+                  </p>
+                )}
+              </div>
+
+              <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-card border border-border rounded-xl p-4">
+                  <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">DATOS DEL EMPLEADO</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: "Teléfono", value: seleccionado.phone || "Sin registrar" },
+                      { label: "Email", value: seleccionado.email || "Sin registrar" },
+                      { label: "Esquema de pago", value: ESQUEMA_TEXTO[seleccionado.esquemaPago] },
+                      { label: "Sueldo base", value: formatMXN(seleccionado.sueldoBase), color: "text-primary" },
+                      ...(seleccionado.esquemaPago !== "FIJO"
+                        ? [
+                            { label: "Comisión", value: `${seleccionado.comisionRate}% sobre ${COMISION_BASE_TEXTO[seleccionado.comisionBase].toLowerCase()}` },
+                          ]
+                        : []),
+                      { label: "Frecuencia de pago", value: FRECUENCIA_TEXTO[seleccionado.frecuencia] },
+                      { label: "CLABE", value: seleccionado.clabe || "Sin registrar" },
+                      { label: "Ingreso", value: formatFecha(seleccionado.hiredAt) },
+                    ].map((f) => (
+                      <div key={f.label} className="bg-muted rounded-lg p-2.5">
+                        <p className="text-[9px] text-muted-foreground mb-0.5">{f.label}</p>
+                        <p className={`text-xs font-medium ${f.color || "text-foreground"}`}>{f.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px]">
+                    <Link2 className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                    {seleccionado.usuarioVinculado ? (
+                      <span className="text-foreground">Cuenta vinculada: {seleccionado.usuarioVinculado}</span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        Sin cuenta vinculada{seleccionado.esquemaPago !== "FIJO" ? " — su comisión no se calcula automáticamente" : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-card border border-border rounded-xl p-4">
+                  <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">ASISTENCIA RECIENTE</p>
+                  {seleccionado.horasSemana === 0 && !seleccionado.asistenciaHoy ? (
+                    <p className="text-xs text-muted-foreground">Sin registros de asistencia todavía.</p>
+                  ) : (
+                    <p className="text-xs text-foreground">
+                      <span className="font-semibold">{seleccionado.horasSemana}</span> horas trabajadas en los últimos 8 días.
+                    </p>
+                  )}
+                </div>
+
+                <div className="sm:col-span-2 bg-card border border-border rounded-xl p-4">
+                  <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL DE PAGOS</p>
+                  {seleccionado.pagos.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Sin pagos generados todavía.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {seleccionado.pagos.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between gap-2 bg-muted rounded-lg px-3 py-2 flex-wrap">
+                          <div>
+                            <p className="text-xs text-foreground">{formatFecha(p.periodoInicio)} — {formatFecha(p.periodoFin)}</p>
+                            <p className="text-[10px] text-muted-foreground">Base {formatMXN(p.montoBase)} + comisión {formatMXN(p.montoComision)}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-foreground">{formatMXN(p.total)}</span>
+                            <span className={`text-[9px] font-medium px-2 py-0.5 rounded-full ${ESTADO_PAGO_BADGE[p.estado]}`}>{ESTADO_PAGO_TEXTO[p.estado]}</span>
+                            {p.estado === "PENDING" && (
+                              <div className="flex gap-1">
+                                <button disabled={pending} onClick={() => handleActualizarPago(p.id, "PAID")}
+                                  className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded text-[10px] font-medium">
+                                  Pagar
+                                </button>
+                                <button disabled={pending} onClick={() => handleActualizarPago(p.id, "CANCELLED")}
+                                  className="px-2 py-1 border border-border hover:bg-card disabled:opacity-50 text-muted-foreground rounded text-[10px] font-medium">
+                                  Cancelar
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Modal empleado */}
+      {modalEmpleado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setModalEmpleado(null)}>
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-sm font-medium text-foreground">{modalEmpleado.modo === "crear" ? "Nuevo empleado" : "Editar empleado"}</span>
+              <button onClick={() => setModalEmpleado(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              {formError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{formError}</div>}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">NOMBRE</label>
+                  <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PUESTO</label>
+                  <input type="text" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">TELÉFONO</label>
+                  <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">EMAIL</label>
+                  <input type="text" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+              </div>
+
+              {branches.length > 1 && (
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
+                  <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">CUENTA DE ACCESO VINCULADA (OPCIONAL)</label>
+                <select value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                  <option value="">Sin vincular</option>
+                  {usuariosParaSelector.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+                </select>
+                <p className="text-[10px] text-muted-foreground mt-1">Necesario para calcular su comisión automáticamente sobre sus propias ventas o reparaciones.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">ESQUEMA DE PAGO</label>
+                  <select value={form.paymentScheme} onChange={(e) => setForm({ ...form, paymentScheme: e.target.value as EsquemaPago })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                    {(["FIJO", "COMISION", "MIXTO"] as EsquemaPago[]).map((s) => <option key={s} value={s}>{ESQUEMA_TEXTO[s]}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">FRECUENCIA</label>
+                  <select value={form.paymentFrequency} onChange={(e) => setForm({ ...form, paymentFrequency: e.target.value as Frecuencia })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                    {(["SEMANAL", "QUINCENAL", "MENSUAL"] as Frecuencia[]).map((f) => <option key={f} value={f}>{FRECUENCIA_TEXTO[f]}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUELDO BASE</label>
+                  <input type="number" value={form.baseSalary} onChange={(e) => setForm({ ...form, baseSalary: e.target.value })} placeholder="$0"
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">CLABE</label>
+                  <input type="text" value={form.clabe} onChange={(e) => setForm({ ...form, clabe: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+              </div>
+
+              {form.paymentScheme !== "FIJO" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN</label>
+                    <input type="number" value={form.commissionRate} onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">COMISIÓN SOBRE</label>
+                    <select value={form.commissionBase} onChange={(e) => setForm({ ...form, commissionBase: e.target.value as BaseComision })}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                      {(["VENTAS", "REPARACIONES", "UTILIDAD"] as BaseComision[]).map((c) => <option key={c} value={c}>{COMISION_BASE_TEXTO[c]}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
+              <button onClick={() => setModalEmpleado(null)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+              <button disabled={guardando} onClick={handleGuardarEmpleado}
+                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
+                {guardando ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal generar pago */}
+      {seleccionadoParaPago && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setModalPagoStaffId(null)}>
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-sm font-medium text-foreground">Generar pago — {seleccionadoParaPago.name}</span>
+              <button onClick={() => setModalPagoStaffId(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              {pagoError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{pagoError}</div>}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">DESDE</label>
+                  <input type="date" value={pagoInicio} onChange={(e) => handleCambiarPeriodoPago("inicio", e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">HASTA</label>
+                  <input type="date" value={pagoFin} onChange={(e) => handleCambiarPeriodoPago("fin", e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MONTO BASE</label>
+                <input type="number" value={pagoBase} onChange={(e) => setPagoBase(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+              </div>
+
+              {seleccionadoParaPago.esquemaPago !== "FIJO" && (
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">
+                    MONTO DE COMISIÓN {cargandoSugerencia && "(calculando sugerencia...)"}
+                  </label>
+                  <input type="number" value={pagoComision} onChange={(e) => setPagoComision(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                  {pagoAdvertencia && <p className="text-[10px] text-amber-600 mt-1">{pagoAdvertencia}</p>}
+                </div>
+              )}
+
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">NOTAS (OPCIONAL)</label>
+                <input type="text" value={pagoNotas} onChange={(e) => setPagoNotas(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+              </div>
+
+              <div className="bg-muted rounded-lg px-3 py-2 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Total a pagar</span>
+                <span className="text-sm font-semibold text-primary">
+                  {formatMXN((parseFloat(pagoBase || "0") || 0) + (parseFloat(pagoComision || "0") || 0))}
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
+              <button onClick={() => setModalPagoStaffId(null)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+              <button disabled={generandoPago} onClick={handleGenerarPago}
+                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
+                {generandoPago ? "Generando..." : "Generar pago"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

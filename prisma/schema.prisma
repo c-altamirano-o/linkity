@@ -11,34 +11,62 @@ datasource db {
 // ============================================
 
 model Tenant {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  logo        String?
-  phone       String?
-  email       String?
-  address     String?
-  city        String?
-  state       String?
-  rfc         String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String      @id @default(cuid())
+  name         String
+  slug         String      @unique
+  logo         String?
+  phone        String?
+  email        String?
+  address      String?
+  city         String?
+  state        String?
+  rfc          String?
+  businessType String?
+  themePreset  ThemePreset @default(NEUTRAL_TECH)
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-  branches      Branch[]
-  users         User[]
-  modules       TenantModule[]
-  subscription  Subscription?
-  customers     Customer[]
-  products      Product[]
-  categories    Category[]
-  repairs       Repair[]
-  sales         Sale[]
-  cashSessions  CashSession[]
-  staff         Staff[]
-  suppliers     Supplier[]
-  purchases     Purchase[]
-  invoices      Invoice[]
+  branches     Branch[]
+  users        User[]
+  modules      TenantModule[]
+  subscription Subscription?
+  customers    Customer[]
+  products     Product[]
+  categories   Category[]
+  repairs      Repair[]
+  sales        Sale[]
+  cashSessions CashSession[]
+  staff        Staff[]
+  suppliers    Supplier[]
+  purchases    Purchase[]
+  invoices     Invoice[]
+  labels       TenantLabel[]
+}
+
+// Textos de UI personalizables por tenant (nombre del módulo, de la entidad,
+// de cada estatus, etc.) sobre una clave interna fija que nunca cambia.
+// Si un tenant no tiene fila para una key, el resolver cae al default del
+// rubro (businessType) y, si tampoco existe, al default genérico del sistema
+// — ambos niveles de default viven en código (lib/labels.ts), no en la BD.
+model TenantLabel {
+  id        String   @id @default(cuid())
+  tenantId  String
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+}
+
+enum ThemePreset {
+  NEUTRAL_TECH
+  BLACK_GOLD
+  EMERALD
+  CORAL_WARM
+  OCEAN_BLUE
 }
 
 model Branch {
@@ -58,6 +86,7 @@ model Branch {
   sales        Sale[]
   cashSessions CashSession[]
   staff        Staff[]
+  purchases    Purchase[]
 }
 
 // ============================================
@@ -65,23 +94,27 @@ model Branch {
 // ============================================
 
 model User {
-  id           String    @id @default(cuid())
-  tenantId     String
-  branchId     String?
-  email        String
-  name         String
-  avatarUrl    String?
-  supabaseId   String    @unique
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id         String   @id @default(cuid())
+  tenantId   String
+  branchId   String?
+  email      String
+  name       String
+  avatarUrl  String?
+  supabaseId String   @unique
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id])
-  branch      Branch?      @relation(fields: [branchId], references: [id])
-  role        UserRole?
-  sales       Sale[]
-  repairs     Repair[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  branch       Branch?       @relation(fields: [branchId], references: [id])
+  role         UserRole?
+  sales        Sale[]
+  repairs      Repair[]
   cashSessions CashSession[]
+  // Vínculo opcional con su registro de personal (M11) — permite atribuirle
+  // a un empleado específico las ventas/reparaciones que hizo, para poder
+  // calcular su comisión individual. No todo Staff tiene cuenta de acceso.
+  staff        Staff?
 
   @@unique([tenantId, email])
 }
@@ -105,7 +138,7 @@ model Role {
 }
 
 model Permission {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   module      String
   action      String
   description String?
@@ -168,6 +201,15 @@ model Subscription {
   endDate   DateTime?
   price     Decimal            @db.Decimal(10, 2)
   currency  String             @default("MXN")
+  // Vigencia contratada (1/3/6/12 meses) y si el cliente activó cobro
+  // recurrente — de esto depende qué recordatorio le corresponde cerca
+  // del vencimiento (aviso de próximo cobro automático vs. aviso de que
+  // debe renovar a mano). El cálculo/envío de esos recordatorios y el
+  // panel de vigencias en Panel Maestro son trabajo aparte, todavía no
+  // construido — este cambio solo guarda los datos que ese trabajo va a
+  // necesitar.
+  billingCycle BillingCycle    @default(MENSUAL)
+  autoRenew    Boolean         @default(false)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 }
@@ -179,6 +221,13 @@ enum SubscriptionStatus {
   TRIAL
 }
 
+enum BillingCycle {
+  MENSUAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
 // ============================================
 // M6 - CATÁLOGO
 // ============================================
@@ -188,6 +237,7 @@ model Category {
   tenantId String
   name     String
   type     CategoryType
+  color    String?
   parentId String?
 
   tenant   Tenant     @relation(fields: [tenantId], references: [id])
@@ -214,12 +264,14 @@ model Product {
   price       Decimal     @db.Decimal(10, 2)
   cost        Decimal?    @db.Decimal(10, 2)
   taxRate     Decimal     @default(16) @db.Decimal(5, 2)
+  emoji       String?
+  metadata    Json?
   isActive    Boolean     @default(true)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  tenant        Tenant          @relation(fields: [tenantId], references: [id])
-  category      Category?       @relation(fields: [categoryId], references: [id])
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  category      Category?      @relation(fields: [categoryId], references: [id])
   inventory     Inventory[]
   saleItems     SaleItem[]
   repairItems   RepairItem[]
@@ -266,6 +318,7 @@ model Customer {
   rfc       String?
   address   String?
   points    Int      @default(0)
+  metadata  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -280,27 +333,29 @@ model Customer {
 // ============================================
 
 model Sale {
-  id             String      @id @default(cuid())
-  tenantId       String
-  branchId       String
-  customerId     String?
-  userId         String
-  folio          String
-  subtotal       Decimal     @db.Decimal(10, 2)
-  tax            Decimal     @db.Decimal(10, 2)
-  discount       Decimal     @default(0) @db.Decimal(10, 2)
-  total          Decimal     @db.Decimal(10, 2)
-  paymentMethod  PaymentMethod
-  status         SaleStatus  @default(COMPLETED)
-  notes          String?
-  createdAt      DateTime    @default(now())
+  id            String        @id @default(cuid())
+  tenantId      String
+  branchId      String
+  customerId    String?
+  userId        String
+  folio         String
+  subtotal      Decimal       @db.Decimal(10, 2)
+  tax           Decimal       @db.Decimal(10, 2)
+  discount      Decimal       @default(0) @db.Decimal(10, 2)
+  total         Decimal       @db.Decimal(10, 2)
+  paymentMethod PaymentMethod
+  status        SaleStatus    @default(COMPLETED)
+  notes         String?
+  metadata      Json?
+  createdAt     DateTime      @default(now())
 
-  tenant   Tenant     @relation(fields: [tenantId], references: [id])
-  branch   Branch     @relation(fields: [branchId], references: [id])
-  customer Customer?  @relation(fields: [customerId], references: [id])
-  user     User       @relation(fields: [userId], references: [id])
-  items    SaleItem[]
-  invoice  Invoice?
+  tenant        Tenant             @relation(fields: [tenantId], references: [id])
+  branch        Branch             @relation(fields: [branchId], references: [id])
+  customer      Customer?          @relation(fields: [customerId], references: [id])
+  user          User               @relation(fields: [userId], references: [id])
+  items         SaleItem[]
+  invoice       Invoice?
+  mixedPayments SaleMixedPayment[]
 
   @@unique([tenantId, folio])
 }
@@ -316,6 +371,23 @@ model SaleItem {
 
   sale    Sale    @relation(fields: [saleId], references: [id])
   product Product @relation(fields: [productId], references: [id])
+}
+
+// Desglose de una venta con método de pago "Mixto": un renglón por cada
+// método realmente utilizado (ej. parte en efectivo, parte con tarjeta).
+model SaleMixedPayment {
+  id     String             @id @default(cuid())
+  saleId String
+  method MixedPaymentMethod
+  amount Decimal            @db.Decimal(10, 2)
+
+  sale Sale @relation(fields: [saleId], references: [id])
+}
+
+enum MixedPaymentMethod {
+  CASH
+  CARD
+  TRANSFER
 }
 
 enum PaymentMethod {
@@ -358,10 +430,10 @@ model Repair {
   whatsappSent  Boolean      @default(false)
   notes         String?
 
-  tenant   Tenant       @relation(fields: [tenantId], references: [id])
-  branch   Branch       @relation(fields: [branchId], references: [id])
-  customer Customer     @relation(fields: [customerId], references: [id])
-  user     User         @relation(fields: [userId], references: [id])
+  tenant   Tenant          @relation(fields: [tenantId], references: [id])
+  branch   Branch          @relation(fields: [branchId], references: [id])
+  customer Customer        @relation(fields: [customerId], references: [id])
+  user     User            @relation(fields: [userId], references: [id])
   items    RepairItem[]
   history  RepairHistory[]
 
@@ -397,6 +469,10 @@ enum RepairStatus {
   READY
   DELIVERED
   CANCELLED
+  WORKSHOP_READY
+  WORKSHOP_RETURN
+  SHOP_READY
+  SHOP_RETURN
 }
 
 enum Priority {
@@ -411,23 +487,23 @@ enum Priority {
 // ============================================
 
 model CashSession {
-  id           String          @id @default(cuid())
+  id           String            @id @default(cuid())
   tenantId     String
   branchId     String
   userId       String
-  openingCash  Decimal         @db.Decimal(10, 2)
-  closingCash  Decimal?        @db.Decimal(10, 2)
-  expectedCash Decimal?        @db.Decimal(10, 2)
-  difference   Decimal?        @db.Decimal(10, 2)
+  openingCash  Decimal           @db.Decimal(10, 2)
+  closingCash  Decimal?          @db.Decimal(10, 2)
+  expectedCash Decimal?          @db.Decimal(10, 2)
+  difference   Decimal?          @db.Decimal(10, 2)
   status       CashSessionStatus @default(OPEN)
-  openedAt     DateTime        @default(now())
+  openedAt     DateTime          @default(now())
   closedAt     DateTime?
   notes        String?
 
-  tenant       Tenant          @relation(fields: [tenantId], references: [id])
-  branch       Branch          @relation(fields: [branchId], references: [id])
-  user         User            @relation(fields: [userId], references: [id])
-  movements    CashMovement[]
+  tenant    Tenant         @relation(fields: [tenantId], references: [id])
+  branch    Branch         @relation(fields: [branchId], references: [id])
+  user      User           @relation(fields: [userId], references: [id])
+  movements CashMovement[]
 }
 
 model CashMovement {
@@ -456,34 +532,90 @@ enum MovementType {
 // ============================================
 
 model Staff {
-  id         String    @id @default(cuid())
-  tenantId   String
-  branchId   String
-  name       String
-  phone      String?
-  email      String?
-  position   String?
-  baseSalary Decimal   @db.Decimal(10, 2)
-  commission Decimal   @default(0) @db.Decimal(5, 2)
-  hiredAt    DateTime  @default(now())
-  isActive   Boolean   @default(true)
+  id       String  @id @default(cuid())
+  tenantId String
+  branchId String
+  // Cuenta de acceso ligada a este empleado (opcional) — sin esto no hay
+  // forma de saber qué Sale/Repair hizo cada quien para calcularle su
+  // comisión individual, porque Sale.userId/Repair.userId apuntan a User,
+  // no a Staff. Un empleado sin cuenta (ej. sin acceso al sistema) se queda
+  // con userId null y su comisión no se calcula automáticamente.
+  userId   String? @unique
+  name     String
+  phone    String?
+  email    String?
+  position String?
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id])
-  branch      Branch       @relation(fields: [branchId], references: [id])
+  // Esquema de pago (6 campos)
+  paymentScheme    PaymentScheme    @default(FIJO)
+  baseSalary       Decimal          @db.Decimal(10, 2)
+  commissionRate   Decimal          @default(0) @db.Decimal(5, 2)
+  commissionBase   CommissionBase   @default(VENTAS)
+  paymentFrequency PaymentFrequency @default(QUINCENAL)
+  clabe            String?
+
+  hiredAt  DateTime @default(now())
+  isActive Boolean  @default(true)
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
+  branch     Branch         @relation(fields: [branchId], references: [id])
+  user       User?          @relation(fields: [userId], references: [id])
   attendances Attendance[]
+  payments   StaffPayment[]
+}
+
+enum PaymentScheme {
+  FIJO
+  COMISION
+  MIXTO
+}
+
+enum CommissionBase {
+  VENTAS
+  REPARACIONES
+  UTILIDAD
+}
+
+enum PaymentFrequency {
+  SEMANAL
+  QUINCENAL
+  MENSUAL
 }
 
 model Attendance {
-  id        String    @id @default(cuid())
-  staffId   String
-  date      DateTime  @db.Date
-  checkIn   DateTime?
-  checkOut  DateTime?
-  notes     String?
+  id       String    @id @default(cuid())
+  staffId  String
+  date     DateTime  @db.Date
+  checkIn  DateTime?
+  checkOut DateTime?
+  notes    String?
 
   staff Staff @relation(fields: [staffId], references: [id])
 
   @@unique([staffId, date])
+}
+
+// Pagos de nómina efectivamente generados/dispersados a cada miembro del personal.
+model StaffPayment {
+  id               String             @id @default(cuid())
+  staffId          String
+  periodStart      DateTime           @db.Date
+  periodEnd        DateTime           @db.Date
+  baseAmount       Decimal            @db.Decimal(10, 2)
+  commissionAmount Decimal            @default(0) @db.Decimal(10, 2)
+  total            Decimal            @db.Decimal(10, 2)
+  status           StaffPaymentStatus @default(PENDING)
+  paidAt           DateTime?
+  notes            String?
+  createdAt        DateTime           @default(now())
+
+  staff Staff @relation(fields: [staffId], references: [id])
+}
+
+enum StaffPaymentStatus {
+  PENDING
+  PAID
+  CANCELLED
 }
 
 // ============================================
@@ -509,14 +641,28 @@ model Purchase {
   id         String         @id @default(cuid())
   tenantId   String
   supplierId String
+  // Sucursal a la que se incrementa el Inventory cuando la compra pasa a
+  // RECIBIDA. Opcional (no `branchId String` a secas) por la misma razón
+  // que Staff.userId se dejó opcional: ya existe al menos una Purchase
+  // sembrada (seed.ts) sin este campo, y agregarlo como requerido habría
+  // disparado una advertencia de pérdida de datos en `prisma db push`. Toda
+  // Purchase NUEVA sí exige branchId desde la Server Action
+  // (crearCompraAction en compras-actions.ts) — el null solo puede
+  // sobrevivir en registros sembrados antes de este cambio.
+  branchId   String?
   folio      String
   total      Decimal        @db.Decimal(10, 2)
   status     PurchaseStatus @default(PENDING)
   notes      String?
   createdAt  DateTime       @default(now())
+  // Cuándo se marcó como recibida (dispara el incremento de Inventory) —
+  // mismo patrón que Repair.deliveredAt / CashSession.closedAt: un
+  // timestamp de "cuándo pasó" además del status en sí.
+  receivedAt DateTime?
 
   tenant   Tenant         @relation(fields: [tenantId], references: [id])
   supplier Supplier       @relation(fields: [supplierId], references: [id])
+  branch   Branch?        @relation(fields: [branchId], references: [id])
   items    PurchaseItem[]
 
   @@unique([tenantId, folio])
