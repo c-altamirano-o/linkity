@@ -37,6 +37,7 @@ export default async function InventarioPage({
       labels={labels}
       branches={branches}
       tenantSlug={tenantSlug}
+      tenantName={tenant.name}
     />
   );
 }

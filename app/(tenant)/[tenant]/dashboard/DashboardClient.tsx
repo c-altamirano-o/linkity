@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ShoppingCart, Wrench, AlertTriangle, Clock, ArrowUpRight, ArrowDownRight,
   CheckCircle, RotateCcw, Receipt, Building2, X, Phone, Settings,
@@ -86,10 +87,13 @@ function EmptyState({ text }: { text: string }) {
 export default function DashboardClient({
   data,
   labels,
+  tenantSlug,
 }: {
   data: DashboardData;
   labels: LabelDictionary;
+  tenantSlug: string;
 }) {
+  const router = useRouter();
   const t = (key: string) => label(labels, key);
 
   const [modalAbierto, setModalAbierto] = useState<ModalType>(null);
@@ -527,12 +531,13 @@ export default function DashboardClient({
             <p className="text-xs font-medium text-muted-foreground mb-2">Accesos rápidos</p>
             <div className="grid grid-cols-2 gap-1.5">
               {[
-                { label: "Nueva venta", color: "bg-primary" },
-                { label: `Nueva ${t("entity.repair.singular").toLowerCase()}`, color: "bg-cyan-500" },
-                { label: "Abrir caja", color: "bg-emerald-500" },
-                { label: "Nuevo cliente", color: "bg-amber-500" },
+                { label: "Nueva venta", color: "bg-primary", href: `/${tenantSlug}/pos` },
+                { label: `Nueva ${t("entity.repair.singular").toLowerCase()}`, color: "bg-cyan-500", href: `/${tenantSlug}/reparaciones` },
+                { label: "Abrir caja", color: "bg-emerald-500", href: `/${tenantSlug}/caja` },
+                { label: "Nuevo cliente", color: "bg-amber-500", href: `/${tenantSlug}/clientes` },
               ].map((btn) => (
-                <button key={btn.label} className={`${btn.color} hover:opacity-90 text-white text-xs font-medium py-1.5 px-2 rounded-lg`}>
+                <button key={btn.label} onClick={() => router.push(btn.href)}
+                  className={`${btn.color} hover:opacity-90 text-white text-xs font-medium py-1.5 px-2 rounded-lg`}>
                   {btn.label}
                 </button>
               ))}

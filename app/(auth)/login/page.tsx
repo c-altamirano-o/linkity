@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { getTenantSlugBySupabaseId } from "./actions";
+import { getTenantSlugBySupabaseId, isSuperAdminBySupabaseId } from "./actions";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -35,6 +35,13 @@ export default function LoginPage() {
     const tenantSlug = await getTenantSlugBySupabaseId(data.user.id);
 
     if (!tenantSlug) {
+      // No tiene negocio asociado — puede ser un administrador de Panel
+      // Maestro (esas cuentas no son User de ningún tenant a propósito).
+      const esSuperAdmin = await isSuperAdminBySupabaseId(data.user.id);
+      if (esSuperAdmin) {
+        window.location.href = "/maestro/dashboard";
+        return;
+      }
       setError("Tu cuenta no está asociada a ningún negocio.");
       setLoading(false);
       return;

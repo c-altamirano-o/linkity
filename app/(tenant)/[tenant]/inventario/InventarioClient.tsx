@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search, SlidersHorizontal, FileDown, Plus, AlertTriangle, XCircle, Building2 } from "lucide-react";
+import { Search, SlidersHorizontal, FileDown, ChevronDown, Plus, AlertTriangle, XCircle, Building2 } from "lucide-react";
 import type { ProductoInventario } from "@/lib/inventario-data";
 import { ajustarStock, type AjusteTipo } from "@/lib/inventario-actions";
 import { label, type LabelDictionary } from "@/lib/labels";
@@ -17,9 +17,11 @@ interface InventarioClientProps {
   labels: LabelDictionary;
   branches: BranchOption[];
   tenantSlug: string;
+  tenantName: string;
 }
 
 const TODAS_SUCURSALES_ID = "__todas__";
+const TODAS_CATEGORIAS = "__todas__";
 
 const filtrosTabs = ["Todos", "Productos", "Refacciones", "Stock bajo", "Agotados"] as const;
 
@@ -37,19 +39,39 @@ interface VistaProducto extends ProductoInventario {
   minStock: number;
 }
 
-export default function InventarioClient({ productos, labels, branches, tenantSlug }: InventarioClientProps) {
+export default function InventarioClient({ productos, labels, branches, tenantSlug, tenantName }: InventarioClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState<(typeof filtrosTabs)[number]>("Todos");
   const [sucursal, setSucursal] = useState(TODAS_SUCURSALES_ID);
+  const [categoriaFiltro, setCategoriaFiltro] = useState(TODAS_CATEGORIAS);
 
   const [modalAjuste, setModalAjuste] = useState<VistaProducto | null>(null);
   const [ajusteCantidad, setAjusteCantidad] = useState("");
   const [ajusteTipo, setAjusteTipo] = useState<AjusteTipo>("entrada");
   const [ajusteBranchId, setAjusteBranchId] = useState("");
   const [ajusteError, setAjusteError] = useState<string | null>(null);
+
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
+  const [mostrarExportMenu, setMostrarExportMenu] = useState(false);
+  const filtrosRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filtrosRef.current && !filtrosRef.current.contains(e.target as Node)) setMostrarFiltros(false);
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) setMostrarExportMenu(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const categoriasDisponibles = useMemo(
+    () => Array.from(new Set(productos.map((p) => p.categoryName))).sort((a, b) => a.localeCompare(b)),
+    [productos]
+  );
 
   const vista: VistaProducto[] = useMemo(() => {
     return productos.map((p) => {
@@ -71,8 +93,98 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
       filtro === "Refacciones" ? p.type === "PART" :
       filtro === "Stock bajo" ? status === "low" :
       filtro === "Agotados" ? status === "out" : true;
-    return matchSearch && matchFiltro;
+    const matchCategoria = categoriaFiltro === TODAS_CATEGORIAS ? true : p.categoryName === categoriaFiltro;
+    return matchSearch && matchFiltro && matchCategoria;
   });
+
+  const filtrosActivos = categoriaFiltro !== TODAS_CATEGORIAS ? 1 : 0;
+
+  const nombreArchivo = (ext: string) =>
+    `Inventario_${sucursalNombreArchivo()}_${new Date().toISOString().slice(0, 10)}.${ext}`;
+
+  function sucursalNombreArchivo() {
+    const n = sucursal === TODAS_SUCURSALES_ID ? "Todas_sucursales" : branches.find((b) => b.id === sucursal)?.name ?? "Sucursal";
+    return n.replace(/\s+/g, "_");
+  }
+
+  // ── CSV ──────────────────────────────────────────────────
+  const exportarCSV = () => {
+    const lines = [
+      `# ${tenantName} — Inventario`,
+      `# Sucursal: ${sucursal === TODAS_SUCURSALES_ID ? "Todas las sucursales" : branches.find((b) => b.id === sucursal)?.name ?? ""}`,
+      `# Generado el: ${new Date().toLocaleString("es-MX")}`,
+      `Producto,SKU,Categoria,Tipo,Stock actual,Stock minimo,Precio venta,Costo,Valor inventario`,
+      ...productosFiltrados.map(
+        (p) =>
+          `"${p.name}",${p.sku ?? ""},"${p.categoryName}",${p.type === "PRODUCT" ? "Producto" : "Refaccion"},${p.stock},${p.minStock},${p.price},${p.cost},${(p.cost * p.stock).toFixed(2)}`
+      ),
+    ];
+    const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nombreArchivo("csv");
+    a.click();
+    URL.revokeObjectURL(url);
+    setMostrarExportMenu(false);
+  };
+
+  // ── XLSX ─────────────────────────────────────────────────
+  const exportarXLSX = async () => {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Linkity Soluciones";
+    const ws = wb.addWorksheet("Inventario", { views: [{ state: "frozen", ySplit: 4 }] });
+    const PU = "4F46E5", LP = "EDE9FE";
+    const BD = { style: "thin" as const, color: { argb: "E2E8F0" } };
+    const bdr = { top: BD, bottom: BD, left: BD, right: BD };
+    ws.columns = [
+      { width: 28 }, { width: 14 }, { width: 18 }, { width: 12 },
+      { width: 12 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 16 },
+    ];
+    const addMerged = (range: string, text: string, bg: string, fc: string, sz: number, bold = false, align: any = "left") => {
+      ws.mergeCells(range);
+      const c = ws.getCell(range.split(":")[0]);
+      c.value = text;
+      c.font = { bold, size: sz, color: { argb: fc } };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
+      c.alignment = { horizontal: align, vertical: "middle" };
+    };
+    addMerged("A1:I1", `${tenantName} — Inventario`, PU, "FFFFFF", 14, true);
+    ws.getRow(1).height = 26;
+    const sucursalTexto = sucursal === TODAS_SUCURSALES_ID ? "Todas las sucursales" : branches.find((b) => b.id === sucursal)?.name ?? "";
+    addMerged("A2:I2", `Sucursal: ${sucursalTexto}  ·  Generado el: ${new Date().toLocaleString("es-MX")}`, LP, "374151", 9);
+    ws.addRow([]);
+
+    const header = ws.addRow(["Producto", "SKU", "Categoría", "Tipo", "Stock actual", "Stock mínimo", "Precio venta", "Costo", "Valor inventario"]);
+    header.eachCell((c) => {
+      c.font = { bold: true, size: 10, color: { argb: "FFFFFF" } };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E293B" } };
+      c.alignment = { horizontal: "left", vertical: "middle" };
+      c.border = bdr;
+    });
+
+    for (const p of productosFiltrados) {
+      const row = ws.addRow([
+        p.name, p.sku ?? "", p.categoryName, p.type === "PRODUCT" ? "Producto" : "Refacción",
+        p.stock, p.minStock, p.price, p.cost, Number((p.cost * p.stock).toFixed(2)),
+      ]);
+      row.eachCell((c, colNumber) => {
+        c.border = bdr;
+        if (colNumber >= 7) c.numFmt = "$#,##0.00";
+      });
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nombreArchivo("xlsx");
+    a.click();
+    URL.revokeObjectURL(url);
+    setMostrarExportMenu(false);
+  };
 
   const totalProductos = productos.length;
   const valorInventario = vista.reduce((s, p) => s + p.cost * p.stock, 0);
@@ -144,14 +256,59 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 px-2.5 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted">
-            <SlidersHorizontal className="w-3 h-3" />
-            <span className="hidden sm:inline">Filtros</span>
-          </button>
-          <button className="flex items-center gap-1.5 px-2.5 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted">
-            <FileDown className="w-3 h-3" />
-            <span className="hidden sm:inline">Exportar</span>
-          </button>
+          <div className="relative" ref={filtrosRef}>
+            <button onClick={() => setMostrarFiltros((v) => !v)}
+              className="flex items-center gap-1.5 px-2.5 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted">
+              <SlidersHorizontal className="w-3 h-3" />
+              <span className="hidden sm:inline">Filtros</span>
+              {filtrosActivos > 0 && (
+                <span className="w-4 h-4 flex items-center justify-center bg-primary text-primary-foreground rounded-full text-[9px] font-semibold">
+                  {filtrosActivos}
+                </span>
+              )}
+            </button>
+            {mostrarFiltros && (
+              <div className="absolute right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-lg z-30 p-3 w-56">
+                <label className="block text-[10px] font-medium text-muted-foreground mb-1">Categoría</label>
+                <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)}
+                  className="w-full px-2.5 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary">
+                  <option value={TODAS_CATEGORIAS}>Todas las categorías</option>
+                  {categoriasDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                {filtrosActivos > 0 && (
+                  <button onClick={() => setCategoriaFiltro(TODAS_CATEGORIAS)}
+                    className="mt-2 text-[10px] text-primary font-medium hover:underline">
+                    Limpiar filtro
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="relative" ref={exportRef}>
+            <button onClick={() => setMostrarExportMenu((v) => !v)}
+              className="flex items-center gap-1.5 px-2.5 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted">
+              <FileDown className="w-3 h-3" />
+              <span className="hidden sm:inline">Exportar</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${mostrarExportMenu ? "rotate-180" : ""}`} />
+            </button>
+            {mostrarExportMenu && (
+              <div className="absolute right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-lg z-30 overflow-hidden w-52">
+                {[
+                  { icon: "📄", label: "CSV", desc: "Compatible con cualquier sistema", fn: exportarCSV },
+                  { icon: "📊", label: "Excel (XLSX)", desc: "Con formato y colores", fn: exportarXLSX },
+                ].map((opt) => (
+                  <button key={opt.label} onClick={opt.fn}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left border-b border-border/60 last:border-0">
+                    <span className="text-base">{opt.icon}</span>
+                    <div>
+                      <p className="text-xs font-medium text-foreground">{opt.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{opt.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

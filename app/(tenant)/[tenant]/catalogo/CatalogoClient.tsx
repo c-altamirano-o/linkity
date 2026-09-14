@@ -1,13 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search, Plus, SlidersHorizontal, Smartphone, Cpu,
   Wrench, TrendingUp, Building2, Calendar, Menu, X
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import type { CatalogoData, TipoCatalogo } from "@/lib/catalogo-data";
+import type { CatalogoData, TipoCatalogo, ProductoCatalogo } from "@/lib/catalogo-data";
 import { label, type LabelDictionary } from "@/lib/labels";
+import {
+  crearProductoAction, editarProductoAction, crearCategoriaAction,
+  type TipoProductoInput,
+} from "@/app/actions/catalogo-actions";
 
 interface BranchOption {
   id: string;
@@ -18,12 +23,37 @@ interface CatalogoClientProps {
   data: CatalogoData;
   labels: LabelDictionary;
   branches: BranchOption[];
+  tenantSlug: string;
 }
+
+interface FormProducto {
+  name: string;
+  sku: string;
+  price: string;
+  cost: string;
+  type: TipoProductoInput;
+  categoryId: string;
+  emoji: string;
+  isActive: boolean;
+}
+
+const FORM_VACIO: FormProducto = {
+  name: "", sku: "", price: "", cost: "", type: "PRODUCT", categoryId: "", emoji: "", isActive: true,
+};
 
 const TIPO_LABELS: Record<TipoCatalogo, string> = {
   PRODUCT: "Productos",
   PART: "Refacciones",
   SERVICE: "Servicios",
+};
+
+// Solo como placeholder visual del campo emoji en el modal — el valor real
+// que se guarda cuando el usuario no escribe nada es null (el fallback por
+// tipo se resuelve en lib/catalogo-data.ts al leer, no aquí).
+const TYPE_FALLBACK_EMOJI_LOCAL: Record<TipoProductoInput, string> = {
+  PRODUCT: "📦",
+  PART: "🔩",
+  SERVICE: "🔧",
 };
 
 // Colores fijos por tipo — funcionan como etiquetas categóricas (igual que
@@ -99,7 +129,9 @@ function matchesPeriodo(fechaISO: string, periodo: string, fechaInicio: string, 
   return true;
 }
 
-export default function CatalogoClient({ data, labels, branches }: CatalogoClientProps) {
+export default function CatalogoClient({ data, labels, branches, tenantSlug }: CatalogoClientProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const { categorias, productos, ventasDetalle } = data;
 
   const categoriasPorTipo = useMemo(() => {
@@ -132,6 +164,80 @@ export default function CatalogoClient({ data, labels, branches }: CatalogoClien
     setTabActivo("catalogo");
     setSidebarMovil(false);
   };
+
+  // ── Modal crear/editar producto ──────────────────────────────
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [editando, setEditando] = useState<ProductoCatalogo | null>(null);
+  const [form, setForm] = useState<FormProducto>(FORM_VACIO);
+  const [errorModal, setErrorModal] = useState<string | null>(null);
+  const [nuevaCategoria, setNuevaCategoria] = useState(false);
+  const [nombreNuevaCategoria, setNombreNuevaCategoria] = useState("");
+
+  function abrirNuevo() {
+    setEditando(null);
+    setForm({ ...FORM_VACIO, type: tipoActivo });
+    setErrorModal(null);
+    setNuevaCategoria(false);
+    setNombreNuevaCategoria("");
+    setModalAbierto(true);
+  }
+
+  function abrirEditar(p: ProductoCatalogo) {
+    setEditando(p);
+    setForm({
+      name: p.name,
+      sku: p.sku ?? "",
+      price: String(p.price),
+      cost: p.cost ? String(p.cost) : "",
+      type: p.type,
+      categoryId: p.categoryId ?? "",
+      emoji: p.emoji ?? "",
+      isActive: true,
+    });
+    setErrorModal(null);
+    setNuevaCategoria(false);
+    setNombreNuevaCategoria("");
+    setModalAbierto(true);
+  }
+
+  function guardarProducto() {
+    setErrorModal(null);
+    startTransition(async () => {
+      let categoryId = form.categoryId;
+
+      if (nuevaCategoria && nombreNuevaCategoria.trim()) {
+        const resCat = await crearCategoriaAction({ tenantSlug, name: nombreNuevaCategoria.trim(), type: form.type });
+        if (!resCat.ok) {
+          setErrorModal(resCat.error);
+          return;
+        }
+        categoryId = resCat.id;
+      }
+
+      const datos = {
+        name: form.name,
+        sku: form.sku || null,
+        price: Number(form.price),
+        cost: form.cost ? Number(form.cost) : null,
+        type: form.type,
+        categoryId: categoryId || null,
+        emoji: form.emoji || null,
+      };
+
+      const res = editando
+        ? await editarProductoAction({ tenantSlug, productId: editando.id, isActive: form.isActive, ...datos })
+        : await crearProductoAction({ tenantSlug, ...datos });
+
+      if (!res.ok) {
+        setErrorModal(res.error);
+        return;
+      }
+      setModalAbierto(false);
+      router.refresh();
+    });
+  }
+
+  const categoriasDelTipoForm = categorias.filter((c) => c.type === form.type);
 
   const productosFiltrados = productos.filter((p) => {
     const matchTipo = p.type === tipoActivo;
@@ -191,7 +297,7 @@ export default function CatalogoClient({ data, labels, branches }: CatalogoClien
       <div className="flex items-center justify-between px-3 py-3 border-b border-border">
         <span className="text-sm font-medium text-foreground">{label(labels, "module.catalog.name")}</span>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1 bg-primary text-primary-foreground text-[10px] font-medium px-2 py-1.5 rounded-lg">
+          <button onClick={abrirNuevo} className="flex items-center gap-1 bg-primary text-primary-foreground text-[10px] font-medium px-2 py-1.5 rounded-lg">
             <Plus className="w-2.5 h-2.5" /> Nuevo
           </button>
           <button onClick={() => setSidebarMovil(false)}
@@ -338,12 +444,15 @@ export default function CatalogoClient({ data, labels, branches }: CatalogoClien
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                 <Plus className="w-8 h-8 text-muted-foreground/40 mb-2" />
                 <p className="text-sm font-medium text-foreground mb-1">Aún no hay nada en tu catálogo</p>
-                <p className="text-xs text-muted-foreground max-w-xs">Agrega tus primeros productos, refacciones o servicios para empezar a venderlos.</p>
+                <p className="text-xs text-muted-foreground max-w-xs mb-3">Agrega tus primeros productos, refacciones o servicios para empezar a venderlos.</p>
+                <button onClick={abrirNuevo} className="flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-medium px-3 py-2 rounded-lg">
+                  <Plus className="w-3.5 h-3.5" /> Agregar producto
+                </button>
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 content-start">
                 {productosFiltrados.map((p) => (
-                  <div key={p.id} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer">
+                  <div key={p.id} onClick={() => abrirEditar(p)} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer">
                     <div className="h-14 sm:h-16 bg-muted flex items-center justify-center text-2xl border-b border-border">
                       {p.emoji}
                     </div>
@@ -363,7 +472,7 @@ export default function CatalogoClient({ data, labels, branches }: CatalogoClien
                 {productosFiltrados.length === 0 && (
                   <p className="col-span-full text-center text-xs text-muted-foreground py-6">Sin resultados para este filtro.</p>
                 )}
-                <button className="flex flex-col items-center justify-center border border-dashed border-border rounded-xl hover:border-primary/40 hover:bg-muted transition-all min-h-[130px] sm:min-h-[140px]">
+                <button onClick={abrirNuevo} className="flex flex-col items-center justify-center border border-dashed border-border rounded-xl hover:border-primary/40 hover:bg-muted transition-all min-h-[130px] sm:min-h-[140px]">
                   <Plus className="w-6 h-6 text-muted-foreground/50 mb-1" />
                   <span className="text-[10px] text-muted-foreground/50">Agregar</span>
                 </button>
@@ -482,6 +591,147 @@ export default function CatalogoClient({ data, labels, branches }: CatalogoClien
           </div>
         )}
       </div>
+
+      {/* Modal crear/editar producto */}
+      {modalAbierto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={() => setModalAbierto(false)}
+        >
+          <div
+            className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h3 className="text-[13px] font-semibold text-foreground">
+                {editando ? "Editar producto" : "Nuevo producto"}
+              </h3>
+              <button onClick={() => setModalAbierto(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 flex flex-col gap-3">
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground">Tipo</label>
+                <select
+                  value={form.type}
+                  onChange={(e) => setForm({ ...form, type: e.target.value as TipoProductoInput, categoryId: "" })}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                >
+                  {TIPOS_ORDEN.map((t) => (
+                    <option key={t} value={t}>{TIPO_LABELS[t]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground">Nombre *</label>
+                <input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                  placeholder="Ej. Pantalla iPhone 13"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground">SKU</label>
+                  <input
+                    value={form.sku}
+                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground">Emoji</label>
+                  <input
+                    value={form.emoji}
+                    onChange={(e) => setForm({ ...form, emoji: e.target.value })}
+                    placeholder={TYPE_FALLBACK_EMOJI_LOCAL[form.type]}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground">Precio de venta *</label>
+                  <input
+                    type="number" min={0} step="0.01"
+                    value={form.price}
+                    onChange={(e) => setForm({ ...form, price: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground">Costo</label>
+                  <input
+                    type="number" min={0} step="0.01"
+                    value={form.cost}
+                    onChange={(e) => setForm({ ...form, cost: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium text-muted-foreground">Categoría</label>
+                  <button
+                    type="button"
+                    onClick={() => setNuevaCategoria((v) => !v)}
+                    className="text-[10px] text-primary font-medium hover:underline"
+                  >
+                    {nuevaCategoria ? "Elegir existente" : "+ Nueva categoría"}
+                  </button>
+                </div>
+                {nuevaCategoria ? (
+                  <input
+                    value={nombreNuevaCategoria}
+                    onChange={(e) => setNombreNuevaCategoria(e.target.value)}
+                    placeholder="Nombre de la nueva categoría"
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                  />
+                ) : (
+                  <select
+                    value={form.categoryId}
+                    onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                  >
+                    <option value="">Sin categoría</option>
+                    {categoriasDelTipoForm.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {editando && (
+                <label className="flex items-center gap-2 text-[11px] text-foreground/80">
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                  />
+                  Producto activo (visible para venderse)
+                </label>
+              )}
+              {errorModal && <p className="text-[11px] text-red-600">{errorModal}</p>}
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
+              <button
+                onClick={() => setModalAbierto(false)}
+                className="px-3 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarProducto}
+                disabled={isPending || !form.name.trim() || !form.price}
+                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12px] font-medium transition-colors"
+              >
+                {isPending ? "Guardando…" : editando ? "Guardar cambios" : "Crear producto"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

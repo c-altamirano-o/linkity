@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MODULE_CATALOG } from "@/lib/modules-catalog";
+import { requireSuperAdmin } from "@/lib/maestro-auth";
 
 interface CreateTenantInput {
   businessName: string;
@@ -47,6 +48,12 @@ function generateTempPassword(): string {
 export async function createTenantAction(
   input: CreateTenantInput
 ): Promise<CreateTenantResult> {
+  // Server Actions son llamables por POST directo, sin pasar por el layout
+  // de /maestro — el guard de la UI no alcanza a protegerlas por sí solo.
+  // Ver lib/maestro-auth.ts.
+  const resuelto = await requireSuperAdmin();
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
   try {
     if (!input.businessName || !input.ownerName || !input.ownerEmail) {
       return { success: false, error: "Faltan campos obligatorios." };

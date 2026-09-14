@@ -29,5 +29,5 @@ export default async function DashboardPage({
     getTenantLabels(tenant.id, tenant.businessType),
   ]);
 
-  return <DashboardClient data={data} labels={labels} />;
+  return <DashboardClient data={data} labels={labels} tenantSlug={tenantSlug} />;
 }

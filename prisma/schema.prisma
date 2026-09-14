@@ -90,6 +90,28 @@ model Branch {
 }
 
 // ============================================
+// SUPERADMIN — PANEL MAESTRO
+// ============================================
+
+// Administradores de la plataforma (dueños de Linkity, no de un negocio en
+// particular). Separado de User a propósito: User.tenantId es obligatorio
+// (todo User pertenece a UN negocio), así que un admin de plataforma no se
+// puede modelar como un User más sin volver ese campo opcional en todo el
+// resto del sistema. Un superadmin inicia sesión con el mismo Supabase
+// Auth que cualquier tenant (mismo login de siempre) — esta tabla es lo
+// único que decide si esa sesión tiene permiso de entrar a /maestro/*.
+// Se crea/promueve con scripts/set-superadmin.ts (no hay UI para esto
+// todavía, a propósito: solo Carlos lo necesita por ahora).
+model SuperAdmin {
+  id         String   @id @default(cuid())
+  supabaseId String   @unique
+  email      String   @unique
+  name       String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
+
+// ============================================
 // M3 - USUARIOS Y AUTENTICACIÓN
 // ============================================
 

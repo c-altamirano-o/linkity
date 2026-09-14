@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { 
-  LayoutDashboard, Building2, Puzzle, CreditCard, 
-  Users, Ticket, BarChart3, Settings, LogOut, Link as LinkIcon
+import { redirect } from "next/navigation";
+import {
+  LayoutDashboard, Building2, Puzzle, CreditCard,
+  Users, Ticket, BarChart3, Settings, LogOut, Link as LinkIcon, ShieldAlert
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { requireSuperAdmin } from "@/lib/maestro-auth";
 
 export const metadata: Metadata = {
   title: "Panel Maestro — Linkity",
@@ -35,11 +38,42 @@ const navItems = [
   }
 ];
 
-export default function MaestroLayout({
+export default async function MaestroLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Sin sesión: manda a iniciar sesión (login/page.tsx ya sabe mandar a un
+  // superadmin a /maestro/dashboard en cuanto entra, ver isSuperAdminBySupabaseId
+  // en app/(auth)/login/actions.ts). Con sesión pero sin fila en SuperAdmin:
+  // se queda logueado en su cuenta normal, pero ve un "acceso no
+  // autorizado" en vez del panel — así se evita el loop confuso de
+  // mandarlo de vuelta a /login estando ya autenticado.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const resuelto = await requireSuperAdmin();
+
+  if (!resuelto.ok) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-100 p-4">
+        <div className="bg-white border border-slate-200 rounded-lg p-8 max-w-sm text-center">
+          <ShieldAlert className="w-8 h-8 text-red-500 mx-auto mb-3" />
+          <p className="text-[14px] font-medium text-slate-800 mb-1">Acceso no autorizado</p>
+          <p className="text-[12px] text-slate-500 mb-4">
+            Tu cuenta ({user.email}) no tiene permisos de administrador de Panel Maestro.
+          </p>
+          <Link href="/login" className="text-[12px] text-[#4F46E5] font-medium hover:underline">
+            Volver al inicio de sesión
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
 
