@@ -7,36 +7,51 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/maestro-auth";
+import { prisma } from "@/lib/prisma";
+import { getSuscripcionesData } from "@/lib/suscripciones-data";
 
 export const metadata: Metadata = {
   title: "Panel Maestro — Linkity",
 };
 
-const navItems = [
-  {
-    section: "PRINCIPAL",
-    items: [
-      { label: "Dashboard", href: "/maestro/dashboard", icon: LayoutDashboard, badge: null },
-      { label: "Negocios", href: "/maestro/tenants", icon: Building2, badge: "12" },
-      { label: "Módulos", href: "/maestro/modulos", icon: Puzzle, badge: null },
-      { label: "Suscripciones", href: "/maestro/suscripciones", icon: CreditCard, badge: "2", badgeColor: "red" },
-    ]
-  },
-  {
-    section: "GESTIÓN",
-    items: [
-      { label: "Usuarios", href: "/maestro/usuarios", icon: Users, badge: null },
-      { label: "Soporte", href: "/maestro/soporte", icon: Ticket, badge: "3", badgeColor: "green" },
-      { label: "Reportes", href: "/maestro/reportes", icon: BarChart3, badge: null },
-    ]
-  },
-  {
-    section: "SISTEMA",
-    items: [
-      { label: "Configuración", href: "/maestro/configuracion", icon: Settings, badge: null },
-    ]
-  }
-];
+// Antes estos dos badges ("12" negocios, "2" suscripciones) eran números
+// fijos en el mockup, sin conexión a datos reales. Ahora "Negocios" cuenta
+// los tenants reales y "Suscripciones" cuenta cuántos necesitan atención
+// de cobro (vencidas + por vencer en los próximos 7 días) — mismo criterio
+// de no fabricar datos que se usó en el resto del Panel Maestro.
+function buildNavItems(totalNegocios: number, alertaSuscripciones: number) {
+  return [
+    {
+      section: "PRINCIPAL",
+      items: [
+        { label: "Dashboard", href: "/maestro/dashboard", icon: LayoutDashboard, badge: null as string | null, badgeColor: undefined as string | undefined },
+        { label: "Negocios", href: "/maestro/tenants", icon: Building2, badge: String(totalNegocios), badgeColor: undefined as string | undefined },
+        { label: "Módulos", href: "/maestro/modulos", icon: Puzzle, badge: null as string | null, badgeColor: undefined as string | undefined },
+        {
+          label: "Suscripciones",
+          href: "/maestro/suscripciones",
+          icon: CreditCard,
+          badge: alertaSuscripciones > 0 ? String(alertaSuscripciones) : null,
+          badgeColor: "red" as string | undefined,
+        },
+      ]
+    },
+    {
+      section: "GESTIÓN",
+      items: [
+        { label: "Usuarios", href: "/maestro/usuarios", icon: Users, badge: null as string | null, badgeColor: undefined as string | undefined },
+        { label: "Soporte", href: "/maestro/soporte", icon: Ticket, badge: "3", badgeColor: "green" as string | undefined },
+        { label: "Reportes", href: "/maestro/reportes", icon: BarChart3, badge: null as string | null, badgeColor: undefined as string | undefined },
+      ]
+    },
+    {
+      section: "SISTEMA",
+      items: [
+        { label: "Configuración", href: "/maestro/configuracion", icon: Settings, badge: null as string | null, badgeColor: undefined as string | undefined },
+      ]
+    }
+  ];
+}
 
 export default async function MaestroLayout({
   children,
@@ -73,6 +88,16 @@ export default async function MaestroLayout({
       </div>
     );
   }
+
+  // Badges reales del sidebar (antes eran números fijos en el mockup):
+  // "Negocios" = total de tenants; "Suscripciones" = cuántos requieren
+  // atención de cobro ahora mismo (ya vencidos + por vencer en ≤7 días).
+  const [totalNegocios, suscripciones] = await Promise.all([
+    prisma.tenant.count(),
+    getSuscripcionesData(),
+  ]);
+  const alertaSuscripciones = suscripciones.resumen.vencidas + suscripciones.resumen.porVencerPronto;
+  const navItems = buildNavItems(totalNegocios, alertaSuscripciones);
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
