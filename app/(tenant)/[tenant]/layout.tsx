@@ -169,11 +169,20 @@ export default async function TenantLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Sin esta verificación, cualquiera que adivinara o conociera el slug de
+  // un negocio (ej. /difussion-barberia/dashboard) podía entrar sin haber
+  // iniciado sesión — proxy.ts (el middleware) solo protege rutas bajo
+  // /maestro, nunca protegió las rutas de negocio. Mismo criterio que ya
+  // usa app/(admin)/maestro/layout.tsx.
+  if (!user) {
+    redirect("/login");
+  }
+
   // Cuentas creadas con contraseña temporal (Panel Maestro o
   // auto-registro) no pueden entrar a ningún módulo del negocio hasta que
   // cambien su contraseña en /primer-acceso — esa pantalla vive fuera de
   // este layout, así que no hay riesgo de loop.
-  if (user?.user_metadata?.must_change_password) {
+  if (user.user_metadata?.must_change_password) {
     redirect("/primer-acceso");
   }
 
@@ -183,22 +192,36 @@ export default async function TenantLayout({
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
-    select: { themePreset: true },
+    select: { id: true, themePreset: true },
   });
 
   if (dbTenant?.themePreset) {
     activePreset = THEME_PRESETS[dbTenant.themePreset as keyof typeof THEME_PRESETS] || THEME_PRESETS.NEUTRAL_TECH;
   }
 
-  if (user) {
-    const dbUser = await prisma.user.findUnique({
-      where: { supabaseId: user.id },
-      include: { role: { include: { role: true } } },
-    });
-    if (dbUser) {
-      userName = dbUser.name;
-      userRole = dbUser.role?.role.name ?? "";
+  const dbUser = await prisma.user.findUnique({
+    where: { supabaseId: user.id },
+    include: { role: { include: { role: true } }, tenant: { select: { slug: true } } },
+  });
+
+  // Aislamiento multi-tenant: sin esto, un usuario autenticado de OTRO
+  // negocio podía entrar aquí con solo cambiar el slug en la URL (ej. un
+  // empleado de "fix-expert" visitando /difussion-barberia/dashboard) y ver
+  // los datos reales de un negocio ajeno — cada pantalla de adentro confía
+  // en que este layout ya validó la pertenencia. También cierra la sesión
+  // de una cuenta desactivada desde Panel Maestro (Usuarios) aunque ya
+  // tuviera una sesión abierta.
+  if (dbTenant) {
+    if (!dbUser || !dbUser.isActive) {
+      redirect("/login");
+    } else if (dbUser.tenantId !== dbTenant.id) {
+      redirect(`/${dbUser.tenant.slug}/dashboard`);
     }
+  }
+
+  if (dbUser) {
+    userName = dbUser.name;
+    userRole = dbUser.role?.role.name ?? "";
   }
 
   return (

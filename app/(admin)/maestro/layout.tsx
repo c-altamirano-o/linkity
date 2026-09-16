@@ -40,7 +40,7 @@ function buildNavItems(totalNegocios: number, alertaSuscripciones: number) {
       section: "GESTIÓN",
       items: [
         { label: "Usuarios", href: "/maestro/usuarios", icon: Users, badge: null as string | null, badgeColor: undefined as string | undefined },
-        { label: "Soporte", href: "/maestro/soporte", icon: Ticket, badge: "3", badgeColor: "green" as string | undefined },
+        { label: "Soporte", href: "/maestro/soporte", icon: Ticket, badge: null as string | null, badgeColor: undefined as string | undefined },
         { label: "Reportes", href: "/maestro/reportes", icon: BarChart3, badge: null as string | null, badgeColor: undefined as string | undefined },
       ]
     },

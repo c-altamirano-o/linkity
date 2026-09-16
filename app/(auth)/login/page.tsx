@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { getTenantSlugBySupabaseId, isSuperAdminBySupabaseId } from "./actions";
+import { getTenantAccesoBySupabaseId, isSuperAdminBySupabaseId } from "./actions";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -32,7 +32,14 @@ export default function LoginPage() {
       return;
     }
 
-    const tenantSlug = await getTenantSlugBySupabaseId(data.user.id);
+    const { tenantSlug, cuentaDesactivada } = await getTenantAccesoBySupabaseId(data.user.id);
+
+    if (cuentaDesactivada) {
+      setError("Tu cuenta fue desactivada. Contacta al administrador de tu negocio.");
+      await supabase.auth.signOut();
+      setLoading(false);
+      return;
+    }
 
     if (!tenantSlug) {
       // No tiene negocio asociado — puede ser un administrador de Panel
