@@ -1,9 +1,12 @@
 # Propuesta: Soporte (tickets) en Panel Maestro
 
-Estado: **sin aplicar**. Este documento describe el cambio que falta para que
-`/maestro/soporte` deje de ser una pantalla-aviso y se vuelva una bandeja de
-tickets real. No se tocó `prisma/schema.prisma` — un cambio de schema en
-producción se revisa contigo antes de aplicarlo, no se hace sin supervisión.
+Estado: **schema agregado a `prisma/schema.prisma`, falta correr la migración**.
+Carlos confirmó aplicar esta propuesta tal como está diseñada. El modelo
+(`SupportTicket`, `SupportTicketMessage`, enum `SupportTicketStatus`, más las
+relaciones inversas en `Tenant`/`User`/`SuperAdmin`) ya está en el archivo,
+verificado byte por byte en `C:\linkity`. Falta correr la migración contra la
+base de datos de producción (ver "Cómo aplicarlo" abajo) — después de eso se
+construyen las pantallas de ambos lados.
 
 ## Por qué no existe todavía
 
@@ -69,12 +72,12 @@ del modelo referenciado).
    patrón `requireSuperAdmin()` / verificación de tenant que ya se usa en el
    resto de Panel Maestro.
 
-## Cómo aplicarlo cuando estés listo
+## Cómo aplicarlo (falta este paso)
 
-1. Agregar el bloque de arriba a `prisma/schema.prisma` (yo puedo redactarlo
-   ya directamente en el archivo si me confirmas que sigue así).
-2. Correr `npx prisma migrate dev --name add_support_tickets` (o el flujo que
-   uses normalmente) para generar y aplicar la migración contra la base de
-   producción, y regenerar el cliente de Prisma.
-3. Recién ahí construyo las pantallas — antes de ese paso, cualquier código
-   que use `prisma.supportTicket` no compilaría.
+1. ~~Agregar el bloque de arriba a `prisma/schema.prisma`~~ — ya está hecho.
+2. Corre `npx prisma migrate dev --name add_support_tickets` en tu máquina
+   (o el flujo que uses normalmente) para generar y aplicar la migración
+   contra la base de datos, y regenerar el cliente de Prisma.
+3. Confírmame que corrió limpio (o pégame el error si algo truena) — recién
+   ahí construyo las pantallas de ambos lados. Antes de ese paso, cualquier
+   código que use `prisma.supportTicket` no compilaría.

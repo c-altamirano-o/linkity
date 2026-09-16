@@ -4,14 +4,16 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, SlidersHorizontal, Smartphone, Cpu,
-  Wrench, TrendingUp, Building2, Calendar, Menu, X
+  Wrench, TrendingUp, Building2, Calendar, Menu, X,
+  Sparkles, Upload, Download, Loader2, CheckCircle2, AlertTriangle,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import type { CatalogoData, TipoCatalogo, ProductoCatalogo } from "@/lib/catalogo-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import {
   crearProductoAction, editarProductoAction, crearCategoriaAction,
-  type TipoProductoInput,
+  cargarCatalogoArranqueAction, importarProductosAction,
+  type TipoProductoInput, type FilaImportacion,
 } from "@/app/actions/catalogo-actions";
 
 interface BranchOption {
@@ -24,6 +26,7 @@ interface CatalogoClientProps {
   labels: LabelDictionary;
   branches: BranchOption[];
   tenantSlug: string;
+  businessType: string | null;
 }
 
 interface FormProducto {
@@ -129,7 +132,7 @@ function matchesPeriodo(fechaISO: string, periodo: string, fechaInicio: string, 
   return true;
 }
 
-export default function CatalogoClient({ data, labels, branches, tenantSlug }: CatalogoClientProps) {
+export default function CatalogoClient({ data, labels, branches, tenantSlug, businessType }: CatalogoClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { categorias, productos, ventasDetalle } = data;
@@ -157,6 +160,141 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug }: C
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
   const [sidebarMovil, setSidebarMovil] = useState(false);
+
+  // ── Catálogo de arranque por rubro ───────────────────────────
+  const [cargandoArranque, setCargandoArranque] = useState(false);
+  const [errorArranque, setErrorArranque] = useState<string | null>(null);
+
+  function cargarCatalogoArranque() {
+    setErrorArranque(null);
+    setCargandoArranque(true);
+    startTransition(async () => {
+      const res = await cargarCatalogoArranqueAction({ tenantSlug });
+      setCargandoArranque(false);
+      if (!res.ok) {
+        setErrorArranque(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  // ── Importar catálogo (CSV/Excel) ────────────────────────────
+  const [modalImportar, setModalImportar] = useState(false);
+  const [importando, setImportando] = useState(false);
+  const [errorImportar, setErrorImportar] = useState<string | null>(null);
+  const [resultadoImportar, setResultadoImportar] = useState<{ creados: number; omitidos: { fila: number; motivo: string }[] } | null>(null);
+
+  const TIPO_ARCHIVO_A_ENUM: Record<string, TipoProductoInput> = {
+    producto: "PRODUCT", productos: "PRODUCT", product: "PRODUCT",
+    refaccion: "PART", "refacción": "PART", refacciones: "PART", part: "PART",
+    servicio: "SERVICE", servicios: "SERVICE", service: "SERVICE",
+  };
+
+  function descargarPlantilla() {
+    const encabezado = "Nombre,Tipo,Precio,Costo,SKU,Categoria";
+    const ejemplo = "Ejemplo: Cambio de pantalla,Servicio,800,,,Servicios";
+    const csv = [
+      "# Tipo debe ser: Producto, Refaccion o Servicio",
+      "# Costo, SKU y Categoria son opcionales — puedes dejarlos en blanco",
+      encabezado,
+      ejemplo,
+    ].join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "plantilla_catalogo_linkity.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function parsearCSV(texto: string): FilaImportacion[] {
+    const lineas = texto.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith("#"));
+    if (lineas.length === 0) return [];
+    // La primera línea no-comentario es el encabezado, se descarta.
+    const filas: FilaImportacion[] = [];
+    for (let i = 1; i < lineas.length; i++) {
+      const cols = lineas[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+      const [nombre, tipoTexto, precioTexto, costoTexto, sku, categoria] = cols;
+      if (!nombre) continue;
+      filas.push({
+        fila: i + 1,
+        name: nombre,
+        type: TIPO_ARCHIVO_A_ENUM[(tipoTexto ?? "").toLowerCase()] ?? ("" as TipoProductoInput),
+        price: Number(precioTexto),
+        cost: costoTexto ? Number(costoTexto) : null,
+        sku: sku || null,
+        categoryName: categoria || null,
+      });
+    }
+    return filas;
+  }
+
+  async function parsearXLSX(file: File): Promise<FilaImportacion[]> {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await file.arrayBuffer());
+    const ws = wb.worksheets[0];
+    const filas: FilaImportacion[] = [];
+    // Fila 1 = encabezado, se descarta. Cualquier fila que empiece con "#"
+    // en la primera celda se trata como comentario y se ignora.
+    ws.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const primera = String(row.getCell(1).value ?? "");
+      if (primera.trim().startsWith("#")) return;
+      const nombre = String(row.getCell(1).value ?? "").trim();
+      if (!nombre) return;
+      const tipoTexto = String(row.getCell(2).value ?? "").trim().toLowerCase();
+      const precioVal = row.getCell(3).value;
+      const costoVal = row.getCell(4).value;
+      const sku = String(row.getCell(5).value ?? "").trim();
+      const categoria = String(row.getCell(6).value ?? "").trim();
+      filas.push({
+        fila: rowNumber,
+        name: nombre,
+        type: TIPO_ARCHIVO_A_ENUM[tipoTexto] ?? ("" as TipoProductoInput),
+        price: typeof precioVal === "number" ? precioVal : Number(precioVal),
+        cost: costoVal != null && costoVal !== "" ? (typeof costoVal === "number" ? costoVal : Number(costoVal)) : null,
+        sku: sku || null,
+        categoryName: categoria || null,
+      });
+    });
+    return filas;
+  }
+
+  async function manejarArchivoImportar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setErrorImportar(null);
+    setResultadoImportar(null);
+    setImportando(true);
+
+    try {
+      const esExcel = file.name.toLowerCase().endsWith(".xlsx");
+      const filas = esExcel ? await parsearXLSX(file) : parsearCSV(await file.text());
+
+      if (filas.length === 0) {
+        setErrorImportar("No se encontraron filas para importar en el archivo.");
+        setImportando(false);
+        return;
+      }
+
+      const res = await importarProductosAction({ tenantSlug, filas });
+      setImportando(false);
+      if (!res.ok) {
+        setErrorImportar(res.error);
+        return;
+      }
+      setResultadoImportar({ creados: res.creados, omitidos: res.omitidos });
+      if (res.creados > 0) router.refresh();
+    } catch (err) {
+      setImportando(false);
+      setErrorImportar("No se pudo leer el archivo. Verifica que sea un .csv o .xlsx válido.");
+    }
+  }
 
   const seleccionarTipo = (tipo: TipoCatalogo) => {
     setTipoActivo(tipo);
@@ -294,9 +432,15 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug }: C
   // Contenido del sidebar (reutilizado en desktop y drawer móvil)
   const sidebarContent = (
     <>
-      <div className="flex items-center justify-between px-3 py-3 border-b border-border">
+      <div className="flex items-center justify-between px-3 py-3 border-b border-border gap-1.5">
         <span className="text-sm font-medium text-foreground">{label(labels, "module.catalog.name")}</span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => { setModalImportar(true); setErrorImportar(null); setResultadoImportar(null); }}
+            title="Importar catálogo desde CSV o Excel"
+            className="flex items-center gap-1 bg-muted text-muted-foreground text-[10px] font-medium px-2 py-1.5 rounded-lg hover:bg-muted/70">
+            <Upload className="w-2.5 h-2.5" /> Importar
+          </button>
           <button onClick={abrirNuevo} className="flex items-center gap-1 bg-primary text-primary-foreground text-[10px] font-medium px-2 py-1.5 rounded-lg">
             <Plus className="w-2.5 h-2.5" /> Nuevo
           </button>
@@ -445,9 +589,35 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug }: C
                 <Plus className="w-8 h-8 text-muted-foreground/40 mb-2" />
                 <p className="text-sm font-medium text-foreground mb-1">Aún no hay nada en tu catálogo</p>
                 <p className="text-xs text-muted-foreground max-w-xs mb-3">Agrega tus primeros productos, refacciones o servicios para empezar a venderlos.</p>
-                <button onClick={abrirNuevo} className="flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-medium px-3 py-2 rounded-lg">
-                  <Plus className="w-3.5 h-3.5" /> Agregar producto
-                </button>
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  <button onClick={abrirNuevo} className="flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-medium px-3 py-2 rounded-lg">
+                    <Plus className="w-3.5 h-3.5" /> Agregar producto
+                  </button>
+                  {businessType && (
+                    <button
+                      onClick={cargarCatalogoArranque}
+                      disabled={cargandoArranque}
+                      className="flex items-center gap-1.5 bg-card border border-border text-foreground text-xs font-medium px-3 py-2 rounded-lg hover:bg-muted disabled:opacity-60 transition-colors">
+                      {cargandoArranque
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Sparkles className="w-3.5 h-3.5 text-amber-500" />}
+                      {cargandoArranque ? "Cargando…" : "Cargar catálogo de ejemplo"}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setModalImportar(true); setErrorImportar(null); setResultadoImportar(null); }}
+                    className="flex items-center gap-1.5 bg-card border border-border text-foreground text-xs font-medium px-3 py-2 rounded-lg hover:bg-muted transition-colors">
+                    <Upload className="w-3.5 h-3.5" /> Importar desde archivo
+                  </button>
+                </div>
+                {errorArranque && (
+                  <p className="text-[11px] text-red-600 mt-2 max-w-xs">{errorArranque}</p>
+                )}
+                {businessType && (
+                  <p className="text-[10px] text-muted-foreground/70 mt-2 max-w-xs">
+                    Te agregamos algunos productos y servicios típicos de tu giro para que puedas empezar de inmediato — puedes editarlos o borrarlos cuando quieras.
+                  </p>
+                )}
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 content-start">
@@ -727,6 +897,98 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug }: C
                 className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12px] font-medium transition-colors"
               >
                 {isPending ? "Guardando…" : editando ? "Guardar cambios" : "Crear producto"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal importar catálogo (CSV/Excel) */}
+      {modalImportar && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={() => setModalImportar(false)}
+        >
+          <div
+            className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h3 className="text-[13px] font-semibold text-foreground">Importar catálogo</h3>
+              <button onClick={() => setModalImportar(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 flex flex-col gap-3">
+              <p className="text-xs text-muted-foreground">
+                Sube un archivo CSV o Excel con tus productos, refacciones o servicios. Si vienes de otro sistema, primero descarga la plantilla para ver el formato esperado.
+              </p>
+
+              <button
+                type="button"
+                onClick={descargarPlantilla}
+                className="flex items-center justify-center gap-1.5 border border-dashed border-border text-foreground text-xs font-medium px-3 py-2 rounded-lg hover:bg-muted transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" /> Descargar plantilla (.csv)
+              </button>
+
+              <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-border rounded-lg px-3 py-6 text-center cursor-pointer hover:border-primary/40 hover:bg-muted transition-colors">
+                {importando ? (
+                  <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+                ) : (
+                  <Upload className="w-6 h-6 text-muted-foreground/60" />
+                )}
+                <span className="text-xs font-medium text-foreground">
+                  {importando ? "Importando…" : "Haz clic para elegir tu archivo"}
+                </span>
+                <span className="text-[10px] text-muted-foreground">Formatos aceptados: .csv, .xlsx</span>
+                <input
+                  type="file"
+                  accept=".csv,.xlsx"
+                  onChange={manejarArchivoImportar}
+                  disabled={importando}
+                  className="hidden"
+                />
+              </label>
+
+              {errorImportar && (
+                <div className="flex items-start gap-1.5 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-red-700">{errorImportar}</p>
+                </div>
+              )}
+
+              {resultadoImportar && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-start gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-emerald-700">
+                      {resultadoImportar.creados === 0
+                        ? "No se importó ningún producto."
+                        : `Se importaron ${resultadoImportar.creados} producto${resultadoImportar.creados === 1 ? "" : "s"} correctamente.`}
+                    </p>
+                  </div>
+                  {resultadoImportar.omitidos.length > 0 && (
+                    <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg max-h-32 overflow-y-auto">
+                      <p className="text-[11px] font-medium text-amber-700 mb-1">
+                        {resultadoImportar.omitidos.length} fila{resultadoImportar.omitidos.length === 1 ? "" : "s"} omitida{resultadoImportar.omitidos.length === 1 ? "" : "s"}:
+                      </p>
+                      <ul className="text-[10px] text-amber-700 space-y-0.5">
+                        {resultadoImportar.omitidos.map((o, i) => (
+                          <li key={i}>Fila {o.fila}: {o.motivo}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
+              <button
+                onClick={() => setModalImportar(false)}
+                className="px-3 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground"
+              >
+                {resultadoImportar ? "Cerrar" : "Cancelar"}
               </button>
             </div>
           </div>

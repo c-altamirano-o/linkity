@@ -3,6 +3,7 @@
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { getCatalogoArranque } from "@/lib/catalogo-arranque";
 
 /**
  * Server Actions del módulo Catálogo (M6). Antes de este cambio no existía
@@ -199,5 +200,217 @@ export async function crearCategoriaAction(
     return { ok: true, id: nueva.id };
   } catch (err: any) {
     return manejarErrorAcceso(err, "No se pudo crear la categoría");
+  }
+}
+
+/**
+ * Onboarding: carga de un lote de productos/servicios de ejemplo según el
+ * rubro del negocio (lib/catalogo-arranque.ts). Pensada para un negocio
+ * recién registrado que todavía no tiene nada que vender — por eso exige
+ * que el catálogo esté vacío (mismo criterio que el resto del proyecto de
+ * no fabricar/duplicar datos): si ya tiene productos, no hace nada y
+ * regresa error en vez de mezclar ejemplos con su catálogo real.
+ *
+ * Las categorías se reutilizan por nombre+tipo si el negocio ya las tenía
+ * (poco probable con catálogo vacío, pero no cuesta nada ser defensivo);
+ * si no existen, se crean junto con los productos.
+ */
+export type AccionCatalogoArranqueResult = { ok: true; creados: number } | { ok: false; error: string };
+
+export async function cargarCatalogoArranqueAction(
+  params: { tenantSlug: string }
+): Promise<AccionCatalogoArranqueResult> {
+  const { tenantSlug } = params;
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const totalProductos = await db.product.count();
+    if (totalProductos > 0) {
+      return { ok: false, error: "Tu catálogo ya tiene productos — esto es solo para arrancar desde cero." };
+    }
+
+    const tenantRow = await prisma.tenant.findUnique({ where: { id: tenant.id }, select: { businessType: true } });
+    const items = getCatalogoArranque(tenantRow?.businessType ?? null);
+    if (items.length === 0) {
+      return { ok: false, error: "Todavía no hay un catálogo de ejemplo preparado para tu giro." };
+    }
+
+    const categoriaCache = new Map<string, string>();
+
+    for (const item of items) {
+      const cacheKey = `${item.categoryName}::${item.categoryType}`;
+      let categoryId = categoriaCache.get(cacheKey);
+
+      if (!categoryId) {
+        const existente = await db.category.findFirst({
+          where: { name: item.categoryName, type: item.categoryType },
+          select: { id: true },
+        });
+        if (existente) {
+          categoryId = existente.id;
+        } else {
+          const nueva = await db.category.create({
+            data: { tenantId: tenant.id, name: item.categoryName, type: item.categoryType },
+          });
+          categoryId = nueva.id;
+        }
+        categoriaCache.set(cacheKey, categoryId);
+      }
+
+      await db.product.create({
+        data: {
+          tenantId: tenant.id,
+          categoryId,
+          name: item.name,
+          type: item.type,
+          price: item.price,
+          cost: item.cost ?? null,
+          emoji: item.emoji ?? null,
+        },
+      });
+    }
+
+    revalidatePath(`/${tenantSlug}/catalogo`);
+    revalidatePath(`/${tenantSlug}/inventario`);
+    revalidatePath(`/${tenantSlug}/bienvenida`);
+    return { ok: true, creados: items.length };
+  } catch (err: any) {
+    return manejarErrorAcceso(err, "No se pudo cargar el catálogo de ejemplo");
+  }
+}
+
+/**
+ * Importación masiva desde CSV/Excel (para un negocio que migra de otro
+ * sistema y ya tiene su catálogo armado). El parseo del archivo sucede en
+ * el cliente (CatalogoClient.tsx) — aquí solo se reciben filas ya
+ * estructuradas y se valida/crea una por una, sin tronar el lote completo
+ * por una fila mala: cada fila inválida o duplicada se omite y se reporta,
+ * el resto sí se crea. Igual que cargarCatalogoArranqueAction, las
+ * categorías se resuelven por nombre+tipo (se crean si no existen).
+ */
+export interface FilaImportacion {
+  fila: number; // número de fila en el archivo original, para el reporte
+  name: string;
+  type: TipoProductoInput;
+  price: number;
+  cost?: number | null;
+  sku?: string | null;
+  categoryName?: string | null;
+}
+
+export type AccionImportarResult =
+  | { ok: true; creados: number; omitidos: { fila: number; motivo: string }[] }
+  | { ok: false; error: string };
+
+const MAX_FILAS_IMPORTACION = 500;
+
+export async function importarProductosAction(
+  params: { tenantSlug: string; filas: FilaImportacion[] }
+): Promise<AccionImportarResult> {
+  const { tenantSlug, filas } = params;
+
+  if (!Array.isArray(filas) || filas.length === 0) {
+    return { ok: false, error: "No hay filas para importar" };
+  }
+  if (filas.length > MAX_FILAS_IMPORTACION) {
+    return { ok: false, error: `Máximo ${MAX_FILAS_IMPORTACION} filas por archivo — divide tu importación en lotes más chicos.` };
+  }
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  const omitidos: { fila: number; motivo: string }[] = [];
+  let creados = 0;
+  const categoriaCache = new Map<string, string>();
+  // Evita crear dos productos con el mismo SKU dentro del propio archivo
+  // (además de la verificación contra los que ya existen en BD).
+  const skusEnLote = new Set<string>();
+
+  try {
+    for (const fila of filas) {
+      const nombre = fila.name?.trim();
+      if (!nombre) {
+        omitidos.push({ fila: fila.fila, motivo: "Falta el nombre" });
+        continue;
+      }
+      if (!["PRODUCT", "PART", "SERVICE"].includes(fila.type)) {
+        omitidos.push({ fila: fila.fila, motivo: "Tipo inválido (usa Producto, Refacción o Servicio)" });
+        continue;
+      }
+      if (!Number.isFinite(fila.price) || fila.price <= 0) {
+        omitidos.push({ fila: fila.fila, motivo: "Precio inválido" });
+        continue;
+      }
+      if (fila.cost != null && (!Number.isFinite(fila.cost) || fila.cost < 0)) {
+        omitidos.push({ fila: fila.fila, motivo: "Costo inválido" });
+        continue;
+      }
+
+      const sku = fila.sku?.trim() || null;
+      if (sku) {
+        if (skusEnLote.has(sku)) {
+          omitidos.push({ fila: fila.fila, motivo: `SKU "${sku}" repetido en el archivo` });
+          continue;
+        }
+        const existente = await db.product.findFirst({ where: { sku }, select: { id: true } });
+        if (existente) {
+          omitidos.push({ fila: fila.fila, motivo: `Ya existe un producto con el SKU "${sku}"` });
+          continue;
+        }
+        skusEnLote.add(sku);
+      }
+
+      let categoryId: string | null = null;
+      const categoryName = fila.categoryName?.trim();
+      if (categoryName) {
+        const cacheKey = `${categoryName}::${fila.type}`;
+        categoryId = categoriaCache.get(cacheKey) ?? null;
+        if (!categoryId) {
+          const existenteCat = await db.category.findFirst({
+            where: { name: categoryName, type: fila.type },
+            select: { id: true },
+          });
+          if (existenteCat) {
+            categoryId = existenteCat.id;
+          } else {
+            const nuevaCat = await db.category.create({
+              data: { tenantId: tenant.id, name: categoryName, type: fila.type },
+            });
+            categoryId = nuevaCat.id;
+          }
+          categoriaCache.set(cacheKey, categoryId);
+        }
+      }
+
+      await db.product.create({
+        data: {
+          tenantId: tenant.id,
+          categoryId,
+          name: nombre,
+          sku,
+          type: fila.type,
+          price: fila.price,
+          cost: fila.cost ?? null,
+        },
+      });
+      creados++;
+    }
+
+    if (creados > 0) {
+      revalidatePath(`/${tenantSlug}/catalogo`);
+      revalidatePath(`/${tenantSlug}/inventario`);
+    }
+
+    return { ok: true, creados, omitidos };
+  } catch (err: any) {
+    return manejarErrorAcceso(err, "No se pudo completar la importación") as AccionImportarResult;
   }
 }

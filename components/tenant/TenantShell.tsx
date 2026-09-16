@@ -9,7 +9,7 @@ import {
   LayoutDashboard, ShoppingCart, Wrench, Users, Package,
   Warehouse, DollarSign, UserCog, BarChart3, FileText,
   GitBranch, BookOpen, LogOut, Bell, ChevronDown,
-  Menu, X, ChevronLeft, ChevronRight
+  Menu, X, ChevronLeft, ChevronRight, LifeBuoy
 } from "lucide-react";
 
 const navItems = [
@@ -43,6 +43,12 @@ const navItems = [
     items: [
       { label: "Reportes", href: "reportes", icon: BarChart3 },
       { label: "Facturación", href: "facturacion", icon: FileText },
+    ]
+  },
+  {
+    section: "AYUDA",
+    items: [
+      { label: "Soporte", href: "soporte", icon: LifeBuoy },
     ]
   }
 ];

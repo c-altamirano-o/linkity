@@ -42,6 +42,7 @@ model Tenant {
   purchases    Purchase[]
   invoices     Invoice[]
   labels       TenantLabel[]
+  supportTickets SupportTicket[]
 }
 
 // Textos de UI personalizables por tenant (nombre del módulo, de la entidad,
@@ -109,6 +110,8 @@ model SuperAdmin {
   name       String
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
+
+  supportMessages SupportTicketMessage[]
 }
 
 // ============================================
@@ -137,6 +140,8 @@ model User {
   // a un empleado específico las ventas/reparaciones que hizo, para poder
   // calcular su comisión individual. No todo Staff tiene cuenta de acceso.
   staff        Staff?
+  supportTickets  SupportTicket[]
+  supportMessages SupportTicketMessage[]
 
   @@unique([tenantId, email])
 }
@@ -736,4 +741,51 @@ enum InvoiceStatus {
   PENDING
   STAMPED
   CANCELLED
+}
+
+// ============================================
+// SOPORTE — TICKETS ENTRE NEGOCIO Y PANEL MAESTRO
+// ============================================
+
+// Un ticket lo abre siempre un User de negocio (nunca un SuperAdmin), pero
+// cualquiera de los dos lados puede escribir mensajes dentro de él — por
+// eso SupportTicketMessage tiene userId/superAdminId opcionales (uno u
+// otro, nunca ambos; validado en la Server Action, no en el schema).
+model SupportTicket {
+  id       String              @id @default(cuid())
+  tenantId String
+  userId   String
+  subject  String
+  status   SupportTicketStatus @default(OPEN)
+  // Reutiliza el mismo enum Priority de Reparaciones (M9) en vez de crear
+  // uno nuevo — incluso valores como URGENT ya tienen sentido para un
+  // ticket de soporte.
+  priority  Priority @default(NORMAL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  closedAt  DateTime?
+
+  tenant   Tenant                 @relation(fields: [tenantId], references: [id])
+  user     User                   @relation(fields: [userId], references: [id])
+  messages SupportTicketMessage[]
+}
+
+model SupportTicketMessage {
+  id           String   @id @default(cuid())
+  ticketId     String
+  userId       String?
+  superAdminId String?
+  body         String
+  createdAt    DateTime @default(now())
+
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id])
+  user       User?         @relation(fields: [userId], references: [id])
+  superAdmin SuperAdmin?   @relation(fields: [superAdminId], references: [id])
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
 }

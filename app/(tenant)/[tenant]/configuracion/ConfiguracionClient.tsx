@@ -1,10 +1,30 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { updateThemePreset, updateBusinessType } from "@/app/actions/tenant";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/client";
-import { Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff } from "lucide-react";
+import { THEME_PRESETS, TENANT_THEME_ROOT_ID, type ThemePresetId } from "@/lib/theme-presets";
+import { Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2 } from "lucide-react";
+
+// Aplica los tokens de color de un preset directo sobre el nodo que el
+// layout del tenant ya usa para inyectar el tema real (mismo elemento,
+// mismas variables) — así el cambio se ve al instante en TODA la interfaz
+// (sidebar, botones, etc.), no solo en esta tarjeta, sin tocar la BD hasta
+// que el negocio confirme con "Guardar cambios". Si el nodo no existe
+// todavía (ej. muy al inicio del primer render) no hace nada — el layout
+// ya lo habrá pintado con el valor real de la BD de cualquier forma.
+function aplicarTemaEnVivo(themeId: string) {
+  const preset = THEME_PRESETS[themeId as ThemePresetId];
+  if (!preset) return;
+  const nodo = document.getElementById(TENANT_THEME_ROOT_ID);
+  if (!nodo) return;
+  for (const [variable, valor] of Object.entries(preset)) {
+    nodo.style.setProperty(variable, valor);
+  }
+}
 
 const THEMES = [
   { id: "NEUTRAL_TECH", name: "Neutral Tech", color: "bg-slate-800" },
@@ -27,16 +47,38 @@ export default function ConfiguracionClient({
   themePresetInicial,
   businessTypeInicial,
 }: ConfiguracionClientProps) {
+  const router = useRouter();
+
   // ── Tema ──────────────────────────────────────────────────
   const [temaSeleccionado, setTemaSeleccionado] = useState(themePresetInicial);
   const [temaPending, startTemaTransition] = useTransition();
   const [temaMensaje, setTemaMensaje] = useState("");
 
+  // Guarda cuál es el tema REALMENTE guardado en BD (no el que se está
+  // previsualizando) — si el negocio sale de esta pantalla sin darle
+  // "Guardar cambios", el efecto de limpieza de abajo revierte la vista
+  // previa a este valor, para que un color nunca confirmado no se quede
+  // "pegado" en el resto de la app.
+  const temaConfirmadoRef = useRef(themePresetInicial);
+
+  const seleccionarTema = (themeId: string) => {
+    setTemaSeleccionado(themeId);
+    aplicarTemaEnVivo(themeId); // vista previa instantánea, sin esperar a guardar
+  };
+
+  useEffect(() => {
+    return () => aplicarTemaEnVivo(temaConfirmadoRef.current);
+  }, []);
+
   const guardarTema = () => {
     startTemaTransition(async () => {
       const result = await updateThemePreset(tenantSlug, temaSeleccionado);
       setTemaMensaje(result.success ? "Tema actualizado correctamente." : "Error al actualizar el tema.");
-      if (result.success) setTimeout(() => setTemaMensaje(""), 3000);
+      if (result.success) {
+        temaConfirmadoRef.current = temaSeleccionado;
+        router.refresh();
+        setTimeout(() => setTemaMensaje(""), 3000);
+      }
     });
   };
 
@@ -98,9 +140,17 @@ export default function ConfiguracionClient({
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto w-full h-full overflow-y-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-foreground">Configuración del Sistema</h1>
-        <p className="text-sm text-muted-foreground mt-1">Administra las preferencias visuales y de terminología de tu negocio.</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Configuración del Sistema</h1>
+          <p className="text-sm text-muted-foreground mt-1">Administra las preferencias visuales y de terminología de tu negocio.</p>
+        </div>
+        <Link
+          href={`/${tenantSlug}/dashboard`}
+          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground flex-shrink-0 mt-1"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Volver al dashboard
+        </Link>
       </div>
 
       {/* ── Apariencia y Tema ─────────────────────────────────── */}
@@ -117,7 +167,7 @@ export default function ConfiguracionClient({
             {THEMES.map((theme) => (
               <button
                 key={theme.id}
-                onClick={() => setTemaSeleccionado(theme.id)}
+                onClick={() => seleccionarTema(theme.id)}
                 className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
                   temaSeleccionado === theme.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
                 }`}
@@ -256,6 +306,15 @@ export default function ConfiguracionClient({
           </form>
         </div>
       </div>
+
+      {/* ── Listo ──────────────────────────────────────────────── */}
+      <Link
+        href={`/${tenantSlug}/dashboard`}
+        className="mt-6 w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-lg text-sm transition-all"
+      >
+        <CheckCircle2 className="w-4 h-4" />
+        Listo, volver al dashboard
+      </Link>
     </div>
   );
 }

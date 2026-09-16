@@ -31,5 +31,13 @@ export default async function CatalogoPage({
 
   const branches = tenant.branches.map((b) => ({ id: b.id, name: b.name }));
 
-  return <CatalogoClient data={data} labels={labels} branches={branches} tenantSlug={tenantSlug} />;
+  return (
+    <CatalogoClient
+      data={data}
+      labels={labels}
+      branches={branches}
+      tenantSlug={tenantSlug}
+      businessType={tenant.businessType}
+    />
+  );
 }

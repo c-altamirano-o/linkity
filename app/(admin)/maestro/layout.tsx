@@ -9,17 +9,19 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/maestro-auth";
 import { prisma } from "@/lib/prisma";
 import { getSuscripcionesData } from "@/lib/suscripciones-data";
+import { getTicketsAbiertosCount } from "@/lib/maestro-soporte-data";
 
 export const metadata: Metadata = {
   title: "Panel Maestro — Linkity",
 };
 
-// Antes estos dos badges ("12" negocios, "2" suscripciones) eran números
-// fijos en el mockup, sin conexión a datos reales. Ahora "Negocios" cuenta
-// los tenants reales y "Suscripciones" cuenta cuántos necesitan atención
-// de cobro (vencidas + por vencer en los próximos 7 días) — mismo criterio
-// de no fabricar datos que se usó en el resto del Panel Maestro.
-function buildNavItems(totalNegocios: number, alertaSuscripciones: number) {
+// Antes estos badges ("12" negocios, "2" suscripciones, "3" soporte) eran
+// números fijos en el mockup, sin conexión a datos reales. Ahora "Negocios"
+// cuenta los tenants reales, "Suscripciones" cuenta cuántos necesitan
+// atención de cobro (vencidas + por vencer en los próximos 7 días) y
+// "Soporte" cuenta los tickets abiertos + en progreso — mismo criterio de
+// no fabricar datos que se usó en el resto del Panel Maestro.
+function buildNavItems(totalNegocios: number, alertaSuscripciones: number, ticketsAbiertos: number) {
   return [
     {
       section: "PRINCIPAL",
@@ -40,7 +42,13 @@ function buildNavItems(totalNegocios: number, alertaSuscripciones: number) {
       section: "GESTIÓN",
       items: [
         { label: "Usuarios", href: "/maestro/usuarios", icon: Users, badge: null as string | null, badgeColor: undefined as string | undefined },
-        { label: "Soporte", href: "/maestro/soporte", icon: Ticket, badge: null as string | null, badgeColor: undefined as string | undefined },
+        {
+          label: "Soporte",
+          href: "/maestro/soporte",
+          icon: Ticket,
+          badge: ticketsAbiertos > 0 ? String(ticketsAbiertos) : null,
+          badgeColor: "red" as string | undefined,
+        },
         { label: "Reportes", href: "/maestro/reportes", icon: BarChart3, badge: null as string | null, badgeColor: undefined as string | undefined },
       ]
     },
@@ -92,12 +100,13 @@ export default async function MaestroLayout({
   // Badges reales del sidebar (antes eran números fijos en el mockup):
   // "Negocios" = total de tenants; "Suscripciones" = cuántos requieren
   // atención de cobro ahora mismo (ya vencidos + por vencer en ≤7 días).
-  const [totalNegocios, suscripciones] = await Promise.all([
+  const [totalNegocios, suscripciones, ticketsAbiertos] = await Promise.all([
     prisma.tenant.count(),
     getSuscripcionesData(),
+    getTicketsAbiertosCount(),
   ]);
   const alertaSuscripciones = suscripciones.resumen.vencidas + suscripciones.resumen.porVencerPronto;
-  const navItems = buildNavItems(totalNegocios, alertaSuscripciones);
+  const navItems = buildNavItems(totalNegocios, alertaSuscripciones, ticketsAbiertos);
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">

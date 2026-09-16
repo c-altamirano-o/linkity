@@ -2,6 +2,7 @@
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { PaymentScheme, CommissionBase, PaymentFrequency, StaffPaymentStatus } from "@prisma/client";
 import { calcularComisionSugerida } from "@/lib/personal-data";
@@ -414,5 +415,132 @@ export async function obtenerSugerenciaComisionAction(params: {
   } catch (err: any) {
     console.error("Error al calcular sugerencia de comisión:", err);
     return { ok: false, error: "No se pudo calcular la comisión sugerida" };
+  }
+}
+
+function generarPasswordTemporal(): string {
+  return "Temp" + Math.random().toString(36).slice(-8) + "!1";
+}
+
+/**
+ * Invitación rápida de empleado desde la pantalla de Bienvenida (onboarding).
+ * A diferencia de crearEmpleadoAction (que solo VINCULA un userId ya
+ * existente a un Staff nuevo), esta acción SÍ crea la cuenta desde cero:
+ * usuario de Supabase Auth con contraseña temporal + User + Staff, en una
+ * sola transacción — mismo patrón que registrarNegocioAction en
+ * app/(auth)/register/actions.ts (temp password generada en servidor,
+ * user_metadata.must_change_password=true, el negocio nunca ve ni escribe
+ * la contraseña real del empleado).
+ *
+ * Simplificaciones deliberadas, válidas porque esto solo se usa desde
+ * Bienvenida (justo después del alta, cuando el negocio todavía tiene una
+ * sola sucursal y un solo rol):
+ * - La sucursal se resuelve sola (la primera/única que exista) en vez de
+ *   pedirla en el formulario — el selector completo de sucursal ya existe
+ *   en Personal para cuando haga falta.
+ * - El empleado queda con el mismo rol "Administrador" que el dueño,
+ *   porque hoy no existe una pantalla de permisos por rol (ver el aviso en
+ *   BienvenidaClient.tsx) — es el mismo nivel de acceso que ya tiene
+ *   cualquier cuenta del tenant, no un privilegio nuevo que se esté
+ *   otorgando de más.
+ * - Los 5 campos de esquema de pago (baseSalary, commissionRate, etc.)
+ *   quedan en sus valores por defecto (sueldo base $0, sin comisión) — se
+ *   terminan de configurar después en Personal, igual que cualquier otro
+ *   empleado.
+ */
+export type AccionInvitarEmpleadoResult =
+  | { ok: true; email: string; tempPassword: string }
+  | { ok: false; error: string };
+
+export async function invitarEmpleadoAction(params: {
+  tenantSlug: string;
+  name: string;
+  email: string;
+  position?: string | null;
+}): Promise<AccionInvitarEmpleadoResult> {
+  const { tenantSlug, name, position } = params;
+  const email = params.email.trim().toLowerCase();
+
+  if (!name.trim()) return { ok: false, error: "El nombre es obligatorio" };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "El correo no es válido" };
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const existente = await prisma.user.findFirst({ where: { email }, select: { id: true } });
+    if (existente) return { ok: false, error: "Ya existe una cuenta con ese correo" };
+
+    const branch = await db.branch.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } });
+    if (!branch) return { ok: false, error: "Tu negocio todavía no tiene ninguna sucursal" };
+
+    const rol = await db.role.findFirst({ where: { isSystem: true }, orderBy: { createdAt: "asc" }, select: { id: true } });
+
+    const supabaseAdmin = createAdminClient();
+    const tempPassword = generarPasswordTemporal();
+
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password: tempPassword,
+      email_confirm: true,
+      user_metadata: { must_change_password: true },
+    });
+
+    if (authError || !authData.user) {
+      return { ok: false, error: `No se pudo crear la cuenta: ${authError?.message ?? "error desconocido"}` };
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        const nuevoUsuario = await tx.user.create({
+          data: {
+            tenantId: tenant.id,
+            branchId: branch.id,
+            email,
+            name: name.trim(),
+            supabaseId: authData.user!.id,
+          },
+        });
+
+        if (rol) {
+          await tx.userRole.create({ data: { userId: nuevoUsuario.id, roleId: rol.id } });
+        }
+
+        await tx.staff.create({
+          data: {
+            tenantId: tenant.id,
+            branchId: branch.id,
+            userId: nuevoUsuario.id,
+            name: name.trim(),
+            email,
+            position: position?.trim() || null,
+            paymentScheme: PaymentScheme.FIJO,
+            baseSalary: 0,
+            commissionRate: 0,
+            commissionBase: CommissionBase.VENTAS,
+            paymentFrequency: PaymentFrequency.QUINCENAL,
+          },
+        });
+      });
+    } catch (txErr) {
+      // La cuenta de Supabase ya se creó pero la escritura en BD falló —
+      // se limpia para no dejar una cuenta huérfana que nadie puede usar
+      // ni volver a intentar registrar (el email quedaría "tomado" en Auth).
+      await supabaseAdmin.auth.admin.deleteUser(authData.user!.id).catch(() => {});
+      throw txErr;
+    }
+
+    revalidatePath(`/${tenantSlug}/personal`);
+    revalidatePath(`/${tenantSlug}/bienvenida`);
+    return { ok: true, email, tempPassword };
+  } catch (err: any) {
+    if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
+      return { ok: false, error: "No tienes acceso a este recurso" };
+    }
+    console.error("Error al invitar empleado:", err);
+    return { ok: false, error: "No se pudo invitar al empleado" };
   }
 }
