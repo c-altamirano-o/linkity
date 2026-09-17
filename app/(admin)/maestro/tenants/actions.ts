@@ -48,3 +48,38 @@ export async function alternarModuloTenantAction(params: {
     return { ok: false, error: "No se pudo actualizar el módulo" };
   }
 }
+
+// Reasignar el esquema (límite de sucursales/personal) de un negocio desde
+// su pantalla de detalle — así Carlos "migra" a un cliente de esquema según
+// el volumen que vea, sin tocar la base de datos a mano. esquemaId=null
+// quita el límite (el tenant queda sin esquema asignado, sin restricción).
+export async function asignarEsquemaAction(params: {
+  tenantId: string;
+  slug: string;
+  esquemaId: string | null;
+}): Promise<AccionMaestroResult> {
+  const resuelto = await requireSuperAdmin();
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+
+  try {
+    if (params.esquemaId) {
+      const esquema = await prisma.planEsquema.findUnique({
+        where: { id: params.esquemaId },
+        select: { id: true },
+      });
+      if (!esquema) return { ok: false, error: "Esquema no encontrado" };
+    }
+
+    await prisma.tenant.update({
+      where: { id: params.tenantId },
+      data: { esquemaId: params.esquemaId },
+    });
+
+    revalidatePath(`/maestro/tenants/${params.slug}`);
+    revalidatePath("/maestro/tenants");
+    return { ok: true };
+  } catch (err) {
+    console.error("Error al asignar esquema al negocio:", err);
+    return { ok: false, error: "No se pudo asignar el esquema" };
+  }
+}

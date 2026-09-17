@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
-  LayoutDashboard, Building2, Puzzle, CreditCard,
+  LayoutDashboard, Building2, Puzzle, CreditCard, Layers,
   Users, Ticket, BarChart3, Settings, LogOut, Link as LinkIcon, ShieldAlert
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -29,6 +29,7 @@ function buildNavItems(totalNegocios: number, alertaSuscripciones: number, ticke
         { label: "Dashboard", href: "/maestro/dashboard", icon: LayoutDashboard, badge: null as string | null, badgeColor: undefined as string | undefined },
         { label: "Negocios", href: "/maestro/tenants", icon: Building2, badge: String(totalNegocios), badgeColor: undefined as string | undefined },
         { label: "Módulos", href: "/maestro/modulos", icon: Puzzle, badge: null as string | null, badgeColor: undefined as string | undefined },
+        { label: "Esquemas", href: "/maestro/esquemas", icon: Layers, badge: null as string | null, badgeColor: undefined as string | undefined },
         {
           label: "Suscripciones",
           href: "/maestro/suscripciones",

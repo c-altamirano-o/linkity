@@ -31,6 +31,8 @@ export interface TenantListRow {
   modulosTotal: number;
   branchesCount: number;
   usersCount: number;
+  esquemaName: string | null;
+  esquemaMaxBranches: number | null;
   createdAt: string; // ISO
 }
 
@@ -42,6 +44,7 @@ export async function getTenantsListData(): Promise<TenantListRow[]> {
     include: {
       subscription: true,
       modules: { where: { isActive: true }, select: { moduleId: true } },
+      esquema: { select: { name: true, maxBranches: true } },
       _count: { select: { branches: true, users: true } },
     },
   });
@@ -61,6 +64,8 @@ export async function getTenantsListData(): Promise<TenantListRow[]> {
     modulosTotal: totalModulosCatalogo,
     branchesCount: t._count.branches,
     usersCount: t._count.users,
+    esquemaName: t.esquema?.name ?? null,
+    esquemaMaxBranches: t.esquema?.maxBranches ?? null,
     createdAt: t.createdAt.toISOString(),
   }));
 }
@@ -77,6 +82,7 @@ export interface TenantBranchRow {
   name: string;
   address: string | null;
   isActive: boolean;
+  staffCount: number;
 }
 
 export interface TenantUserRow {
@@ -108,6 +114,11 @@ export interface TenantDetail {
   status: SubscriptionStatus | null;
   endDate: string | null; // ISO
   autoRenew: boolean;
+  esquemaId: string | null;
+  esquemaName: string | null;
+  esquemaMaxBranches: number | null;
+  esquemaMaxStaffPerBranch: number | null;
+  branchesActivas: number;
   modulos: TenantModuloRow[];
   branches: TenantBranchRow[];
   users: TenantUserRow[];
@@ -118,8 +129,12 @@ export async function getTenantDetailData(slug: string): Promise<TenantDetail | 
     where: { slug },
     include: {
       subscription: true,
+      esquema: { select: { id: true, name: true, maxBranches: true, maxStaffPerBranch: true } },
       modules: { where: { isActive: true }, select: { moduleId: true, module: { select: { code: true } } } },
-      branches: { orderBy: { createdAt: "asc" } },
+      branches: {
+        orderBy: { createdAt: "asc" },
+        include: { staff: { where: { isActive: true }, select: { id: true } } },
+      },
       users: {
         orderBy: { createdAt: "asc" },
         include: { role: { include: { role: true } } },
@@ -158,8 +173,19 @@ export async function getTenantDetailData(slug: string): Promise<TenantDetail | 
     status: t.subscription?.status ?? null,
     endDate: t.subscription?.endDate ? t.subscription.endDate.toISOString() : null,
     autoRenew: t.subscription?.autoRenew ?? false,
+    esquemaId: t.esquema?.id ?? null,
+    esquemaName: t.esquema?.name ?? null,
+    esquemaMaxBranches: t.esquema?.maxBranches ?? null,
+    esquemaMaxStaffPerBranch: t.esquema?.maxStaffPerBranch ?? null,
+    branchesActivas: t.branches.filter((b) => b.isActive).length,
     modulos,
-    branches: t.branches.map((b) => ({ id: b.id, name: b.name, address: b.address, isActive: b.isActive })),
+    branches: t.branches.map((b) => ({
+      id: b.id,
+      name: b.name,
+      address: b.address,
+      isActive: b.isActive,
+      staffCount: b.staff.length,
+    })),
     users: t.users.map((u) => ({
       id: u.id,
       name: u.name,

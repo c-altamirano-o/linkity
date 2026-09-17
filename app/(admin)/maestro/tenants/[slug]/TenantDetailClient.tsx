@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Settings, Building2, Users as UsersIcon } from "lucide-react";
+import { Settings, Building2, Users as UsersIcon, Layers } from "lucide-react";
 import type { TenantDetail } from "@/lib/tenants-data";
+import type { EsquemaOption } from "@/lib/esquemas-data";
 import { alternarSuscripcionAction } from "../../dashboard/actions";
-import { alternarModuloTenantAction } from "../actions";
+import { alternarModuloTenantAction, asignarEsquemaAction } from "../actions";
 
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
@@ -27,12 +28,20 @@ const ESTADO_CONFIG: Record<string, { label: string; classes: string }> = {
   CANCELLED: { label: "Cancelado", classes: "bg-slate-200 text-slate-400" },
 };
 
-export default function TenantDetailClient({ tenant }: { tenant: TenantDetail }) {
+export default function TenantDetailClient({
+  tenant,
+  esquemas,
+}: {
+  tenant: TenantDetail;
+  esquemas: EsquemaOption[];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [moduloEnCurso, setModuloEnCurso] = useState<string | null>(null);
   const [suscripcionEnCurso, setSuscripcionEnCurso] = useState(false);
+  const [esquemaSeleccionado, setEsquemaSeleccionado] = useState(tenant.esquemaId ?? "");
+  const [esquemaEnCurso, setEsquemaEnCurso] = useState(false);
 
   const estadoCfg = tenant.status ? ESTADO_CONFIG[tenant.status] : null;
   const puedeSuspender = tenant.status === "ACTIVE";
@@ -58,6 +67,24 @@ export default function TenantDetailClient({ tenant }: { tenant: TenantDetail })
     startTransition(async () => {
       const res = await alternarModuloTenantAction({ tenantId: tenant.id, slug: tenant.slug, moduleCode, activar });
       setModuloEnCurso(null);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function guardarEsquema() {
+    setError(null);
+    setEsquemaEnCurso(true);
+    startTransition(async () => {
+      const res = await asignarEsquemaAction({
+        tenantId: tenant.id,
+        slug: tenant.slug,
+        esquemaId: esquemaSeleccionado || null,
+      });
+      setEsquemaEnCurso(false);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -191,6 +218,47 @@ export default function TenantDetailClient({ tenant }: { tenant: TenantDetail })
         </div>
       </div>
 
+      {/* Esquema (límite de sucursales/personal) */}
+      <div className="bg-white border border-slate-200 rounded-lg p-4">
+        <p className="text-[13px] font-medium text-slate-700 mb-1 flex items-center gap-1.5">
+          <Layers className="w-3.5 h-3.5 text-slate-400" />
+          Esquema
+        </p>
+        <p className="text-[11px] text-slate-400 mb-3">
+          Cuántas sucursales y cuánto personal por sucursal puede tener este negocio. El cobro real lo gestiona
+          Hotmart — esto solo controla capacidad dentro de la plataforma.
+        </p>
+        <div className="flex items-end gap-2 mb-2">
+          <div className="flex-1">
+            <label className="text-[11px] font-medium text-slate-500">Esquema asignado</label>
+            <select
+              value={esquemaSeleccionado}
+              onChange={(e) => setEsquemaSeleccionado(e.target.value)}
+              className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[12px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+            >
+              <option value="">Sin esquema (sin límite)</option>
+              {esquemas.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name} — {e.maxBranches} sucursal(es), {e.maxStaffPerBranch} personal c/u{!e.isActive ? " (desactivado)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            disabled={esquemaEnCurso || esquemaSeleccionado === (tenant.esquemaId ?? "")}
+            onClick={guardarEsquema}
+            className="px-3 py-2 text-[12px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50 flex-shrink-0"
+          >
+            {esquemaEnCurso ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
+        <p className="text-[11px] text-slate-500">
+          Uso actual: {tenant.branchesActivas} sucursal(es) activa(s)
+          {tenant.esquemaMaxBranches !== null ? ` de ${tenant.esquemaMaxBranches} permitida(s)` : ""}.
+        </p>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         {/* Sucursales */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
@@ -208,7 +276,12 @@ export default function TenantDetailClient({ tenant }: { tenant: TenantDetail })
                     <p className="text-slate-700">{b.name}</p>
                     {b.address && <p className="text-[11px] text-slate-400">{b.address}</p>}
                   </div>
-                  {!b.isActive && <span className="text-[10px] text-slate-400">Inactiva</span>}
+                  <div className="text-right">
+                    <p className="text-[11px] text-slate-500">
+                      {b.staffCount}{tenant.esquemaMaxStaffPerBranch !== null ? `/${tenant.esquemaMaxStaffPerBranch}` : ""} personal
+                    </p>
+                    {!b.isActive && <span className="text-[10px] text-slate-400">Inactiva</span>}
+                  </div>
                 </div>
               ))}
             </div>

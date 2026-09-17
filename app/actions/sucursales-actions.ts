@@ -1,8 +1,8 @@
 "use server";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { resolverActor, type ActorResult } from "@/lib/actor";
 
 /**
  * Server Actions del módulo Sucursales. Antes de este cambio no existía
@@ -15,29 +15,12 @@ import { revalidatePath } from "next/cache";
  * se centraliza), resultado discriminado {ok:true,...}|{ok:false,error}.
  */
 
-type ResolverResult =
-  | { ok: true; tenant: { id: string }; dbUser: { id: string; tenantId: string } }
-  | { ok: false; error: string };
+type ResolverResult = ActorResult;
 
+// Delega en resolverActor (lib/actor.ts) — Gerente tiene "sucursales" en su
+// matriz de acceso (lib/roles.ts), Cajero y Técnico no.
 async function resolverTenantYUsuario(tenantSlug: string): Promise<ResolverResult> {
-  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
-  if (!tenant) return { ok: false, error: "Negocio no encontrado" };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Sesión no válida, vuelve a iniciar sesión" };
-
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    select: { id: true, tenantId: true },
-  });
-  if (!dbUser || dbUser.tenantId !== tenant.id) {
-    return { ok: false, error: "No tienes acceso a este negocio" };
-  }
-
-  return { ok: true, tenant, dbUser };
+  return resolverActor(tenantSlug, "sucursales");
 }
 
 function manejarErrorAcceso(err: any, mensajeGenerico: string): { ok: false; error: string } {
@@ -46,6 +29,23 @@ function manejarErrorAcceso(err: any, mensajeGenerico: string): { ok: false; err
   }
   console.error(mensajeGenerico, err);
   return { ok: false, error: mensajeGenerico };
+}
+
+/**
+ * Límite de sucursales del esquema asignado a este tenant (Panel Maestro,
+ * ver lib/esquemas-data.ts) — null si no tiene esquema asignado (sin
+ * límite, criterio deliberado para no romper tenants que ya existían antes
+ * de este campo). Tenant no es un modelo de tenantModels (getTenantPrisma
+ * no lo inyecta), así que aquí se usa el prisma cross-tenant normal, con el
+ * tenant.id ya resuelto/confiable que entrega resolverActor.
+ */
+async function limiteSucursalesDe(tenantId: string): Promise<{ maxBranches: number; nombre: string } | null> {
+  const t = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { esquema: { select: { maxBranches: true, name: true } } },
+  });
+  if (!t?.esquema) return null;
+  return { maxBranches: t.esquema.maxBranches, nombre: t.esquema.name };
 }
 
 export interface DatosSucursal {
@@ -75,6 +75,17 @@ export async function crearSucursalAction(
   const db = getTenantPrisma(tenant.id);
 
   try {
+    const limite = await limiteSucursalesDe(tenant.id);
+    if (limite) {
+      const sucursalesActivas = await db.branch.count({ where: { isActive: true } });
+      if (sucursalesActivas >= limite.maxBranches) {
+        return {
+          ok: false,
+          error: `Tu esquema (${limite.nombre}) permite hasta ${limite.maxBranches} sucursal(es) activa(s). Contacta a soporte para ampliar tu esquema.`,
+        };
+      }
+    }
+
     const nueva = await db.branch.create({
       data: {
         tenantId: tenant.id,
@@ -105,8 +116,25 @@ export async function editarSucursalAction(
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const existente = await db.branch.findUnique({ where: { id: branchId }, select: { id: true } });
+    const existente = await db.branch.findUnique({ where: { id: branchId }, select: { id: true, isActive: true } });
     if (!existente) return { ok: false, error: "Sucursal no encontrada" };
+
+    // Reactivar una sucursal inactiva es, en la práctica, lo mismo que
+    // crear una nueva desde el punto de vista del límite del esquema — sin
+    // este chequeo, desactivar y reactivar sería una forma de saltarse el
+    // límite que sí se aplica en crearSucursalAction.
+    if (isActive && !existente.isActive) {
+      const limite = await limiteSucursalesDe(tenant.id);
+      if (limite) {
+        const sucursalesActivas = await db.branch.count({ where: { isActive: true } });
+        if (sucursalesActivas >= limite.maxBranches) {
+          return {
+            ok: false,
+            error: `Tu esquema (${limite.nombre}) permite hasta ${limite.maxBranches} sucursal(es) activa(s). Contacta a soporte para ampliar tu esquema.`,
+          };
+        }
+      }
+    }
 
     await db.branch.update({
       where: { id: branchId },

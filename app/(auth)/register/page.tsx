@@ -3,18 +3,12 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Building2, User, ArrowRight, ArrowLeft, Check, Loader2, CreditCard } from "lucide-react";
+import { Building2, User, ArrowRight, Check, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
-import { BILLING_CYCLE_LABEL, calcularTotalPago, type BillingCycle } from "@/lib/subscripcion";
 import { registrarNegocioAction } from "./actions";
 
-const PLANES = ["Basico", "Pro", "Enterprise"] as const;
-const PLAN_LABEL: Record<string, string> = { Basico: "Básico", Pro: "Pro", Enterprise: "Enterprise" };
-const PLAN_PRECIO_MENSUAL: Record<string, number> = { Basico: 499, Pro: 999, Enterprise: 1999 };
-const CICLOS: BillingCycle[] = ["MENSUAL", "TRIMESTRAL", "SEMESTRAL", "ANUAL"];
-
-type Paso = "datos" | "pago" | "listo";
+type Paso = "datos" | "listo";
 
 export default function RegisterPage() {
   const [paso, setPaso] = useState<Paso>("datos");
@@ -25,9 +19,6 @@ export default function RegisterPage() {
     ownerEmail: "",
     ownerPhone: "",
   });
-  const [plan, setPlan] = useState<string>("Basico");
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>("MENSUAL");
-  const [autoRenew, setAutoRenew] = useState(false);
   const [loading, setLoading] = useState(false);
   const [entrando, setEntrando] = useState(false);
   const [error, setError] = useState("");
@@ -37,17 +28,17 @@ export default function RegisterPage() {
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
   };
 
-  const handleContinuarDatos = (e: React.FormEvent) => {
+  // Antes este envío solo avanzaba a un segundo paso ("Plan y pago") donde
+  // el visitante elegía plan/vigencia y "pagaba" (simulado) antes de crear
+  // la cuenta. Con el cobro y los paquetes/usuarios adicionales gestionados
+  // por Hotmart fuera de la plataforma, ese paso ya no existe: enviar este
+  // formulario crea la cuenta directo — el esquema de capacidad (sucursales
+  // / personal permitido) lo asigna Carlos desde Panel Maestro, no el
+  // visitante (ver el comentario largo en app/(auth)/register/actions.ts).
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setPaso("pago");
-  };
-
-  const totalPago = calcularTotalPago(PLAN_PRECIO_MENSUAL[plan] ?? PLAN_PRECIO_MENSUAL.Basico, billingCycle);
-
-  const handlePagar = async () => {
     setLoading(true);
-    setError("");
 
     const res = await registrarNegocioAction({
       businessName: form.businessName,
@@ -55,9 +46,6 @@ export default function RegisterPage() {
       ownerName: form.ownerName,
       ownerEmail: form.ownerEmail,
       ownerPhone: form.ownerPhone,
-      plan,
-      billingCycle,
-      autoRenew,
     });
 
     setLoading(false);
@@ -113,7 +101,7 @@ export default function RegisterPage() {
             Crea tu cuenta<br />en menos de dos minutos
           </h2>
           <p className="text-white/60 text-sm mb-8 leading-relaxed">
-            Elige tu plan y vigencia —<br />sin instalar nada.
+            Cuéntanos de tu negocio —<br />sin instalar nada.
           </p>
 
           <ul className="space-y-3">
@@ -149,28 +137,6 @@ export default function RegisterPage() {
               className="object-contain brightness-0 invert"
             />
           </div>
-
-          {paso !== "listo" && (
-            <div className="flex items-center gap-2 mb-6">
-              {(["datos", "pago"] as const).map((p, i) => (
-                <div key={p} className="flex items-center gap-2 flex-1">
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0 ${
-                      paso === p
-                        ? "bg-primary text-primary-foreground"
-                        : (p === "datos" ? "bg-primary/20 text-primary" : "bg-slate-200 dark:bg-slate-700 text-slate-500")
-                    }`}
-                  >
-                    {i + 1}
-                  </div>
-                  <span className={`text-xs ${paso === p ? "text-foreground dark:text-white font-medium" : "text-slate-400"}`}>
-                    {p === "datos" ? "Tus datos" : "Pago"}
-                  </span>
-                  {i === 0 && <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />}
-                </div>
-              ))}
-            </div>
-          )}
 
           {paso === "listo" && resultado ? (
             <div>
@@ -211,7 +177,7 @@ export default function RegisterPage() {
                 </>
               )}
             </div>
-          ) : paso === "datos" ? (
+          ) : (
             <>
               <div className="mb-6">
                 <span className="inline-block bg-primary/10 text-primary text-xs font-semibold px-3 py-1 rounded-full mb-3 tracking-wide">
@@ -229,7 +195,7 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              <form onSubmit={handleContinuarDatos} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
                     <Building2 className="w-3.5 h-3.5" /> Nombre del negocio
@@ -302,9 +268,16 @@ export default function RegisterPage() {
 
                 <button
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 rounded-lg text-sm transition-all flex items-center justify-center gap-2 mt-2"
+                  disabled={loading}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 rounded-lg text-sm transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70"
                 >
-                  Continuar <ArrowRight className="w-4 h-4" />
+                  {loading ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      Crear mi cuenta <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
               </form>
 
@@ -314,115 +287,6 @@ export default function RegisterPage() {
                   Inicia sesión
                 </Link>
               </p>
-            </>
-          ) : (
-            <>
-              <div className="mb-6">
-                <span className="inline-block bg-primary/10 text-primary text-xs font-semibold px-3 py-1 rounded-full mb-3 tracking-wide">
-                  ELIGE TU PLAN
-                </span>
-                <h1 className="text-2xl font-bold text-foreground dark:text-white">Plan y pago</h1>
-                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                  {form.businessName || "Tu negocio"} — último paso.
-                </p>
-              </div>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-2.5 rounded-lg mb-4">
-                  {error}
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 block">Plan</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {PLANES.map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setPlan(p)}
-                        className={`py-2 rounded-lg border text-xs font-medium transition-all ${
-                          plan === p
-                            ? "border-primary bg-primary/5 text-primary"
-                            : "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300"
-                        }`}
-                      >
-                        {PLAN_LABEL[p]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 block">Vigencia</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {CICLOS.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setBillingCycle(c)}
-                        className={`py-2 rounded-lg border text-xs font-medium transition-all ${
-                          billingCycle === c
-                            ? "border-primary bg-primary/5 text-primary"
-                            : "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300"
-                        }`}
-                      >
-                        {BILLING_CYCLE_LABEL[c]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoRenew}
-                    onChange={(e) => setAutoRenew(e.target.checked)}
-                    className="rounded border-slate-300"
-                  />
-                  Renovar automáticamente al vencer (te avisamos antes por si quieres cancelar)
-                </label>
-
-                <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 text-sm space-y-1">
-                  <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                    <span>Plan {PLAN_LABEL[plan]} · {BILLING_CYCLE_LABEL[billingCycle]}</span>
-                    <span>${totalPago.toLocaleString("es-MX")} MXN</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-foreground dark:text-white pt-1 border-t border-slate-200 dark:border-slate-700 mt-1">
-                    <span>Total a pagar hoy</span>
-                    <span>${totalPago.toLocaleString("es-MX")} MXN</span>
-                  </div>
-                </div>
-
-                <div className="bg-amber-50 border border-amber-200 text-amber-700 text-[11px] px-3 py-2 rounded-lg">
-                  Pago simulado: por ahora esta pantalla no está conectada a una pasarela de pago real, solo confirma tu plan y crea tu cuenta.
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handlePagar}
-                  disabled={loading}
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 rounded-lg text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-70"
-                >
-                  {loading ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <CreditCard className="w-4 h-4" />
-                      Confirmar pago simulado
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaso("datos")}
-                  className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-foreground dark:hover:text-white py-1"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" /> Volver a mis datos
-                </button>
-              </div>
             </>
           )}
         </div>

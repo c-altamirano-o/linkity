@@ -73,7 +73,7 @@ export default function TenantsClient({ tenants }: { tenants: TenantListRow[] })
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Negocio</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Plan</th>
+              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Esquema</th>
               <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Estado</th>
               <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Módulos</th>
               <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Sucursales</th>
@@ -98,14 +98,16 @@ export default function TenantsClient({ tenants }: { tenants: TenantListRow[] })
                       </Link>
                       <p className="text-[11px] text-slate-400">{[t.city, t.state].filter(Boolean).join(", ") || "Sin ubicación"}</p>
                     </td>
-                    <td className="px-4 py-2.5 text-[12px] text-slate-600">{t.plan ?? "Sin plan"}</td>
+                    <td className="px-4 py-2.5 text-[12px] text-slate-600">{t.esquemaName ?? "Sin límite"}</td>
                     <td className="px-4 py-2.5">
                       <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${cfg?.classes ?? "bg-slate-100 text-slate-400"}`}>
                         {cfg?.label ?? "Sin suscripción"}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-[12px] text-slate-600">{t.modulosActivos}/{t.modulosTotal}</td>
-                    <td className="px-4 py-2.5 text-[12px] text-slate-600">{t.branchesCount}</td>
+                    <td className="px-4 py-2.5 text-[12px] text-slate-600">
+                      {t.branchesCount}{t.esquemaMaxBranches !== null ? `/${t.esquemaMaxBranches}` : ""}
+                    </td>
                     <td className="px-4 py-2.5 text-[12px] text-slate-600">{t.usersCount}</td>
                   </tr>
                 );

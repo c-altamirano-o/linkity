@@ -3,26 +3,35 @@
 import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MODULE_CATALOG, ALL_MODULE_CODES } from "@/lib/modules-catalog";
-import { calcularVigencia, type BillingCycle } from "@/lib/subscripcion";
+import { getEsquemaDefault } from "@/lib/esquemas-data";
 
 /**
  * Alta de un negocio nuevo por auto-registro público (app/(auth)/register).
  *
- * Flujo real acordado con Carlos: formulario de datos → pantalla de pago
- * (simulada — no hay PAC ni pasarela de pago real conectada, mismo
- * criterio que el timbrado CFDI) → hasta que se "paga" se crea la cuenta.
- * Por eso esta acción solo se llama desde el paso de pago del wizard, no
- * desde el primer paso — igual que si un cliente real solo obtiene acceso
- * después de pagar.
+ * Historia (2026-09): antes este flujo tenía un segundo paso donde el
+ * visitante elegía Plan (Básico/Pro/Enterprise) + vigencia + auto-renovación,
+ * y esta acción cobraba (de forma simulada) y creaba la Subscription con
+ * ese plan/precio. Carlos decidió mover el cobro y los paquetes/usuarios
+ * adicionales a Hotmart (gestionado por completo fuera de la plataforma),
+ * así que el visitante ya no elige nada de eso aquí — el formulario es solo
+ * el paso de datos, y la cuenta se crea directo al enviarlo.
  *
- * Dos diferencias contra createTenantAction de Panel Maestro:
- * 1. Aquí SÍ se captura businessType (rubro) desde el propio formulario —
- *    Panel Maestro no lo pide todavía (gap encontrado de paso, no es
- *    parte de este cambio arreglarlo ahí, queda documentado).
- * 2. La suscripción nace ACTIVA (no TRIAL) con la vigencia y el ciclo de
- *    cobro que el cliente eligió en el paso de pago — respetando la
- *    aclaración de Carlos de que aquí SÍ hay una compra real de por
- *    medio, aunque el cobro en sí sea simulado por ahora.
+ * Lo que antes decidía el visitante (cuántas sucursales/empleados puede
+ * tener) ahora lo decide Carlos desde Panel Maestro (/maestro/esquemas,
+ * /maestro/tenants/[slug]): todo negocio nuevo recibe automáticamente el
+ * esquema marcado como predeterminado (getEsquemaDefault(), lib/esquemas-data.ts)
+ * — si Carlos no ha creado ningún esquema todavía, el negocio queda sin
+ * esquema asignado (sin límite) hasta que le asigne uno a mano.
+ *
+ * La Subscription se sigue creando (status ACTIVE, precio 0) solo para que
+ * las pantallas de Suscripciones/Dashboard de Panel Maestro — que ya
+ * dependen de que exista una fila — sigan funcionando; el precio real que
+ * paga el cliente ya no vive en esta base de datos, vive en Hotmart.
+ *
+ * Diferencia que se mantiene contra createTenantAction de Panel Maestro:
+ * aquí SÍ se captura businessType (rubro) desde el propio formulario —
+ * Panel Maestro no lo pide todavía (gap encontrado de paso, no es parte de
+ * este cambio arreglarlo ahí, queda documentado).
  *
  * El visitante nunca escribe una contraseña en este formulario: la cuenta
  * de Supabase se crea con una contraseña temporal generada por el
@@ -44,9 +53,6 @@ interface RegistrarNegocioInput {
   ownerName: string;
   ownerEmail: string;
   ownerPhone?: string;
-  plan: string;
-  billingCycle: BillingCycle;
-  autoRenew: boolean;
 }
 
 interface RegistrarNegocioResult {
@@ -56,12 +62,6 @@ interface RegistrarNegocioResult {
   ownerEmail?: string;
   tempPassword?: string;
 }
-
-const PLAN_PRICES: Record<string, number> = {
-  Basico: 499,
-  Pro: 999,
-  Enterprise: 1999,
-};
 
 function slugify(text: string): string {
   return text
@@ -119,6 +119,8 @@ export async function registrarNegocioAction(
       };
     }
 
+    const esquemaDefault = await getEsquemaDefault();
+
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
@@ -127,6 +129,7 @@ export async function registrarNegocioAction(
           businessType: input.businessType,
           email: input.ownerEmail.trim(),
           phone: input.ownerPhone?.trim() || null,
+          esquemaId: esquemaDefault?.id ?? null,
         },
       });
 
@@ -155,16 +158,15 @@ export async function registrarNegocioAction(
 
       await tx.userRole.create({ data: { userId: user.id, roleId: role.id } });
 
-      const price = PLAN_PRICES[input.plan] ?? PLAN_PRICES.Basico;
+      // Precio en 0 y plan fijo a "Hotmart": el cobro real ya no vive aquí.
+      // Esta fila solo existe para que Suscripciones/Dashboard (Panel
+      // Maestro) — que hoy asumen que todo tenant tiene una — no se rompan.
       await tx.subscription.create({
         data: {
           tenantId: tenant.id,
-          plan: input.plan,
+          plan: "Hotmart",
           status: "ACTIVE",
-          price,
-          billingCycle: input.billingCycle,
-          autoRenew: input.autoRenew,
-          endDate: calcularVigencia(input.billingCycle),
+          price: 0,
         },
       });
 

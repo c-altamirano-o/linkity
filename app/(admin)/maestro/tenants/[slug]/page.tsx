@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getTenantDetailData } from "@/lib/tenants-data";
+import { getEsquemasOptions } from "@/lib/esquemas-data";
 import TenantDetailClient from "./TenantDetailClient";
 
 export default async function TenantDetailPage({
@@ -10,7 +11,7 @@ export default async function TenantDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const tenant = await getTenantDetailData(slug);
+  const [tenant, esquemas] = await Promise.all([getTenantDetailData(slug), getEsquemasOptions()]);
 
   if (!tenant) notFound();
 
@@ -32,7 +33,7 @@ export default async function TenantDetailPage({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-5">
-        <TenantDetailClient tenant={tenant} />
+        <TenantDetailClient tenant={tenant} esquemas={esquemas} />
       </div>
     </>
   );

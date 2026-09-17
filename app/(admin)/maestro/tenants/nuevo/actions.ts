@@ -14,7 +14,7 @@ interface CreateTenantInput {
   ownerName: string;
   ownerEmail: string;
   ownerPhone: string;
-  plan: string;
+  esquemaId: string | null;
   trialDays: number;
   modules: string[];
 }
@@ -25,12 +25,6 @@ interface CreateTenantResult {
   tenantSlug?: string;
   tempPassword?: string;
 }
-
-const PLAN_PRICES: Record<string, number> = {
-  "Basico": 499,
-  "Pro": 999,
-  "Enterprise": 1999,
-};
 
 function slugify(text: string): string {
   return text
@@ -97,6 +91,7 @@ export async function createTenantAction(
           city: input.city || null,
           state: input.state || null,
           email: input.ownerEmail,
+          esquemaId: input.esquemaId,
         },
       });
 
@@ -127,14 +122,20 @@ export async function createTenantAction(
         data: { userId: user.id, roleId: role.id },
       });
 
-      const price = PLAN_PRICES[input.plan] ?? 0;
+      // Precio en 0 y plan fijo a "Hotmart": el cobro real lo gestiona
+      // Hotmart fuera de la plataforma (ver comentario en
+      // app/(auth)/register/actions.ts) — esta fila solo existe para que
+      // Suscripciones/Dashboard, que asumen que todo tenant tiene una, no
+      // se rompan. El período de prueba sigue siendo interno (no lo ve
+      // Hotmart) porque Carlos lo usa para negocios que está probando antes
+      // de mandarlos a Hotmart.
       const hasTrial = input.trialDays > 0;
       await tx.subscription.create({
         data: {
           tenantId: tenant.id,
-          plan: input.plan,
+          plan: "Hotmart",
           status: hasTrial ? "TRIAL" : "ACTIVE",
-          price,
+          price: 0,
           endDate: hasTrial
             ? new Date(Date.now() + input.trialDays * 24 * 60 * 60 * 1000)
             : null,
