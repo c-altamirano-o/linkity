@@ -1,9 +1,9 @@
 "use server";
 
-import { prisma, getTenantPrisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { PaymentMethod, MixedPaymentMethod, SaleStatus } from "@prisma/client";
+import { resolverActor } from "@/lib/actor";
 
 /**
  * Server Action que persiste una venta real de POS: crea Sale + SaleItem(s)
@@ -67,25 +67,12 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     }
   }
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-  if (!tenant) return { ok: false, error: "Negocio no encontrado" };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Sesión no válida, vuelve a iniciar sesión" };
-
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    select: { id: true, tenantId: true },
-  });
-  if (!dbUser || dbUser.tenantId !== tenant.id) {
-    return { ok: false, error: "No tienes acceso a este negocio" };
-  }
+  // resolverActor (lib/actor.ts) acepta tanto una cuenta real (Supabase
+  // Auth) como una sesión de PIN de personal (M11) — Cajero y Gerente
+  // tienen "pos" en su matriz de acceso (lib/roles.ts).
+  const resuelto = await resolverActor(tenantSlug, "pos");
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant, dbUser } = resuelto;
 
   const db = getTenantPrisma(tenant.id);
 
@@ -107,9 +94,23 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       return { ok: false, error: "Uno o más productos ya no están disponibles" };
     }
 
+    // Product.price es el precio de lista que ve el cliente (ej. "Barba,
+    // $80") y SIEMPRE incluye el IVA — así lo pidió Carlos explícitamente:
+    // el cliente paga exactamente ese número, nunca $80 + IVA encima. Por
+    // eso aquí NO se suma taxRate al precio: se desglosa hacia atrás
+    // (precio final ÷ (1 + tasa)) solo para reportar cuánto de esa venta
+    // corresponde a IVA — ese desglose es informativo/contable (Sale.tax,
+    // Sale.subtotal), nunca cambia lo que el cliente paga (Sale.total).
+    //
+    // Se calcula línea por línea (no con un solo IVA global) porque cada
+    // producto puede tener su propia taxRate — aunque hoy todos usan el
+    // default de 16%, el modelo ya lo permite por producto. Restar el neto
+    // del total de la línea (en vez de redondear el IVA aparte) garantiza
+    // que subtotal + tax == total exacto, sin desfases de centavos.
     let subtotal = 0;
     let tax = 0;
-    const lineas: { productId: string; quantity: number; price: number; subtotal: number; isService: boolean }[] = [];
+    let total = 0;
+    const lineas: { productId: string; quantity: number; price: number; subtotal: number; tax: number; isService: boolean }[] = [];
     for (const it of items) {
       const p = products.find((pr) => pr.id === it.productId)!;
       // Cast a string: comparar el enum de Prisma (ProductType) directo
@@ -122,15 +123,19 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
           return { ok: false, error: `Stock insuficiente de "${p.name}" (disponible: ${stockActual})` };
         }
       }
-      const precio = Number(p.price);
-      const lineaSubtotal = precio * it.cantidad;
-      subtotal += lineaSubtotal;
-      tax += lineaSubtotal * (Number(p.taxRate) / 100);
-      lineas.push({ productId: p.id, quantity: it.cantidad, price: precio, subtotal: lineaSubtotal, isService });
+      const precio = Number(p.price); // precio final al cliente, ya incluye IVA
+      const tasa = Number(p.taxRate);
+      const lineaTotal = Math.round(precio * it.cantidad * 100) / 100;
+      const lineaNeto = Math.round((lineaTotal / (1 + tasa / 100)) * 100) / 100;
+      const lineaIva = Math.round((lineaTotal - lineaNeto) * 100) / 100;
+      subtotal += lineaNeto;
+      tax += lineaIva;
+      total += lineaTotal;
+      lineas.push({ productId: p.id, quantity: it.cantidad, price: precio, subtotal: lineaTotal, tax: lineaIva, isService });
     }
     subtotal = Math.round(subtotal * 100) / 100;
     tax = Math.round(tax * 100) / 100;
-    const total = Math.round((subtotal + tax) * 100) / 100;
+    total = Math.round(total * 100) / 100;
 
     let cambio = 0;
     let metadata: { montoRecibido: number; cambio: number } | undefined;

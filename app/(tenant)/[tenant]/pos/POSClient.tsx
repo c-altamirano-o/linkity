@@ -9,6 +9,7 @@ import {
 import type { PosData, ProductoPOS } from "@/lib/pos-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearVentaAction, type MetodoPago } from "@/app/actions/pos-actions";
+import { ProductoIcono } from "@/lib/catalogo-iconos";
 
 interface BranchOption {
   id: string;
@@ -84,9 +85,17 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     return matchCat && matchSearch;
   });
 
-  const subtotal = carrito.reduce((s, i) => s + i.precio * i.cantidad, 0);
-  const iva = carrito.reduce((s, i) => s + i.precio * i.cantidad * (i.taxRate / 100), 0);
-  const total = Math.round((subtotal + iva) * 100) / 100;
+  // i.precio es el precio de lista (el que ve el cliente en el catálogo) y
+  // YA incluye IVA — el total a cobrar es exactamente ese precio × cantidad,
+  // nunca precio + IVA encima. Subtotal/IVA aquí son solo el desglose
+  // informativo (se calcula hacia atrás, precio ÷ (1 + tasa)) para que el
+  // cliente vea qué parte de lo que paga corresponde a IVA — igual criterio
+  // que crearVentaAction en el servidor (fuente de verdad real de la venta).
+  const total = Math.round(carrito.reduce((s, i) => s + i.precio * i.cantidad, 0) * 100) / 100;
+  const subtotal = Math.round(
+    carrito.reduce((s, i) => s + (i.precio * i.cantidad) / (1 + i.taxRate / 100), 0) * 100
+  ) / 100;
+  const iva = Math.round((total - subtotal) * 100) / 100;
   const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
 
   const montoNum = parseFloat(montoRecibido.replace(/,/g, "")) || 0;
@@ -345,6 +354,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             <span className="text-sm font-semibold text-foreground">Total</span>
             <span className="text-base font-bold text-primary">{formatMXN(total)}</span>
           </div>
+          <p className="text-[10px] text-muted-foreground text-right">Los precios ya incluyen IVA</p>
         </div>
 
         {/* Botones de método de pago — 2×2 */}
@@ -533,7 +543,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 <button key={producto.id} onClick={() => agregarAlCarrito(producto)} disabled={agotado}
                   className="flex flex-col items-start p-3 bg-card border border-border rounded-xl hover:border-primary hover:bg-primary/5 transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-card">
                   <div className="w-full h-14 bg-muted rounded-lg flex items-center justify-center mb-2 text-2xl">
-                    {producto.emoji}
+                    <ProductoIcono value={producto.emoji} className="w-6 h-6 text-primary" />
                   </div>
                   <p className="text-xs font-medium text-foreground leading-tight mb-1 line-clamp-2">{producto.name}</p>
                   <p className="text-sm font-bold text-primary">{formatMXN(producto.price)}</p>
