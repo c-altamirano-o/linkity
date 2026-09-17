@@ -27,6 +27,13 @@ model Tenant {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
+  // Límites de capacidad (cuántas sucursales, cuánto personal por sucursal)
+  // que Carlos asigna/reasigna desde Panel Maestro — ver modelo PlanEsquema.
+  // null = sin esquema asignado = sin límite (así quedan los tenants que ya
+  // existían antes de este campo, para no romperles nada de golpe).
+  esquemaId String?
+  esquema   PlanEsquema? @relation(fields: [esquemaId], references: [id])
+
   branches     Branch[]
   users        User[]
   modules      TenantModule[]
@@ -43,6 +50,7 @@ model Tenant {
   invoices     Invoice[]
   labels       TenantLabel[]
   supportTickets SupportTicket[]
+  staffLoginSessions StaffLoginSession[]
 }
 
 // Textos de UI personalizables por tenant (nombre del módulo, de la entidad,
@@ -88,6 +96,7 @@ model Branch {
   cashSessions CashSession[]
   staff        Staff[]
   purchases    Purchase[]
+  staffLoginSessions StaffLoginSession[]
 }
 
 // ============================================
@@ -142,6 +151,9 @@ model User {
   staff        Staff?
   supportTickets  SupportTicket[]
   supportMessages SupportTicketMessage[]
+  // Nota: StaffLoginSession NO se relaciona con User — apunta directo a
+  // Staff, que es la identidad real detrás de una sesión de PIN (ver
+  // comentario largo en ese modelo).
 
   @@unique([tenantId, email])
 }
@@ -160,6 +172,12 @@ model Role {
 
   userRoles   UserRole[]
   permissions RolePermission[]
+  // Empleados de PIN (M11) que tienen este rol asignado — separado de
+  // UserRole/userRoles (que es para cuentas con acceso completo vía
+  // Supabase Auth: el dueño y, potencialmente, gerentes con correo propio).
+  // Ver el comentario largo en Staff.roleId para la explicación completa de
+  // por qué un empleado de PIN no usa User/UserRole.
+  staff       Staff[]
 
   @@unique([tenantId, name])
 }
@@ -246,6 +264,37 @@ enum SubscriptionStatus {
   SUSPENDED
   CANCELLED
   TRIAL
+}
+
+/**
+ * Esquema de capacidad (2026-09) — reemplaza la idea de "el cliente elige
+ * su plan" en el registro público: ahora el cobro y los paquetes/usuarios
+ * adicionales los gestiona Hotmart por fuera de la plataforma, y aquí
+ * dentro Carlos define cuántas sucursales y cuánto personal por sucursal
+ * puede tener cada negocio — configurable desde Panel Maestro
+ * (/maestro/esquemas), y reasignable en cualquier momento por tenant desde
+ * su pantalla de detalle, para poder "migrar" a un cliente de esquema
+ * según el volumen que vaya necesitando, sin tocar código ni base de datos
+ * a mano.
+ *
+ * `isDefault` marca el esquema que se asigna automáticamente a un negocio
+ * nuevo que se auto-registra (solo debe haber uno con isDefault=true a la
+ * vez — las acciones en maestro/esquemas/actions.ts se encargan de eso).
+ * `isActive=false` es un soft-delete: no se borra un esquema que ya tenga
+ * tenants asignados (rompería su referencia), solo se oculta de la lista
+ * para asignar esquemas nuevos.
+ */
+model PlanEsquema {
+  id                String   @id @default(cuid())
+  name              String
+  maxBranches       Int
+  maxStaffPerBranch Int
+  isDefault         Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenants Tenant[]
 }
 
 enum BillingCycle {
@@ -341,6 +390,11 @@ model Customer {
   tenantId  String
   name      String
   phone     String?
+  // Código de país del teléfono (ej. "+52", "+1") — lib/paises.ts trae el
+  // catálogo. Default México porque es donde opera el negocio hoy; los
+  // clientes creados antes de este campo quedan igual (México) al aplicar
+  // el default vía `db push`, no hace falta backfill manual.
+  phoneCountryCode String @default("+52")
   email     String?
   rfc       String?
   address   String?
@@ -562,16 +616,34 @@ model Staff {
   id       String  @id @default(cuid())
   tenantId String
   branchId String
-  // Cuenta de acceso ligada a este empleado (opcional) — sin esto no hay
-  // forma de saber qué Sale/Repair hizo cada quien para calcularle su
-  // comisión individual, porque Sale.userId/Repair.userId apuntan a User,
-  // no a Staff. Un empleado sin cuenta (ej. sin acceso al sistema) se queda
-  // con userId null y su comisión no se calcula automáticamente.
+  // Cuenta interna de atribución (SIEMPRE se crea desde M11 en adelante,
+  // por eso sigue siendo User y no Staff el que aparece en Sale.userId/
+  // Repair.userId/CashSession.userId — cambiar esas 3 llaves foráneas para
+  // apuntar a Staff habría sido una migración mucho más invasiva). Esta
+  // cuenta NO es una cuenta de acceso real: se crea con un correo sintético
+  // que nadie ve y un supabaseId inventado (nunca corresponde a una cuenta
+  // real de Supabase Auth), así que jamás se puede usar para entrar por
+  // /login — el empleado entra exclusivamente por /[tenant]/entrada con su
+  // PIN (ver lib/staff-auth.ts). Sigue siendo opcional (`?`) solo por
+  // compatibilidad con Staff sembrado antes de este cambio.
   userId   String? @unique
   name     String
   phone    String?
   email    String?
   position String?
+  // PIN de 4 dígitos con el que el empleado entra a /[tenant]/entrada —
+  // guardado con scrypt (lib/staff-auth.ts), nunca en texto plano. Null en
+  // empleados que todavía no tienen PIN asignado (Staff sembrado antes de
+  // este cambio, o un empleado que Carlos deliberadamente deja sin acceso
+  // al sistema).
+  pinHash  String?
+  // Rol que determina a qué módulos puede entrar este empleado (ver
+  // lib/roles.ts) — deliberadamente separado de Role.userRoles/UserRole
+  // (que es para el dueño y cualquier cuenta con acceso completo vía
+  // Supabase Auth). "Administrador" nunca se ofrece aquí como opción: ese
+  // nivel de acceso solo existe a través de una cuenta real, no de un PIN.
+  roleId   String?
+  role     Role?   @relation(fields: [roleId], references: [id])
 
   // Esquema de pago (6 campos)
   paymentScheme    PaymentScheme    @default(FIJO)
@@ -589,6 +661,7 @@ model Staff {
   user       User?          @relation(fields: [userId], references: [id])
   attendances Attendance[]
   payments   StaffPayment[]
+  loginSessions StaffLoginSession[]
 }
 
 enum PaymentScheme {
@@ -620,6 +693,52 @@ model Attendance {
   staff Staff @relation(fields: [staffId], references: [id])
 
   @@unique([staffId, date])
+}
+
+// Bitácora de asistencia basada en el login/logout REAL de personal por PIN
+// (2026-09-16, a petición de Carlos). A propósito un modelo aparte de
+// Attendance (arriba): Attendance es el registro MANUAL que ya alimenta
+// horasSemana/nómina en Personal (un botón "Registrar entrada/salida" que
+// cualquiera puede apretar sin estar realmente usando el sistema) — Carlos
+// decidió dejarlo tal cual, sin tocar nómina, y que este nuevo panel de
+// asistencia (/[tenant]/asistencia, solo visible para el administrador) sea
+// puramente informativo y aparte, basado en cuándo el empleado de verdad
+// entró/salió del sistema con su PIN.
+//
+// Una fila por CADA sesión de PIN (no una por día): un mismo empleado puede
+// tener varios login/logout el mismo día (turno partido, o simplemente
+// volver a entrar tras cerrar sesión) — por eso NO lleva un @@unique por
+// día como Attendance. checkOut queda null mientras la sesión sigue
+// abierta; se cierra por 3 caminos: (1) el empleado presiona "Cambiar de
+// usuario" (closedBy MANUAL, ver cerrarSesionPersonalAction en
+// acceso-personal-actions.ts), (2) el administrador la cierra a mano desde
+// el panel (closedBy MANUAL también — ver cerrarAsistenciaManualAction en
+// asistencia-actions.ts), o (3) el sistema detecta que ya es otro día
+// calendario (México) la próxima vez que esa sesión intenta usarse, y la
+// cierra sola en el instante justo antes de medianoche del día en que iba
+// (closedBy DATE_ROLLOVER) — así nunca queda "abierta" más de un día,
+// aunque el empleado deje la pestaña abierta o no cierre sesión (ver
+// verificarSesionPersonalVigente en lib/asistencia.ts, que reemplaza a
+// leerSesionPersonal en los dos lugares que validan esta sesión: el layout
+// del tenant y resolverActor).
+model StaffLoginSession {
+  id        String                  @id @default(cuid())
+  tenantId  String
+  staffId   String
+  branchId  String
+  checkIn   DateTime                @default(now())
+  checkOut  DateTime?
+  closedBy  StaffLoginCloseReason?
+  createdAt DateTime                @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  staff  Staff  @relation(fields: [staffId], references: [id])
+  branch Branch @relation(fields: [branchId], references: [id])
+}
+
+enum StaffLoginCloseReason {
+  MANUAL
+  DATE_ROLLOVER
 }
 
 // Pagos de nómina efectivamente generados/dispersados a cada miembro del personal.
