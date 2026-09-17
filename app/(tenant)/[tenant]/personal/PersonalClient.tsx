@@ -9,7 +9,7 @@ import {
 import type { PersonalData, EmpleadoUI, EsquemaPago, BaseComision, Frecuencia, EstadoPago, MetodoPago } from "@/lib/personal-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import type { RolTenantUI } from "@/lib/roles";
-import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, validarTelefono } from "@/lib/paises";
+import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, paisPorCodigo, validarTelefono } from "@/lib/paises";
 import {
   crearEmpleadoAction, editarEmpleadoAction, cambiarEstadoEmpleadoAction,
   registrarAsistenciaAction, generarPagoAction, actualizarEstadoPagoAction,
@@ -35,7 +35,12 @@ interface PersonalClientProps {
   puestosSugeridos: string[];
 }
 
-const ESQUEMA_TEXTO: Record<EsquemaPago, string> = { FIJO: "Sueldo fijo", COMISION: "Solo comisión", MIXTO: "Fijo + comisión", DESTAJO: "Destajo (por unidad)" };
+const ESQUEMA_TEXTO: Record<EsquemaPago, string> = {
+  FIJO: "Sueldo fijo (sin comisión)",
+  COMISION: "Comisión (% del precio)",
+  MIXTO: "Fijo + comisión (%)",
+  DESTAJO: "Destajo ($ fijo por unidad, no %)",
+};
 const COMISION_BASE_TEXTO: Record<BaseComision, string> = { VENTAS: "Ventas", REPARACIONES: "Reparaciones", UTILIDAD: "Utilidad" };
 const FRECUENCIA_TEXTO: Record<Frecuencia, string> = { SEMANAL: "Semanal", CATORCENAL: "Catorcenal", QUINCENAL: "Quincenal", MENSUAL: "Mensual" };
 const METODO_PAGO_TEXTO: Record<MetodoPago, string> = { EFECTIVO: "Efectivo", TRANSFERENCIA: "Transferencia", CHEQUE: "Cheque", TARJETA_NOMINA: "Tarjeta de nómina", OTRO: "Otro" };
@@ -630,14 +635,24 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PAÍS</label>
-                  <select value={form.phoneCountryCode} onChange={(e) => setForm({ ...form, phoneCountryCode: e.target.value })}
+                  <select value={form.phoneCountryCode}
+                    onChange={(e) => {
+                      // Al cambiar de país se recorta el teléfono ya
+                      // capturado a los dígitos del país nuevo — evita
+                      // dejar un número con la longitud del país anterior.
+                      const nuevoPais = paisPorCodigo(e.target.value);
+                      setForm({ ...form, phoneCountryCode: e.target.value, phone: form.phone.slice(0, nuevoPais.digits) });
+                    }}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                     {PAISES_TELEFONO.map((p) => <option key={p.code} value={p.code}>{p.flag} {p.code}</option>)}
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">TELÉFONO</label>
-                  <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">
+                    TELÉFONO ({paisPorCodigo(form.phoneCountryCode).digits} DÍGITOS)
+                  </label>
+                  <input type="text" inputMode="numeric" value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, "").slice(0, paisPorCodigo(form.phoneCountryCode).digits) })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
               </div>
@@ -687,6 +702,22 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                     {(["FIJO", "COMISION", "MIXTO", "DESTAJO"] as EsquemaPago[]).map((s) => <option key={s} value={s}>{ESQUEMA_TEXTO[s]}</option>)}
                   </select>
+                  <div className={`mt-1.5 rounded-lg border px-2.5 py-2 text-[10px] leading-relaxed ${
+                    form.paymentScheme === "DESTAJO" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-primary/5 border-primary/20 text-foreground"
+                  }`}>
+                    {form.paymentScheme === "FIJO" && "Se le paga lo mismo sin importar cuánto venda o repare."}
+                    {form.paymentScheme === "COMISION" && (
+                      <>Es un <strong>PORCENTAJE</strong> del precio de cada venta/reparación — ej. un corte de $250 al 50% = tu empleado recibe $125. Este es el caso típico de un barbero.</>
+                    )}
+                    {form.paymentScheme === "MIXTO" && "Un sueldo fijo más un porcentaje de comisión adicional (igual que Comisión, pero sumado a un sueldo base)."}
+                    {form.paymentScheme === "DESTAJO" && (
+                      <>
+                        <strong>NO es un porcentaje</strong> — es un monto fijo en pesos por cada unidad, sin importar su precio de venta. Ej. si pagas $50 de destajo por corte, tu empleado recibe $50 tanto si el corte se vendió en $200 como en $300.
+                        <br />
+                        Si en cambio quieres que reciba un % del precio (como el ejemplo del corte a $250 al 50%), usa <strong>&quot;Comisión&quot;</strong>, no Destajo.
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MÉTODO DE PAGO</label>
@@ -709,8 +740,11 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUELDO BASE</label>
-                  <input type="number" value={form.baseSalary} onChange={(e) => setForm({ ...form, baseSalary: e.target.value })} placeholder="$0"
-                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                  <div className="relative mt-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                    <input type="number" value={form.baseSalary} onChange={(e) => setForm({ ...form, baseSalary: e.target.value })} placeholder="0"
+                      className="w-full pl-6 pr-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                  </div>
                 </div>
                 <div>
                   <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">FRECUENCIA DEL SUELDO</label>
@@ -722,37 +756,53 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
 
               {form.paymentScheme === "DESTAJO" && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MONTO POR UNIDAD</label>
-                    <input type="number" value={form.pieceRate} onChange={(e) => setForm({ ...form, pieceRate: e.target.value })} placeholder="$0"
-                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                <div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MONTO FIJO EN PESOS POR UNIDAD</label>
+                      <div className="relative mt-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                        <input type="number" value={form.pieceRate} onChange={(e) => setForm({ ...form, pieceRate: e.target.value })} placeholder="0"
+                          className="w-full pl-6 pr-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">POR CADA</label>
+                      <select value={form.commissionBase} onChange={(e) => setForm({ ...form, commissionBase: e.target.value as BaseComision })}
+                        className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                        <option value="VENTAS">Venta</option>
+                        <option value="REPARACIONES">Reparación entregada</option>
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">POR CADA</label>
-                    <select value={form.commissionBase} onChange={(e) => setForm({ ...form, commissionBase: e.target.value as BaseComision })}
-                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
-                      <option value="VENTAS">Venta</option>
-                      <option value="REPARACIONES">Reparación entregada</option>
-                    </select>
-                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Ejemplo: entrega 1 {form.commissionBase === "VENTAS" ? "venta" : "reparación"}, sin importar en cuánto se cobró — tu empleado recibe exactamente {formatMXN(parseFloat(form.pieceRate || "0") || 0)}.
+                  </p>
                 </div>
               )}
 
               {(form.paymentScheme === "COMISION" || form.paymentScheme === "MIXTO") && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN</label>
-                    <input type="number" value={form.commissionRate} onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
-                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                <div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN</label>
+                      <div className="relative mt-1">
+                        <input type="number" value={form.commissionRate} onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
+                          className="w-full pl-3 pr-7 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">COMISIÓN SOBRE</label>
+                      <select value={form.commissionBase} onChange={(e) => setForm({ ...form, commissionBase: e.target.value as BaseComision })}
+                        className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                        {(["VENTAS", "REPARACIONES", "UTILIDAD"] as BaseComision[]).map((c) => <option key={c} value={c}>{COMISION_BASE_TEXTO[c]}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">COMISIÓN SOBRE</label>
-                    <select value={form.commissionBase} onChange={(e) => setForm({ ...form, commissionBase: e.target.value as BaseComision })}
-                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
-                      {(["VENTAS", "REPARACIONES", "UTILIDAD"] as BaseComision[]).map((c) => <option key={c} value={c}>{COMISION_BASE_TEXTO[c]}</option>)}
-                    </select>
-                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Ejemplo: en {form.commissionBase === "UTILIDAD" ? "una utilidad" : form.commissionBase === "REPARACIONES" ? "una reparación" : "una venta"} de {formatMXN(250)}, tu empleado recibe {formatMXN(250 * ((parseFloat(form.commissionRate || "0") || 0) / 100))} ({parseFloat(form.commissionRate || "0") || 0}%).
+                  </p>
                 </div>
               )}
 
@@ -778,8 +828,11 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <div>
                       <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN DE EQUIPO</label>
-                      <input type="number" value={form.teamCommissionRate} onChange={(e) => setForm({ ...form, teamCommissionRate: e.target.value })}
-                        className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                      <div className="relative mt-1">
+                        <input type="number" value={form.teamCommissionRate} onChange={(e) => setForm({ ...form, teamCommissionRate: e.target.value })}
+                          className="w-full pl-3 pr-7 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                      </div>
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SOBRE (SUCURSAL)</label>
@@ -904,6 +957,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
         <RolesManager
           tenantSlug={tenantSlug}
           rolesIniciales={roles}
+          sugerenciasRoles={puestosSugeridos}
           onCerrar={() => setModalRoles(false)}
           onCambio={() => router.refresh()}
         />

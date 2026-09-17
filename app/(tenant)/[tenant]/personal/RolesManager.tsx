@@ -32,11 +32,16 @@ const MODULOS_ASIGNABLES: ModuloKey[] = MODULOS.filter(
 interface RolesManagerProps {
   tenantSlug: string;
   rolesIniciales: RolTenantUI[];
+  // Puestos sugeridos para el rubro de este negocio (lib/puestos-rubro.ts,
+  // mismo catálogo que alimenta el <datalist> de "Puesto" en el formulario
+  // de empleado) — aquí se ofrecen como chips de un clic para crear el rol
+  // correspondiente, sin tener que escribir el nombre a mano.
+  sugerenciasRoles?: string[];
   onCerrar: () => void;
   onCambio: () => void;
 }
 
-export default function RolesManager({ tenantSlug, rolesIniciales, onCerrar, onCambio }: RolesManagerProps) {
+export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRoles = [], onCerrar, onCambio }: RolesManagerProps) {
   const [roles, setRoles] = useState<RolTenantUI[]>(rolesIniciales);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [nombreEdit, setNombreEdit] = useState("");
@@ -182,6 +187,17 @@ export default function RolesManager({ tenantSlug, rolesIniciales, onCerrar, onC
               <input type="text" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)}
                 placeholder="Nombre del rol (ej. Barbero)"
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+              {sugerenciasRoles.filter((s) => !roles.some((r) => r.name === s)).length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  <span className="text-[10px] text-muted-foreground mr-1">Sugeridos para tu rubro:</span>
+                  {sugerenciasRoles.filter((s) => !roles.some((r) => r.name === s)).map((s) => (
+                    <button key={s} type="button" onClick={() => setNombreNuevo(s)}
+                      className="px-2 py-0.5 rounded-full bg-muted hover:bg-primary/10 hover:text-primary text-[10px] text-foreground">
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {MODULOS_ASIGNABLES.map((m) => (
                   <label key={m} className="flex items-center gap-1.5 text-xs text-foreground">
