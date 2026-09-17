@@ -1,9 +1,9 @@
 "use server";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { getCatalogoArranque } from "@/lib/catalogo-arranque";
+import { resolverActor, type ActorResult } from "@/lib/actor";
 
 /**
  * Server Actions del módulo Catálogo (M6). Antes de este cambio no existía
@@ -16,36 +16,46 @@ import { getCatalogoArranque } from "@/lib/catalogo-arranque";
  * resolverTenantYUsuario duplicado localmente, retorno discriminado
  * {ok:true,...}|{ok:false,error}.
  *
- * Nota: crear/editar un producto NO toca Inventory (el stock por sucursal)
- * — esa es información que ya entra por un camino real y probado
- * (recibir una Compra incrementa Inventory, ver compras-actions.ts).
- * Reutilizar ese mismo mecanismo en vez de inventar un segundo lugar para
- * "poner stock a mano" evita que los dos caminos se desincronicen.
+ * Nota sobre Inventory (el stock por sucursal): un producto/refacción
+ * recién creado (por cualquiera de las 3 formas de esta pantalla — alta
+ * manual, catálogo de arranque, importación CSV/Excel) arranca con 1
+ * unidad de existencia en cada sucursal activa del negocio, en vez de 0
+ * (a petición de Carlos, 2026-09-16 — mostrar "Agotado" apenas se da de
+ * alta un producto resultaba confuso). Editar un producto ya existente
+ * sigue sin tocar Inventory. Los servicios (type SERVICE) no llevan
+ * stock, así que no reciben fila de Inventory. El movimiento real de
+ * stock de ahí en adelante sigue el mismo camino de siempre: recibir una
+ * Compra lo incrementa (compras-actions.ts), venderlo lo descuenta
+ * (pos-actions.ts), y Inventario permite ajustarlo a mano
+ * (inventario-actions.ts).
  */
 
-type ResolverResult =
-  | { ok: true; tenant: { id: string }; dbUser: { id: string; tenantId: string } }
-  | { ok: false; error: string };
+type ResolverResult = ActorResult;
 
+// Delega en resolverActor (lib/actor.ts) — Gerente tiene "catalogo" en su
+// matriz de acceso (lib/roles.ts), Cajero y Técnico no (ellos venden desde
+// POS/Reparaciones, que traen su propio selector de productos, no
+// necesitan la pantalla de gestión del catálogo).
 async function resolverTenantYUsuario(tenantSlug: string): Promise<ResolverResult> {
-  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
-  if (!tenant) return { ok: false, error: "Negocio no encontrado" };
+  return resolverActor(tenantSlug, "catalogo");
+}
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Sesión no válida, vuelve a iniciar sesión" };
+const STOCK_INICIAL_DEFAULT = 1;
 
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    select: { id: true, tenantId: true },
+// Da de alta la fila de Inventory (stock inicial) de un producto recién
+// creado en cada sucursal activa del tenant. No se llama para type
+// SERVICE (los servicios no llevan stock) ni al editar un producto ya
+// existente (ver nota arriba). `db` debe ser el mismo cliente escopado al
+// tenant (getTenantPrisma) que ya se usó para crear el producto.
+async function crearInventarioInicial(
+  db: ReturnType<typeof getTenantPrisma>,
+  productId: string,
+  branchIds: string[]
+): Promise<void> {
+  if (branchIds.length === 0) return;
+  await db.inventory.createMany({
+    data: branchIds.map((branchId) => ({ productId, branchId, stock: STOCK_INICIAL_DEFAULT })),
   });
-  if (!dbUser || dbUser.tenantId !== tenant.id) {
-    return { ok: false, error: "No tienes acceso a este negocio" };
-  }
-
-  return { ok: true, tenant, dbUser };
 }
 
 function manejarErrorAcceso(err: any, mensajeGenerico: string): { ok: false; error: string } {
@@ -109,6 +119,11 @@ export async function crearProductoAction(
         emoji: datos.emoji?.trim() || null,
       },
     });
+
+    if (datos.type !== "SERVICE") {
+      const sucursalesActivas = await db.branch.findMany({ where: { isActive: true }, select: { id: true } });
+      await crearInventarioInicial(db, nuevo.id, sucursalesActivas.map((b) => b.id));
+    }
 
     revalidatePath(`/${tenantSlug}/catalogo`);
     revalidatePath(`/${tenantSlug}/inventario`);
@@ -241,6 +256,8 @@ export async function cargarCatalogoArranqueAction(
     }
 
     const categoriaCache = new Map<string, string>();
+    const sucursalesActivas = await db.branch.findMany({ where: { isActive: true }, select: { id: true } });
+    const branchIds = sucursalesActivas.map((b) => b.id);
 
     for (const item of items) {
       const cacheKey = `${item.categoryName}::${item.categoryType}`;
@@ -262,7 +279,7 @@ export async function cargarCatalogoArranqueAction(
         categoriaCache.set(cacheKey, categoryId);
       }
 
-      await db.product.create({
+      const nuevo = await db.product.create({
         data: {
           tenantId: tenant.id,
           categoryId,
@@ -273,6 +290,10 @@ export async function cargarCatalogoArranqueAction(
           emoji: item.emoji ?? null,
         },
       });
+
+      if (item.type !== "SERVICE") {
+        await crearInventarioInicial(db, nuevo.id, branchIds);
+      }
     }
 
     revalidatePath(`/${tenantSlug}/catalogo`);
@@ -333,6 +354,8 @@ export async function importarProductosAction(
   // Evita crear dos productos con el mismo SKU dentro del propio archivo
   // (además de la verificación contra los que ya existen en BD).
   const skusEnLote = new Set<string>();
+  const sucursalesActivas = await db.branch.findMany({ where: { isActive: true }, select: { id: true } });
+  const branchIds = sucursalesActivas.map((b) => b.id);
 
   try {
     for (const fila of filas) {
@@ -390,7 +413,7 @@ export async function importarProductosAction(
         }
       }
 
-      await db.product.create({
+      const nuevo = await db.product.create({
         data: {
           tenantId: tenant.id,
           categoryId,
@@ -401,6 +424,11 @@ export async function importarProductosAction(
           cost: fila.cost ?? null,
         },
       });
+
+      if (fila.type !== "SERVICE") {
+        await crearInventarioInicial(db, nuevo.id, branchIds);
+      }
+
       creados++;
     }
 

@@ -10,6 +10,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import type { CatalogoData, TipoCatalogo, ProductoCatalogo } from "@/lib/catalogo-data";
 import { label, type LabelDictionary } from "@/lib/labels";
+import { ProductoIcono, ICON_PREFIX, ICONOS } from "@/lib/catalogo-iconos";
 import {
   crearProductoAction, editarProductoAction, crearCategoriaAction,
   cargarCatalogoArranqueAction, importarProductosAction,
@@ -59,13 +60,29 @@ const TYPE_FALLBACK_EMOJI_LOCAL: Record<TipoProductoInput, string> = {
   SERVICE: "🔧",
 };
 
-// Colores fijos por tipo — funcionan como etiquetas categóricas (igual que
-// los badges de método de pago en el Dashboard), no como marca ni como
-// indicador de estatus, así que se quedan igual sin importar el tema.
+// Convierte una clave PascalCase de la galería de íconos (ej.
+// "BatteryCharging") en un texto legible para el tooltip del selector
+// ("Battery Charging") — evita mantener una segunda lista de nombres en
+// español a mano para cada ícono nuevo que se agregue a ICONOS.
+const humanizarIcono = (clave: string) => clave.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+
+// Colores por tipo — a petición explícita de Carlos ("que los colores
+// cambien de acuerdo al theme que seleccione el usuario, eso nos dará una
+// capa de personalización más completa"), estos YA NO son colores fijos de
+// Tailwind (antes bg-purple-50/text-purple-600, etc.) sino los tokens de
+// tema de lib/theme-presets.ts (--primary, --accent, --secondary) — cambian
+// solos si el negocio cambia de tema en Configuración, sin tocar código.
+// Se conserva la distinción visual entre los 3 tipos (para que la pestaña/
+// categoría activa y la miniatura de cada producto sigan siendo
+// reconocibles a simple vista) usando 3 tokens distintos del mismo tema en
+// vez de un solo color para los tres. A diferencia de los badges de
+// estatus/método de pago (esos SÍ siguen fijos siempre, ver el criterio en
+// lib/theme-presets.ts), este es un caso donde Carlos pidió expresamente lo
+// contrario: que sí cedan al tema.
 const tipoConfig: Record<TipoCatalogo, { label: string; icon: typeof Smartphone; color: string; bg: string }> = {
-  PRODUCT: { label: TIPO_LABELS.PRODUCT, icon: Smartphone, color: "text-purple-600", bg: "bg-purple-50" },
-  PART:    { label: TIPO_LABELS.PART,    icon: Cpu,        color: "text-orange-600", bg: "bg-orange-50" },
-  SERVICE: { label: TIPO_LABELS.SERVICE, icon: Wrench,     color: "text-emerald-600", bg: "bg-emerald-50" },
+  PRODUCT: { label: TIPO_LABELS.PRODUCT, icon: Smartphone, color: "text-primary", bg: "bg-primary/10" },
+  PART:    { label: TIPO_LABELS.PART,    icon: Cpu,        color: "text-accent-foreground", bg: "bg-accent" },
+  SERVICE: { label: TIPO_LABELS.SERVICE, icon: Wrench,     color: "text-secondary-foreground", bg: "bg-secondary" },
 };
 
 const TIPOS_ORDEN: TipoCatalogo[] = ["PRODUCT", "PART", "SERVICE"];
@@ -311,9 +328,24 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   const [nuevaCategoria, setNuevaCategoria] = useState(false);
   const [nombreNuevaCategoria, setNombreNuevaCategoria] = useState("");
 
+  // Selector de ícono del modal: "icono" muestra la galería de ICONOS
+  // (misma paleta vectorial que ya usa el catálogo de arranque),  "emoji"
+  // muestra el campo de texto libre de siempre para quien prefiera escribir
+  // un emoji real que no esté en la galería. form.emoji guarda el valor
+  // final en ambos casos (con prefijo ICON_PREFIX si viene de la galería,
+  // o el texto tal cual si es un emoji escrito a mano) — un solo campo,
+  // sin necesidad de reconciliar dos fuentes al guardar.
+  const [modoIcono, setModoIcono] = useState<"icono" | "emoji">("icono");
+
+  function alternarModoIcono() {
+    setModoIcono((m) => (m === "icono" ? "emoji" : "icono"));
+    setForm((f) => ({ ...f, emoji: "" }));
+  }
+
   function abrirNuevo() {
     setEditando(null);
     setForm({ ...FORM_VACIO, type: tipoActivo });
+    setModoIcono("icono");
     setErrorModal(null);
     setNuevaCategoria(false);
     setNombreNuevaCategoria("");
@@ -322,6 +354,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
 
   function abrirEditar(p: ProductoCatalogo) {
     setEditando(p);
+    const esIconoDeSistema = !!p.emoji && p.emoji.startsWith(ICON_PREFIX);
     setForm({
       name: p.name,
       sku: p.sku ?? "",
@@ -332,6 +365,10 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       emoji: p.emoji ?? "",
       isActive: true,
     });
+    // Si ya trae un ícono de la galería, o si no tiene nada todavía,
+    // arranca en modo galería; solo entra directo a modo texto si ya
+    // tenía un emoji escrito a mano.
+    setModoIcono(esIconoDeSistema || !p.emoji ? "icono" : "emoji");
     setErrorModal(null);
     setNuevaCategoria(false);
     setNombreNuevaCategoria("");
@@ -359,7 +396,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
         cost: form.cost ? Number(form.cost) : null,
         type: form.type,
         categoryId: categoryId || null,
-        emoji: form.emoji || null,
+        emoji: form.emoji.trim() || null,
       };
 
       const res = editando
@@ -623,8 +660,8 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
               <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 content-start">
                 {productosFiltrados.map((p) => (
                   <div key={p.id} onClick={() => abrirEditar(p)} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer">
-                    <div className="h-14 sm:h-16 bg-muted flex items-center justify-center text-2xl border-b border-border">
-                      {p.emoji}
+                    <div className={`h-14 sm:h-16 ${tipoConfig[p.type].bg} flex items-center justify-center text-2xl border-b border-border`}>
+                      <ProductoIcono value={p.emoji} className={`w-7 h-7 ${tipoConfig[p.type].color}`} />
                     </div>
                     <div className="p-2.5 sm:p-3">
                       <p className="text-xs font-medium text-foreground leading-tight mb-1 line-clamp-2">{p.name}</p>
@@ -802,24 +839,72 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   placeholder="Ej. Pantalla iPhone 13"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground">SKU</label>
-                  <input
-                    value={form.sku}
-                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
-                  />
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground">SKU</label>
+                <input
+                  value={form.sku}
+                  onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                    Ícono
+                    <span className="w-5 h-5 rounded-md bg-muted border border-border flex items-center justify-center text-muted-foreground">
+                      <ProductoIcono value={form.emoji || null} className="w-3 h-3" />
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={alternarModoIcono}
+                    className="text-[10px] text-primary font-medium hover:underline"
+                  >
+                    {modoIcono === "icono" ? "Escribir mi propio emoji" : "Elegir de la galería"}
+                  </button>
                 </div>
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground">Emoji</label>
+                {modoIcono === "icono" ? (
+                  <div className="mt-1 grid grid-cols-8 gap-1 p-2 border border-border rounded-lg bg-muted max-h-32 overflow-y-auto">
+                    <button
+                      type="button"
+                      title="Sin ícono (usa el genérico del tipo)"
+                      onClick={() => setForm({ ...form, emoji: "" })}
+                      className={`w-7 h-7 flex items-center justify-center rounded-md text-[9px] font-medium transition-colors ${
+                        form.emoji === ""
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                      }`}
+                    >
+                      —
+                    </button>
+                    {Object.entries(ICONOS).map(([key, Icono]) => {
+                      const valor = `${ICON_PREFIX}${key}`;
+                      const seleccionado = form.emoji === valor;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          title={humanizarIcono(key)}
+                          onClick={() => setForm({ ...form, emoji: valor })}
+                          className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors ${
+                            seleccionado
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                          }`}
+                        >
+                          <Icono className="w-4 h-4" weight="regular" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
                   <input
                     value={form.emoji}
                     onChange={(e) => setForm({ ...form, emoji: e.target.value })}
                     placeholder={TYPE_FALLBACK_EMOJI_LOCAL[form.type]}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
                   />
-                </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

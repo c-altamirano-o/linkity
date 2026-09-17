@@ -6,6 +6,7 @@ import { Search, SlidersHorizontal, FileDown, ChevronDown, Plus, AlertTriangle, 
 import type { ProductoInventario } from "@/lib/inventario-data";
 import { ajustarStock, type AjusteTipo } from "@/lib/inventario-actions";
 import { label, type LabelDictionary } from "@/lib/labels";
+import { ProductoIcono } from "@/lib/catalogo-iconos";
 
 interface BranchOption {
   id: string;
@@ -372,7 +373,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                     <td className="px-3 sm:px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 bg-muted rounded-lg flex items-center justify-center text-sm flex-shrink-0">
-                          {p.emoji}
+                          <ProductoIcono value={p.emoji} className="w-4 h-4 text-primary" />
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-foreground truncate max-w-[140px]">{p.name}</p>
