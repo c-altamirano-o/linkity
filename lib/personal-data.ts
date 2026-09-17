@@ -9,15 +9,21 @@ import { getTenantPrisma } from "@/lib/prisma";
  * cambio) — así que esta capa y la UI que la consume se construyeron juntas,
  * no se "migró" un mockup existente.
  *
- * Nota de arquitectura importante: Staff (el registro de personal) ahora
- * tiene un campo opcional Staff.userId que lo vincula con su cuenta de
- * acceso (User). Sin ese vínculo no hay forma de saber qué Sale/Repair hizo
- * cada empleado específico — Sale.userId y Repair.userId apuntan a User, no
- * a Staff — así que la comisión individual (comisionBase VENTAS/
- * REPARACIONES/UTILIDAD) solo se puede calcular para empleados vinculados a
- * una cuenta. Esto requirió un cambio de schema (ver schema.prisma) que
+ * Nota de arquitectura importante: Staff (el registro de personal) siempre
+ * tiene un Staff.userId que apunta a su cuenta de atribución (User) — desde
+ * M11 (PIN de personal) esa cuenta se crea automáticamente al dar de alta
+ * al empleado (ver personal-actions.ts), ya no es un vínculo opcional que
+ * Carlos elige a mano. Sale.userId y Repair.userId apuntan a User, no a
+ * Staff, así que la comisión individual (comisionBase VENTAS/REPARACIONES/
+ * UTILIDAD) se calcula sobre las ventas/reparaciones atribuidas a esa
+ * cuenta oculta. Esto requirió un cambio de schema (ver schema.prisma) que
  * Carlos todavía necesita aplicar con `npx prisma db push` + `npx prisma
  * generate` antes de que este módulo compile y funcione contra la BD real.
+ *
+ * Cambio M11: se quita usuariosDisponibles/UsuarioOption (el selector de
+ * "vincular cuenta existente" ya no existe — ver personal-actions.ts) y
+ * EmpleadoUI gana roleName/roleDescripcion/tienePin, para mostrar el rol
+ * asignado y si el empleado ya tiene un PIN configurado.
  */
 
 export type EsquemaPago = "FIJO" | "COMISION" | "MIXTO";
@@ -46,12 +52,12 @@ export interface EmpleadoUI {
   id: string;
   branchId: string;
   branchName: string;
-  userId: string | null;
-  usuarioVinculado: string | null;
   name: string;
   phone: string | null;
-  email: string | null;
   position: string | null;
+  roleName: string | null;
+  roleDescripcion: string | null;
+  tienePin: boolean;
   esquemaPago: EsquemaPago;
   sueldoBase: number;
   comisionRate: number;
@@ -65,17 +71,8 @@ export interface EmpleadoUI {
   pagos: PagoUI[];
 }
 
-export interface UsuarioOption {
-  id: string;
-  name: string;
-  email: string;
-}
-
 export interface PersonalData {
   empleados: EmpleadoUI[];
-  // Solo Users del tenant que todavía no tienen un Staff vinculado — para
-  // ofrecerlos en el selector de "vincular cuenta" al crear/editar.
-  usuariosDisponibles: UsuarioOption[];
 }
 
 function hoyString(): string {
@@ -89,21 +86,15 @@ export async function getPersonalData(tenantId: string): Promise<PersonalData> {
   const hace8Dias = new Date();
   hace8Dias.setDate(hace8Dias.getDate() - 8);
 
-  const [staffRaw, usersRaw] = await Promise.all([
-    db.staff.findMany({
-      orderBy: { name: "asc" },
-      include: {
-        branch: { select: { name: true } },
-        user: { select: { name: true } },
-        attendances: { where: { date: { gte: hace8Dias } }, orderBy: { date: "desc" } },
-        payments: { orderBy: { periodStart: "desc" }, take: 6 },
-      },
-    }),
-    db.user.findMany({
-      select: { id: true, name: true, email: true, staff: { select: { id: true } } },
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  const staffRaw = await db.staff.findMany({
+    orderBy: { name: "asc" },
+    include: {
+      branch: { select: { name: true } },
+      role: { select: { name: true, description: true } },
+      attendances: { where: { date: { gte: hace8Dias } }, orderBy: { date: "desc" } },
+      payments: { orderBy: { periodStart: "desc" }, take: 6 },
+    },
+  });
 
   const hoy = hoyString();
 
@@ -120,12 +111,12 @@ export async function getPersonalData(tenantId: string): Promise<PersonalData> {
       id: s.id,
       branchId: s.branchId,
       branchName: s.branch.name,
-      userId: s.userId,
-      usuarioVinculado: s.user?.name ?? null,
       name: s.name,
       phone: s.phone,
-      email: s.email,
       position: s.position,
+      roleName: s.role?.name ?? null,
+      roleDescripcion: s.role?.description ?? null,
+      tienePin: Boolean(s.pinHash),
       esquemaPago: s.paymentScheme as EsquemaPago,
       sueldoBase: Number(s.baseSalary),
       comisionRate: Number(s.commissionRate),
@@ -152,11 +143,7 @@ export async function getPersonalData(tenantId: string): Promise<PersonalData> {
     };
   });
 
-  const usuariosDisponibles: UsuarioOption[] = usersRaw
-    .filter((u) => !u.staff)
-    .map((u) => ({ id: u.id, name: u.name, email: u.email }));
-
-  return { empleados, usuariosDisponibles };
+  return { empleados };
 }
 
 export interface SugerenciaComision {

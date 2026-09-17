@@ -1,9 +1,9 @@
 "use server";
 
-import { prisma, getTenantPrisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { PurchaseStatus } from "@prisma/client";
+import { resolverActor, type ActorResult } from "@/lib/actor";
 
 /**
  * Server Actions del módulo Compras/Proveedores (M12). Mismo criterio que
@@ -23,32 +23,12 @@ import { PurchaseStatus } from "@prisma/client";
  * fallar a medias sin saber a qué sucursal sumarle stock.
  */
 
-type ResolverResult =
-  | { ok: true; tenant: { id: string }; dbUser: { id: string; tenantId: string } }
-  | { ok: false; error: string };
+type ResolverResult = ActorResult;
 
-// Discriminante `ok` explícito + tipo de retorno anotado — mismo patrón
-// que ya se estandarizó en caja-actions.ts y personal-actions.ts después
-// de los 3 errores TS2322 que reportó Carlos al construir Caja.
+// Delega en resolverActor (lib/actor.ts) — Gerente tiene "compras" en su
+// matriz de acceso (lib/roles.ts), Cajero y Técnico no.
 async function resolverTenantYUsuario(tenantSlug: string): Promise<ResolverResult> {
-  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
-  if (!tenant) return { ok: false, error: "Negocio no encontrado" };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Sesión no válida, vuelve a iniciar sesión" };
-
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    select: { id: true, tenantId: true },
-  });
-  if (!dbUser || dbUser.tenantId !== tenant.id) {
-    return { ok: false, error: "No tienes acceso a este negocio" };
-  }
-
-  return { ok: true, tenant, dbUser };
+  return resolverActor(tenantSlug, "compras");
 }
 
 export interface ItemCompraParams {

@@ -1,8 +1,8 @@
 "use server";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { resolverActor, type ActorResult } from "@/lib/actor";
 
 /**
  * Server Actions del módulo Soporte, lado negocio. Mismo patrón
@@ -16,29 +16,12 @@ import { revalidatePath } from "next/cache";
  * este tenant.
  */
 
-type ResolverResult =
-  | { ok: true; tenant: { id: string }; dbUser: { id: string; tenantId: string } }
-  | { ok: false; error: string };
+type ResolverResult = ActorResult;
 
+// Delega en resolverActor (lib/actor.ts) — Gerente tiene "soporte" en su
+// matriz de acceso (lib/roles.ts), Cajero y Técnico no.
 async function resolverTenantYUsuario(tenantSlug: string): Promise<ResolverResult> {
-  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
-  if (!tenant) return { ok: false, error: "Negocio no encontrado" };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Sesión no válida, vuelve a iniciar sesión" };
-
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    select: { id: true, tenantId: true },
-  });
-  if (!dbUser || dbUser.tenantId !== tenant.id) {
-    return { ok: false, error: "No tienes acceso a este negocio" };
-  }
-
-  return { ok: true, tenant, dbUser };
+  return resolverActor(tenantSlug, "soporte");
 }
 
 export type AccionSoporteResult = { ok: true; id?: string } | { ok: false; error: string };

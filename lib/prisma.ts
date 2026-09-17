@@ -59,7 +59,7 @@ export const getTenantPrisma = (tenantId: string) => {
   const tenantModels = [
     "TenantLabel", "Branch", "User", "Role", "TenantModule", "Subscription",
     "Category", "Product", "Customer", "Sale", "Repair", "CashSession",
-    "Staff", "Supplier", "Purchase", "Invoice", "SupportTicket"
+    "Staff", "Supplier", "Purchase", "Invoice", "SupportTicket", "StaffLoginSession"
   ];
 
   return prisma.$extends({

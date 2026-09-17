@@ -1,11 +1,15 @@
 "use server";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { PaymentScheme, CommissionBase, PaymentFrequency, StaffPaymentStatus } from "@prisma/client";
 import { calcularComisionSugerida } from "@/lib/personal-data";
+import { resolverActor, type ActorResult } from "@/lib/actor";
+import { asegurarRolAsignable } from "@/lib/roles-server";
+import { esRolAsignable, type RolAsignable } from "@/lib/roles";
+import { hashPin, pinValido } from "@/lib/staff-auth";
+import { randomUUID } from "crypto";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Server Actions del módulo Personal (M11). Mismo criterio de siempre:
@@ -20,34 +24,33 @@ import { calcularComisionSugerida } from "@/lib/personal-data";
  * su propio negocio — la sugerencia de comisión (calcularComisionSugerida en
  * lib/personal-data.ts) es solo un punto de partida editable, porque en la
  * práctica la nómina necesita ajustes humanos (bonos, descuentos, acuerdos).
+ *
+ * Cambio de esta pasada (feedback de Carlos: "no veo necesario tener un
+ * correo... solo debo asignar un Nombre, Puesto y un PIN de inicio"):
+ * crearEmpleadoAction/editarEmpleadoAction ya no piden correo ni ofrecen
+ * "vincular una cuenta existente" — todo empleado nuevo recibe
+ * automáticamente una cuenta de atribución oculta (ver el comentario largo
+ * en Staff.userId, schema.prisma) más un PIN de 4 dígitos y un Rol
+ * (Gerente/Cajero/Técnico — "Administrador" nunca se ofrece aquí, ver
+ * lib/roles.ts). Personal se queda 100% admin-only vía resolverActor(
+ * tenantSlug, "personal") — ningún Rol asignable incluye "personal" en su
+ * matriz de acceso, así que una sesión de PIN de personal nunca puede
+ * llegar a estas acciones ni aunque conozca su URL/nombre exacto.
  */
 
-type ResolverResult =
-  | { ok: true; tenant: { id: string }; dbUser: { id: string; tenantId: string } }
-  | { ok: false; error: string };
+type ResolverResult = ActorResult;
 
-// Tipo de retorno anotado explícitamente + discriminante `ok` en todas las
-// ramas (no la presencia/ausencia de una key) — mismo fix que ya se aplicó
-// en caja-actions.ts tras los errores TS2322 que reportó Carlos ahí.
 async function resolverTenantYUsuario(tenantSlug: string): Promise<ResolverResult> {
-  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
-  if (!tenant) return { ok: false, error: "Negocio no encontrado" };
+  return resolverActor(tenantSlug, "personal");
+}
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Sesión no válida, vuelve a iniciar sesión" };
-
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    select: { id: true, tenantId: true },
-  });
-  if (!dbUser || dbUser.tenantId !== tenant.id) {
-    return { ok: false, error: "No tienes acceso a este negocio" };
-  }
-
-  return { ok: true, tenant, dbUser };
+/** Correo/uid sintéticos para la cuenta de atribución de un empleado de PIN — ver Staff.userId en schema.prisma. Nunca se muestran ni sirven para iniciar sesión por /login. */
+function credencialesInternas(tenantSlug: string) {
+  const sufijo = randomUUID().replace(/-/g, "").slice(0, 12);
+  return {
+    email: `staff-${sufijo}@${tenantSlug}.personal.linkity.internal`,
+    supabaseId: `staff-placeholder-${randomUUID()}`,
+  };
 }
 
 export type AccionPersonalResult = { ok: true } | { ok: false; error: string };
@@ -56,20 +59,20 @@ export interface DatosEmpleado {
   branchId: string;
   name: string;
   phone?: string | null;
-  email?: string | null;
   position?: string | null;
+  roleName: RolAsignable;
   paymentScheme: PaymentScheme;
   baseSalary: number;
   commissionRate: number;
   commissionBase: CommissionBase;
   paymentFrequency: PaymentFrequency;
   clabe?: string | null;
-  userId?: string | null;
 }
 
 function validarDatosEmpleado(d: DatosEmpleado): string | null {
   if (!d.branchId) return "Selecciona una sucursal";
   if (!d.name.trim()) return "El nombre es obligatorio";
+  if (!esRolAsignable(d.roleName)) return "Selecciona un rol válido";
   if (!Number.isFinite(d.baseSalary) || d.baseSalary < 0) return "El sueldo base no es válido";
   if (!Number.isFinite(d.commissionRate) || d.commissionRate < 0 || d.commissionRate > 100) {
     return "El porcentaje de comisión debe estar entre 0 y 100";
@@ -78,11 +81,12 @@ function validarDatosEmpleado(d: DatosEmpleado): string | null {
 }
 
 export async function crearEmpleadoAction(
-  params: { tenantSlug: string } & DatosEmpleado
+  params: { tenantSlug: string; pin: string } & DatosEmpleado
 ): Promise<AccionPersonalResult> {
-  const { tenantSlug, ...datos } = params;
+  const { tenantSlug, pin, ...datos } = params;
   const errorValidacion = validarDatosEmpleado(datos);
   if (errorValidacion) return { ok: false, error: errorValidacion };
+  if (!pinValido(pin)) return { ok: false, error: "El PIN de inicio debe ser de 4 dígitos" };
 
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
@@ -94,28 +98,63 @@ export async function crearEmpleadoAction(
     const branch = await db.branch.findUnique({ where: { id: datos.branchId }, select: { id: true } });
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
 
-    if (datos.userId) {
-      const cuenta = await db.user.findUnique({ where: { id: datos.userId }, select: { id: true, staff: { select: { id: true } } } });
-      if (!cuenta) return { ok: false, error: "Cuenta de usuario no encontrada" };
-      if (cuenta.staff) return { ok: false, error: "Esa cuenta ya está vinculada a otro empleado" };
+    // Límite de personal por sucursal del esquema asignado a este tenant
+    // (Panel Maestro, ver lib/esquemas-data.ts) — null si no tiene esquema
+    // asignado (sin límite). Se revisa ANTES de crear la cuenta de
+    // atribución oculta para no dejar un User huérfano si el límite bloquea
+    // el alta.
+    const tenantConEsquema = await prisma.tenant.findUnique({
+      where: { id: tenant.id },
+      select: { esquema: { select: { maxStaffPerBranch: true, name: true } } },
+    });
+    if (tenantConEsquema?.esquema) {
+      const staffActivos = await db.staff.count({ where: { branchId: datos.branchId, isActive: true } });
+      if (staffActivos >= tenantConEsquema.esquema.maxStaffPerBranch) {
+        return {
+          ok: false,
+          error: `Tu esquema (${tenantConEsquema.esquema.name}) permite hasta ${tenantConEsquema.esquema.maxStaffPerBranch} empleado(s) por sucursal. Contacta a soporte para ampliar tu esquema.`,
+        };
+      }
     }
 
-    await db.staff.create({
-      data: {
-        tenantId: tenant.id,
-        branchId: datos.branchId,
-        userId: datos.userId || null,
-        name: datos.name.trim(),
-        phone: datos.phone?.trim() || null,
-        email: datos.email?.trim() || null,
-        position: datos.position?.trim() || null,
-        paymentScheme: datos.paymentScheme,
-        baseSalary: datos.baseSalary,
-        commissionRate: datos.commissionRate,
-        commissionBase: datos.commissionBase,
-        paymentFrequency: datos.paymentFrequency,
-        clabe: datos.clabe?.trim() || null,
-      },
+    // Idempotente — si "Gerente"/"Cajero"/"Técnico" ya existe como Role de
+    // este tenant lo reutiliza, si no lo crea (ver lib/roles-server.ts).
+    const rol = await asegurarRolAsignable(tenant.id, datos.roleName);
+    const { email, supabaseId } = credencialesInternas(tenantSlug);
+    const pinHash = hashPin(pin);
+
+    // Cuenta de atribución oculta (User) + registro de Staff, juntos en una
+    // transacción — ver el comentario largo al inicio de este archivo y en
+    // Staff.userId (schema.prisma).
+    await prisma.$transaction(async (tx) => {
+      const usuarioOculto = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          branchId: datos.branchId,
+          email,
+          name: datos.name.trim(),
+          supabaseId,
+        },
+      });
+
+      await tx.staff.create({
+        data: {
+          tenantId: tenant.id,
+          branchId: datos.branchId,
+          userId: usuarioOculto.id,
+          name: datos.name.trim(),
+          phone: datos.phone?.trim() || null,
+          position: datos.position?.trim() || null,
+          roleId: rol.id,
+          pinHash,
+          paymentScheme: datos.paymentScheme,
+          baseSalary: datos.baseSalary,
+          commissionRate: datos.commissionRate,
+          commissionBase: datos.commissionBase,
+          paymentFrequency: datos.paymentFrequency,
+          clabe: datos.clabe?.trim() || null,
+        },
+      });
     });
 
     revalidatePath(`/${tenantSlug}/personal`);
@@ -149,21 +188,16 @@ export async function editarEmpleadoAction(
     const branch = await db.branch.findUnique({ where: { id: datos.branchId }, select: { id: true } });
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
 
-    if (datos.userId && datos.userId !== existente.userId) {
-      const cuenta = await db.user.findUnique({ where: { id: datos.userId }, select: { id: true, staff: { select: { id: true } } } });
-      if (!cuenta) return { ok: false, error: "Cuenta de usuario no encontrada" };
-      if (cuenta.staff) return { ok: false, error: "Esa cuenta ya está vinculada a otro empleado" };
-    }
+    const rol = await asegurarRolAsignable(tenant.id, datos.roleName);
 
     await db.staff.update({
       where: { id: staffId },
       data: {
         branchId: datos.branchId,
-        userId: datos.userId || null,
         name: datos.name.trim(),
         phone: datos.phone?.trim() || null,
-        email: datos.email?.trim() || null,
         position: datos.position?.trim() || null,
+        roleId: rol.id,
         paymentScheme: datos.paymentScheme,
         baseSalary: datos.baseSalary,
         commissionRate: datos.commissionRate,
@@ -173,6 +207,13 @@ export async function editarEmpleadoAction(
       },
     });
 
+    // Mantiene el nombre de la cuenta de atribución oculta sincronizado —
+    // no se muestra en ningún lado, pero evita que quede con un nombre
+    // viejo si algún reporte futuro llega a exponerlo.
+    if (existente.userId) {
+      await db.user.update({ where: { id: existente.userId }, data: { name: datos.name.trim() } }).catch(() => {});
+    }
+
     revalidatePath(`/${tenantSlug}/personal`);
     return { ok: true };
   } catch (err: any) {
@@ -181,6 +222,37 @@ export async function editarEmpleadoAction(
     }
     console.error("Error al editar empleado:", err);
     return { ok: false, error: "No se pudo actualizar el empleado" };
+  }
+}
+
+export async function restablecerPinAction(params: {
+  tenantSlug: string;
+  staffId: string;
+  pin: string;
+}): Promise<AccionPersonalResult> {
+  const { tenantSlug, staffId, pin } = params;
+  if (!pinValido(pin)) return { ok: false, error: "El PIN debe ser de 4 dígitos" };
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const existente = await db.staff.findUnique({ where: { id: staffId }, select: { id: true } });
+    if (!existente) return { ok: false, error: "Empleado no encontrado" };
+
+    await db.staff.update({ where: { id: staffId }, data: { pinHash: hashPin(pin) } });
+
+    revalidatePath(`/${tenantSlug}/personal`);
+    return { ok: true };
+  } catch (err: any) {
+    if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
+      return { ok: false, error: "No tienes acceso a este recurso" };
+    }
+    console.error("Error al restablecer PIN:", err);
+    return { ok: false, error: "No se pudo restablecer el PIN" };
   }
 }
 

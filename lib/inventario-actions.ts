@@ -2,6 +2,7 @@
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { resolverActor } from "@/lib/actor";
 
 /**
  * Server Action que persiste un ajuste de stock. Es intencionalmente
@@ -42,13 +43,13 @@ export async function ajustarStock(params: {
     return { ok: false, error: "Selecciona una sucursal" };
   }
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-  if (!tenant) {
-    return { ok: false, error: "Negocio no encontrado" };
-  }
+  // Hallazgo al conectar este archivo a las sesiones de PIN de personal
+  // (M11): esta acción tampoco validaba ninguna sesión, solo el tenantSlug
+  // — se cierra aquí de paso. Gerente tiene "inventario" en su matriz de
+  // acceso (lib/roles.ts), Cajero y Técnico no.
+  const resuelto = await resolverActor(tenantSlug, "inventario");
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
 
   const db = getTenantPrisma(tenant.id);
 

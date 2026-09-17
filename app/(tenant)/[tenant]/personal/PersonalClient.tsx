@@ -4,14 +4,15 @@ import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, Users, UserCheck, Clock, Wallet, LogIn, LogOut, Pencil,
-  Banknote, X, Check, Ban, Link2,
+  Banknote, X, Check, Ban, KeyRound, Shield,
 } from "lucide-react";
 import type { PersonalData, EmpleadoUI, EsquemaPago, BaseComision, Frecuencia, EstadoPago } from "@/lib/personal-data";
 import { label, type LabelDictionary } from "@/lib/labels";
+import { ROLES_ASIGNABLES, ROLES_DESCRIPCION, type RolAsignable } from "@/lib/roles";
 import {
   crearEmpleadoAction, editarEmpleadoAction, cambiarEstadoEmpleadoAction,
   registrarAsistenciaAction, generarPagoAction, actualizarEstadoPagoAction,
-  obtenerSugerenciaComisionAction, type DatosEmpleado,
+  obtenerSugerenciaComisionAction, restablecerPinAction, type DatosEmpleado,
 } from "@/app/actions/personal-actions";
 
 interface BranchOption {
@@ -52,40 +53,45 @@ function periodoPorDefecto(frecuencia: Frecuencia): { inicio: string; fin: strin
   return { inicio: inicioDate.toISOString().slice(0, 10), fin: hoy.toISOString().slice(0, 10) };
 }
 
+function esRolAsignableValor(valor: string): valor is RolAsignable {
+  return (ROLES_ASIGNABLES as readonly string[]).includes(valor);
+}
+
 interface FormEmpleado {
   branchId: string;
   name: string;
   phone: string;
-  email: string;
   position: string;
+  roleName: RolAsignable | "";
+  pin: string;
   paymentScheme: EsquemaPago;
   baseSalary: string;
   commissionRate: string;
   commissionBase: BaseComision;
   paymentFrequency: Frecuencia;
   clabe: string;
-  userId: string;
 }
 
 function formVacio(branchId: string): FormEmpleado {
   return {
-    branchId, name: "", phone: "", email: "", position: "",
+    branchId, name: "", phone: "", position: "", roleName: "", pin: "",
     paymentScheme: "FIJO", baseSalary: "", commissionRate: "0", commissionBase: "VENTAS",
-    paymentFrequency: "QUINCENAL", clabe: "", userId: "",
+    paymentFrequency: "QUINCENAL", clabe: "",
   };
 }
 
 function formDeEmpleado(e: EmpleadoUI): FormEmpleado {
   return {
-    branchId: e.branchId, name: e.name, phone: e.phone ?? "", email: e.email ?? "", position: e.position ?? "",
+    branchId: e.branchId, name: e.name, phone: e.phone ?? "", position: e.position ?? "",
+    roleName: e.roleName && esRolAsignableValor(e.roleName) ? e.roleName : "", pin: "",
     paymentScheme: e.esquemaPago, baseSalary: String(e.sueldoBase), commissionRate: String(e.comisionRate),
-    commissionBase: e.comisionBase, paymentFrequency: e.frecuencia, clabe: e.clabe ?? "", userId: e.userId ?? "",
+    commissionBase: e.comisionBase, paymentFrequency: e.frecuencia, clabe: e.clabe ?? "",
   };
 }
 
 export default function PersonalClient({ data, labels, branches, tenantSlug }: PersonalClientProps) {
   const router = useRouter();
-  const { empleados, usuariosDisponibles } = data;
+  const { empleados } = data;
 
   const [busqueda, setBusqueda] = useState("");
   const [filtroSucursal, setFiltroSucursal] = useState("todas");
@@ -99,6 +105,11 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
   const [form, setForm] = useState<FormEmpleado>(formVacio(branches[0]?.id ?? ""));
   const [formError, setFormError] = useState<string | null>(null);
   const [guardando, startGuardar] = useTransition();
+
+  const [modalPinStaffId, setModalPinStaffId] = useState<string | null>(null);
+  const [nuevoPin, setNuevoPin] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [restableciendoPin, startRestablecerPin] = useTransition();
 
   const [modalPagoStaffId, setModalPagoStaffId] = useState<string | null>(null);
   const [pagoInicio, setPagoInicio] = useState("");
@@ -161,19 +172,14 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
     setModalEmpleado({ modo: "editar", id: emp.id });
   };
 
-  const usuariosParaSelector = useMemo(() => {
-    if (modalEmpleado?.modo === "editar") {
-      const actual = empleados.find((e) => e.id === modalEmpleado.id);
-      if (actual?.userId && actual.usuarioVinculado) {
-        return [{ id: actual.userId, name: actual.usuarioVinculado, email: actual.email ?? "" }, ...usuariosDisponibles];
-      }
-    }
-    return usuariosDisponibles;
-  }, [modalEmpleado, usuariosDisponibles, empleados]);
-
   const handleGuardarEmpleado = () => {
     if (!form.name.trim()) { setFormError("El nombre es obligatorio"); return; }
     if (!form.branchId) { setFormError("Selecciona una sucursal"); return; }
+    if (!form.roleName) { setFormError("Selecciona un rol — determina a qué módulos tendrá acceso"); return; }
+    if (modalEmpleado?.modo === "crear" && !/^\d{4}$/.test(form.pin)) {
+      setFormError("Asigna un PIN de inicio de 4 dígitos");
+      return;
+    }
     const baseSalary = parseFloat(form.baseSalary || "0");
     const commissionRate = parseFloat(form.commissionRate || "0");
     if (!Number.isFinite(baseSalary) || baseSalary < 0) { setFormError("El sueldo base no es válido"); return; }
@@ -184,26 +190,47 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
       branchId: form.branchId,
       name: form.name,
       phone: form.phone || null,
-      email: form.email || null,
       position: form.position || null,
+      roleName: form.roleName as RolAsignable,
       paymentScheme: form.paymentScheme as any,
       baseSalary,
       commissionRate,
       commissionBase: form.commissionBase as any,
       paymentFrequency: form.paymentFrequency as any,
       clabe: form.clabe || null,
-      userId: form.userId || null,
     };
 
     startGuardar(async () => {
       const res = modalEmpleado?.modo === "editar" && modalEmpleado.id
         ? await editarEmpleadoAction({ tenantSlug, staffId: modalEmpleado.id, ...datos })
-        : await crearEmpleadoAction({ tenantSlug, ...datos });
+        : await crearEmpleadoAction({ tenantSlug, pin: form.pin, ...datos });
       if (res.ok) {
         setModalEmpleado(null);
         refrescar();
       } else {
         setFormError(res.error);
+      }
+    });
+  };
+
+  // ── Modal restablecer PIN ────────────────────────────────
+  const abrirRestablecerPin = (emp: EmpleadoUI) => {
+    setModalPinStaffId(emp.id);
+    setNuevoPin("");
+    setPinError(null);
+  };
+
+  const handleRestablecerPin = () => {
+    if (!modalPinStaffId) return;
+    if (!/^\d{4}$/.test(nuevoPin)) { setPinError("El PIN debe ser de 4 dígitos"); return; }
+    setPinError(null);
+    startRestablecerPin(async () => {
+      const res = await restablecerPinAction({ tenantSlug, staffId: modalPinStaffId, pin: nuevoPin });
+      if (res.ok) {
+        setModalPinStaffId(null);
+        refrescar();
+      } else {
+        setPinError(res.error);
       }
     });
   };
@@ -282,6 +309,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
   };
 
   const moduloNombre = label(labels, "module.staff.name");
+  const empleadoParaPin = empleados.find((e) => e.id === modalPinStaffId) ?? null;
 
   return (
     <div className="flex flex-col h-full">
@@ -363,7 +391,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-foreground truncate">{e.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{e.position || "Sin puesto"} · {e.branchName}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{e.position || e.roleName || "Sin puesto"} · {e.branchName}</p>
                   </div>
                   {!e.isActive && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground flex-shrink-0">Inactivo</span>}
                 </div>
@@ -415,6 +443,10 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                       className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted rounded-lg text-xs font-medium text-foreground">
                       <Pencil className="w-3 h-3" /> Editar
                     </button>
+                    <button onClick={() => abrirRestablecerPin(seleccionado)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted rounded-lg text-xs font-medium text-foreground">
+                      <KeyRound className="w-3 h-3" /> {seleccionado.tienePin ? "Restablecer PIN" : "Asignar PIN"}
+                    </button>
                     <button onClick={() => abrirModalPago(seleccionado)}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-xs font-medium">
                       <Banknote className="w-3 h-3" /> Generar pago
@@ -439,7 +471,6 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       { label: "Teléfono", value: seleccionado.phone || "Sin registrar" },
-                      { label: "Email", value: seleccionado.email || "Sin registrar" },
                       { label: "Esquema de pago", value: ESQUEMA_TEXTO[seleccionado.esquemaPago] },
                       { label: "Sueldo base", value: formatMXN(seleccionado.sueldoBase), color: "text-primary" },
                       ...(seleccionado.esquemaPago !== "FIJO"
@@ -458,15 +489,17 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                     ))}
                   </div>
                   <div className="mt-2 flex items-center gap-1.5 text-[11px]">
-                    <Link2 className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                    {seleccionado.usuarioVinculado ? (
-                      <span className="text-foreground">Cuenta vinculada: {seleccionado.usuarioVinculado}</span>
-                    ) : (
-                      <span className="text-muted-foreground">
-                        Sin cuenta vinculada{seleccionado.esquemaPago !== "FIJO" ? " — su comisión no se calcula automáticamente" : ""}
-                      </span>
-                    )}
+                    <Shield className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                    <span className="text-foreground">
+                      Rol: {seleccionado.roleName ?? "Sin rol asignado"}
+                    </span>
+                    <span className="text-muted-foreground">
+                      · {seleccionado.tienePin ? "con PIN configurado" : "sin PIN todavía"}
+                    </span>
                   </div>
+                  {seleccionado.roleDescripcion && (
+                    <p className="mt-1 text-[10px] text-muted-foreground">{seleccionado.roleDescripcion}</p>
+                  )}
                 </div>
 
                 <div className="bg-card border border-border rounded-xl p-4">
@@ -549,32 +582,41 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                   <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">EMAIL</label>
-                  <input type="text" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
-                </div>
+                {branches.length > 1 && (
+                  <div>
+                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
+                    <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                      {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
-
-              {branches.length > 1 && (
-                <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
-                  <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
-                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
-                </div>
-              )}
 
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">CUENTA DE ACCESO VINCULADA (OPCIONAL)</label>
-                <select value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })}
+                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">ROL — DETERMINA SU ACCESO AL SISTEMA</label>
+                <select value={form.roleName} onChange={(e) => setForm({ ...form, roleName: e.target.value as RolAsignable })}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
-                  <option value="">Sin vincular</option>
-                  {usuariosParaSelector.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+                  <option value="">Selecciona un rol...</option>
+                  {ROLES_ASIGNABLES.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
-                <p className="text-[10px] text-muted-foreground mt-1">Necesario para calcular su comisión automáticamente sobre sus propias ventas o reparaciones.</p>
+                {form.roleName && (
+                  <p className="text-[10px] text-muted-foreground mt-1">{ROLES_DESCRIPCION[form.roleName as RolAsignable]}</p>
+                )}
               </div>
+
+              {modalEmpleado.modo === "crear" ? (
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PIN DE INICIO (4 DÍGITOS)</label>
+                  <input type="text" inputMode="numeric" maxLength={4} value={form.pin}
+                    onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                    placeholder="0000"
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary tracking-[0.3em]" />
+                  <p className="text-[10px] text-muted-foreground mt-1">Con este PIN el empleado entra en {branches.length ? `/${tenantSlug}/entrada` : "la pantalla de entrada"} — nunca con tu contraseña de administrador.</p>
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">Para cambiar el PIN de este empleado, usa el botón &quot;Restablecer PIN&quot; en su ficha.</p>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -628,6 +670,38 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
               <button disabled={guardando} onClick={handleGuardarEmpleado}
                 className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
                 {guardando ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal restablecer PIN */}
+      {empleadoParaPin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setModalPinStaffId(null)}>
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-sm font-medium text-foreground">
+                {empleadoParaPin.tienePin ? "Restablecer PIN" : "Asignar PIN"} — {empleadoParaPin.name}
+              </span>
+              <button onClick={() => setModalPinStaffId(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              {pinError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{pinError}</div>}
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">NUEVO PIN (4 DÍGITOS)</label>
+                <input type="text" inputMode="numeric" maxLength={4} value={nuevoPin} autoFocus
+                  onChange={(e) => setNuevoPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="0000"
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary tracking-[0.3em]" />
+                <p className="text-[10px] text-muted-foreground mt-1">El PIN anterior deja de funcionar de inmediato.</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
+              <button onClick={() => setModalPinStaffId(null)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+              <button disabled={restableciendoPin} onClick={handleRestablecerPin}
+                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
+                {restableciendoPin ? "Guardando..." : "Guardar PIN"}
               </button>
             </div>
           </div>

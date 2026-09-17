@@ -5,14 +5,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
+import { moduloPermitido, type ModuloKey } from "@/lib/roles";
+import { cerrarSesionPersonalAction } from "@/app/actions/acceso-personal-actions";
 import {
   LayoutDashboard, ShoppingCart, Wrench, Users, Package,
   Warehouse, DollarSign, UserCog, BarChart3, FileText,
   GitBranch, BookOpen, LogOut, Bell, ChevronDown,
-  Menu, X, ChevronLeft, ChevronRight, LifeBuoy
+  Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck
 } from "lucide-react";
 
-const navItems = [
+const navItems: { section: string; items: { label: string; href: ModuloKey; icon: typeof LayoutDashboard }[] }[] = [
   {
     section: "PRINCIPAL",
     items: [
@@ -35,6 +37,11 @@ const navItems = [
     items: [
       { label: "Caja", href: "caja", icon: DollarSign },
       { label: "Personal", href: "personal", icon: UserCog },
+      // Exclusivo del administrador (no está en la matriz de acceso de
+      // ningún rol de PIN, lib/roles.ts) — igual que "Personal" ya lo era
+      // en la práctica, aquí queda explícito: staff nunca ve este link
+      // porque modo==="staff" filtra navItems con moduloPermitido().
+      { label: "Asistencia", href: "asistencia", icon: CalendarCheck },
       { label: "Sucursales", href: "sucursales", icon: GitBranch },
     ]
   },
@@ -58,11 +65,20 @@ export default function TenantShell({
   tenant,
   userName = "Usuario",
   userRole = "",
+  modo = "admin",
+  roleName = null,
 }: {
   children: React.ReactNode;
   tenant: string;
   userName?: string;
   userRole?: string;
+  // "admin" = cuenta real (Supabase Auth, dueño/gerente) — ve todo el menú,
+  // sin cambios respecto al comportamiento de siempre. "staff" = sesión de
+  // PIN de personal (M11) — el menú se filtra a los módulos que su rol
+  // tiene permitido (lib/roles.ts) y "Cerrar sesión" cierra esa sesión de
+  // PIN en vez de la de Supabase Auth (que ni siquiera tiene).
+  modo?: "admin" | "staff";
+  roleName?: string | null;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -94,7 +110,21 @@ export default function TenantShell({
 
   const isActive = (href: string) => pathname.includes(href);
 
+  // En modo "staff" se filtra cada grupo por lo que ese rol tiene
+  // permitido, y se descarta el grupo completo si queda vacío (ej. Cajero
+  // no ve nada de "GESTIÓN" — ese encabezado tampoco debe aparecer).
+  const gruposVisibles = modo === "staff"
+    ? navItems
+        .map((grupo) => ({ ...grupo, items: grupo.items.filter((item) => moduloPermitido(roleName, item.href)) }))
+        .filter((grupo) => grupo.items.length > 0)
+    : navItems;
+
   const handleSignOut = async () => {
+    if (modo === "staff") {
+      await cerrarSesionPersonalAction();
+      window.location.href = `/entrada/${tenant}`;
+      return;
+    }
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = "/login";
@@ -154,7 +184,7 @@ export default function TenantShell({
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2 px-1.5">
-          {navItems.map((group) => (
+          {gruposVisibles.map((group) => (
             <div key={group.section} className="mb-2">
               {collapsed
                 ? <div className="my-2 border-t border-sidebar-border" />
@@ -205,7 +235,7 @@ export default function TenantShell({
               ${collapsed ? "justify-center" : ""}
             `}>
             <LogOut className="w-4 h-4 flex-shrink-0" />
-            {!collapsed && <span>Cerrar sesión</span>}
+            {!collapsed && <span>{modo === "staff" ? "Cambiar de usuario" : "Cerrar sesión"}</span>}
           </button>
         </div>
 

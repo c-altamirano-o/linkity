@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import TenantShell from "@/components/tenant/TenantShell";
 import { THEME_PRESETS, TENANT_THEME_ROOT_ID } from "@/lib/theme-presets";
+import { verificarSesionPersonalVigente } from "@/lib/asistencia";
+import { moduloPermitido, primerModuloPermitido, type ModuloKey } from "@/lib/roles";
 
 export const metadata: Metadata = {
   title: "Linkity",
@@ -28,20 +31,29 @@ export default async function TenantLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Sin esta verificación, cualquiera que adivinara o conociera el slug de
-  // un negocio (ej. /difussion-barberia/dashboard) podía entrar sin haber
-  // iniciado sesión — proxy.ts (el middleware) solo protege rutas bajo
-  // /maestro, nunca protegió las rutas de negocio. Mismo criterio que ya
-  // usa app/(admin)/maestro/layout.tsx.
-  if (!user) {
-    redirect("/login");
+  // A partir de M11 hay dos formas válidas de tener sesión aquí: una cuenta
+  // real (Supabase Auth, el dueño/gerente que entró por /login) o una
+  // sesión de personal por PIN (ver lib/staff-auth.ts, entra por
+  // /entrada/[tenant]). Sin ninguna de las dos, se manda a la pantalla de
+  // PIN — no a /login directo — porque en un negocio real quien abre el
+  // sistema todos los días suele ser un empleado, no el dueño; /login sigue
+  // ahí, con un link visible desde /entrada, para cuando sí es el dueño.
+  // verificarSesionPersonalVigente (en vez de leerSesionPersonal a secas)
+  // hace cumplir el cierre automático de la sesión de PIN al cambiar de día
+  // calendario (lib/asistencia.ts) — así ninguna sesión de personal se
+  // queda abierta de un día para otro sin que el empleado vuelva a teclear
+  // su PIN.
+  const sesionPersonal = user ? null : await verificarSesionPersonalVigente();
+
+  if (!user && !sesionPersonal) {
+    redirect(`/entrada/${tenant}`);
   }
 
   // Cuentas creadas con contraseña temporal (Panel Maestro o
   // auto-registro) no pueden entrar a ningún módulo del negocio hasta que
   // cambien su contraseña en /primer-acceso — esa pantalla vive fuera de
   // este layout, así que no hay riesgo de loop.
-  if (user.user_metadata?.must_change_password) {
+  if (user?.user_metadata?.must_change_password) {
     redirect("/primer-acceso");
   }
 
@@ -54,6 +66,8 @@ export default async function TenantLayout({
   // literal DISTINTO entre sí; sin esta anotación, la reasignación de
   // abajo a un preset distinto de NEUTRAL_TECH no compilaría.
   let activePreset: Record<string, string> = THEME_PRESETS.NEUTRAL_TECH;
+  let modo: "admin" | "staff" = "admin";
+  let roleNameParaNav: string | null = null;
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
@@ -64,34 +78,62 @@ export default async function TenantLayout({
     activePreset = THEME_PRESETS[dbTenant.themePreset as keyof typeof THEME_PRESETS] || THEME_PRESETS.NEUTRAL_TECH;
   }
 
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    include: { role: { include: { role: true } }, tenant: { select: { slug: true } } },
-  });
+  if (dbTenant && user) {
+    // Modo administrador/gerente con cuenta real — mismo guard de siempre,
+    // sin ningún cambio de comportamiento para el dueño.
+    const dbUser = await prisma.user.findUnique({
+      where: { supabaseId: user.id },
+      include: { role: { include: { role: true } }, tenant: { select: { slug: true } } },
+    });
 
-  // Aislamiento multi-tenant: sin esto, un usuario autenticado de OTRO
-  // negocio podía entrar aquí con solo cambiar el slug en la URL (ej. un
-  // empleado de "fix-expert" visitando /difussion-barberia/dashboard) y ver
-  // los datos reales de un negocio ajeno — cada pantalla de adentro confía
-  // en que este layout ya validó la pertenencia. También cierra la sesión
-  // de una cuenta desactivada desde Panel Maestro (Usuarios) aunque ya
-  // tuviera una sesión abierta.
-  if (dbTenant) {
+    // Aislamiento multi-tenant: sin esto, un usuario autenticado de OTRO
+    // negocio podía entrar aquí con solo cambiar el slug en la URL (ej. un
+    // empleado de "fix-expert" visitando /difussion-barberia/dashboard) y ver
+    // los datos reales de un negocio ajeno — cada pantalla de adentro confía
+    // en que este layout ya validó la pertenencia. También cierra la sesión
+    // de una cuenta desactivada desde Panel Maestro (Usuarios) aunque ya
+    // tuviera una sesión abierta.
     if (!dbUser || !dbUser.isActive) {
-      redirect("/login");
+      redirect(`/entrada/${tenant}`);
     } else if (dbUser.tenantId !== dbTenant.id) {
       redirect(`/${dbUser.tenant.slug}/dashboard`);
     }
-  }
 
-  if (dbUser) {
     userName = dbUser.name;
     userRole = dbUser.role?.role.name ?? "";
+  } else if (dbTenant && sesionPersonal) {
+    // Mismo aislamiento multi-tenant que arriba, pero para una sesión de
+    // PIN: si por lo que sea trae el tenantId de OTRO negocio (cookie
+    // vieja de una sesión anterior en el mismo navegador/dispositivo
+    // compartido), se manda a la entrada del negocio correcto en vez de
+    // dejarla pasar.
+    if (sesionPersonal.tenantId !== dbTenant.id) {
+      redirect(`/entrada/${tenant}`);
+    }
+
+    modo = "staff";
+    userName = sesionPersonal.staffName;
+    userRole = sesionPersonal.roleName;
+    roleNameParaNav = sesionPersonal.roleName;
+
+    // Guard de ruta por rol: un empleado de PIN que cae en un módulo que su
+    // rol no tiene permitido (ej. escribiendo /personal a mano en la URL)
+    // se redirige al primer módulo que sí puede ver — el link ya está
+    // oculto en TenantShell, esto es la verificación real del lado del
+    // servidor, la que de verdad importa. El pathname llega vía un header
+    // que proxy.ts sella en cada request (los layouts de Server Components
+    // no lo reciben directo, solo params/searchParams).
+    const headerList = await headers();
+    const pathname = headerList.get("x-pathname") ?? "";
+    const modulo = pathname.split("/").filter(Boolean)[1] as ModuloKey | undefined;
+    if (modulo && !moduloPermitido(sesionPersonal.roleName, modulo)) {
+      redirect(`/${tenant}/${primerModuloPermitido(sesionPersonal.roleName)}`);
+    }
   }
 
   return (
     <div id={TENANT_THEME_ROOT_ID} style={activePreset as React.CSSProperties} className="contents">
-      <TenantShell tenant={tenant} userName={userName} userRole={userRole}>
+      <TenantShell tenant={tenant} userName={userName} userRole={userRole} modo={modo} roleName={roleNameParaNav}>
         {children}
       </TenantShell>
     </div>

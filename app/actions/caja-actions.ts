@@ -1,10 +1,10 @@
 "use server";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { CashSessionStatus, MovementType } from "@prisma/client";
 import { efectivoDeVenta } from "@/lib/caja-data";
+import { resolverActor, type ActorResult } from "@/lib/actor";
 
 /**
  * Server Actions del módulo Caja (M10). Mismo criterio que POS/Reparaciones:
@@ -22,37 +22,15 @@ import { efectivoDeVenta } from "@/lib/caja-data";
  * marcarla como cobrada).
  */
 
-type ResolverResult =
-  | { ok: true; tenant: { id: string }; dbUser: { id: string; tenantId: string } }
-  | { ok: false; error: string };
+type ResolverResult = ActorResult;
 
-// Nota: se usa un discriminante `ok` explícito (en vez de `"error" in resuelto`)
-// porque TypeScript no siempre angosta de forma confiable una unión de más de
-// dos formas de objeto inferida por control flow — Carlos reportó 3 errores
-// TS2322 ("string | undefined" no asignable a "string") en los 3 sitios que
-// hacían `if ("error" in resuelto) return { ok:false, error: resuelto.error }`.
-// Con `ok` como discriminante explícito y el tipo de retorno anotado, la
-// angostura es exacta — mismo patrón que ya usan AccionSimpleResult,
-// CrearReparacionResult, etc. en el resto del proyecto.
+// Delega en resolverActor (lib/actor.ts) — acepta tanto una cuenta real
+// (Supabase Auth) como una sesión de PIN de personal (M11); Cajero y
+// Gerente tienen "caja" en su matriz de acceso (lib/roles.ts), Técnico no.
+// El tipo de retorno se queda idéntico al de siempre (`ok`/`tenant`/
+// `dbUser`) para no tocar ninguna otra línea de este archivo.
 async function resolverTenantYUsuario(tenantSlug: string): Promise<ResolverResult> {
-  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
-  if (!tenant) return { ok: false, error: "Negocio no encontrado" };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Sesión no válida, vuelve a iniciar sesión" };
-
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    select: { id: true, tenantId: true },
-  });
-  if (!dbUser || dbUser.tenantId !== tenant.id) {
-    return { ok: false, error: "No tienes acceso a este negocio" };
-  }
-
-  return { ok: true, tenant, dbUser };
+  return resolverActor(tenantSlug, "caja");
 }
 
 export type AccionCajaResult = { ok: true } | { ok: false; error: string };

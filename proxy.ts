@@ -43,6 +43,16 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Sella la ruta actual en un header propio — Server Components (como
+  // app/(tenant)/[tenant]/layout.tsx) no reciben el pathname directamente,
+  // solo params/searchParams, así que este es el mecanismo estándar de
+  // Next.js para que un layout sepa en qué ruta está sin volverse Client
+  // Component. Lo usa el guard de acceso por rol de personal (M11): un
+  // empleado de PIN que cae en una ruta que su rol no puede ver se
+  // redirige al primer módulo permitido — ver moduloPermitido en
+  // lib/roles.ts.
+  supabaseResponse.headers.set("x-pathname", request.nextUrl.pathname);
+
   return supabaseResponse;
 }
 
