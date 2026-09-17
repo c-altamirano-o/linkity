@@ -25,6 +25,21 @@ export interface HistorialItem {
   fecha: string; // ISO
 }
 
+// Una pieza/refacción (o producto/servicio) asignado a la reparación —
+// activa el modelo RepairItem del schema, que existía desde M9 pero nunca
+// se leía ni escribía desde ninguna acción/UI (ver el comentario largo en
+// agregarPiezaReparacionAction, app/actions/reparaciones-actions.ts). El
+// precio queda "congelado" al momento de asignar la pieza (no es un
+// lookup en vivo al producto), para que si el precio del catálogo cambia
+// después no se altere retroactivamente lo que ya se le cotizó al cliente.
+export interface PiezaReparacion {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  price: number;
+}
+
 export interface ReparacionUI {
   id: string;
   folio: string;
@@ -47,6 +62,7 @@ export interface ReparacionUI {
   whatsappSent: boolean;
   publicToken: string;
   historial: HistorialItem[];
+  piezas: PiezaReparacion[];
 }
 
 export interface ClienteOption {
@@ -55,9 +71,23 @@ export interface ClienteOption {
   phone: string | null;
 }
 
+// Catálogo simplificado para el selector de "agregar pieza" — se manda
+// completo (PRODUCT/PART/SERVICE) en vez de filtrar solo PART porque en la
+// práctica también se cotiza mano de obra como servicio o, a veces, un
+// producto completo de reemplazo (ej. una pantalla ya armada catalogada
+// como PRODUCT). El filtro/orden lo decide el usuario en el selector.
+export interface ProductoParaReparacion {
+  id: string;
+  name: string;
+  sku: string | null;
+  type: "PRODUCT" | "PART" | "SERVICE";
+  price: number;
+}
+
 export interface ReparacionesData {
   reparaciones: ReparacionUI[];
   clientes: ClienteOption[];
+  productos: ProductoParaReparacion[];
 }
 
 function iniciales(nombre: string): string {
@@ -70,16 +100,25 @@ export async function getReparacionesData(tenantId: string): Promise<Reparacione
   // Repair y Customer tienen tenantId propio → getTenantPrisma lo inyecta solo.
   const db = getTenantPrisma(tenantId);
 
-  const [repairsRaw, customersRaw] = await Promise.all([
+  const [repairsRaw, customersRaw, productsRaw] = await Promise.all([
     db.repair.findMany({
       include: {
         customer: { select: { id: true, name: true, phone: true } },
         user: { select: { name: true } },
         history: { orderBy: { createdAt: "desc" } },
+        items: { include: { product: { select: { name: true } } } },
       },
       orderBy: { receivedAt: "desc" },
     }),
     db.customer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, phone: true } }),
+    // Solo productos activos, para el selector de "agregar pieza" — igual
+    // criterio que el resto del proyecto (ej. POS) de no ofrecer algo que
+    // el negocio ya dio de baja.
+    db.product.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, sku: true, type: true, price: true },
+    }),
   ]);
 
   const reparaciones: ReparacionUI[] = repairsRaw.map((r) => ({
@@ -108,9 +147,24 @@ export async function getReparacionesData(tenantId: string): Promise<Reparacione
       nota: h.notes,
       fecha: h.createdAt.toISOString(),
     })),
+    piezas: r.items.map((it) => ({
+      id: it.id,
+      productId: it.productId,
+      productName: it.product.name,
+      quantity: it.quantity,
+      price: Number(it.price),
+    })),
   }));
 
   const clientes: ClienteOption[] = customersRaw.map((c) => ({ id: c.id, name: c.name, phone: c.phone }));
 
-  return { reparaciones, clientes };
+  const productos: ProductoParaReparacion[] = productsRaw.map((p) => ({
+    id: p.id,
+    name: p.name,
+    sku: p.sku,
+    type: p.type as ProductoParaReparacion["type"],
+    price: Number(p.price),
+  }));
+
+  return { reparaciones, clientes, productos };
 }

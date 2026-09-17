@@ -5,14 +5,19 @@ import { useRouter } from "next/navigation";
 import {
   Search, Plus, Check, Clock, ExternalLink, Copy,
   Wrench, Package, Stethoscope, Store, ArrowRight,
-  Phone, CheckCircle, AlertCircle, User, ChevronLeft, X,
+  Phone, CheckCircle, AlertCircle, ChevronLeft, X,
+  Printer, Trash2, Pencil,
 } from "lucide-react";
-import type { ReparacionesData, ReparacionUI, EstadoReparacion, PrioridadReparacion } from "@/lib/reparaciones-data";
+import type {
+  ReparacionesData, ReparacionUI, EstadoReparacion, PrioridadReparacion, ProductoParaReparacion,
+} from "@/lib/reparaciones-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import {
   crearReparacionAction, avanzarEstadoAction, marcarWhatsappEnviadoAction, cobrarYEntregarAction,
+  agregarPiezaReparacionAction, eliminarPiezaReparacionAction, actualizarCostoEstimadoAction,
   type NuevoEstadoReparacion, type MetodoPagoReparacion,
 } from "@/app/actions/reparaciones-actions";
+import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
 
 interface BranchOption {
   id: string;
@@ -24,6 +29,14 @@ interface ReparacionesClientProps {
   labels: LabelDictionary;
   branches: BranchOption[];
   tenantSlug: string;
+  // Rol real del actor que abrió esta página (lib/roles.ts) — null para el
+  // dueño/administrador (cuenta de Supabase Auth, sin restricción de vista)
+  // y para Gerente/Técnico. Solo "Cajero" cambia a la vista de mostrador
+  // (VistaTienda): cobrar y entregar equipos ya reparados, sin el tablero
+  // completo de estados que sí necesita un Técnico. Reemplaza al viejo
+  // "simulador de rol" (rolDemo, puramente de UI) ahora que M11 sí tiene
+  // sesiones y roles reales.
+  roleName: string | null;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -95,6 +108,112 @@ const formatFechaHora = (iso: string) =>
   new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true });
 
 const esMismoDia = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
+
+// Mismo criterio de "humanizar el slug" que usa TenantShell.tsx para el
+// nombre del negocio en el sidebar — duplicado aquí a propósito (este
+// componente no recibe el nombre "bonito" del tenant como prop).
+function nombreNegocio(tenantSlug: string): string {
+  return decodeURIComponent(tenantSlug).replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+}
+
+interface TicketPieza {
+  productName: string;
+  quantity: number;
+  price: number;
+}
+
+interface TicketData {
+  folio: string;
+  cliente: string;
+  telefono: string | null;
+  marca: string;
+  modelo: string;
+  falla: string;
+  piezas: TicketPieza[];
+  costoEstimado: number | null;
+}
+
+/**
+ * Ticket de recepción imprimible — respuesta directa a que "el cliente debe
+ * conocer cuánto le saldrá la reparación antes de decidir dejarlo... así
+ * como en el ticket que se le entregará". Antes de esto no existía ningún
+ * comprobante entregable al cliente (solo el mensaje de WhatsApp). Se abre
+ * en una ventana aparte con su propio HTML/CSS mínimo — así no hay que
+ * pelear con el layout/tema oscuro de la app para que imprima limpio, y
+ * funciona igual sin importar el navegador. No es un CFDI/factura fiscal
+ * (eso sigue pendiente, ver notas del proyecto) — es solo el comprobante de
+ * recepción con el costo pactado, para que quede algo físico en la mano del
+ * cliente.
+ */
+function abrirTicketImprimible(t: TicketData, negocio: string) {
+  if (typeof window === "undefined") return;
+  const subtotalPiezas = t.piezas.reduce((s, p) => s + p.price * p.quantity, 0);
+  const filasPiezas = t.piezas
+    .map(
+      (p) => `
+        <tr>
+          <td>${p.productName}</td>
+          <td style="text-align:center">${p.quantity}</td>
+          <td style="text-align:right">${formatMXN(p.price)}</td>
+          <td style="text-align:right">${formatMXN(p.price * p.quantity)}</td>
+        </tr>`
+    )
+    .join("");
+
+  const win = window.open("", "_blank", "width=420,height=720");
+  if (!win) return;
+
+  win.document.write(`
+    <!DOCTYPE html>
+    <html lang="es-MX">
+    <head>
+      <meta charset="utf-8" />
+      <title>Ticket ${t.folio}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; padding: 20px; color: #111827; font-size: 13px; max-width: 380px; margin: 0 auto; }
+        h1 { font-size: 16px; margin: 0 0 2px; }
+        .muted { color: #6b7280; font-size: 11px; margin: 0; }
+        hr { border: none; border-top: 1px dashed #9ca3af; margin: 10px 0; }
+        p { margin: 4px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+        th, td { padding: 4px 2px; font-size: 11.5px; border-bottom: 1px solid #f3f4f6; }
+        th { text-align: left; color: #6b7280; font-weight: 600; }
+        .total { font-size: 15px; font-weight: bold; text-align: right; margin-top: 8px; }
+        .aviso { margin-top: 14px; font-size: 10.5px; color: #4b5563; border-top: 1px dashed #9ca3af; padding-top: 8px; }
+        .firma { margin-top: 40px; border-top: 1px solid #374151; padding-top: 4px; font-size: 11px; text-align: center; color: #374151; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head>
+    <body>
+      <h1>${negocio}</h1>
+      <p class="muted">Recibo de reparación · ${t.folio}</p>
+      <p class="muted">${new Date().toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</p>
+      <hr />
+      <p><strong>Cliente:</strong> ${t.cliente}${t.telefono ? ` · ${t.telefono}` : ""}</p>
+      <p><strong>Equipo:</strong> ${t.marca} ${t.modelo}</p>
+      <p><strong>Falla reportada:</strong> ${t.falla}</p>
+      ${
+        t.piezas.length > 0
+          ? `<hr />
+      <table>
+        <thead><tr><th>Pieza</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
+        <tbody>${filasPiezas}</tbody>
+      </table>
+      <p class="muted" style="text-align:right">Subtotal piezas: ${formatMXN(subtotalPiezas)}</p>`
+          : ""
+      }
+      <hr />
+      <p class="total">Costo estimado: ${t.costoEstimado != null ? formatMXN(t.costoEstimado) : "Por definir"}</p>
+      <p class="aviso">Este costo es un estimado y puede ajustarse tras el diagnóstico completo del equipo. Cualquier cambio se te notificará antes de proceder con la reparación.</p>
+      <div class="firma">Firma de conformidad</div>
+    </body>
+    </html>
+  `);
+  win.document.close();
+  win.focus();
+  win.print();
+}
 
 /* ── Botón de acción por estado ── */
 function AccionBtn({
@@ -333,6 +452,17 @@ function VistaTienda({
                 </div>
               ))}
             </div>
+            {seleccionada.piezas.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-border">
+                <p className="text-[9px] text-muted-foreground mb-1">Piezas asignadas</p>
+                {seleccionada.piezas.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between text-[11px] text-muted-foreground py-0.5">
+                    <span className="truncate flex-1">{p.productName} × {p.quantity}</span>
+                    <span>{formatMXN(p.price * p.quantity)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="bg-card border border-border rounded-xl p-4">
@@ -364,6 +494,7 @@ function VistaTienda({
 /* ── VISTA ADMIN / TÉCNICO ── */
 function VistaAdmin({
   reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, pending, onNuevaClick,
+  productos, negocio, tenantSlug, router,
 }: {
   reparaciones: ReparacionUI[];
   labels: LabelDictionary;
@@ -372,6 +503,10 @@ function VistaAdmin({
   onCobrarClick: (repairId: string, costoEstimado: number | null) => void;
   pending: boolean;
   onNuevaClick: () => void;
+  productos: ProductoParaReparacion[];
+  negocio: string;
+  tenantSlug: string;
+  router: ReturnType<typeof useRouter>;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("Todas");
@@ -379,6 +514,56 @@ function VistaAdmin({
   const [copiado, setCopiado] = useState(false);
   const [mostrarDetalle, setMostrarDetalle] = useState(false);
   const activoLabel = label(labels, "entity.repair.asset");
+
+  const [piezaAccion, startPiezaAccion] = useTransition();
+  const [piezaError, setPiezaError] = useState<string | null>(null);
+  const [piezaProductoId, setPiezaProductoId] = useState("");
+  const [piezaCantidad, setPiezaCantidad] = useState("1");
+  const [editandoCosto, setEditandoCosto] = useState(false);
+  const [costoEditado, setCostoEditado] = useState("");
+
+  const agregarPieza = (repairId: string) => {
+    if (!piezaProductoId) return;
+    const cantidad = Math.max(1, parseInt(piezaCantidad, 10) || 1);
+    setPiezaError(null);
+    startPiezaAccion(async () => {
+      const res = await agregarPiezaReparacionAction({ tenantSlug, repairId, productId: piezaProductoId, quantity: cantidad });
+      if (res.ok) {
+        setPiezaProductoId("");
+        setPiezaCantidad("1");
+        router.refresh();
+      } else {
+        setPiezaError(res.error);
+      }
+    });
+  };
+
+  const quitarPieza = (repairId: string, itemId: string) => {
+    setPiezaError(null);
+    startPiezaAccion(async () => {
+      const res = await eliminarPiezaReparacionAction({ tenantSlug, repairId, itemId });
+      if (res.ok) router.refresh();
+      else setPiezaError(res.error);
+    });
+  };
+
+  const guardarCostoEditado = (repairId: string) => {
+    const valor = parseFloat(costoEditado);
+    if (!Number.isFinite(valor) || valor < 0) {
+      setPiezaError("Ingresa un costo válido");
+      return;
+    }
+    setPiezaError(null);
+    startPiezaAccion(async () => {
+      const res = await actualizarCostoEstimadoAction({ tenantSlug, repairId, costoEstimado: valor });
+      if (res.ok) {
+        setEditandoCosto(false);
+        router.refresh();
+      } else {
+        setPiezaError(res.error);
+      }
+    });
+  };
 
   const filtrosMap: Record<string, EstadoReparacion[]> = {
     "Todas": [],
@@ -509,6 +694,25 @@ function VistaAdmin({
               </div>
             </div>
             <div className="flex gap-1.5 sm:gap-2 items-center flex-wrap justify-end">
+              <button
+                onClick={() =>
+                  abrirTicketImprimible(
+                    {
+                      folio: seleccionada.folio,
+                      cliente: seleccionada.cliente,
+                      telefono: seleccionada.telefono,
+                      marca: seleccionada.marca,
+                      modelo: seleccionada.modelo,
+                      falla: seleccionada.falla,
+                      piezas: seleccionada.piezas,
+                      costoEstimado: seleccionada.costoEstimado,
+                    },
+                    negocio
+                  )
+                }
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors">
+                <Printer className="w-3 h-3" /> Ticket
+              </button>
               <AccionBtn estado={seleccionada.estado} pending={pending}
                 onAvanzar={(nuevo) => onAvanzar(seleccionada.id, nuevo)}
                 onCobrarClick={() => onCobrarClick(seleccionada.id, seleccionada.costoEstimado)} />
@@ -559,7 +763,6 @@ function VistaAdmin({
               {[
                 { label: `Marca / Modelo`, value: `${seleccionada.marca} ${seleccionada.modelo}` },
                 { label: "Falla reportada", value: seleccionada.falla },
-                { label: "Costo estimado", value: seleccionada.costoEstimado ? formatMXN(seleccionada.costoEstimado) : "Por definir", color: "text-primary" },
                 { label: "Fecha estimada", value: seleccionada.fechaEstimada ? formatFecha(seleccionada.fechaEstimada) : "Sin definir" },
                 { label: "Técnico", value: seleccionada.tecnico },
                 { label: "Prioridad", value: PRIORIDAD_TEXTO[seleccionada.prioridad], badge: PRIORIDAD_CONFIG[seleccionada.prioridad].classes },
@@ -568,10 +771,81 @@ function VistaAdmin({
                   <p className="text-[9px] text-muted-foreground mb-0.5">{f.label}</p>
                   {f.badge
                     ? <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${f.badge}`}>{f.value}</span>
-                    : <p className={`text-xs font-medium ${f.color || "text-foreground"}`}>{f.value}</p>}
+                    : <p className="text-xs font-medium text-foreground">{f.value}</p>}
                 </div>
               ))}
+
+              <div className="bg-muted rounded-lg p-2.5 col-span-2">
+                <p className="text-[9px] text-muted-foreground mb-0.5">Costo estimado</p>
+                {editandoCosto ? (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <input type="number" autoFocus value={costoEditado} onChange={(e) => setCostoEditado(e.target.value)}
+                      placeholder="$0"
+                      className="w-24 px-2 py-1 border border-border rounded-md text-xs bg-card focus:outline-none focus:border-primary" />
+                    <button disabled={piezaAccion} onClick={() => guardarCostoEditado(seleccionada.id)}
+                      className="px-2 py-1 bg-primary text-primary-foreground rounded-md text-[11px] disabled:opacity-50">
+                      Guardar
+                    </button>
+                    <button onClick={() => setEditandoCosto(false)} className="px-2 py-1 text-[11px] text-muted-foreground">
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-medium text-primary">
+                      {seleccionada.costoEstimado ? formatMXN(seleccionada.costoEstimado) : "Por definir"}
+                    </p>
+                    <button
+                      onClick={() => { setEditandoCosto(true); setCostoEditado(seleccionada.costoEstimado != null ? String(seleccionada.costoEstimado) : ""); }}
+                      className="text-muted-foreground hover:text-foreground">
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">PIEZAS / REFACCIONES</p>
+            {piezaError && <p className="text-[10px] text-red-600 mb-2">{piezaError}</p>}
+            {seleccionada.piezas.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground mb-2">Sin piezas asignadas todavía.</p>
+            ) : (
+              <div className="mb-2 divide-y divide-border border border-border rounded-lg">
+                {seleccionada.piezas.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between px-2.5 py-1.5 text-xs">
+                    <span className="flex-1 truncate">{p.productName} × {p.quantity}</span>
+                    <span className="text-muted-foreground mr-2">{formatMXN(p.price * p.quantity)}</span>
+                    <button disabled={piezaAccion} onClick={() => quitarPieza(seleccionada.id, p.id)}
+                      className="text-muted-foreground hover:text-red-600 disabled:opacity-40">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-2.5 py-1.5 text-xs font-medium">
+                  <span>Subtotal piezas</span>
+                  <span>{formatMXN(seleccionada.piezas.reduce((s, p) => s + p.price * p.quantity, 0))}</span>
+                </div>
+              </div>
+            )}
+            {seleccionada.estado !== "DELIVERED" && seleccionada.estado !== "CANCELLED" && (
+              <div className="flex gap-1.5">
+                <select value={piezaProductoId} onChange={(e) => setPiezaProductoId(e.target.value)}
+                  className="flex-1 min-w-0 px-2 py-1.5 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:border-primary">
+                  <option value="">Selecciona una pieza…</option>
+                  {productos.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
+                  ))}
+                </select>
+                <input type="number" min={1} value={piezaCantidad} onChange={(e) => setPiezaCantidad(e.target.value)}
+                  className="w-12 px-2 py-1.5 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:border-primary" />
+                <button disabled={!piezaProductoId || piezaAccion} onClick={() => agregarPieza(seleccionada.id)}
+                  className="px-2.5 py-1.5 bg-muted hover:bg-accent disabled:opacity-40 rounded-lg text-primary">
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="bg-card border border-border rounded-xl p-4">
@@ -615,7 +889,11 @@ function VistaAdmin({
             {seleccionada.whatsappSent ? (
               <>
                 <div className="bg-[#DCF8C6] rounded-lg p-3 text-xs text-slate-800 leading-relaxed mb-2">
-                  Hola {seleccionada.cliente.split(" ")[0]} 👋, tu <strong>{seleccionada.modelo}</strong> está siendo atendido. Puedes ver el estado aquí:
+                  Hola {seleccionada.cliente.split(" ")[0]} 👋, tu <strong>{seleccionada.modelo}</strong> está siendo atendido.{" "}
+                  {seleccionada.costoEstimado
+                    ? <>Costo estimado: <strong>{formatMXN(seleccionada.costoEstimado)}</strong>. </>
+                    : ""}
+                  Puedes ver el estado aquí:
                 </div>
                 <div className="flex items-center gap-2 bg-card rounded-lg px-3 py-2 border border-emerald-200">
                   <ExternalLink className="w-3 h-3 text-primary flex-shrink-0" />
@@ -638,13 +916,15 @@ function VistaAdmin({
   );
 }
 
-type Rol = "admin" | "tecnico" | "tienda";
-
-export default function ReparacionesClient({ data, labels, branches, tenantSlug }: ReparacionesClientProps) {
-  const { reparaciones, clientes } = data;
+export default function ReparacionesClient({ data, labels, branches, tenantSlug, roleName }: ReparacionesClientProps) {
+  const { reparaciones, clientes, productos } = data;
   const router = useRouter();
+  const negocio = nombreNegocio(tenantSlug);
 
-  const [rolDemo, setRolDemo] = useState<Rol>("admin");
+  // Cajero ve el mostrador (cobrar/entregar); todos los demás (dueño,
+  // Gerente, Técnico) ven el tablero completo — ver el comentario en
+  // ReparacionesClientProps.
+  const vistaTienda = roleName === "Cajero";
   const [pendingAccion, startAccion] = useTransition();
   const [accionError, setAccionError] = useState<string | null>(null);
 
@@ -655,6 +935,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug 
   const [modoClienteNuevo, setModoClienteNuevo] = useState(false);
   const [nuevaClienteNuevoNombre, setNuevaClienteNuevoNombre] = useState("");
   const [nuevaClienteNuevoTelefono, setNuevaClienteNuevoTelefono] = useState("");
+  const [nuevaClienteNuevoCodigoPais, setNuevaClienteNuevoCodigoPais] = useState(PAIS_TELEFONO_DEFAULT);
   const [nuevaMarca, setNuevaMarca] = useState("");
   const [nuevaModelo, setNuevaModelo] = useState("");
   const [nuevaFalla, setNuevaFalla] = useState("");
@@ -662,6 +943,33 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug 
   const [nuevaPrioridad, setNuevaPrioridad] = useState<PrioridadReparacion>("NORMAL");
   const [nuevaError, setNuevaError] = useState<string | null>(null);
   const [creando, startCrear] = useTransition();
+
+  // Piezas/refacciones capturadas ya desde el alta — ver el comentario en
+  // CrearReparacionParams.piezas (reparaciones-actions.ts). El precio que
+  // se ve aquí es solo de referencia (viene del catálogo cargado en la
+  // página); el servidor vuelve a tomarlo del catálogo al crear, nunca
+  // confía en este valor.
+  const [piezaNuevaId, setPiezaNuevaId] = useState("");
+  const [piezaNuevaCantidad, setPiezaNuevaCantidad] = useState("1");
+  const [nuevasPiezas, setNuevasPiezas] = useState<{ productId: string; productName: string; price: number; quantity: number }[]>([]);
+  const subtotalPiezasNueva = nuevasPiezas.reduce((s, p) => s + p.price * p.quantity, 0);
+
+  const agregarPiezaNueva = () => {
+    const producto = productos.find((p) => p.id === piezaNuevaId);
+    if (!producto) return;
+    const cantidad = Math.max(1, parseInt(piezaNuevaCantidad, 10) || 1);
+    setNuevasPiezas((prev) => {
+      const existente = prev.find((p) => p.productId === producto.id);
+      if (existente) {
+        return prev.map((p) => (p.productId === producto.id ? { ...p, quantity: p.quantity + cantidad } : p));
+      }
+      return [...prev, { productId: producto.id, productName: producto.name, price: producto.price, quantity: cantidad }];
+    });
+    setPiezaNuevaId("");
+    setPiezaNuevaCantidad("1");
+  };
+
+  const quitarPiezaNueva = (productId: string) => setNuevasPiezas((prev) => prev.filter((p) => p.productId !== productId));
 
   const [cobroRepairId, setCobroRepairId] = useState<string | null>(null);
   const [cobroMonto, setCobroMonto] = useState("");
@@ -730,8 +1038,9 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug 
   const resetModalNueva = () => {
     setNuevaMarca(""); setNuevaModelo(""); setNuevaFalla(""); setNuevaCosto("");
     setNuevaClienteId(null); setNuevaClienteQuery(""); setModoClienteNuevo(false);
-    setNuevaClienteNuevoNombre(""); setNuevaClienteNuevoTelefono("");
+    setNuevaClienteNuevoNombre(""); setNuevaClienteNuevoTelefono(""); setNuevaClienteNuevoCodigoPais(PAIS_TELEFONO_DEFAULT);
     setNuevaPrioridad("NORMAL"); setNuevaError(null);
+    setNuevasPiezas([]); setPiezaNuevaId(""); setPiezaNuevaCantidad("1");
   };
 
   const handleCrearReparacion = () => {
@@ -743,19 +1052,48 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug 
     const branchId = branches.length > 1 ? nuevaBranchId : (branches[0]?.id ?? "");
     if (!branchId) { setNuevaError("No hay sucursales activas"); return; }
 
+    // Nombre/teléfono del cliente para el ticket que se imprime justo abajo
+    // — tomado del cliente ya existente seleccionado o del que se está
+    // registrando en el momento, según el modo activo del formulario.
+    const clienteExistente = !modoClienteNuevo && nuevaClienteId ? clientes.find((c) => c.id === nuevaClienteId) : null;
+    const clienteNombreTicket = modoClienteNuevo ? nuevaClienteNuevoNombre.trim() : (clienteExistente?.name ?? nuevaClienteQuery);
+    const clienteTelefonoTicket = modoClienteNuevo ? (nuevaClienteNuevoTelefono || null) : (clienteExistente?.phone ?? null);
+    const costoEstimadoTicket = nuevaCosto ? parseFloat(nuevaCosto) : null;
+
     startCrear(async () => {
       const res = await crearReparacionAction({
         tenantSlug,
         branchId,
         clienteId: modoClienteNuevo ? null : nuevaClienteId,
-        clienteNuevo: modoClienteNuevo ? { name: nuevaClienteNuevoNombre, phone: nuevaClienteNuevoTelefono || undefined } : null,
+        clienteNuevo: modoClienteNuevo
+          ? { name: nuevaClienteNuevoNombre, phone: nuevaClienteNuevoTelefono || undefined, phoneCountryCode: nuevaClienteNuevoCodigoPais }
+          : null,
         marca: nuevaMarca,
         modelo: nuevaModelo,
         falla: nuevaFalla,
-        costoEstimado: nuevaCosto ? parseFloat(nuevaCosto) : null,
+        costoEstimado: costoEstimadoTicket,
         prioridad: nuevaPrioridad,
+        piezas: nuevasPiezas.map((p) => ({ productId: p.productId, quantity: p.quantity })),
       });
       if (res.ok) {
+        // Se imprime/muestra el ticket de una vez, con lo que se acaba de
+        // capturar — así el cliente sabe cuánto le va a costar antes de
+        // irse, sin depender de que el admin vuelva a seleccionar esta
+        // reparación en la lista (que además no cambia sola tras el
+        // router.refresh()).
+        abrirTicketImprimible(
+          {
+            folio: res.folio,
+            cliente: clienteNombreTicket || "Cliente",
+            telefono: clienteTelefonoTicket,
+            marca: nuevaMarca,
+            modelo: nuevaModelo,
+            falla: nuevaFalla,
+            piezas: nuevasPiezas,
+            costoEstimado: costoEstimadoTicket,
+          },
+          negocio
+        );
         setModalNuevaAbierto(false);
         resetModalNueva();
         router.refresh();
@@ -767,32 +1105,16 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug 
 
   return (
     <div className="flex flex-col h-full">
-      <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 flex items-center gap-3 overflow-x-auto">
-        <span className="text-[10px] text-amber-700 font-medium flex items-center gap-1 whitespace-nowrap">
-          <User className="w-3 h-3" /> Simulador de rol:
-        </span>
-        <div className="flex gap-1">
-          {(["admin", "tecnico", "tienda"] as Rol[]).map((r) => (
-            <button key={r} onClick={() => setRolDemo(r)}
-              className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium capitalize transition-colors whitespace-nowrap ${
-                rolDemo === r ? "bg-amber-500 text-white" : "bg-white text-amber-600 border border-amber-300"
-              }`}>
-              {r === "admin" ? "Administrador" : r === "tecnico" ? "Técnico" : "Tienda"}
-            </button>
-          ))}
-        </div>
-        <span className="text-[10px] text-amber-500 ml-auto whitespace-nowrap">Esta barra desaparece con roles reales (M4)</span>
-      </div>
-
       {accionError && (
         <div className="bg-red-50 border-b border-red-200 px-4 py-1.5 text-[11px] text-red-600">{accionError}</div>
       )}
 
       <div className="flex-1 overflow-hidden">
-        {rolDemo === "tienda" ? (
+        {vistaTienda ? (
           <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={abrirModalCobro} pending={pendingAccion} />
         ) : (
-          <VistaAdmin reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={abrirModalCobro} pending={pendingAccion} onNuevaClick={() => setModalNuevaAbierto(true)} />
+          <VistaAdmin reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={abrirModalCobro} pending={pendingAccion} onNuevaClick={() => setModalNuevaAbierto(true)}
+            productos={productos} negocio={negocio} tenantSlug={tenantSlug} router={router} />
         )}
       </div>
 
@@ -840,9 +1162,17 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug 
                     <input type="text" value={nuevaClienteNuevoNombre} onChange={(e) => setNuevaClienteNuevoNombre(e.target.value)}
                       placeholder="Nombre del cliente"
                       className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
-                    <input type="text" value={nuevaClienteNuevoTelefono} onChange={(e) => setNuevaClienteNuevoTelefono(e.target.value)}
-                      placeholder="Teléfono (opcional)"
-                      className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                    <div className="flex gap-2">
+                      <select value={nuevaClienteNuevoCodigoPais} onChange={(e) => setNuevaClienteNuevoCodigoPais(e.target.value)}
+                        className="px-2 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary flex-shrink-0">
+                        {PAISES_TELEFONO.map((p) => (
+                          <option key={p.code} value={p.code}>{p.flag} {p.code}</option>
+                        ))}
+                      </select>
+                      <input type="text" value={nuevaClienteNuevoTelefono} onChange={(e) => setNuevaClienteNuevoTelefono(e.target.value)}
+                        placeholder="Teléfono (opcional)"
+                        className="flex-1 min-w-0 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                    </div>
                     <button type="button" onClick={() => setModoClienteNuevo(false)} className="text-[11px] text-muted-foreground">
                       Buscar cliente existente
                     </button>
@@ -879,11 +1209,53 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug 
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary resize-none" />
               </div>
 
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PIEZAS / REFACCIONES (OPCIONAL)</label>
+                <div className="flex gap-2 mt-1">
+                  <select value={piezaNuevaId} onChange={(e) => setPiezaNuevaId(e.target.value)}
+                    className="flex-1 min-w-0 px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary">
+                    <option value="">Selecciona una pieza…</option>
+                    {productos.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
+                    ))}
+                  </select>
+                  <input type="number" min={1} value={piezaNuevaCantidad} onChange={(e) => setPiezaNuevaCantidad(e.target.value)}
+                    className="w-14 px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary" />
+                  <button type="button" onClick={agregarPiezaNueva} disabled={!piezaNuevaId}
+                    className="px-2.5 py-2 bg-muted hover:bg-accent disabled:opacity-40 rounded-lg text-primary">
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {nuevasPiezas.length > 0 && (
+                  <div className="mt-2 border border-border rounded-lg divide-y divide-border">
+                    {nuevasPiezas.map((p) => (
+                      <div key={p.productId} className="flex items-center justify-between px-2.5 py-1.5 text-[11px]">
+                        <span className="flex-1 truncate">{p.productName} × {p.quantity}</span>
+                        <span className="text-muted-foreground mr-2">{formatMXN(p.price * p.quantity)}</span>
+                        <button type="button" onClick={() => quitarPiezaNueva(p.productId)} className="text-muted-foreground hover:text-red-600">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between px-2.5 py-1.5 text-[11px] font-medium">
+                      <span>Subtotal piezas</span>
+                      <div className="flex items-center gap-2">
+                        <span>{formatMXN(subtotalPiezasNueva)}</span>
+                        <button type="button" onClick={() => setNuevaCosto(String(subtotalPiezasNueva))} className="text-[10px] text-primary">
+                          Usar como estimado
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">COSTO ESTIMADO</label>
                   <input type="number" value={nuevaCosto} onChange={(e) => setNuevaCosto(e.target.value)} placeholder="$0"
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                  <p className="text-[10px] text-muted-foreground mt-1">El cliente verá este monto en su ticket y en el aviso de WhatsApp.</p>
                 </div>
                 <div>
                   <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PRIORIDAD</label>
