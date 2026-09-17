@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { moduloPermitido, type ModuloKey } from "@/lib/roles";
+import { label, DEFAULT_LABELS, type LabelDictionary } from "@/lib/labels";
 import { cerrarSesionPersonalAction } from "@/app/actions/acceso-personal-actions";
 import {
   LayoutDashboard, ShoppingCart, Wrench, Users, Package,
@@ -14,48 +15,53 @@ import {
   Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck
 } from "lucide-react";
 
-const navItems: { section: string; items: { label: string; href: ModuloKey; icon: typeof LayoutDashboard }[] }[] = [
+// Estructura fija (secciones, orden, ícono) — el NOMBRE de cada ítem ya no
+// se escribe aquí a mano: sale del diccionario de labels (lib/labels.ts),
+// resuelto por rubro/tenant en el layout del tenant y pasado como prop, así
+// "Reparaciones" puede convertirse en "Órdenes de Servicio" para un taller
+// automotriz sin tocar este archivo (ver labelKey de cada ítem, abajo).
+const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloKey; icon: typeof LayoutDashboard }[] }[] = [
   {
     section: "PRINCIPAL",
     items: [
-      { label: "Inicio", href: "dashboard", icon: LayoutDashboard },
-      { label: "Punto de Venta", href: "pos", icon: ShoppingCart },
-      { label: "Reparaciones", href: "reparaciones", icon: Wrench },
+      { labelKey: "module.dashboard.name", href: "dashboard", icon: LayoutDashboard },
+      { labelKey: "module.pos.name", href: "pos", icon: ShoppingCart },
+      { labelKey: "module.repair.name", href: "reparaciones", icon: Wrench },
     ]
   },
   {
     section: "GESTIÓN",
     items: [
-      { label: "Clientes", href: "clientes", icon: Users },
-      { label: "Catálogo", href: "catalogo", icon: BookOpen },
-      { label: "Inventario", href: "inventario", icon: Warehouse },
-      { label: "Compras", href: "compras", icon: Package },
+      { labelKey: "module.customers.name", href: "clientes", icon: Users },
+      { labelKey: "module.catalog.name", href: "catalogo", icon: BookOpen },
+      { labelKey: "module.inventory.name", href: "inventario", icon: Warehouse },
+      { labelKey: "module.purchases.name", href: "compras", icon: Package },
     ]
   },
   {
     section: "OPERACIÓN",
     items: [
-      { label: "Caja", href: "caja", icon: DollarSign },
-      { label: "Personal", href: "personal", icon: UserCog },
+      { labelKey: "module.cash.name", href: "caja", icon: DollarSign },
+      { labelKey: "module.staff.name", href: "personal", icon: UserCog },
       // Exclusivo del administrador (no está en la matriz de acceso de
       // ningún rol de PIN, lib/roles.ts) — igual que "Personal" ya lo era
       // en la práctica, aquí queda explícito: staff nunca ve este link
       // porque modo==="staff" filtra navItems con moduloPermitido().
-      { label: "Asistencia", href: "asistencia", icon: CalendarCheck },
-      { label: "Sucursales", href: "sucursales", icon: GitBranch },
+      { labelKey: "module.attendance.name", href: "asistencia", icon: CalendarCheck },
+      { labelKey: "module.branches.name", href: "sucursales", icon: GitBranch },
     ]
   },
   {
     section: "REPORTES",
     items: [
-      { label: "Reportes", href: "reportes", icon: BarChart3 },
-      { label: "Facturación", href: "facturacion", icon: FileText },
+      { labelKey: "module.reports.name", href: "reportes", icon: BarChart3 },
+      { labelKey: "module.invoicing.name", href: "facturacion", icon: FileText },
     ]
   },
   {
     section: "AYUDA",
     items: [
-      { label: "Soporte", href: "soporte", icon: LifeBuoy },
+      { labelKey: "module.support.name", href: "soporte", icon: LifeBuoy },
     ]
   }
 ];
@@ -67,6 +73,8 @@ export default function TenantShell({
   userRole = "",
   modo = "admin",
   roleName = null,
+  labels = DEFAULT_LABELS,
+  modulosInactivos = [],
 }: {
   children: React.ReactNode;
   tenant: string;
@@ -79,6 +87,16 @@ export default function TenantShell({
   // PIN en vez de la de Supabase Auth (que ni siquiera tiene).
   modo?: "admin" | "staff";
   roleName?: string | null;
+  // Diccionario ya resuelto (rubro + overrides del tenant) para los
+  // nombres de módulo del menú — lib/labels.ts. Default genérico por si
+  // algún caller viejo no lo pasa todavía.
+  labels?: LabelDictionary;
+  // Códigos de módulo (mismas claves que ModuloKey) que este negocio tiene
+  // desactivados — personalización por rubro (2026-09-17). "Ausente de
+  // esta lista" = activo, tanto para el módulo recién agregado a la BD
+  // como para uno que un negocio nunca desactivó, así que ningún tenant ya
+  // en producción antes de este cambio pierde un link de golpe.
+  modulosInactivos?: string[];
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -110,14 +128,25 @@ export default function TenantShell({
 
   const isActive = (href: string) => pathname.includes(href);
 
-  // En modo "staff" se filtra cada grupo por lo que ese rol tiene
-  // permitido, y se descarta el grupo completo si queda vacío (ej. Cajero
-  // no ve nada de "GESTIÓN" — ese encabezado tampoco debe aparecer).
-  const gruposVisibles = modo === "staff"
-    ? navItems
-        .map((grupo) => ({ ...grupo, items: grupo.items.filter((item) => moduloPermitido(roleName, item.href)) }))
-        .filter((grupo) => grupo.items.length > 0)
-    : navItems;
+  const modulosInactivosSet = new Set(modulosInactivos);
+
+  // Primero se resuelve el nombre visible de cada ítem contra el
+  // diccionario de labels (rubro + overrides del tenant), luego se filtra
+  // por dos criterios independientes: (1) el módulo está desactivado para
+  // ESTE negocio (personalización por rubro, aplica igual a admin y
+  // staff), y (2) en modo "staff", el rol de ese empleado no tiene
+  // permitido ese módulo (lib/roles.ts) — se descarta el grupo completo si
+  // queda vacío (ej. Cajero no ve nada de "GESTIÓN" — ese encabezado
+  // tampoco debe aparecer).
+  const gruposVisibles = NAV_STRUCTURE
+    .map((grupo) => ({
+      section: grupo.section,
+      items: grupo.items
+        .filter((item) => !modulosInactivosSet.has(item.href))
+        .filter((item) => modo !== "staff" || moduloPermitido(roleName, item.href))
+        .map((item) => ({ ...item, label: label(labels, item.labelKey) })),
+    }))
+    .filter((grupo) => grupo.items.length > 0);
 
   const handleSignOut = async () => {
     if (modo === "staff") {

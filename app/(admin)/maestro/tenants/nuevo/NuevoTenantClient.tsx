@@ -4,24 +4,19 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Building2, User, Package, Check, Layers } from "lucide-react";
 import type { EsquemaOption } from "@/lib/esquemas-data";
+import { MODULE_CATALOG } from "@/lib/modules-catalog";
 import { createTenantAction } from "./actions";
 
-const modulosDisponibles = [
-  { code: "M1", name: "Acceso Universal", desc: "Acceso desde cualquier dispositivo" },
-  { code: "M2", name: "Boveda de Datos", desc: "Aislamiento multi-tenant" },
-  { code: "M3", name: "Login Seguro", desc: "Autenticacion de usuarios" },
-  { code: "M4", name: "Permisos", desc: "Roles y permisos granulares" },
-  { code: "M5", name: "Multi-Sucursal", desc: "Gestion de multiples locales" },
-  { code: "M6", name: "Catalogo", desc: "Productos, refacciones y servicios" },
-  { code: "M7", name: "Clientes", desc: "Fidelizacion y garantias" },
-  { code: "M8", name: "Punto de Venta", desc: "POS ultra rapido" },
-  { code: "M9", name: "Reparaciones", desc: "Taller con WhatsApp" },
-  { code: "M10", name: "Control de Caja", desc: "Caja blindada" },
-  { code: "M11", name: "Personal", desc: "Empleados y comisiones" },
-  { code: "M12", name: "Inventario", desc: "Logistica y almacen" },
-  { code: "M13", name: "Dashboard", desc: "Metricas del negocio" },
-  { code: "M14", name: "Facturacion CFDI", desc: "Facturas electronicas" },
-];
+// Antes tenía su propia lista de códigos "M1".."M14" (desincronizada del
+// catálogo real desde hace tiempo — le faltaban Compras/Soporte/Asistencia
+// por completo). Ahora usa MODULE_CATALOG directo (lib/modules-catalog.ts)
+// — una sola fuente de verdad, la misma que ya usa el menú del tenant y el
+// toggle de Panel Maestro/Configuración.
+const modulosDisponibles = Object.entries(MODULE_CATALOG).map(([code, info]) => ({
+  code,
+  name: info.name,
+  isCore: info.isCore,
+}));
 
 export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOption[] }) {
   const [form, setForm] = useState({
@@ -34,7 +29,11 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
     ownerEmail: "",
     ownerPhone: "",
   });
-  const [modulosActivos, setModulosActivos] = useState<string[]>(["M1", "M2", "M3", "M4"]);
+  // Default: todos los módulos activos (antes eran los 4 conceptos de
+  // "núcleo" viejos, M1-M4, que ya no existen como tal — ver
+  // lib/modules-catalog.ts) — Carlos desmarca lo que ese negocio en
+  // particular no necesite.
+  const [modulosActivos, setModulosActivos] = useState<string[]>(modulosDisponibles.map((m) => m.code));
   // El default es el esquema marcado como predeterminado (el mismo que se
   // le asigna a un negocio que se auto-registra) — Carlos puede cambiarlo
   // aquí mismo antes de crear el negocio, o después desde su ficha.
@@ -201,8 +200,10 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
                       <button
                         key={m.code}
                         type="button"
+                        disabled={m.isCore}
                         onClick={() => toggleModulo(m.code)}
-                        className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
+                        title={m.isCore ? "Los módulos núcleo siempre quedan activos" : undefined}
+                        className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
                           isActive
                             ? "border-[#4F46E5] bg-[#4F46E5]/5"
                             : "border-slate-200 hover:border-slate-300 bg-slate-50"
@@ -215,9 +216,9 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
                         </div>
                         <div>
                           <p className={`text-[11px] font-medium ${isActive ? "text-[#4F46E5]" : "text-slate-600"}`}>
-                            {m.code} - {m.name}
+                            {m.name}
+                            {m.isCore && <span className="text-slate-400 font-normal"> · núcleo</span>}
                           </p>
-                          <p className="text-[10px] text-slate-400">{m.desc}</p>
                         </div>
                       </button>
                     );

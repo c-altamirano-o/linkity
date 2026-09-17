@@ -130,7 +130,12 @@ export async function getTenantDetailData(slug: string): Promise<TenantDetail | 
     include: {
       subscription: true,
       esquema: { select: { id: true, name: true, maxBranches: true, maxStaffPerBranch: true } },
-      modules: { where: { isActive: true }, select: { moduleId: true, module: { select: { code: true } } } },
+      // Enforcement real de módulos (2026-09-17) = "default abierto": se
+      // traen TODAS las filas (no solo isActive:true) para poder distinguir
+      // "sin fila" (activo) de "fila explícita isActive:false" (inactivo) —
+      // ver el cálculo de `modulos` más abajo y el comentario largo en
+      // app/actions/modulos-tenant-actions.ts.
+      modules: { select: { moduleId: true, isActive: true, module: { select: { code: true } } } },
       branches: {
         orderBy: { createdAt: "asc" },
         include: { staff: { where: { isActive: true }, select: { id: true } } },
@@ -144,12 +149,14 @@ export async function getTenantDetailData(slug: string): Promise<TenantDetail | 
 
   if (!t) return null;
 
-  const activeCodes = new Set(t.modules.map((m) => m.module.code));
+  // "Default abierto": un código sin fila en absoluto cuenta como activo;
+  // solo una fila con isActive:false lo marca inactivo.
+  const inactiveCodes = new Set(t.modules.filter((m) => !m.isActive).map((m) => m.module.code));
   const modulos: TenantModuloRow[] = ALL_MODULE_CODES.map((code) => ({
     code,
     name: MODULE_CATALOG[code].name,
     isCore: MODULE_CATALOG[code].isCore,
-    activo: activeCodes.has(code),
+    activo: !inactiveCodes.has(code),
   }));
 
   return {

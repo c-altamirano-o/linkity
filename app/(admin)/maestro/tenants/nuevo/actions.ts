@@ -142,9 +142,18 @@ export async function createTenantAction(
         },
       });
 
-      for (const code of input.modules) {
+      // Nota (2026-09-17, personalización por rubro): el enforcement real
+      // de módulos ahora es "default abierto" — sin fila, o fila con
+      // isActive:true, es un módulo ACTIVO; solo una fila explícita
+      // isActive:false lo oculta (ver app/actions/modulos-tenant-actions.ts).
+      // Por eso aquí se recorre TODO el catálogo, no solo input.modules:
+      // los que Carlos marcó quedan con fila isActive:true (informativo,
+      // mismo efecto que no tener fila) y los que NO marcó quedan con una
+      // fila explícita isActive:false, para que su elección en este
+      // formulario de verdad oculte algo en el negocio nuevo.
+      const marcados = new Set(input.modules);
+      for (const code of Object.keys(MODULE_CATALOG)) {
         const info = MODULE_CATALOG[code];
-        if (!info) continue;
 
         const mod = await tx.module.upsert({
           where: { code },
@@ -153,7 +162,7 @@ export async function createTenantAction(
         });
 
         await tx.tenantModule.create({
-          data: { tenantId: tenant.id, moduleId: mod.id },
+          data: { tenantId: tenant.id, moduleId: mod.id, isActive: info.isCore || marcados.has(code) },
         });
       }
 

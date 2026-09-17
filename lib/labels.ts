@@ -40,6 +40,17 @@ export const DEFAULT_LABELS: LabelDictionary = {
   "module.suppliers.name": "Proveedores",
   "module.invoicing.name": "Facturación",
   "module.dashboard.name": "Dashboard",
+  // Agregados 2026-09-17 al conectar el menú lateral (TenantShell.tsx) a
+  // este sistema de labels — antes tenía sus nombres escritos a mano y
+  // nunca variaban por rubro ni eran personalizables. "module.purchases"
+  // es el módulo real "Compras" (no confundir con "module.suppliers" de
+  // arriba, que quedó sin usar — se conserva por si en el futuro se separa
+  // el catálogo de proveedores de las compras en sí).
+  "module.purchases.name": "Compras",
+  "module.branches.name": "Sucursales",
+  "module.reports.name": "Reportes",
+  "module.support.name": "Soporte",
+  "module.attendance.name": "Asistencia",
 
   // Nombre de la entidad principal del módulo de reparaciones
   "entity.repair.singular": "Reparación",

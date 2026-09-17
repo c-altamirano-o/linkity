@@ -4,10 +4,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateThemePreset, updateBusinessType } from "@/app/actions/tenant";
+import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/client";
 import { THEME_PRESETS, TENANT_THEME_ROOT_ID, type ThemePresetId } from "@/lib/theme-presets";
-import { Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2, LayoutGrid, Sparkles } from "lucide-react";
 
 // Aplica los tokens de color de un preset directo sobre el nodo que el
 // layout del tenant ya usa para inyectar el tema real (mismo elemento,
@@ -36,16 +37,26 @@ const THEMES = [
 
 const SIN_RUBRO = "";
 
+interface ModuloPersonalizable {
+  code: string;
+  name: string;
+  activo: boolean;
+}
+
 interface ConfiguracionClientProps {
   tenantSlug: string;
   themePresetInicial: string;
   businessTypeInicial: string | null;
+  modulos: ModuloPersonalizable[];
+  recomendadosOff: string[];
 }
 
 export default function ConfiguracionClient({
   tenantSlug,
   themePresetInicial,
   businessTypeInicial,
+  modulos,
+  recomendadosOff,
 }: ConfiguracionClientProps) {
   const router = useRouter();
 
@@ -92,6 +103,50 @@ export default function ConfiguracionClient({
       const result = await updateBusinessType(tenantSlug, rubroSeleccionado === SIN_RUBRO ? null : rubroSeleccionado);
       setRubroMensaje(result.success ? "Rubro actualizado correctamente." : "Error al actualizar el rubro.");
       if (result.success) setTimeout(() => setRubroMensaje(""), 3000);
+    });
+  };
+
+  // ── Módulos de tu negocio ─────────────────────────────────
+  // Personalización por rubro (2026-09-17): cada negocio decide qué
+  // módulos ve en su menú — "modulos" ya viene resuelto del servidor
+  // (activo = sin fila desactivada explícita, ver page.tsx). Se guarda una
+  // copia local editable para reflejar el toggle al instante sin esperar
+  // el refresh completo de la página.
+  const [modulosState, setModulosState] = useState(modulos);
+  const [moduloEnCurso, setModuloEnCurso] = useState<string | null>(null);
+  const [modulosMensaje, setModulosMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [aplicandoRecomendado, startAplicarRecomendadoTransition] = useTransition();
+  const [, startModulosTransition] = useTransition();
+
+  const alternarModulo = (code: string, activar: boolean) => {
+    setModuloEnCurso(code);
+    setModulosMensaje(null);
+    setModulosState((prev) => prev.map((m) => (m.code === code ? { ...m, activo: activar } : m)));
+    startModulosTransition(async () => {
+      const result = await alternarModuloPropioAction({ tenantSlug, moduleCode: code, activar });
+      setModuloEnCurso(null);
+      if (!result.ok) {
+        // Revierte el cambio optimista si el servidor lo rechazó.
+        setModulosState((prev) => prev.map((m) => (m.code === code ? { ...m, activo: !activar } : m)));
+        setModulosMensaje({ tipo: "error", texto: result.error });
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const aplicarRecomendado = () => {
+    setModulosMensaje(null);
+    startAplicarRecomendadoTransition(async () => {
+      const result = await aplicarRecomendadoRubroAction({ tenantSlug });
+      if (!result.ok) {
+        setModulosMensaje({ tipo: "error", texto: result.error });
+        return;
+      }
+      setModulosState((prev) => prev.map((m) => ({ ...m, activo: !recomendadosOff.includes(m.code) })));
+      setModulosMensaje({ tipo: "ok", texto: "Se aplicó la recomendación para tu rubro." });
+      router.refresh();
+      setTimeout(() => setModulosMensaje(null), 4000);
     });
   };
 
@@ -234,6 +289,73 @@ export default function ConfiguracionClient({
             </button>
             {rubroMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{rubroMensaje}</span>}
           </div>
+        </div>
+      </div>
+
+      {/* ── Módulos de tu negocio ──────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <LayoutGrid className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold text-foreground">Módulos de tu negocio</h2>
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-muted-foreground mb-5">
+            Elige qué módulos aparecen en tu menú. Apagar uno no borra ninguna información que ya
+            hayas capturado — solo deja de mostrarse hasta que lo vuelvas a activar.
+          </p>
+
+          {recomendadosOff.length > 0 && (
+            <div className="mb-5 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3.5">
+              <Sparkles className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-xs text-foreground">
+                  Para el rubro que elegiste, recomendamos apagar:{" "}
+                  {recomendadosOff.map((code) => modulosState.find((m) => m.code === code)?.name ?? code).join(", ")}.
+                </p>
+                <button
+                  onClick={aplicarRecomendado}
+                  disabled={aplicandoRecomendado}
+                  className="mt-2 text-xs font-medium text-primary hover:underline disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {aplicandoRecomendado && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Aplicar recomendado para tu rubro
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="divide-y divide-border">
+            {modulosState.map((m) => (
+              <div key={m.code} className="flex items-center justify-between py-2.5">
+                <span className="text-sm text-foreground">{m.name}</span>
+                <button
+                  type="button"
+                  disabled={moduloEnCurso === m.code}
+                  onClick={() => alternarModulo(m.code, !m.activo)}
+                  className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${
+                    m.activo ? "bg-primary" : "bg-muted-foreground/30"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                      m.activo ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {modulosMensaje && (
+            <p
+              className={`mt-4 text-sm font-medium animate-in fade-in ${
+                modulosMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"
+              }`}
+            >
+              {modulosMensaje.texto}
+            </p>
+          )}
         </div>
       </div>
 

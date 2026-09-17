@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MODULE_CATALOG, ALL_MODULE_CODES } from "@/lib/modules-catalog";
+import { modulosRecomendadosOff } from "@/lib/modulos-rubro";
 import { getEsquemaDefault } from "@/lib/esquemas-data";
 
 /**
@@ -41,10 +42,14 @@ import { getEsquemaDefault } from "@/lib/esquemas-data";
  * visitante automáticamente y mandarlo a /primer-acceso, donde SÍ teclea
  * su propia contraseña nueva él mismo antes de llegar a su negocio.
  *
- * Todo negocio que se auto-registra empieza con todos los módulos
- * activos (a diferencia de Panel Maestro, donde el admin de Linkity
- * elige módulos a mano) — es más simple para un cliente nuevo ver todo
- * el sistema desde el día uno.
+ * Todo negocio que se auto-registra empieza con los módulos que
+ * recomienda su rubro (2026-09-17, personalización por rubro — ver
+ * lib/modulos-rubro.ts): la mayoría quedan activos desde el día uno igual
+ * que antes, pero el o los módulos que no aplican a su giro (ej.
+ * "Reparaciones" para una barbería) arrancan ya desactivados, en vez de
+ * que el negocio tenga que descubrir y apagarlo él mismo después. Sigue
+ * siendo una sugerencia, no un candado: el propio negocio puede reactivar
+ * cualquier módulo desde Configuración cuando quiera.
  */
 
 interface RegistrarNegocioInput {
@@ -170,6 +175,7 @@ export async function registrarNegocioAction(
         },
       });
 
+      const recomendadosOff = new Set(modulosRecomendadosOff(input.businessType));
       for (const code of ALL_MODULE_CODES) {
         const info = MODULE_CATALOG[code];
         const mod = await tx.module.upsert({
@@ -177,7 +183,9 @@ export async function registrarNegocioAction(
           update: {},
           create: { code, name: info.name, isCore: info.isCore },
         });
-        await tx.tenantModule.create({ data: { tenantId: tenant.id, moduleId: mod.id } });
+        await tx.tenantModule.create({
+          data: { tenantId: tenant.id, moduleId: mod.id, isActive: !recomendadosOff.has(code) },
+        });
       }
 
       return tenant;

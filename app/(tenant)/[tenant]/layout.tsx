@@ -7,6 +7,8 @@ import TenantShell from "@/components/tenant/TenantShell";
 import { THEME_PRESETS, TENANT_THEME_ROOT_ID } from "@/lib/theme-presets";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { moduloPermitido, primerModuloPermitido, type ModuloKey } from "@/lib/roles";
+import { getTenantLabels } from "@/lib/labels-server";
+import type { LabelDictionary } from "@/lib/labels";
 
 export const metadata: Metadata = {
   title: "Linkity",
@@ -71,11 +73,32 @@ export default async function TenantLayout({
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
-    select: { id: true, themePreset: true },
+    select: { id: true, themePreset: true, businessType: true },
   });
 
   if (dbTenant?.themePreset) {
     activePreset = THEME_PRESETS[dbTenant.themePreset as keyof typeof THEME_PRESETS] || THEME_PRESETS.NEUTRAL_TECH;
+  }
+
+  // Personalización por rubro (2026-09-17): labels ya resueltos (rubro +
+  // overrides del propio tenant) para el menú, y el conjunto de módulos que
+  // ESTE negocio desactivó (ver lib/modulos-rubro.ts / app/actions/
+  // modulos-tenant-actions.ts). "Sin fila en TenantModule, o fila con
+  // isActive:true" = módulo activo; solo una fila explícita isActive:false
+  // lo oculta — así ningún negocio que ya estaba en producción antes de
+  // este cambio pierde un módulo de golpe (nunca tuvo una fila así).
+  let labels: LabelDictionary = {};
+  let modulosInactivos: string[] = [];
+  if (dbTenant) {
+    const [labelsResueltos, inactivos] = await Promise.all([
+      getTenantLabels(dbTenant.id, dbTenant.businessType),
+      prisma.tenantModule.findMany({
+        where: { tenantId: dbTenant.id, isActive: false },
+        select: { module: { select: { code: true } } },
+      }),
+    ]);
+    labels = labelsResueltos;
+    modulosInactivos = inactivos.map((tm) => tm.module.code);
   }
 
   if (dbTenant && user) {
@@ -131,9 +154,34 @@ export default async function TenantLayout({
     }
   }
 
+  // Guard de módulo desactivado por rubro/negocio (2026-09-17) — a
+  // diferencia del guard de arriba (por ROL, solo aplica a personal de
+  // PIN), este aplica a CUALQUIER sesión, incluido el dueño con cuenta
+  // real: si el propio negocio apagó un módulo (ej. "Reparaciones" en una
+  // barbería), nadie debe poder seguir usándolo solo por escribir la URL a
+  // mano — el link ya está oculto en TenantShell, esto es la verificación
+  // real del servidor. Se lee de nuevo el pathname (en vez de reusar el
+  // del bloque de arriba) porque ese bloque solo corre en modo "staff".
+  if (dbTenant && modulosInactivos.length > 0) {
+    const headerList = await headers();
+    const pathname = headerList.get("x-pathname") ?? "";
+    const modulo = pathname.split("/").filter(Boolean)[1] as ModuloKey | undefined;
+    if (modulo && modulosInactivos.includes(modulo)) {
+      redirect(`/${tenant}/dashboard`);
+    }
+  }
+
   return (
     <div id={TENANT_THEME_ROOT_ID} style={activePreset as React.CSSProperties} className="contents">
-      <TenantShell tenant={tenant} userName={userName} userRole={userRole} modo={modo} roleName={roleNameParaNav}>
+      <TenantShell
+        tenant={tenant}
+        userName={userName}
+        userRole={userRole}
+        modo={modo}
+        roleName={roleNameParaNav}
+        labels={labels}
+        modulosInactivos={modulosInactivos}
+      >
         {children}
       </TenantShell>
     </div>

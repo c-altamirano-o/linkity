@@ -35,29 +35,35 @@ export interface ModuloAdopcionRow {
 }
 
 export async function getModulosData(): Promise<ModuloAdopcionRow[]> {
-  const [tenants, tenantModules] = await Promise.all([
+  // Enforcement real de módulos (2026-09-17) = "default abierto": un tenant
+  // tiene un módulo activo salvo que exista una fila EXPLÍCITA
+  // isActive:false para él (ver app/actions/modulos-tenant-actions.ts para
+  // el detalle). Por eso esta pantalla ya no cuenta filas isActive:true —
+  // cuenta las isActive:false y resta, para que la adopción mostrada aquí
+  // coincida con lo que el negocio de verdad ve en su menú.
+  const [tenants, tenantModulesInactivos] = await Promise.all([
     prisma.tenant.findMany({
       select: { id: true, name: true, slug: true },
       orderBy: { name: "asc" },
     }),
     prisma.tenantModule.findMany({
-      where: { isActive: true },
+      where: { isActive: false },
       select: { tenantId: true, module: { select: { code: true } } },
     }),
   ]);
 
-  const activosPorCodigo = new Map<string, Set<string>>();
-  for (const tm of tenantModules) {
-    const set = activosPorCodigo.get(tm.module.code) ?? new Set<string>();
+  const inactivosPorCodigo = new Map<string, Set<string>>();
+  for (const tm of tenantModulesInactivos) {
+    const set = inactivosPorCodigo.get(tm.module.code) ?? new Set<string>();
     set.add(tm.tenantId);
-    activosPorCodigo.set(tm.module.code, set);
+    inactivosPorCodigo.set(tm.module.code, set);
   }
 
   return ALL_MODULE_CODES.map((code) => {
     const info = MODULE_CATALOG[code];
-    const activosSet = activosPorCodigo.get(code) ?? new Set<string>();
-    const tenantsActivos = tenants.filter((t) => activosSet.has(t.id));
-    const tenantsInactivos = tenants.filter((t) => !activosSet.has(t.id));
+    const inactivosSet = inactivosPorCodigo.get(code) ?? new Set<string>();
+    const tenantsActivos = tenants.filter((t) => !inactivosSet.has(t.id));
+    const tenantsInactivos = tenants.filter((t) => inactivosSet.has(t.id));
 
     return {
       code,
