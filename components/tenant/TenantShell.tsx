@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
-import { moduloPermitido, type ModuloKey } from "@/lib/roles";
+import type { ModuloKey } from "@/lib/roles";
 import { label, DEFAULT_LABELS, type LabelDictionary } from "@/lib/labels";
 import { cerrarSesionPersonalAction } from "@/app/actions/acceso-personal-actions";
 import {
@@ -43,10 +43,11 @@ const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloK
     items: [
       { labelKey: "module.cash.name", href: "caja", icon: DollarSign },
       { labelKey: "module.staff.name", href: "personal", icon: UserCog },
-      // Exclusivo del administrador (no está en la matriz de acceso de
-      // ningún rol de PIN, lib/roles.ts) — igual que "Personal" ya lo era
-      // en la práctica, aquí queda explícito: staff nunca ve este link
-      // porque modo==="staff" filtra navItems con moduloPermitido().
+      // Exclusivo del administrador (ningún rol de PIN lo ofrece como
+      // casilla en "Roles y permisos" — ver RolesManager.tsx) — igual que
+      // "Personal" ya lo era en la práctica, aquí queda explícito: staff
+      // nunca ve este link porque modo==="staff" filtra navItems contra el
+      // prop modulosPermitidos (ya resuelto en el servidor).
       { labelKey: "module.attendance.name", href: "asistencia", icon: CalendarCheck },
       { labelKey: "module.branches.name", href: "sucursales", icon: GitBranch },
     ]
@@ -72,7 +73,7 @@ export default function TenantShell({
   userName = "Usuario",
   userRole = "",
   modo = "admin",
-  roleName = null,
+  modulosPermitidos = null,
   labels = DEFAULT_LABELS,
   modulosInactivos = [],
   logoUrl = null,
@@ -87,7 +88,13 @@ export default function TenantShell({
   // tiene permitido (lib/roles.ts) y "Cerrar sesión" cierra esa sesión de
   // PIN en vez de la de Supabase Auth (que ni siquiera tiene).
   modo?: "admin" | "staff";
-  roleName?: string | null;
+  // Módulos que la sesión de PIN actual tiene permitido (ya resuelto en el
+  // servidor por lib/roles-server.ts a partir del Role personalizable del
+  // empleado — ver el comentario largo ahí). null en modo "admin" (sin
+  // restricción, ve todo el menú); en modo "staff" siempre viene como
+  // arreglo (puede estar vacío, aunque roles-server.ts ya garantiza que al
+  // menos incluya "dashboard").
+  modulosPermitidos?: ModuloKey[] | null;
   // Diccionario ya resuelto (rubro + overrides del tenant) para los
   // nombres de módulo del menú — lib/labels.ts. Default genérico por si
   // algún caller viejo no lo pasa todavía.
@@ -151,7 +158,7 @@ export default function TenantShell({
       section: grupo.section,
       items: grupo.items
         .filter((item) => !modulosInactivosSet.has(item.href))
-        .filter((item) => modo !== "staff" || moduloPermitido(roleName, item.href))
+        .filter((item) => modo !== "staff" || (modulosPermitidos?.includes(item.href) ?? false))
         .map((item) => ({ ...item, label: label(labels, item.labelKey) })),
     }))
     .filter((grupo) => grupo.items.length > 0);

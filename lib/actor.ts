@@ -2,7 +2,8 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
-import { moduloPermitido, type ModuloKey } from "@/lib/roles";
+import type { ModuloKey } from "@/lib/roles";
+import { modulosPermitidosParaRolPorNombre } from "@/lib/roles-server";
 
 /**
  * Resolutor de "quién está haciendo esta acción", compartido por todos los
@@ -54,7 +55,8 @@ export async function resolverActor(tenantSlug: string, modulo: ModuloKey): Prom
   //    automático al cambiar de día (lib/asistencia.ts).
   const sesion = await verificarSesionPersonalVigente();
   if (sesion && sesion.tenantId === tenant.id) {
-    if (!moduloPermitido(sesion.roleName, modulo)) {
+    const modulosPermitidos = await modulosPermitidosParaRolPorNombre(tenant.id, sesion.roleName);
+    if (!modulosPermitidos.includes(modulo)) {
       return { ok: false, error: "Tu rol no tiene acceso a este módulo" };
     }
     return {

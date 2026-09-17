@@ -26,9 +26,10 @@ import { getTenantPrisma } from "@/lib/prisma";
  * asignado y si el empleado ya tiene un PIN configurado.
  */
 
-export type EsquemaPago = "FIJO" | "COMISION" | "MIXTO";
+export type EsquemaPago = "FIJO" | "COMISION" | "MIXTO" | "DESTAJO";
 export type BaseComision = "VENTAS" | "REPARACIONES" | "UTILIDAD";
-export type Frecuencia = "SEMANAL" | "QUINCENAL" | "MENSUAL";
+export type Frecuencia = "SEMANAL" | "CATORCENAL" | "QUINCENAL" | "MENSUAL";
+export type MetodoPago = "EFECTIVO" | "TRANSFERENCIA" | "CHEQUE" | "TARJETA_NOMINA" | "OTRO";
 export type EstadoPago = "PENDING" | "PAID" | "CANCELLED";
 
 export interface AsistenciaHoy {
@@ -54,7 +55,9 @@ export interface EmpleadoUI {
   branchName: string;
   name: string;
   phone: string | null;
+  phoneCountryCode: string;
   position: string | null;
+  roleId: string | null;
   roleName: string | null;
   roleDescripcion: string | null;
   tienePin: boolean;
@@ -63,6 +66,13 @@ export interface EmpleadoUI {
   comisionRate: number;
   comisionBase: BaseComision;
   frecuencia: Frecuencia;
+  // Frecuencia propia de la comisión (separada del sueldo — ver el
+  // comentario en Staff.commissionFrequency, schema.prisma).
+  frecuenciaComision: Frecuencia;
+  montoDestajo: number;
+  comisionEquipoRate: number;
+  comisionEquipoBase: BaseComision | null;
+  metodoPago: MetodoPago;
   clabe: string | null;
   hiredAt: string; // ISO
   isActive: boolean;
@@ -90,7 +100,7 @@ export async function getPersonalData(tenantId: string): Promise<PersonalData> {
     orderBy: { name: "asc" },
     include: {
       branch: { select: { name: true } },
-      role: { select: { name: true, description: true } },
+      role: { select: { id: true, name: true, description: true } },
       attendances: { where: { date: { gte: hace8Dias } }, orderBy: { date: "desc" } },
       payments: { orderBy: { periodStart: "desc" }, take: 6 },
     },
@@ -113,7 +123,9 @@ export async function getPersonalData(tenantId: string): Promise<PersonalData> {
       branchName: s.branch.name,
       name: s.name,
       phone: s.phone,
+      phoneCountryCode: s.phoneCountryCode,
       position: s.position,
+      roleId: s.role?.id ?? null,
       roleName: s.role?.name ?? null,
       roleDescripcion: s.role?.description ?? null,
       tienePin: Boolean(s.pinHash),
@@ -122,6 +134,11 @@ export async function getPersonalData(tenantId: string): Promise<PersonalData> {
       comisionRate: Number(s.commissionRate),
       comisionBase: s.commissionBase as BaseComision,
       frecuencia: s.paymentFrequency as Frecuencia,
+      frecuenciaComision: s.commissionFrequency as Frecuencia,
+      montoDestajo: Number(s.pieceRate),
+      comisionEquipoRate: Number(s.teamCommissionRate),
+      comisionEquipoBase: (s.teamCommissionBase as BaseComision | null) ?? null,
+      metodoPago: s.staffPaymentMethod as MetodoPago,
       clabe: s.clabe,
       hiredAt: s.hiredAt.toISOString(),
       isActive: s.isActive,
@@ -206,6 +223,61 @@ export async function calcularComisionSugerida(
   const items = await db.sale
     .findMany({
       where: { userId: staff.userId, createdAt: rango },
+      select: { items: { select: { subtotal: true, quantity: true, product: { select: { cost: true } } } } },
+    })
+    .then((sales) => sales.flatMap((s) => s.items));
+
+  const base = items.reduce((s, it) => {
+    const costoUnitario = it.product.cost != null ? Number(it.product.cost) : 0;
+    return s + (Number(it.subtotal) - costoUnitario * it.quantity);
+  }, 0);
+  const advertencia = items.some((it) => it.product.cost == null)
+    ? "Algunos productos vendidos en este período no tienen costo capturado en el catálogo — se contaron como utilidad completa, lo que puede sobreestimar la comisión."
+    : null;
+
+  return { monto: Math.max(0, Math.round(base * rate * 100) / 100), advertencia };
+}
+
+/**
+ * Sugerencia de la comisión de EQUIPO (2026-09-17) — la segunda comisión que
+ * puede tener un empleado por liderar a los demás (ej. Jefe de Barberos,
+ * Staff.teamCommissionRate/teamCommissionBase). A diferencia de
+ * calcularComisionSugerida (que filtra por la cuenta oculta de UN
+ * empleado), esta se calcula sobre TODA la producción de la sucursal en el
+ * período — simplificación deliberada documentada en el schema: el sistema
+ * no modela un organigrama de "quién le reporta a quién", así que la
+ * comisión de equipo es, hoy, una comisión de sucursal.
+ */
+export async function calcularComisionEquipoSugerida(
+  tenantId: string,
+  branchId: string,
+  teamCommissionBase: BaseComision,
+  teamCommissionRate: number,
+  periodoInicio: Date,
+  periodoFin: Date
+): Promise<SugerenciaComision> {
+  const db = getTenantPrisma(tenantId);
+  const rate = teamCommissionRate / 100;
+  const rango = { gte: periodoInicio, lte: periodoFin };
+
+  if (teamCommissionBase === "VENTAS") {
+    const ventas = await db.sale.findMany({ where: { branchId, createdAt: rango }, select: { total: true } });
+    const base = ventas.reduce((s, v) => s + Number(v.total), 0);
+    return { monto: Math.round(base * rate * 100) / 100, advertencia: null };
+  }
+
+  if (teamCommissionBase === "REPARACIONES") {
+    const reparaciones = await db.repair.findMany({
+      where: { branchId, deliveredAt: rango, finalCost: { not: null } },
+      select: { finalCost: true },
+    });
+    const base = reparaciones.reduce((s, r) => s + Number(r.finalCost ?? 0), 0);
+    return { monto: Math.round(base * rate * 100) / 100, advertencia: null };
+  }
+
+  const items = await db.sale
+    .findMany({
+      where: { branchId, createdAt: rango },
       select: { items: { select: { subtotal: true, quantity: true, product: { select: { cost: true } } } } },
     })
     .then((sales) => sales.flatMap((s) => s.items));

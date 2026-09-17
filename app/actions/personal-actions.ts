@@ -2,11 +2,10 @@
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { PaymentScheme, CommissionBase, PaymentFrequency, StaffPaymentStatus } from "@prisma/client";
-import { calcularComisionSugerida } from "@/lib/personal-data";
+import { PaymentScheme, CommissionBase, PaymentFrequency, StaffPaymentMethod, StaffPaymentStatus } from "@prisma/client";
+import { calcularComisionSugerida, calcularComisionEquipoSugerida } from "@/lib/personal-data";
 import { resolverActor, type ActorResult } from "@/lib/actor";
-import { asegurarRolAsignable } from "@/lib/roles-server";
-import { esRolAsignable, type RolAsignable } from "@/lib/roles";
+import { validarTelefono, PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
 import { hashPin, pinValido } from "@/lib/staff-auth";
 import { randomUUID } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -30,12 +29,20 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * crearEmpleadoAction/editarEmpleadoAction ya no piden correo ni ofrecen
  * "vincular una cuenta existente" — todo empleado nuevo recibe
  * automáticamente una cuenta de atribución oculta (ver el comentario largo
- * en Staff.userId, schema.prisma) más un PIN de 4 dígitos y un Rol
- * (Gerente/Cajero/Técnico — "Administrador" nunca se ofrece aquí, ver
- * lib/roles.ts). Personal se queda 100% admin-only vía resolverActor(
- * tenantSlug, "personal") — ningún Rol asignable incluye "personal" en su
- * matriz de acceso, así que una sesión de PIN de personal nunca puede
- * llegar a estas acciones ni aunque conozca su URL/nombre exacto.
+ * en Staff.userId, schema.prisma) más un PIN de 4 dígitos y un Rol del
+ * catálogo de ESTE tenant (base o personalizado — "Administrador" nunca se
+ * ofrece aquí, ver ROL_ADMINISTRADOR en lib/roles.ts). Personal se queda
+ * 100% admin-only vía resolverActor(tenantSlug, "personal") — ningún rol
+ * asignable incluye "personal" en su matriz de acceso, así que una sesión
+ * de PIN de personal nunca puede llegar a estas acciones ni aunque conozca
+ * su URL/nombre exacto.
+ *
+ * Cambio 2026-09-17 (roles y esquemas de pago personalizables, a petición
+ * de Carlos): DatosEmpleado.roleName (un valor fijo) se volvió roleId (el
+ * id de cualquier Role del tenant, ver RolesManager.tsx) y se agregaron los
+ * campos de teléfono con código de país, método de pago, frecuencia de
+ * comisión separada de la del sueldo, destajo y comisión de equipo — ver el
+ * comentario largo en Staff (schema.prisma) para el detalle de cada uno.
  */
 
 type ResolverResult = ActorResult;
@@ -59,24 +66,62 @@ export interface DatosEmpleado {
   branchId: string;
   name: string;
   phone?: string | null;
+  phoneCountryCode?: string;
   position?: string | null;
-  roleName: RolAsignable;
+  // Rol personalizable del tenant (2026-09-17) — antes era un valor fijo
+  // ("Gerente"|"Cajero"|"Técnico"); ahora es el id de cualquier Role del
+  // catálogo de este negocio (base o personalizado, ver RolesManager.tsx /
+  // roles-server.ts). La pertenencia al tenant se valida en el servidor
+  // (validarRolDeTenant, abajo) — nunca se confía en el id que manda el
+  // cliente sin más.
+  roleId: string;
   paymentScheme: PaymentScheme;
   baseSalary: number;
   commissionRate: number;
   commissionBase: CommissionBase;
   paymentFrequency: PaymentFrequency;
+  // Frecuencia propia de la comisión, separada de paymentFrequency (que
+  // ahora significa específicamente "frecuencia del sueldo base") — caso
+  // real reportado por Carlos: sueldo fijo semanal + comisión mensual.
+  commissionFrequency: PaymentFrequency;
+  // Monto fijo por unidad (venta o reparación, según commissionBase) — solo
+  // relevante cuando paymentScheme = DESTAJO.
+  pieceRate: number;
+  // Segunda comisión, propia de quien lidera un equipo (ej. Jefe de
+  // Barberos) — se calcula sobre la producción de TODA la sucursal del
+  // empleado (simplificación deliberada, ver el comentario en
+  // Staff.teamCommissionBase, schema.prisma). null/0 = no lidera equipo.
+  teamCommissionRate: number;
+  teamCommissionBase: CommissionBase | null;
+  staffPaymentMethod: StaffPaymentMethod;
   clabe?: string | null;
 }
 
 function validarDatosEmpleado(d: DatosEmpleado): string | null {
   if (!d.branchId) return "Selecciona una sucursal";
   if (!d.name.trim()) return "El nombre es obligatorio";
-  if (!esRolAsignable(d.roleName)) return "Selecciona un rol válido";
+  if (!d.roleId) return "Selecciona un rol — determina a qué módulos tendrá acceso";
   if (!Number.isFinite(d.baseSalary) || d.baseSalary < 0) return "El sueldo base no es válido";
   if (!Number.isFinite(d.commissionRate) || d.commissionRate < 0 || d.commissionRate > 100) {
     return "El porcentaje de comisión debe estar entre 0 y 100";
   }
+  if (!Number.isFinite(d.pieceRate) || d.pieceRate < 0) return "El monto por destajo no es válido";
+  if (!Number.isFinite(d.teamCommissionRate) || d.teamCommissionRate < 0 || d.teamCommissionRate > 100) {
+    return "El porcentaje de comisión de equipo debe estar entre 0 y 100";
+  }
+  const errorTelefono = validarTelefono(d.phone, d.phoneCountryCode || PAIS_TELEFONO_DEFAULT);
+  if (errorTelefono) return errorTelefono;
+  if (d.staffPaymentMethod === StaffPaymentMethod.TRANSFERENCIA) {
+    const clabeDigitos = (d.clabe ?? "").replace(/\D/g, "");
+    if (clabeDigitos.length !== 18) return "La CLABE debe tener exactamente 18 dígitos";
+  }
+  return null;
+}
+
+/** Confirma que roleId sea de verdad un Role de ESTE tenant — Role no trae tenantId inyectado por getTenantPrisma (no está en la lista de tenantModels, ver lib/prisma.ts), así que aquí se valida a mano, mismo criterio que ya usaba asegurarRolAsignable/asegurarRolBase. */
+async function validarRolDeTenant(tenantId: string, roleId: string): Promise<string | null> {
+  const rol = await prisma.role.findUnique({ where: { id: roleId }, select: { tenantId: true } });
+  if (!rol || rol.tenantId !== tenantId) return "El rol seleccionado no existe o no pertenece a este negocio";
   return null;
 }
 
@@ -117,9 +162,9 @@ export async function crearEmpleadoAction(
       }
     }
 
-    // Idempotente — si "Gerente"/"Cajero"/"Técnico" ya existe como Role de
-    // este tenant lo reutiliza, si no lo crea (ver lib/roles-server.ts).
-    const rol = await asegurarRolAsignable(tenant.id, datos.roleName);
+    const errorRol = await validarRolDeTenant(tenant.id, datos.roleId);
+    if (errorRol) return { ok: false, error: errorRol };
+
     const { email, supabaseId } = credencialesInternas(tenantSlug);
     const pinHash = hashPin(pin);
 
@@ -144,15 +189,21 @@ export async function crearEmpleadoAction(
           userId: usuarioOculto.id,
           name: datos.name.trim(),
           phone: datos.phone?.trim() || null,
+          phoneCountryCode: datos.phoneCountryCode || PAIS_TELEFONO_DEFAULT,
           position: datos.position?.trim() || null,
-          roleId: rol.id,
+          roleId: datos.roleId,
           pinHash,
           paymentScheme: datos.paymentScheme,
           baseSalary: datos.baseSalary,
           commissionRate: datos.commissionRate,
           commissionBase: datos.commissionBase,
           paymentFrequency: datos.paymentFrequency,
-          clabe: datos.clabe?.trim() || null,
+          commissionFrequency: datos.commissionFrequency,
+          pieceRate: datos.pieceRate,
+          teamCommissionRate: datos.teamCommissionRate,
+          teamCommissionBase: datos.teamCommissionBase,
+          staffPaymentMethod: datos.staffPaymentMethod,
+          clabe: datos.staffPaymentMethod === StaffPaymentMethod.TRANSFERENCIA ? (datos.clabe ?? "").replace(/\D/g, "") : datos.clabe?.trim() || null,
         },
       });
     });
@@ -188,7 +239,8 @@ export async function editarEmpleadoAction(
     const branch = await db.branch.findUnique({ where: { id: datos.branchId }, select: { id: true } });
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
 
-    const rol = await asegurarRolAsignable(tenant.id, datos.roleName);
+    const errorRol = await validarRolDeTenant(tenant.id, datos.roleId);
+    if (errorRol) return { ok: false, error: errorRol };
 
     await db.staff.update({
       where: { id: staffId },
@@ -196,14 +248,20 @@ export async function editarEmpleadoAction(
         branchId: datos.branchId,
         name: datos.name.trim(),
         phone: datos.phone?.trim() || null,
+        phoneCountryCode: datos.phoneCountryCode || PAIS_TELEFONO_DEFAULT,
         position: datos.position?.trim() || null,
-        roleId: rol.id,
+        roleId: datos.roleId,
         paymentScheme: datos.paymentScheme,
         baseSalary: datos.baseSalary,
         commissionRate: datos.commissionRate,
         commissionBase: datos.commissionBase,
         paymentFrequency: datos.paymentFrequency,
-        clabe: datos.clabe?.trim() || null,
+        commissionFrequency: datos.commissionFrequency,
+        pieceRate: datos.pieceRate,
+        teamCommissionRate: datos.teamCommissionRate,
+        teamCommissionBase: datos.teamCommissionBase,
+        staffPaymentMethod: datos.staffPaymentMethod,
+        clabe: datos.staffPaymentMethod === StaffPaymentMethod.TRANSFERENCIA ? (datos.clabe ?? "").replace(/\D/g, "") : datos.clabe?.trim() || null,
       },
     });
 
@@ -440,7 +498,7 @@ export async function actualizarEstadoPagoAction(params: {
 }
 
 export type SugerenciaComisionResult =
-  | { ok: true; monto: number; advertencia: string | null }
+  | { ok: true; monto: number; advertencia: string | null; montoEquipo: number; advertenciaEquipo: string | null }
   | { ok: false; error: string };
 
 /**
@@ -467,7 +525,7 @@ export async function obtenerSugerenciaComisionAction(params: {
   try {
     const staff = await db.staff.findUnique({
       where: { id: staffId },
-      select: { userId: true, commissionBase: true, commissionRate: true },
+      select: { userId: true, branchId: true, commissionBase: true, commissionRate: true, teamCommissionBase: true, teamCommissionRate: true },
     });
     if (!staff) return { ok: false, error: "Empleado no encontrado" };
 
@@ -483,7 +541,27 @@ export async function obtenerSugerenciaComisionAction(params: {
       inicio,
       fin
     );
-    return { ok: true, monto: sugerencia.monto, advertencia: sugerencia.advertencia };
+
+    // Comisión de equipo (2026-09-17) — solo aplica si el empleado lidera un
+    // equipo (teamCommissionBase != null); se calcula sobre la producción de
+    // toda su sucursal, no solo la suya (ver el comentario en
+    // calcularComisionEquipoSugerida, lib/personal-data.ts).
+    let montoEquipo = 0;
+    let advertenciaEquipo: string | null = null;
+    if (staff.teamCommissionBase && Number(staff.teamCommissionRate) > 0) {
+      const sugerenciaEquipo = await calcularComisionEquipoSugerida(
+        tenant.id,
+        staff.branchId,
+        staff.teamCommissionBase as any,
+        Number(staff.teamCommissionRate),
+        inicio,
+        fin
+      );
+      montoEquipo = sugerenciaEquipo.monto;
+      advertenciaEquipo = sugerenciaEquipo.advertencia;
+    }
+
+    return { ok: true, monto: sugerencia.monto, advertencia: sugerencia.advertencia, montoEquipo, advertenciaEquipo };
   } catch (err: any) {
     console.error("Error al calcular sugerencia de comisión:", err);
     return { ok: false, error: "No se pudo calcular la comisión sugerida" };

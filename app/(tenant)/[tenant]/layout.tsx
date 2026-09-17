@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import TenantShell from "@/components/tenant/TenantShell";
 import { THEME_PRESETS, TENANT_THEME_ROOT_ID } from "@/lib/theme-presets";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
-import { moduloPermitido, primerModuloPermitido, type ModuloKey } from "@/lib/roles";
+import type { ModuloKey } from "@/lib/roles";
+import { modulosPermitidosParaRolPorNombre } from "@/lib/roles-server";
 import { getTenantLabels } from "@/lib/labels-server";
 import type { LabelDictionary } from "@/lib/labels";
 
@@ -69,7 +70,12 @@ export default async function TenantLayout({
   // abajo a un preset distinto de NEUTRAL_TECH no compilaría.
   let activePreset: Record<string, string> = THEME_PRESETS.NEUTRAL_TECH;
   let modo: "admin" | "staff" = "admin";
-  let roleNameParaNav: string | null = null;
+  // Módulos que el rol de la sesión de PIN tiene permitido — se calcula una
+  // sola vez más abajo (modo "staff") y se reusa tanto para el guard de ruta
+  // del servidor como para el prop que filtra el menú en TenantShell; en
+  // modo "admin" se queda en null, que TenantShell interpreta como "sin
+  // restricción" (ve todo el menú, igual que siempre).
+  let modulosPermitidosParaNav: ModuloKey[] | null = null;
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
@@ -137,7 +143,6 @@ export default async function TenantLayout({
     modo = "staff";
     userName = sesionPersonal.staffName;
     userRole = sesionPersonal.roleName;
-    roleNameParaNav = sesionPersonal.roleName;
 
     // Guard de ruta por rol: un empleado de PIN que cae en un módulo que su
     // rol no tiene permitido (ej. escribiendo /personal a mano en la URL)
@@ -146,11 +151,13 @@ export default async function TenantLayout({
     // servidor, la que de verdad importa. El pathname llega vía un header
     // que proxy.ts sella en cada request (los layouts de Server Components
     // no lo reciben directo, solo params/searchParams).
+    modulosPermitidosParaNav = await modulosPermitidosParaRolPorNombre(dbTenant.id, sesionPersonal.roleName);
+
     const headerList = await headers();
     const pathname = headerList.get("x-pathname") ?? "";
     const modulo = pathname.split("/").filter(Boolean)[1] as ModuloKey | undefined;
-    if (modulo && !moduloPermitido(sesionPersonal.roleName, modulo)) {
-      redirect(`/${tenant}/${primerModuloPermitido(sesionPersonal.roleName)}`);
+    if (modulo && !modulosPermitidosParaNav.includes(modulo)) {
+      redirect(`/${tenant}/${modulosPermitidosParaNav[0] ?? "dashboard"}`);
     }
   }
 
@@ -178,7 +185,7 @@ export default async function TenantLayout({
         userName={userName}
         userRole={userRole}
         modo={modo}
-        roleName={roleNameParaNav}
+        modulosPermitidos={modulosPermitidosParaNav}
         labels={labels}
         modulosInactivos={modulosInactivos}
         logoUrl={dbTenant?.logo ?? null}

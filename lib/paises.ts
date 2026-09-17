@@ -27,11 +27,25 @@ export interface PaisTelefono {
   code: string;
   name: string;
   flag: string;
+  /**
+   * Cantidad exacta de dígitos que debe tener el número nacional en este
+   * país, sin el código de país (2026-09-17, a petición de Carlos: el campo
+   * de teléfono era texto libre y aceptaba más de los 10 dígitos que exige
+   * México). Dato por país en vez de una constante fija de "siempre 10" para
+   * que agregar un país nuevo con otra longitud sea solo agregar una entrada
+   * aquí, sin tocar la validación.
+   *
+   * México: 10 dígitos — el prefijo celular "+52 1" se eliminó en agosto de
+   * 2019, así que hoy fijo y móvil comparten el mismo formato de 10 dígitos
+   * (fuente: Wikipedia, "Telephone numbers in Mexico").
+   * Estados Unidos: 10 dígitos (código de área + número, plan NANP).
+   */
+  digits: number;
 }
 
 export const PAISES_TELEFONO: PaisTelefono[] = [
-  { code: "+52", name: "México", flag: "🇲🇽" },
-  { code: "+1", name: "Estados Unidos", flag: "🇺🇸" },
+  { code: "+52", name: "México", flag: "🇲🇽", digits: 10 },
+  { code: "+1", name: "Estados Unidos", flag: "🇺🇸", digits: 10 },
 ];
 
 export const PAIS_TELEFONO_DEFAULT = "+52";
@@ -64,4 +78,21 @@ export function telefonoWhatsapp(phone: string | null | undefined, countryCode: 
   if (!digitos) return null;
   const codigo = (countryCode || PAIS_TELEFONO_DEFAULT).replace(/\D/g, "");
   return `${codigo}${digitos}`;
+}
+
+/**
+ * Valida que un teléfono tenga exactamente los dígitos que exige su país
+ * (PaisTelefono.digits) — null/vacío se considera válido aquí a propósito
+ * (el teléfono sigue siendo opcional en Customer y Staff; quien exige que no
+ * esté vacío lo revisa aparte). Regresa un mensaje de error listo para
+ * mostrar, o null si es válido.
+ */
+export function validarTelefono(phone: string | null | undefined, countryCode: string | null | undefined): string | null {
+  if (!phone?.trim()) return null;
+  const digitos = phone.replace(/\D/g, "");
+  const pais = paisPorCodigo(countryCode);
+  if (digitos.length !== pais.digits) {
+    return `El teléfono de ${pais.name} debe tener ${pais.digits} dígitos`;
+  }
+  return null;
 }

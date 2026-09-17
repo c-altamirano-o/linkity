@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getPersonalData } from "@/lib/personal-data";
 import { getTenantLabels } from "@/lib/labels-server";
+import { listarRolesTenant } from "@/lib/roles-server";
+import { puestosSugeridos } from "@/lib/puestos-rubro";
 import PersonalClient from "./PersonalClient";
 
 export default async function PersonalPage({
@@ -24,10 +26,16 @@ export default async function PersonalPage({
 
   if (!tenant) notFound();
 
-  const [data, labels] = await Promise.all([
+  // roles: catálogo de roles asignables de este negocio (base + los que el
+  // propio admin haya creado desde "Roles y permisos" — ver
+  // lib/roles-server.ts). puestos: solo texto sugerido para el <datalist>
+  // de "Puesto", no tiene ningún efecto en permisos (ver lib/puestos-rubro.ts).
+  const [data, labels, roles] = await Promise.all([
     getPersonalData(tenant.id),
     getTenantLabels(tenant.id, tenant.businessType),
+    listarRolesTenant(tenant.id),
   ]);
+  const puestos = puestosSugeridos(tenant.businessType);
 
   return (
     <PersonalClient
@@ -35,6 +43,8 @@ export default async function PersonalPage({
       labels={labels}
       branches={tenant.branches}
       tenantSlug={tenantSlug}
+      roles={roles}
+      puestosSugeridos={puestos}
     />
   );
 }

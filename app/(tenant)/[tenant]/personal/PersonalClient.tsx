@@ -6,14 +6,16 @@ import {
   Search, Plus, Users, UserCheck, Clock, Wallet, LogIn, LogOut, Pencil,
   Banknote, X, Check, Ban, KeyRound, Shield,
 } from "lucide-react";
-import type { PersonalData, EmpleadoUI, EsquemaPago, BaseComision, Frecuencia, EstadoPago } from "@/lib/personal-data";
+import type { PersonalData, EmpleadoUI, EsquemaPago, BaseComision, Frecuencia, EstadoPago, MetodoPago } from "@/lib/personal-data";
 import { label, type LabelDictionary } from "@/lib/labels";
-import { ROLES_ASIGNABLES, ROLES_DESCRIPCION, type RolAsignable } from "@/lib/roles";
+import type { RolTenantUI } from "@/lib/roles";
+import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, validarTelefono } from "@/lib/paises";
 import {
   crearEmpleadoAction, editarEmpleadoAction, cambiarEstadoEmpleadoAction,
   registrarAsistenciaAction, generarPagoAction, actualizarEstadoPagoAction,
   obtenerSugerenciaComisionAction, restablecerPinAction, type DatosEmpleado,
 } from "@/app/actions/personal-actions";
+import RolesManager from "./RolesManager";
 
 interface BranchOption {
   id: string;
@@ -25,11 +27,18 @@ interface PersonalClientProps {
   labels: LabelDictionary;
   branches: BranchOption[];
   tenantSlug: string;
+  // Catálogo de roles asignables de este negocio (base + personalizados) —
+  // ver lib/roles-server.ts. puestosSugeridos alimenta solo un <datalist> de
+  // autocompletado para "Puesto" (lib/puestos-rubro.ts), sin ningún efecto
+  // en permisos.
+  roles: RolTenantUI[];
+  puestosSugeridos: string[];
 }
 
-const ESQUEMA_TEXTO: Record<EsquemaPago, string> = { FIJO: "Sueldo fijo", COMISION: "Solo comisión", MIXTO: "Fijo + comisión" };
+const ESQUEMA_TEXTO: Record<EsquemaPago, string> = { FIJO: "Sueldo fijo", COMISION: "Solo comisión", MIXTO: "Fijo + comisión", DESTAJO: "Destajo (por unidad)" };
 const COMISION_BASE_TEXTO: Record<BaseComision, string> = { VENTAS: "Ventas", REPARACIONES: "Reparaciones", UTILIDAD: "Utilidad" };
-const FRECUENCIA_TEXTO: Record<Frecuencia, string> = { SEMANAL: "Semanal", QUINCENAL: "Quincenal", MENSUAL: "Mensual" };
+const FRECUENCIA_TEXTO: Record<Frecuencia, string> = { SEMANAL: "Semanal", CATORCENAL: "Catorcenal", QUINCENAL: "Quincenal", MENSUAL: "Mensual" };
+const METODO_PAGO_TEXTO: Record<MetodoPago, string> = { EFECTIVO: "Efectivo", TRANSFERENCIA: "Transferencia", CHEQUE: "Cheque", TARJETA_NOMINA: "Tarjeta de nómina", OTRO: "Otro" };
 const ESTADO_PAGO_TEXTO: Record<EstadoPago, string> = { PENDING: "Pendiente", PAID: "Pagado", CANCELLED: "Cancelado" };
 const ESTADO_PAGO_BADGE: Record<EstadoPago, string> = {
   PENDING: "bg-amber-50 text-amber-700",
@@ -53,45 +62,51 @@ function periodoPorDefecto(frecuencia: Frecuencia): { inicio: string; fin: strin
   return { inicio: inicioDate.toISOString().slice(0, 10), fin: hoy.toISOString().slice(0, 10) };
 }
 
-function esRolAsignableValor(valor: string): valor is RolAsignable {
-  return (ROLES_ASIGNABLES as readonly string[]).includes(valor);
-}
-
 interface FormEmpleado {
   branchId: string;
   name: string;
   phone: string;
+  phoneCountryCode: string;
   position: string;
-  roleName: RolAsignable | "";
+  roleId: string;
   pin: string;
   paymentScheme: EsquemaPago;
   baseSalary: string;
   commissionRate: string;
   commissionBase: BaseComision;
   paymentFrequency: Frecuencia;
+  commissionFrequency: Frecuencia;
+  pieceRate: string;
+  teamCommissionRate: string;
+  teamCommissionBase: BaseComision | "";
+  staffPaymentMethod: MetodoPago;
   clabe: string;
 }
 
 function formVacio(branchId: string): FormEmpleado {
   return {
-    branchId, name: "", phone: "", position: "", roleName: "", pin: "",
+    branchId, name: "", phone: "", phoneCountryCode: PAIS_TELEFONO_DEFAULT, position: "", roleId: "", pin: "",
     paymentScheme: "FIJO", baseSalary: "", commissionRate: "0", commissionBase: "VENTAS",
-    paymentFrequency: "QUINCENAL", clabe: "",
+    paymentFrequency: "QUINCENAL", commissionFrequency: "QUINCENAL", pieceRate: "0",
+    teamCommissionRate: "0", teamCommissionBase: "", staffPaymentMethod: "EFECTIVO", clabe: "",
   };
 }
 
 function formDeEmpleado(e: EmpleadoUI): FormEmpleado {
   return {
-    branchId: e.branchId, name: e.name, phone: e.phone ?? "", position: e.position ?? "",
-    roleName: e.roleName && esRolAsignableValor(e.roleName) ? e.roleName : "", pin: "",
+    branchId: e.branchId, name: e.name, phone: e.phone ?? "", phoneCountryCode: e.phoneCountryCode, position: e.position ?? "",
+    roleId: e.roleId ?? "", pin: "",
     paymentScheme: e.esquemaPago, baseSalary: String(e.sueldoBase), commissionRate: String(e.comisionRate),
-    commissionBase: e.comisionBase, paymentFrequency: e.frecuencia, clabe: e.clabe ?? "",
+    commissionBase: e.comisionBase, paymentFrequency: e.frecuencia, commissionFrequency: e.frecuenciaComision,
+    pieceRate: String(e.montoDestajo), teamCommissionRate: String(e.comisionEquipoRate),
+    teamCommissionBase: e.comisionEquipoBase ?? "", staffPaymentMethod: e.metodoPago, clabe: e.clabe ?? "",
   };
 }
 
-export default function PersonalClient({ data, labels, branches, tenantSlug }: PersonalClientProps) {
+export default function PersonalClient({ data, labels, branches, tenantSlug, roles, puestosSugeridos }: PersonalClientProps) {
   const router = useRouter();
   const { empleados } = data;
+  const [modalRoles, setModalRoles] = useState(false);
 
   const [busqueda, setBusqueda] = useState("");
   const [filtroSucursal, setFiltroSucursal] = useState("todas");
@@ -175,28 +190,44 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
   const handleGuardarEmpleado = () => {
     if (!form.name.trim()) { setFormError("El nombre es obligatorio"); return; }
     if (!form.branchId) { setFormError("Selecciona una sucursal"); return; }
-    if (!form.roleName) { setFormError("Selecciona un rol — determina a qué módulos tendrá acceso"); return; }
+    if (!form.roleId) { setFormError("Selecciona un rol — determina a qué módulos tendrá acceso"); return; }
     if (modalEmpleado?.modo === "crear" && !/^\d{4}$/.test(form.pin)) {
       setFormError("Asigna un PIN de inicio de 4 dígitos");
       return;
     }
     const baseSalary = parseFloat(form.baseSalary || "0");
     const commissionRate = parseFloat(form.commissionRate || "0");
+    const pieceRate = parseFloat(form.pieceRate || "0");
+    const teamCommissionRate = parseFloat(form.teamCommissionRate || "0");
     if (!Number.isFinite(baseSalary) || baseSalary < 0) { setFormError("El sueldo base no es válido"); return; }
     if (!Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 100) { setFormError("El % de comisión debe estar entre 0 y 100"); return; }
+    if (!Number.isFinite(pieceRate) || pieceRate < 0) { setFormError("El monto por destajo no es válido"); return; }
+    if (!Number.isFinite(teamCommissionRate) || teamCommissionRate < 0 || teamCommissionRate > 100) { setFormError("El % de comisión de equipo debe estar entre 0 y 100"); return; }
+    const errorTelefono = validarTelefono(form.phone, form.phoneCountryCode);
+    if (errorTelefono) { setFormError(errorTelefono); return; }
+    if (form.staffPaymentMethod === "TRANSFERENCIA" && form.clabe.replace(/\D/g, "").length !== 18) {
+      setFormError("La CLABE debe tener exactamente 18 dígitos");
+      return;
+    }
     setFormError(null);
 
     const datos: DatosEmpleado = {
       branchId: form.branchId,
       name: form.name,
       phone: form.phone || null,
+      phoneCountryCode: form.phoneCountryCode,
       position: form.position || null,
-      roleName: form.roleName as RolAsignable,
+      roleId: form.roleId,
       paymentScheme: form.paymentScheme as any,
       baseSalary,
       commissionRate,
       commissionBase: form.commissionBase as any,
       paymentFrequency: form.paymentFrequency as any,
+      commissionFrequency: form.commissionFrequency as any,
+      pieceRate,
+      teamCommissionRate,
+      teamCommissionBase: (form.teamCommissionBase || null) as any,
+      staffPaymentMethod: form.staffPaymentMethod as any,
       clabe: form.clabe || null,
     };
 
@@ -255,8 +286,10 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
     obtenerSugerenciaComisionAction({ tenantSlug, staffId, periodoInicio: inicio, periodoFin: fin })
       .then((res) => {
         if (res.ok) {
-          setPagoComision(String(res.monto));
-          setPagoAdvertencia(res.advertencia);
+          // Suma la comisión individual con la de equipo (si el empleado
+          // lidera uno) — un solo monto editable, igual que antes.
+          setPagoComision(String(res.monto + res.montoEquipo));
+          setPagoAdvertencia([res.advertencia, res.advertenciaEquipo].filter(Boolean).join(" ") || null);
         } else {
           setPagoAdvertencia(res.error);
         }
@@ -369,10 +402,16 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                 ))}
               </div>
             </div>
-            <button onClick={abrirNuevoEmpleado}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium rounded-lg">
-              <Plus className="w-3.5 h-3.5" /> Nuevo empleado
-            </button>
+            <div className="flex gap-1.5">
+              <button onClick={abrirNuevoEmpleado}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium rounded-lg">
+                <Plus className="w-3.5 h-3.5" /> Nuevo empleado
+              </button>
+              <button onClick={() => setModalRoles(true)} title="Roles y permisos"
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted text-xs font-medium rounded-lg text-foreground">
+                <Shield className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -470,16 +509,25 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                   <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">DATOS DEL EMPLEADO</p>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { label: "Teléfono", value: seleccionado.phone || "Sin registrar" },
+                      { label: "Teléfono", value: seleccionado.phone ? `${seleccionado.phoneCountryCode} ${seleccionado.phone}` : "Sin registrar" },
                       { label: "Esquema de pago", value: ESQUEMA_TEXTO[seleccionado.esquemaPago] },
                       { label: "Sueldo base", value: formatMXN(seleccionado.sueldoBase), color: "text-primary" },
-                      ...(seleccionado.esquemaPago !== "FIJO"
-                        ? [
-                            { label: "Comisión", value: `${seleccionado.comisionRate}% sobre ${COMISION_BASE_TEXTO[seleccionado.comisionBase].toLowerCase()}` },
-                          ]
+                      ...(seleccionado.esquemaPago === "DESTAJO"
+                        ? [{ label: "Destajo", value: `${formatMXN(seleccionado.montoDestajo)} por ${COMISION_BASE_TEXTO[seleccionado.comisionBase].toLowerCase()}` }]
+                        : seleccionado.esquemaPago !== "FIJO"
+                        ? [{ label: "Comisión", value: `${seleccionado.comisionRate}% sobre ${COMISION_BASE_TEXTO[seleccionado.comisionBase].toLowerCase()}` }]
                         : []),
-                      { label: "Frecuencia de pago", value: FRECUENCIA_TEXTO[seleccionado.frecuencia] },
-                      { label: "CLABE", value: seleccionado.clabe || "Sin registrar" },
+                      ...(seleccionado.esquemaPago !== "FIJO"
+                        ? [{ label: "Frecuencia de comisión", value: FRECUENCIA_TEXTO[seleccionado.frecuenciaComision] }]
+                        : []),
+                      ...(seleccionado.comisionEquipoBase
+                        ? [{ label: "Comisión de equipo", value: `${seleccionado.comisionEquipoRate}% sobre ${COMISION_BASE_TEXTO[seleccionado.comisionEquipoBase].toLowerCase()} de la sucursal` }]
+                        : []),
+                      { label: "Frecuencia del sueldo", value: FRECUENCIA_TEXTO[seleccionado.frecuencia] },
+                      { label: "Método de pago", value: METODO_PAGO_TEXTO[seleccionado.metodoPago] },
+                      ...(seleccionado.metodoPago === "TRANSFERENCIA"
+                        ? [{ label: "CLABE", value: seleccionado.clabe || "Sin registrar" }]
+                        : []),
                       { label: "Ingreso", value: formatFecha(seleccionado.hiredAt) },
                     ].map((f) => (
                       <div key={f.label} className="bg-muted rounded-lg p-2.5">
@@ -571,37 +619,51 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                 </div>
                 <div>
                   <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PUESTO</label>
-                  <input type="text" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
+                  <input type="text" list="puestos-sugeridos-datalist" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                  <datalist id="puestos-sugeridos-datalist">
+                    {puestosSugeridos.map((p) => <option key={p} value={p} />)}
+                  </datalist>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PAÍS</label>
+                  <select value={form.phoneCountryCode} onChange={(e) => setForm({ ...form, phoneCountryCode: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                    {PAISES_TELEFONO.map((p) => <option key={p.code} value={p.code}>{p.flag} {p.code}</option>)}
+                  </select>
+                </div>
+                <div className="col-span-2">
                   <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">TELÉFONO</label>
                   <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
-                {branches.length > 1 && (
-                  <div>
-                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
-                    <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
-                      {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
-                  </div>
-                )}
               </div>
 
+              {branches.length > 1 && (
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
+                  <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              )}
+
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">ROL — DETERMINA SU ACCESO AL SISTEMA</label>
-                <select value={form.roleName} onChange={(e) => setForm({ ...form, roleName: e.target.value as RolAsignable })}
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">ROL — DETERMINA SU ACCESO AL SISTEMA</label>
+                  <button type="button" onClick={() => setModalRoles(true)} className="text-[10px] text-primary hover:underline">Roles y permisos</button>
+                </div>
+                <select value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                   <option value="">Selecciona un rol...</option>
-                  {ROLES_ASIGNABLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                  {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
-                {form.roleName && (
-                  <p className="text-[10px] text-muted-foreground mt-1">{ROLES_DESCRIPCION[form.roleName as RolAsignable]}</p>
+                {form.roleId && (
+                  <p className="text-[10px] text-muted-foreground mt-1">{roles.find((r) => r.id === form.roleId)?.description}</p>
                 )}
               </div>
 
@@ -623,17 +685,26 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                   <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">ESQUEMA DE PAGO</label>
                   <select value={form.paymentScheme} onChange={(e) => setForm({ ...form, paymentScheme: e.target.value as EsquemaPago })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
-                    {(["FIJO", "COMISION", "MIXTO"] as EsquemaPago[]).map((s) => <option key={s} value={s}>{ESQUEMA_TEXTO[s]}</option>)}
+                    {(["FIJO", "COMISION", "MIXTO", "DESTAJO"] as EsquemaPago[]).map((s) => <option key={s} value={s}>{ESQUEMA_TEXTO[s]}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">FRECUENCIA</label>
-                  <select value={form.paymentFrequency} onChange={(e) => setForm({ ...form, paymentFrequency: e.target.value as Frecuencia })}
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MÉTODO DE PAGO</label>
+                  <select value={form.staffPaymentMethod} onChange={(e) => setForm({ ...form, staffPaymentMethod: e.target.value as MetodoPago })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
-                    {(["SEMANAL", "QUINCENAL", "MENSUAL"] as Frecuencia[]).map((f) => <option key={f} value={f}>{FRECUENCIA_TEXTO[f]}</option>)}
+                    {(["EFECTIVO", "TRANSFERENCIA", "CHEQUE", "TARJETA_NOMINA", "OTRO"] as MetodoPago[]).map((m) => <option key={m} value={m}>{METODO_PAGO_TEXTO[m]}</option>)}
                   </select>
                 </div>
               </div>
+
+              {form.staffPaymentMethod === "TRANSFERENCIA" && (
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">CLABE (18 DÍGITOS)</label>
+                  <input type="text" inputMode="numeric" maxLength={18} value={form.clabe}
+                    onChange={(e) => setForm({ ...form, clabe: e.target.value.replace(/\D/g, "").slice(0, 18) })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -642,13 +713,33 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">CLABE</label>
-                  <input type="text" value={form.clabe} onChange={(e) => setForm({ ...form, clabe: e.target.value })}
-                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">FRECUENCIA DEL SUELDO</label>
+                  <select value={form.paymentFrequency} onChange={(e) => setForm({ ...form, paymentFrequency: e.target.value as Frecuencia })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                    {(["SEMANAL", "CATORCENAL", "QUINCENAL", "MENSUAL"] as Frecuencia[]).map((f) => <option key={f} value={f}>{FRECUENCIA_TEXTO[f]}</option>)}
+                  </select>
                 </div>
               </div>
 
-              {form.paymentScheme !== "FIJO" && (
+              {form.paymentScheme === "DESTAJO" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MONTO POR UNIDAD</label>
+                    <input type="number" value={form.pieceRate} onChange={(e) => setForm({ ...form, pieceRate: e.target.value })} placeholder="$0"
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">POR CADA</label>
+                    <select value={form.commissionBase} onChange={(e) => setForm({ ...form, commissionBase: e.target.value as BaseComision })}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                      <option value="VENTAS">Venta</option>
+                      <option value="REPARACIONES">Reparación entregada</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {(form.paymentScheme === "COMISION" || form.paymentScheme === "MIXTO") && (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN</label>
@@ -664,6 +755,42 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
                   </div>
                 </div>
               )}
+
+              {form.paymentScheme !== "FIJO" && (
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">FRECUENCIA DE LA COMISIÓN</label>
+                  <select value={form.commissionFrequency} onChange={(e) => setForm({ ...form, commissionFrequency: e.target.value as Frecuencia })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                    {(["SEMANAL", "CATORCENAL", "QUINCENAL", "MENSUAL"] as Frecuencia[]).map((f) => <option key={f} value={f}>{FRECUENCIA_TEXTO[f]}</option>)}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground mt-1">Puede ser distinta a la del sueldo — ej. sueldo semanal + comisión mensual.</p>
+                </div>
+              )}
+
+              <div className="border-t border-border pt-3">
+                <label className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground tracking-widest">
+                  <input type="checkbox" checked={form.teamCommissionBase !== ""}
+                    onChange={(e) => setForm({ ...form, teamCommissionBase: e.target.checked ? "VENTAS" : "", teamCommissionRate: e.target.checked ? form.teamCommissionRate : "0" })} />
+                  ¿LIDERA UN EQUIPO? (COMISIÓN EXTRA)
+                </label>
+                <p className="text-[10px] text-muted-foreground mt-1">Ej. Jefe de Barberos: cobra su comisión individual de arriba más esta comisión extra, calculada sobre la producción de toda su sucursal.</p>
+                {form.teamCommissionBase !== "" && (
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div>
+                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN DE EQUIPO</label>
+                      <input type="number" value={form.teamCommissionRate} onChange={(e) => setForm({ ...form, teamCommissionRate: e.target.value })}
+                        className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SOBRE (SUCURSAL)</label>
+                      <select value={form.teamCommissionBase} onChange={(e) => setForm({ ...form, teamCommissionBase: e.target.value as BaseComision })}
+                        className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                        {(["VENTAS", "REPARACIONES", "UTILIDAD"] as BaseComision[]).map((c) => <option key={c} value={c}>{COMISION_BASE_TEXTO[c]}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button onClick={() => setModalEmpleado(null)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
@@ -771,6 +898,15 @@ export default function PersonalClient({ data, labels, branches, tenantSlug }: P
             </div>
           </div>
         </div>
+      )}
+
+      {modalRoles && (
+        <RolesManager
+          tenantSlug={tenantSlug}
+          rolesIniciales={roles}
+          onCerrar={() => setModalRoles(false)}
+          onCambio={() => router.refresh()}
+        />
       )}
     </div>
   );
