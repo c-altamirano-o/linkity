@@ -1,8 +1,9 @@
 "use server";
 
-import { prisma, getTenantPrisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { resolverActor, type ActorResult } from "@/lib/actor";
+import { PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
 
 /**
  * Server Actions del módulo Clientes (M7). Mismo criterio de siempre: el
@@ -10,36 +11,28 @@ import { revalidatePath } from "next/cache";
  * y se resuelve el tenant/usuario antes de tocar la base de datos. Antes de
  * este cambio no existía ningún actions.ts para este módulo — la pantalla
  * era de solo lectura de datos inventados.
+ *
+ * resolverTenantYUsuario ahora delega en resolverActor (lib/actor.ts), que
+ * acepta tanto una cuenta real (Supabase Auth) como una sesión de PIN de
+ * personal (M11) — Cajero y Técnico tienen "clientes" en su matriz de
+ * acceso (lib/roles.ts), así que un empleado con PIN sí puede dar de alta
+ * o editar un cliente desde aquí.
  */
 
-type ResolverResult =
-  | { ok: true; tenant: { id: string }; dbUser: { id: string; tenantId: string } }
-  | { ok: false; error: string };
+type ResolverResult = ActorResult;
 
 async function resolverTenantYUsuario(tenantSlug: string): Promise<ResolverResult> {
-  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
-  if (!tenant) return { ok: false, error: "Negocio no encontrado" };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Sesión no válida, vuelve a iniciar sesión" };
-
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    select: { id: true, tenantId: true },
-  });
-  if (!dbUser || dbUser.tenantId !== tenant.id) {
-    return { ok: false, error: "No tienes acceso a este negocio" };
-  }
-
-  return { ok: true, tenant, dbUser };
+  return resolverActor(tenantSlug, "clientes");
 }
 
 export interface DatosCliente {
   name: string;
   phone?: string | null;
+  // Código de país del teléfono (ej. "+52", "+1") — ver lib/paises.ts. Se
+  // guarda por separado del número (no concatenado en `phone`) para poder
+  // mostrar el selector ya preseleccionado al editar, y para construir el
+  // link de WhatsApp correcto sin tener que parsear el string.
+  phoneCountryCode?: string | null;
   email?: string | null;
   rfc?: string | null;
   address?: string | null;
@@ -71,6 +64,7 @@ export async function crearClienteAction(
         tenantId: tenant.id,
         name: datos.name.trim(),
         phone: datos.phone?.trim() || null,
+        phoneCountryCode: datos.phoneCountryCode?.trim() || PAIS_TELEFONO_DEFAULT,
         email: datos.email?.trim() || null,
         rfc: datos.rfc?.trim() || null,
         address: datos.address?.trim() || null,
@@ -110,6 +104,7 @@ export async function editarClienteAction(
       data: {
         name: datos.name.trim(),
         phone: datos.phone?.trim() || null,
+        phoneCountryCode: datos.phoneCountryCode?.trim() || PAIS_TELEFONO_DEFAULT,
         email: datos.email?.trim() || null,
         rfc: datos.rfc?.trim() || null,
         address: datos.address?.trim() || null,

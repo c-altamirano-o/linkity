@@ -9,6 +9,7 @@ import {
 import type { ClienteUI, EstadoReparacionCliente, EstadoVentaCliente } from "@/lib/clientes-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearClienteAction, editarClienteAction, type DatosCliente } from "@/app/actions/clientes-actions";
+import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp, formatoTelefono } from "@/lib/paises";
 
 interface ClientesClientProps {
   clientes: ClienteUI[];
@@ -87,18 +88,15 @@ function tiempoRelativo(iso: string | null): string {
   return formatFechaCorta(iso);
 }
 
-function whatsappHref(phone: string | null): string | null {
-  if (!phone) return null;
-  const digitos = phone.replace(/\D/g, "");
-  if (!digitos) return null;
-  const numero = digitos.length === 10 ? `52${digitos}` : digitos;
-  return `https://wa.me/${numero}`;
+function whatsappHref(phone: string | null, countryCode: string | null): string | null {
+  const numero = telefonoWhatsapp(phone, countryCode);
+  return numero ? `https://wa.me/${numero}` : null;
 }
 
 const filtrosTabs = ["Todo", "Compras", "Reparaciones"] as const;
 type FiltroHistorial = (typeof filtrosTabs)[number];
 
-const FORM_VACIO: DatosCliente = { name: "", phone: "", email: "", rfc: "", address: "" };
+const FORM_VACIO: DatosCliente = { name: "", phone: "", phoneCountryCode: PAIS_TELEFONO_DEFAULT, email: "", rfc: "", address: "" };
 
 export default function ClientesClient({ clientes, labels, tenantSlug }: ClientesClientProps) {
   const router = useRouter();
@@ -135,7 +133,14 @@ export default function ClientesClient({ clientes, labels, tenantSlug }: Cliente
 
   function abrirModalEditar(c: ClienteUI) {
     setModoModal("editar");
-    setForm({ name: c.name, phone: c.phone ?? "", email: c.email ?? "", rfc: c.rfc ?? "", address: c.address ?? "" });
+    setForm({
+      name: c.name,
+      phone: c.phone ?? "",
+      phoneCountryCode: c.phoneCountryCode || PAIS_TELEFONO_DEFAULT,
+      email: c.email ?? "",
+      rfc: c.rfc ?? "",
+      address: c.address ?? "",
+    });
     setFormError(null);
     setModalAbierto(true);
   }
@@ -185,13 +190,26 @@ export default function ClientesClient({ clientes, labels, tenantSlug }: Cliente
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Teléfono</label>
-            <input
-              type="text"
-              value={form.phone ?? ""}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              placeholder="10 dígitos"
-            />
+            <div className="mt-1 flex gap-2">
+              <select
+                value={form.phoneCountryCode || PAIS_TELEFONO_DEFAULT}
+                onChange={(e) => setForm({ ...form, phoneCountryCode: e.target.value })}
+                className="px-2 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary flex-shrink-0"
+              >
+                {PAISES_TELEFONO.map((p) => (
+                  <option key={p.code} value={p.code}>
+                    {p.flag} {p.code}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={form.phone ?? ""}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                className="flex-1 min-w-0 px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                placeholder="Número"
+              />
+            </div>
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Correo electrónico</label>
@@ -331,7 +349,7 @@ export default function ClientesClient({ clientes, labels, tenantSlug }: Cliente
                     <p className="text-xs font-medium text-foreground">{c.name}</p>
                     <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
                       <Phone className="w-2.5 h-2.5 flex-shrink-0" />
-                      <span className="truncate">{c.phone ?? "Sin teléfono"}</span>
+                      <span className="truncate">{formatoTelefono(c.phone, c.phoneCountryCode) ?? "Sin teléfono"}</span>
                       <span className="text-muted-foreground/50 flex-shrink-0">·</span>
                       <span className="flex-shrink-0">{c.visitas} {c.visitas === 1 ? "visita" : "visitas"}</span>
                     </div>
@@ -376,7 +394,7 @@ export default function ClientesClient({ clientes, labels, tenantSlug }: Cliente
                     <p className="text-sm sm:text-[15px] font-semibold text-foreground">{seleccionado.name}</p>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                       <Phone className="w-3 h-3 flex-shrink-0" />
-                      <span>{seleccionado.phone ?? "Sin teléfono"}</span>
+                      <span>{formatoTelefono(seleccionado.phone, seleccionado.phoneCountryCode) ?? "Sin teléfono"}</span>
                     </div>
                   </div>
                 </div>
@@ -388,9 +406,9 @@ export default function ClientesClient({ clientes, labels, tenantSlug }: Cliente
                     <Edit className="w-3 h-3" />
                     <span className="hidden sm:inline">Editar</span>
                   </button>
-                  {whatsappHref(seleccionado.phone) && (
+                  {whatsappHref(seleccionado.phone, seleccionado.phoneCountryCode) && (
                     <a
-                      href={whatsappHref(seleccionado.phone)!}
+                      href={whatsappHref(seleccionado.phone, seleccionado.phoneCountryCode)!}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#25D366] hover:bg-[#22c35e] text-white rounded-lg text-xs font-medium transition-colors"

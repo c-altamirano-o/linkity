@@ -39,6 +39,7 @@ export interface ClienteUI {
   id: string;
   name: string;
   phone: string | null;
+  phoneCountryCode: string;
   email: string | null;
   rfc: string | null;
   address: string | null;
@@ -131,6 +132,7 @@ export async function getClientesData(tenantId: string): Promise<ClienteUI[]> {
       id: c.id,
       name: c.name,
       phone: c.phone,
+      phoneCountryCode: c.phoneCountryCode,
       email: c.email,
       rfc: c.rfc,
       address: c.address,
