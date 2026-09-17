@@ -13,7 +13,7 @@ export default async function ConfiguracionPage({
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
-    select: { id: true, themePreset: true, businessType: true },
+    select: { id: true, themePreset: true, businessType: true, logo: true },
   });
 
   if (!tenant) notFound();
@@ -40,6 +40,7 @@ export default async function ConfiguracionPage({
       businessTypeInicial={tenant.businessType}
       modulos={modulosPersonalizables}
       recomendadosOff={recomendadosOff}
+      logoInicial={tenant.logo}
     />
   );
 }

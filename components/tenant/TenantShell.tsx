@@ -75,6 +75,7 @@ export default function TenantShell({
   roleName = null,
   labels = DEFAULT_LABELS,
   modulosInactivos = [],
+  logoUrl = null,
 }: {
   children: React.ReactNode;
   tenant: string;
@@ -97,6 +98,13 @@ export default function TenantShell({
   // como para uno que un negocio nunca desactivó, así que ningún tenant ya
   // en producción antes de este cambio pierde un link de golpe.
   modulosInactivos?: string[];
+  // Logo propio del negocio (2026-09-17) — el de Linkity en el sidebar de
+  // arriba NUNCA se reemplaza (esa es la marca de la plataforma, igual para
+  // todos los tenants); este es un logo aparte, distinto por negocio, que
+  // se muestra en el área del encabezado superior que antes quedaba vacía
+  // en pantallas grandes (a la izquierda, junto a la campana/usuario) —
+  // null mientras el negocio no haya subido uno (app/actions/logo-actions.ts).
+  logoUrl?: string | null;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -282,16 +290,61 @@ export default function TenantShell({
       <main className="flex-1 flex flex-col overflow-hidden min-w-0">
 
         <div className="bg-card border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               className="lg:hidden p-1.5 rounded-lg hover:bg-muted transition-colors"
               onClick={() => setMobileOpen(true)}
             >
               <Menu className="w-5 h-5 text-muted-foreground" />
             </button>
-            <span className="lg:hidden text-sm font-semibold text-foreground truncate max-w-[160px]">
-              {businessName}
-            </span>
+
+            {/* Marca de Linkity, discreta, SOLO en mobile (lg:hidden) — en
+                mobile el sidebar (donde vive el logo real de Linkity) queda
+                fuera de pantalla hasta que se abre el menú, así que sin esto
+                la marca de la plataforma no se ve nunca ahí. Mismo ícono y
+                opacidad que ya se usa junto a "by Linkity Soluciones" en el
+                pie del sidebar expandido — pensado para verse bien de
+                tamaño chico, nunca compite con el logo/nombre del negocio
+                de al lado. */}
+            <Image
+              src="/images/favicon.svg"
+              alt="Linkity"
+              width={14}
+              height={14}
+              className="lg:hidden opacity-40 flex-shrink-0"
+            />
+
+            {/* Identidad del negocio en mobile: su logo si ya subió uno
+                (mismo criterio que el logo de escritorio, más abajo), o el
+                nombre en texto mientras tanto — nunca los dos a la vez, para
+                no competir por el mismo espacio angosto. */}
+            {logoUrl ? (
+              <div className="lg:hidden flex items-center h-7 max-w-[140px] overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element -- logo subido por el negocio, dominio/tamaño no se conocen de antemano */}
+                <img
+                  src={logoUrl}
+                  alt={`Logo de ${businessName}`}
+                  className="max-h-7 max-w-full w-auto object-contain"
+                />
+              </div>
+            ) : (
+              <span className="lg:hidden text-sm font-semibold text-foreground truncate max-w-[140px]">
+                {businessName}
+              </span>
+            )}
+
+            {/* Logo propio del negocio en escritorio — área que antes
+                quedaba vacía (ver comentario de logoUrl en las props). */}
+            {logoUrl && (
+              <div className="hidden lg:flex items-center h-9 max-w-[220px] overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element -- logo subido por el negocio, dominio/tamaño no se conocen de antemano */}
+                <img
+                  src={logoUrl}
+                  alt={`Logo de ${businessName}`}
+                  className="max-h-9 max-w-full w-auto object-contain"
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

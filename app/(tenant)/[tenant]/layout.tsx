@@ -73,7 +73,7 @@ export default async function TenantLayout({
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
-    select: { id: true, themePreset: true, businessType: true },
+    select: { id: true, themePreset: true, businessType: true, logo: true },
   });
 
   if (dbTenant?.themePreset) {
@@ -181,6 +181,7 @@ export default async function TenantLayout({
         roleName={roleNameParaNav}
         labels={labels}
         modulosInactivos={modulosInactivos}
+        logoUrl={dbTenant?.logo ?? null}
       >
         {children}
       </TenantShell>

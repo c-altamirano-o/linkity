@@ -5,10 +5,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateThemePreset, updateBusinessType } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
+import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/client";
 import { THEME_PRESETS, TENANT_THEME_ROOT_ID, type ThemePresetId } from "@/lib/theme-presets";
-import { Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2, LayoutGrid, Sparkles } from "lucide-react";
+import {
+  Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
+  LayoutGrid, Sparkles, Image as ImageIcon,
+} from "lucide-react";
+
+const TIPOS_LOGO_PERMITIDOS = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+const TAMANO_MAXIMO_LOGO = 2 * 1024 * 1024; // 2 MB — mismo límite que valida logo-actions.ts en el servidor
 
 // Aplica los tokens de color de un preset directo sobre el nodo que el
 // layout del tenant ya usa para inyectar el tema real (mismo elemento,
@@ -49,6 +56,7 @@ interface ConfiguracionClientProps {
   businessTypeInicial: string | null;
   modulos: ModuloPersonalizable[];
   recomendadosOff: string[];
+  logoInicial: string | null;
 }
 
 export default function ConfiguracionClient({
@@ -57,6 +65,7 @@ export default function ConfiguracionClient({
   businessTypeInicial,
   modulos,
   recomendadosOff,
+  logoInicial,
 }: ConfiguracionClientProps) {
   const router = useRouter();
 
@@ -147,6 +156,87 @@ export default function ConfiguracionClient({
       setModulosMensaje({ tipo: "ok", texto: "Se aplicó la recomendación para tu rubro." });
       router.refresh();
       setTimeout(() => setModulosMensaje(null), 4000);
+    });
+  };
+
+  // ── Logo de tu negocio ────────────────────────────────────
+  // Aparte del logo de Linkity en el sidebar (que nunca cambia) — este es
+  // el logo propio de cada negocio, que se muestra en el encabezado
+  // superior (ver TenantShell.tsx). Se sube a Supabase Storage vía
+  // app/actions/logo-actions.ts, que ya valida tipo/tamaño en el servidor;
+  // aquí se valida lo mismo del lado del cliente solo para dar el mensaje
+  // de error al instante, sin esperar el viaje al servidor.
+  const [logoUrl, setLogoUrl] = useState(logoInicial);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoPending, startLogoTransition] = useTransition();
+  const [logoMensaje, setLogoMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Libera el object URL de la vista previa al reemplazarlo o al salir de
+  // la pantalla — si no, cada archivo elegido se queda ocupando memoria del
+  // navegador hasta recargar la página.
+  useEffect(() => {
+    return () => {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+    };
+  }, [logoPreview]);
+
+  const seleccionarLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const archivo = e.target.files?.[0];
+    setLogoMensaje(null);
+    if (!archivo) return;
+
+    if (!TIPOS_LOGO_PERMITIDOS.includes(archivo.type)) {
+      setLogoMensaje({ tipo: "error", texto: "Formato no soportado. Usa PNG, JPG, WEBP o SVG." });
+      e.target.value = "";
+      return;
+    }
+    if (archivo.size > TAMANO_MAXIMO_LOGO) {
+      setLogoMensaje({ tipo: "error", texto: "La imagen no debe pesar más de 2 MB." });
+      e.target.value = "";
+      return;
+    }
+
+    if (logoPreview) URL.revokeObjectURL(logoPreview);
+    setLogoFile(archivo);
+    setLogoPreview(URL.createObjectURL(archivo));
+  };
+
+  const subirLogo = () => {
+    if (!logoFile) return;
+    setLogoMensaje(null);
+    startLogoTransition(async () => {
+      const formData = new FormData();
+      formData.append("logo", logoFile);
+      const result = await subirLogoAction(tenantSlug, formData);
+      if (!result.ok) {
+        setLogoMensaje({ tipo: "error", texto: result.error });
+        return;
+      }
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+      setLogoUrl(result.url);
+      setLogoFile(null);
+      setLogoPreview(null);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+      setLogoMensaje({ tipo: "ok", texto: "Logo actualizado correctamente." });
+      router.refresh();
+      setTimeout(() => setLogoMensaje(null), 4000);
+    });
+  };
+
+  const quitarLogo = () => {
+    setLogoMensaje(null);
+    startLogoTransition(async () => {
+      const result = await eliminarLogoAction(tenantSlug);
+      if (!result.ok) {
+        setLogoMensaje({ tipo: "error", texto: result.error });
+        return;
+      }
+      setLogoUrl(null);
+      setLogoMensaje({ tipo: "ok", texto: "Logo eliminado." });
+      router.refresh();
+      setTimeout(() => setLogoMensaje(null), 4000);
     });
   };
 
@@ -356,6 +446,76 @@ export default function ConfiguracionClient({
               {modulosMensaje.texto}
             </p>
           )}
+        </div>
+      </div>
+
+      {/* ── Logo de tu negocio ─────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <ImageIcon className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold text-foreground">Logo de tu negocio</h2>
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-muted-foreground mb-5">
+            Sube el logo de tu negocio para que se muestre en tu sistema, junto al de Linkity Soluciones.
+            Recomendado: imagen horizontal, PNG/JPG/WEBP/SVG, máximo 2 MB.
+          </p>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+            <div className="w-40 h-16 rounded-lg border border-dashed border-border bg-muted/40 flex items-center justify-center overflow-hidden flex-shrink-0">
+              {logoPreview || logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- logo subido por el negocio, dominio/tamaño no se conocen de antemano
+                <img
+                  src={logoPreview ?? logoUrl ?? ""}
+                  alt="Logo del negocio"
+                  className="max-w-full max-h-full object-contain"
+                />
+              ) : (
+                <span className="text-xs text-muted-foreground px-2 text-center">Sin logo todavía</span>
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                onChange={seleccionarLogo}
+                className="block w-full text-xs text-muted-foreground file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20 file:cursor-pointer cursor-pointer"
+              />
+
+              <div className="mt-4 flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={subirLogo}
+                  disabled={!logoFile || logoPending}
+                  className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {logoPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {logoPending ? "Guardando..." : "Subir logo"}
+                </button>
+                {logoUrl && !logoFile && (
+                  <button
+                    onClick={quitarLogo}
+                    disabled={logoPending}
+                    className="px-4 py-2.5 border border-border hover:bg-muted text-muted-foreground text-sm font-medium rounded-lg transition-all disabled:opacity-50"
+                  >
+                    Quitar logo
+                  </button>
+                )}
+              </div>
+
+              {logoMensaje && (
+                <p
+                  className={`mt-3 text-sm font-medium animate-in fade-in ${
+                    logoMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"
+                  }`}
+                >
+                  {logoMensaje.texto}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
