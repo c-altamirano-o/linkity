@@ -15,6 +15,7 @@ interface ClientesClientProps {
   clientes: ClienteUI[];
   labels: LabelDictionary;
   tenantSlug: string;
+  reparacionesActiva: boolean;
 }
 
 // Mismo criterio de color que ReparacionesClient.tsx (ESTADO_BADGE), para
@@ -93,17 +94,23 @@ function whatsappHref(phone: string | null, countryCode: string | null): string 
   return numero ? `https://wa.me/${numero}` : null;
 }
 
-const filtrosTabs = ["Todo", "Compras", "Reparaciones"] as const;
-type FiltroHistorial = (typeof filtrosTabs)[number];
+type FiltroHistorial = "Todo" | "Compras" | "Reparaciones";
 
 const FORM_VACIO: DatosCliente = { name: "", phone: "", phoneCountryCode: PAIS_TELEFONO_DEFAULT, email: "", rfc: "", address: "" };
 
-export default function ClientesClient({ clientes, labels, tenantSlug }: ClientesClientProps) {
+export default function ClientesClient({ clientes, labels, tenantSlug, reparacionesActiva }: ClientesClientProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
   const [seleccionadoId, setSeleccionadoId] = useState<string | null>(clientes[0]?.id ?? null);
   const [filtroHistorial, setFiltroHistorial] = useState<FiltroHistorial>("Todo");
   const [mostrarDetalle, setMostrarDetalle] = useState(false);
+
+  // Negocio con el módulo de Reparaciones apagado (ej. una barbería): ni la
+  // pestaña "Reparaciones" del historial ni ningún registro de tipo
+  // "reparacion" que pudiera haber quedado de antes deben aparecer aquí.
+  const filtrosTabs: FiltroHistorial[] = reparacionesActiva
+    ? ["Todo", "Compras", "Reparaciones"]
+    : ["Todo", "Compras"];
 
   const [modalAbierto, setModalAbierto] = useState(false);
   const [modoModal, setModoModal] = useState<"crear" | "editar">("crear");
@@ -116,13 +123,16 @@ export default function ClientesClient({ clientes, labels, tenantSlug }: Cliente
   );
   const seleccionado = clientes.find((c) => c.id === seleccionadoId) ?? null;
 
-  const historialFiltrado = seleccionado
-    ? seleccionado.historial.filter((h) => {
-        if (filtroHistorial === "Todo") return true;
-        if (filtroHistorial === "Compras") return h.tipo === "venta";
-        return h.tipo === "reparacion";
-      })
-    : [];
+  const historialVisible =
+    seleccionado && !reparacionesActiva
+      ? seleccionado.historial.filter((h) => h.tipo !== "reparacion")
+      : seleccionado?.historial ?? [];
+
+  const historialFiltrado = historialVisible.filter((h) => {
+    if (filtroHistorial === "Todo") return true;
+    if (filtroHistorial === "Compras") return h.tipo === "venta";
+    return h.tipo === "reparacion";
+  });
 
   function abrirModalNuevo() {
     setModoModal("crear");
@@ -427,14 +437,18 @@ export default function ClientesClient({ clientes, labels, tenantSlug }: Cliente
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+              <div className={`grid grid-cols-2 gap-2 sm:gap-3 ${reparacionesActiva ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
                 {[
                   { label: "Total gastado", value: formatMXN(seleccionado.totalGastado), sub: `${seleccionado.visitas} visitas` },
-                  {
-                    label: label(labels, "entity.repair.plural"),
-                    value: String(seleccionado.reparaciones),
-                    sub: seleccionado.reparacionesActivas > 0 ? `${seleccionado.reparacionesActivas} activa(s)` : "Sin activas",
-                  },
+                  ...(reparacionesActiva
+                    ? [
+                        {
+                          label: label(labels, "entity.repair.plural"),
+                          value: String(seleccionado.reparaciones),
+                          sub: seleccionado.reparacionesActivas > 0 ? `${seleccionado.reparacionesActivas} activa(s)` : "Sin activas",
+                        },
+                      ]
+                    : []),
                   { label: "Última visita", value: tiempoRelativo(seleccionado.ultimaVisita), sub: "" },
                   { label: "Cliente desde", value: formatFechaCorta(seleccionado.createdAt), sub: "" },
                 ].map((s) => (
