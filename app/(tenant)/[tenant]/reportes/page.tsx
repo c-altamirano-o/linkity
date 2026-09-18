@@ -35,9 +35,13 @@ export default async function ReportesPage({ params }: PageProps) {
   // siempre las tarjetas "Reparaciones Totales" y "Reparaciones por
   // estatus" aunque el negocio (ej. una barbería) tuviera ese módulo
   // apagado.
+  // TenantModule usa llave compuesta (tenantId+moduleId, ver @@id en
+  // schema.prisma) — no tiene columna `id` propia, así que el select no
+  // puede pedirla (esto tumbó el build: "Object literal may only specify
+  // known properties, and 'id' does not exist in type 'TenantModuleSelect'").
   const reparacionesInactiva = await prisma.tenantModule.findFirst({
     where: { tenantId: tenant.id, isActive: false, module: { code: "reparaciones" } },
-    select: { id: true },
+    select: { tenantId: true },
   });
   const reparacionesActiva = !reparacionesInactiva;
 

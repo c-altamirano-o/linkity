@@ -32,9 +32,13 @@ export default async function DashboardPage({
   // aun en negocios como una barbería que tienen Reparaciones apagado —
   // el guard de layout.tsx solo protege la RUTA /reparaciones, no las
   // tarjetas de resumen que el propio Dashboard arma con sus datos.
+  // TenantModule usa llave compuesta (tenantId+moduleId, ver @@id en
+  // schema.prisma) — no tiene columna `id` propia, así que el select no
+  // puede pedirla (esto tumbó el build: "Object literal may only specify
+  // known properties, and 'id' does not exist in type 'TenantModuleSelect'").
   const reparacionesInactiva = await prisma.tenantModule.findFirst({
     where: { tenantId: tenant.id, isActive: false, module: { code: "reparaciones" } },
-    select: { id: true },
+    select: { tenantId: true },
   });
   const reparacionesActiva = !reparacionesInactiva;
 
