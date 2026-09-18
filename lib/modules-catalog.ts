@@ -51,6 +51,14 @@ export const MODULE_CATALOG: Record<string, ModuloInfo> = {
   // vez de recibir un aparato a reparar. Ver lib/modulos-rubro.ts para qué
   // rubro lo trae activado por default.
   citas: { name: "Citas", isCore: false },
+  // Expediente Clínico + Odontograma (2026-09-18, items 2 y 3 de la
+  // propuesta de Consultorio Dental) — vive embebido dentro de la ficha del
+  // cliente (módulo Clientes), no tiene ruta propia ni aparece en el menú
+  // lateral; se activa/desactiva igual que cualquier otro módulo desde
+  // Configuración, y ese estado es lo que ClientesClient.tsx usa para
+  // mostrar u ocultar la pestaña "Expediente Clínico". Ver lib/modulos-rubro.ts
+  // para qué rubros lo traen activado por default.
+  "expediente-clinico": { name: "Expediente Clínico", isCore: false },
   clientes: { name: "Clientes", isCore: false },
   catalogo: { name: "Catálogo", isCore: false },
   inventario: { name: "Inventario", isCore: false },

@@ -37,33 +37,40 @@ export const VERTICAL_MODULE_DEFAULTS_OFF: Record<string, string[]> = {
   // el molde de Reparaciones (marca, modelo, falla) no les aplica. "citas"
   // (2026-09-18) sí les aplica, así que se queda activo por default para
   // estos 8 — no aparece en su arreglo de apagados.
-  barberia: ["reparaciones"],
+  //
+  // "expediente-clinico" (2026-09-18, mismo día): solo se queda ACTIVO por
+  // default para los 3 rubros de consulta clínica real (consultorio_dental,
+  // consultorio_medico, veterinaria) — antecedentes/notas de evolución de un
+  // paciente no le aplican a una barbería, estética, spa, gimnasio o
+  // estudio de tatuajes, aunque agenden citas igual que un consultorio.
+  barberia: ["reparaciones", "expediente-clinico"],
   consultorio_dental: ["reparaciones"],
   consultorio_medico: ["reparaciones"],
   veterinaria: ["reparaciones"],
-  estetica: ["reparaciones"],
-  spa: ["reparaciones"],
-  gimnasio: ["reparaciones"],
-  tatuajes: ["reparaciones"],
-  // Retail puro — vende producto terminado, no repara nada, y no agenda
-  // citas (una venta de mostrador no se programa con anticipación).
-  comercio_retail: ["reparaciones", "citas"],
+  estetica: ["reparaciones", "expediente-clinico"],
+  spa: ["reparaciones", "expediente-clinico"],
+  gimnasio: ["reparaciones", "expediente-clinico"],
+  tatuajes: ["reparaciones", "expediente-clinico"],
+  // Retail puro — vende producto terminado, no repara nada, no agenda
+  // citas (una venta de mostrador no se programa con anticipación) y no
+  // lleva expediente clínico de nadie.
+  comercio_retail: ["reparaciones", "citas", "expediente-clinico"],
 
   // Los 11 rubros de reparación de aparato/vehículo — Reparaciones es su
   // módulo central (se queda activo por default, por eso no aparece en su
-  // arreglo), pero tampoco agendan "citas" — reciben el aparato cuando el
-  // cliente llega, no antes (2026-09-18).
-  reparacion_celulares: ["citas"],
-  taller_autos: ["citas"],
-  taller_motos: ["citas"],
-  electrodomesticos: ["citas"],
-  computadoras: ["citas"],
-  relojeria_joyeria: ["citas"],
-  zapateria: ["citas"],
-  refrigeracion_ac: ["citas"],
-  bicicletas: ["citas"],
-  cerrajeria: ["citas"],
-  tapiceria: ["citas"],
+  // arreglo), pero tampoco agendan "citas" ni llevan expediente clínico de
+  // nadie — reciben el aparato cuando el cliente llega, no antes (2026-09-18).
+  reparacion_celulares: ["citas", "expediente-clinico"],
+  taller_autos: ["citas", "expediente-clinico"],
+  taller_motos: ["citas", "expediente-clinico"],
+  electrodomesticos: ["citas", "expediente-clinico"],
+  computadoras: ["citas", "expediente-clinico"],
+  relojeria_joyeria: ["citas", "expediente-clinico"],
+  zapateria: ["citas", "expediente-clinico"],
+  refrigeracion_ac: ["citas", "expediente-clinico"],
+  bicicletas: ["citas", "expediente-clinico"],
+  cerrajeria: ["citas", "expediente-clinico"],
+  tapiceria: ["citas", "expediente-clinico"],
 };
 
 /** Códigos de módulo recomendados como inactivos para un rubro dado (arreglo vacío = ninguno). */

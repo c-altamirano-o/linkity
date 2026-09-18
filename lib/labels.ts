@@ -55,6 +55,23 @@ export const DEFAULT_LABELS: LabelDictionary = {
   // lib/modules-catalog.ts sobre por qué este módulo es distinto de
   // Reparaciones.
   "module.appointments.name": "Citas",
+  // Expediente Clínico + Odontograma (2026-09-18) — embebido en la ficha
+  // del cliente, ver el comentario largo en lib/modules-catalog.ts.
+  "module.clinicalRecord.name": "Expediente Clínico",
+
+  // Condición de cada diente en el odontograma (ToothCondition) — el texto
+  // que ve el usuario para cada valor del enum; no varía por rubro (el
+  // odontograma solo aplica a consultorio_dental).
+  "tooth.condition.SANO": "Sano",
+  "tooth.condition.CARIES": "Caries",
+  "tooth.condition.OBTURADO": "Obturado",
+  "tooth.condition.CORONA": "Corona",
+  "tooth.condition.ENDODONCIA": "Endodoncia",
+  "tooth.condition.AUSENTE": "Ausente",
+  "tooth.condition.EXTRACCION_INDICADA": "Extracción indicada",
+  "tooth.condition.IMPLANTE": "Implante",
+  "tooth.condition.FRACTURADO": "Fracturado",
+  "tooth.condition.SELLANTE": "Sellante",
 
   // Nombre de la entidad principal del módulo de reparaciones
   "entity.repair.singular": "Reparación",

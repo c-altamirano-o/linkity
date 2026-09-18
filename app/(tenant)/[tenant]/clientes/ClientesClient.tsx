@@ -1,14 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Search, Plus, Edit, ShoppingCart, Wrench, Phone, ChevronLeft, X, Users,
+  Search, Plus, Edit, ShoppingCart, Wrench, Phone, ChevronLeft, X, Users, Stethoscope,
 } from "lucide-react";
 import type { ClienteUI, EstadoReparacionCliente, EstadoVentaCliente } from "@/lib/clientes-data";
+import type { ExpedienteCliente, CondicionDiente } from "@/lib/expediente-data";
+import { DIENTES_SUPERIOR, DIENTES_INFERIOR } from "@/lib/expediente-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearClienteAction, editarClienteAction, type DatosCliente } from "@/app/actions/clientes-actions";
+import {
+  guardarAntecedentesAction, crearNotaEvolucionAction, actualizarDienteAction,
+  type DatosAntecedentes, type DatosNotaEvolucion,
+} from "@/app/actions/expediente-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp, formatoTelefono } from "@/lib/paises";
 
 interface ClientesClientProps {
@@ -16,7 +22,51 @@ interface ClientesClientProps {
   labels: LabelDictionary;
   tenantSlug: string;
   reparacionesActiva: boolean;
+  // Expediente Clínico + Odontograma (M16, 2026-09-18) — ver el comentario
+  // largo en schema.prisma. expedienteActiva es el módulo completo (el
+  // negocio lo apagó/prendió desde Configuración); odontogramaActivo es
+  // además condicionado al rubro (solo consultorio_dental tiene dientes que
+  // registrar) — un negocio puede tener expediente activo SIN odontograma
+  // (ej. un consultorio médico o una veterinaria).
+  expedienteActiva: boolean;
+  odontogramaActivo: boolean;
+  expedientes: Record<string, ExpedienteCliente>;
 }
+
+const EXPEDIENTE_VACIO: ExpedienteCliente = { antecedentes: null, notas: [], dientes: [] };
+
+const ANTECEDENTES_VACIO: DatosAntecedentes = {
+  tipoSangre: "", alergias: "", enfermedadesCronicas: "", medicamentosActuales: "",
+  cirugiasPrevias: "", antecedentesFamiliares: "", notasGenerales: "",
+};
+
+const NOTA_VACIA: DatosNotaEvolucion = { motivo: "", diagnostico: "", tratamiento: "", notas: "" };
+
+// Los 10 valores del enum ToothCondition, en el mismo orden en que se
+// declaran en schema.prisma — el texto que ve el usuario sale de
+// lib/labels.ts (tooth.condition.*, personalizable por tenant si algún
+// negocio quiere otro texto), aquí solo se necesita el orden fijo para
+// construir el <select>.
+const CONDICIONES_DIENTE: CondicionDiente[] = [
+  "SANO", "CARIES", "OBTURADO", "CORONA", "ENDODONCIA", "AUSENTE",
+  "EXTRACCION_INDICADA", "IMPLANTE", "FRACTURADO", "SELLANTE",
+];
+
+// Color por condición en el odontograma — SANO se deja neutro (el diente
+// "por defecto", sin fila en la BD) y el resto usa la misma paleta de
+// severidad que ya usan los badges de Reparaciones/Ventas en este archivo.
+const CONDICION_COLOR: Record<CondicionDiente, string> = {
+  SANO: "bg-card border-border text-foreground",
+  CARIES: "bg-red-50 border-red-200 text-red-700",
+  OBTURADO: "bg-blue-50 border-blue-200 text-blue-700",
+  CORONA: "bg-amber-50 border-amber-200 text-amber-700",
+  ENDODONCIA: "bg-purple-50 border-purple-200 text-purple-700",
+  AUSENTE: "bg-muted border-border text-muted-foreground line-through",
+  EXTRACCION_INDICADA: "bg-red-100 border-red-300 text-red-800",
+  IMPLANTE: "bg-cyan-50 border-cyan-200 text-cyan-700",
+  FRACTURADO: "bg-orange-50 border-orange-200 text-orange-700",
+  SELLANTE: "bg-emerald-50 border-emerald-200 text-emerald-700",
+};
 
 // Mismo criterio de color que ReparacionesClient.tsx (ESTADO_BADGE), para
 // que el estado de una reparación se vea igual en ambos módulos.
@@ -98,12 +148,33 @@ type FiltroHistorial = "Todo" | "Compras" | "Reparaciones";
 
 const FORM_VACIO: DatosCliente = { name: "", phone: "", phoneCountryCode: PAIS_TELEFONO_DEFAULT, email: "", rfc: "", address: "" };
 
-export default function ClientesClient({ clientes, labels, tenantSlug, reparacionesActiva }: ClientesClientProps) {
+export default function ClientesClient({
+  clientes, labels, tenantSlug, reparacionesActiva, expedienteActiva, odontogramaActivo, expedientes,
+}: ClientesClientProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
   const [seleccionadoId, setSeleccionadoId] = useState<string | null>(clientes[0]?.id ?? null);
   const [filtroHistorial, setFiltroHistorial] = useState<FiltroHistorial>("Todo");
   const [mostrarDetalle, setMostrarDetalle] = useState(false);
+
+  // Body del detalle: "historial" (compras/reparaciones, comportamiento de
+  // siempre) o "expediente" (M16) — solo existe la segunda opción cuando el
+  // negocio tiene el módulo activo.
+  const [vistaDetalle, setVistaDetalle] = useState<"historial" | "expediente">("historial");
+
+  const [antecedentesForm, setAntecedentesForm] = useState<DatosAntecedentes>(ANTECEDENTES_VACIO);
+  const [antecedentesGuardando, startAntecedentesGuardar] = useTransition();
+  const [antecedentesGuardado, setAntecedentesGuardado] = useState(false);
+
+  const [notaModalAbierto, setNotaModalAbierto] = useState(false);
+  const [notaForm, setNotaForm] = useState<DatosNotaEvolucion>(NOTA_VACIA);
+  const [notaError, setNotaError] = useState<string | null>(null);
+  const [notaGuardando, startNotaGuardar] = useTransition();
+
+  const [dienteSeleccionado, setDienteSeleccionado] = useState<number | null>(null);
+  const [dienteCondicion, setDienteCondicion] = useState<CondicionDiente>("SANO");
+  const [dienteNotas, setDienteNotas] = useState("");
+  const [dienteGuardando, startDienteGuardar] = useTransition();
 
   // Negocio con el módulo de Reparaciones apagado (ej. una barbería): ni la
   // pestaña "Reparaciones" del historial ni ningún registro de tipo
@@ -122,6 +193,91 @@ export default function ClientesClient({ clientes, labels, tenantSlug, reparacio
     (c) => c.name.toLowerCase().includes(busqueda.toLowerCase()) || (c.phone ?? "").includes(busqueda)
   );
   const seleccionado = clientes.find((c) => c.id === seleccionadoId) ?? null;
+  const expedienteSeleccionado: ExpedienteCliente =
+    (seleccionado && expedientes[seleccionado.id]) || EXPEDIENTE_VACIO;
+
+  // Al cambiar de cliente (o de antecedentes ya guardados desde el server
+  // tras un router.refresh()), el formulario de antecedentes se re-sincroniza
+  // con lo último persistido — evita que quede pegado el texto de otro
+  // paciente al cambiar de selección, y limpia el aviso de "Guardado".
+  useEffect(() => {
+    const a = expedienteSeleccionado.antecedentes;
+    setAntecedentesForm(
+      a
+        ? {
+            tipoSangre: a.tipoSangre ?? "",
+            alergias: a.alergias ?? "",
+            enfermedadesCronicas: a.enfermedadesCronicas ?? "",
+            medicamentosActuales: a.medicamentosActuales ?? "",
+            cirugiasPrevias: a.cirugiasPrevias ?? "",
+            antecedentesFamiliares: a.antecedentesFamiliares ?? "",
+            notasGenerales: a.notasGenerales ?? "",
+          }
+        : ANTECEDENTES_VACIO
+    );
+    setAntecedentesGuardado(false);
+    setDienteSeleccionado(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seleccionadoId, expedienteSeleccionado.antecedentes]);
+
+  function abrirDiente(numero: number) {
+    const existente = expedienteSeleccionado.dientes.find((d) => d.numero === numero);
+    setDienteSeleccionado(numero);
+    setDienteCondicion(existente?.condicion ?? "SANO");
+    setDienteNotas(existente?.notas ?? "");
+  }
+
+  function handleGuardarAntecedentes() {
+    if (!seleccionado) return;
+    startAntecedentesGuardar(async () => {
+      const res = await guardarAntecedentesAction({ tenantSlug, customerId: seleccionado.id, ...antecedentesForm });
+      if (res.ok) {
+        setAntecedentesGuardado(true);
+        router.refresh();
+      }
+    });
+  }
+
+  function abrirModalNota() {
+    setNotaForm(NOTA_VACIA);
+    setNotaError(null);
+    setNotaModalAbierto(true);
+  }
+
+  function handleGuardarNota() {
+    if (!seleccionado) return;
+    if (!notaForm.motivo.trim()) {
+      setNotaError("Describe el motivo de la consulta");
+      return;
+    }
+    setNotaError(null);
+    startNotaGuardar(async () => {
+      const res = await crearNotaEvolucionAction({ tenantSlug, customerId: seleccionado.id, ...notaForm });
+      if (res.ok) {
+        setNotaModalAbierto(false);
+        router.refresh();
+      } else {
+        setNotaError(res.error);
+      }
+    });
+  }
+
+  function handleGuardarDiente() {
+    if (!seleccionado || dienteSeleccionado == null) return;
+    startDienteGuardar(async () => {
+      const res = await actualizarDienteAction({
+        tenantSlug,
+        customerId: seleccionado.id,
+        numero: dienteSeleccionado,
+        condicion: dienteCondicion,
+        notas: dienteNotas,
+      });
+      if (res.ok) {
+        setDienteSeleccionado(null);
+        router.refresh();
+      }
+    });
+  }
 
   const historialVisible =
     seleccionado && !reparacionesActiva
@@ -461,74 +617,361 @@ export default function ClientesClient({ clientes, labels, tenantSlug, reparacio
               </div>
             </div>
 
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-4">
-              <div className="flex gap-2 mb-3 overflow-x-auto">
-                {filtrosTabs.map((tab) => (
+            {/* Selector Historial / Expediente Clínico (M16) — solo existe
+                si el negocio tiene el módulo activo; si no, el body se
+                queda exactamente como antes de este cambio. */}
+            {expedienteActiva && (
+              <div className="flex gap-2 px-3 sm:px-4 pt-3 bg-card border-b border-border">
+                {(["historial", "expediente"] as const).map((v) => (
                   <button
-                    key={tab}
-                    onClick={() => setFiltroHistorial(tab)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
-                      filtroHistorial === tab
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-card border border-border text-muted-foreground hover:bg-muted"
+                    key={v}
+                    onClick={() => setVistaDetalle(v)}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                      vistaDetalle === v
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {tab}
+                    {v === "expediente" && <Stethoscope className="w-3.5 h-3.5" />}
+                    {v === "historial" ? "Historial" : label(labels, "module.clinicalRecord.name")}
                   </button>
                 ))}
               </div>
+            )}
 
-              <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL</p>
-
-              <div className="space-y-2">
-                {historialFiltrado.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground text-xs">Sin registros en esta categoría</div>
-                ) : (
-                  historialFiltrado.map((h) => (
-                    <div
-                      key={`${h.tipo}-${h.id}`}
-                      className="flex items-center gap-3 p-3 bg-card border border-border rounded-xl hover:border-muted-foreground/30 transition-colors"
-                    >
-                      <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          h.tipo === "reparacion" ? "bg-purple-50" : "bg-emerald-50"
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+              {(!expedienteActiva || vistaDetalle === "historial") ? (
+                <>
+                  <div className="flex gap-2 mb-3 overflow-x-auto">
+                    {filtrosTabs.map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setFiltroHistorial(tab)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
+                          filtroHistorial === tab
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-card border border-border text-muted-foreground hover:bg-muted"
                         }`}
                       >
-                        {h.tipo === "reparacion" ? (
-                          <Wrench className="w-4 h-4 text-purple-600" />
-                        ) : (
-                          <ShoppingCart className="w-4 h-4 text-emerald-600" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-foreground truncate">{h.titulo}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {h.folio} · {formatFechaLarga(h.fecha)}
-                        </p>
-                      </div>
-                      <span
-                        className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${
-                          h.tipo === "reparacion"
-                            ? REPARACION_BADGE[h.estado as EstadoReparacionCliente]
-                            : VENTA_BADGE[h.estado as EstadoVentaCliente]
-                        }`}
-                      >
-                        {h.tipo === "reparacion"
-                          ? label(labels, `repair.status.${h.estado}`)
-                          : VENTA_TEXTO[h.estado as EstadoVentaCliente]}
-                      </span>
-                      <span className="text-xs font-semibold text-foreground min-w-[60px] text-right flex-shrink-0">
-                        {h.monto > 0 ? formatMXN(h.monto) : "Por definir"}
-                      </span>
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL</p>
+
+                  <div className="space-y-2">
+                    {historialFiltrado.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground text-xs">Sin registros en esta categoría</div>
+                    ) : (
+                      historialFiltrado.map((h) => (
+                        <div
+                          key={`${h.tipo}-${h.id}`}
+                          className="flex items-center gap-3 p-3 bg-card border border-border rounded-xl hover:border-muted-foreground/30 transition-colors"
+                        >
+                          <div
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                              h.tipo === "reparacion" ? "bg-purple-50" : "bg-emerald-50"
+                            }`}
+                          >
+                            {h.tipo === "reparacion" ? (
+                              <Wrench className="w-4 h-4 text-purple-600" />
+                            ) : (
+                              <ShoppingCart className="w-4 h-4 text-emerald-600" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-foreground truncate">{h.titulo}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {h.folio} · {formatFechaLarga(h.fecha)}
+                            </p>
+                          </div>
+                          <span
+                            className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${
+                              h.tipo === "reparacion"
+                                ? REPARACION_BADGE[h.estado as EstadoReparacionCliente]
+                                : VENTA_BADGE[h.estado as EstadoVentaCliente]
+                            }`}
+                          >
+                            {h.tipo === "reparacion"
+                              ? label(labels, `repair.status.${h.estado}`)
+                              : VENTA_TEXTO[h.estado as EstadoVentaCliente]}
+                          </span>
+                          <span className="text-xs font-semibold text-foreground min-w-[60px] text-right flex-shrink-0">
+                            {h.monto > 0 ? formatMXN(h.monto) : "Por definir"}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-5">
+                  {/* Antecedentes */}
+                  <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest">ANTECEDENTES</p>
+                      {antecedentesGuardado && <span className="text-[10px] text-emerald-600">Guardado</span>}
                     </div>
-                  ))
-                )}
-              </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Tipo de sangre</label>
+                        <input
+                          type="text"
+                          value={antecedentesForm.tipoSangre ?? ""}
+                          onChange={(e) => { setAntecedentesForm({ ...antecedentesForm, tipoSangre: e.target.value }); setAntecedentesGuardado(false); }}
+                          placeholder="ej. O+"
+                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Alergias</label>
+                        <input
+                          type="text"
+                          value={antecedentesForm.alergias ?? ""}
+                          onChange={(e) => { setAntecedentesForm({ ...antecedentesForm, alergias: e.target.value }); setAntecedentesGuardado(false); }}
+                          placeholder="ej. Penicilina"
+                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Enfermedades crónicas</label>
+                        <input
+                          type="text"
+                          value={antecedentesForm.enfermedadesCronicas ?? ""}
+                          onChange={(e) => { setAntecedentesForm({ ...antecedentesForm, enfermedadesCronicas: e.target.value }); setAntecedentesGuardado(false); }}
+                          placeholder="ej. Diabetes, hipertensión"
+                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Medicamentos actuales</label>
+                        <input
+                          type="text"
+                          value={antecedentesForm.medicamentosActuales ?? ""}
+                          onChange={(e) => { setAntecedentesForm({ ...antecedentesForm, medicamentosActuales: e.target.value }); setAntecedentesGuardado(false); }}
+                          placeholder="opcional"
+                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Cirugías previas</label>
+                        <input
+                          type="text"
+                          value={antecedentesForm.cirugiasPrevias ?? ""}
+                          onChange={(e) => { setAntecedentesForm({ ...antecedentesForm, cirugiasPrevias: e.target.value }); setAntecedentesGuardado(false); }}
+                          placeholder="opcional"
+                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Antecedentes familiares</label>
+                        <input
+                          type="text"
+                          value={antecedentesForm.antecedentesFamiliares ?? ""}
+                          onChange={(e) => { setAntecedentesForm({ ...antecedentesForm, antecedentesFamiliares: e.target.value }); setAntecedentesGuardado(false); }}
+                          placeholder="opcional"
+                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-medium text-muted-foreground">Notas generales</label>
+                        <textarea
+                          value={antecedentesForm.notasGenerales ?? ""}
+                          onChange={(e) => { setAntecedentesForm({ ...antecedentesForm, notasGenerales: e.target.value }); setAntecedentesGuardado(false); }}
+                          rows={2}
+                          placeholder="opcional"
+                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end mt-3">
+                      <button
+                        onClick={handleGuardarAntecedentes}
+                        disabled={antecedentesGuardando}
+                        className="px-4 py-1.5 text-xs rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+                      >
+                        {antecedentesGuardando ? "Guardando…" : "Guardar antecedentes"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Odontograma — solo consultorio dental */}
+                  {odontogramaActivo && (
+                    <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
+                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">ODONTOGRAMA</p>
+                      <div className="space-y-1.5 overflow-x-auto pb-1">
+                        {[DIENTES_SUPERIOR, DIENTES_INFERIOR].map((fila, i) => (
+                          <div key={i} className="flex gap-1 justify-center min-w-max">
+                            {fila.map((numero) => {
+                              const diente = expedienteSeleccionado.dientes.find((d) => d.numero === numero);
+                              const condicion = diente?.condicion ?? "SANO";
+                              return (
+                                <button
+                                  key={numero}
+                                  onClick={() => abrirDiente(numero)}
+                                  title={`Diente ${numero} — ${label(labels, `tooth.condition.${condicion}`)}`}
+                                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-md border text-[10px] font-semibold flex items-center justify-center transition-colors ${CONDICION_COLOR[condicion]} ${dienteSeleccionado === numero ? "ring-2 ring-primary" : ""}`}
+                                >
+                                  {numero}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+
+                      {dienteSeleccionado != null && (
+                        <div className="mt-4 p-3 rounded-lg bg-muted/40 border border-border">
+                          <p className="text-xs font-semibold text-foreground mb-2">Diente {dienteSeleccionado}</p>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <select
+                              value={dienteCondicion}
+                              onChange={(e) => setDienteCondicion(e.target.value as CondicionDiente)}
+                              className="px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            >
+                              {CONDICIONES_DIENTE.map((c) => (
+                                <option key={c} value={c}>{label(labels, `tooth.condition.${c}`)}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              value={dienteNotas}
+                              onChange={(e) => setDienteNotas(e.target.value)}
+                              placeholder="Notas del diente (opcional)"
+                              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={handleGuardarDiente}
+                                disabled={dienteGuardando}
+                                className="px-4 py-2 text-xs rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50 whitespace-nowrap"
+                              >
+                                {dienteGuardando ? "Guardando…" : "Guardar"}
+                              </button>
+                              <button
+                                onClick={() => setDienteSeleccionado(null)}
+                                className="px-3 py-2 text-xs rounded-lg border border-border text-muted-foreground hover:bg-muted"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Notas de evolución */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest">NOTAS DE EVOLUCIÓN</p>
+                      <button
+                        onClick={abrirModalNota}
+                        className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg"
+                      >
+                        <Plus className="w-3 h-3" /> Nueva nota
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {expedienteSeleccionado.notas.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground text-xs">Sin notas de evolución todavía</div>
+                      ) : (
+                        expedienteSeleccionado.notas.map((n) => (
+                          <div key={n.id} className="p-3 bg-card border border-border rounded-xl">
+                            <div className="flex items-start justify-between gap-3 mb-1">
+                              <p className="text-xs font-medium text-foreground">{n.motivo}</p>
+                              <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
+                                {formatFechaLarga(n.fecha)}
+                              </span>
+                            </div>
+                            {n.diagnostico && <p className="text-xs text-muted-foreground"><span className="font-medium">Diagnóstico:</span> {n.diagnostico}</p>}
+                            {n.tratamiento && <p className="text-xs text-muted-foreground"><span className="font-medium">Tratamiento:</span> {n.tratamiento}</p>}
+                            {n.notas && <p className="text-xs text-muted-foreground mt-1">{n.notas}</p>}
+                            <p className="text-[10px] text-muted-foreground mt-1.5">Atendió: {n.doctor}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
       </div>
+
+      {notaModalAbierto && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <p className="text-sm font-semibold text-foreground">Nueva nota de evolución</p>
+              <button onClick={() => setNotaModalAbierto(false)} className="p-1 rounded-md hover:bg-muted">
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Motivo de la consulta *</label>
+                <input
+                  type="text"
+                  value={notaForm.motivo}
+                  onChange={(e) => setNotaForm({ ...notaForm, motivo: e.target.value })}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  placeholder="ej. Limpieza dental, revisión"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Diagnóstico</label>
+                <input
+                  type="text"
+                  value={notaForm.diagnostico ?? ""}
+                  onChange={(e) => setNotaForm({ ...notaForm, diagnostico: e.target.value })}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  placeholder="opcional"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Tratamiento</label>
+                <input
+                  type="text"
+                  value={notaForm.tratamiento ?? ""}
+                  onChange={(e) => setNotaForm({ ...notaForm, tratamiento: e.target.value })}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  placeholder="opcional"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Notas</label>
+                <textarea
+                  value={notaForm.notas ?? ""}
+                  onChange={(e) => setNotaForm({ ...notaForm, notas: e.target.value })}
+                  rows={3}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  placeholder="opcional"
+                />
+              </div>
+              {notaError && <p className="text-xs text-red-600">{notaError}</p>}
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <button
+                onClick={() => setNotaModalAbierto(false)}
+                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGuardarNota}
+                disabled={notaGuardando}
+                className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+              >
+                {notaGuardando ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal}
     </div>

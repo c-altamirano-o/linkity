@@ -36,7 +36,7 @@ export const ROL_ADMINISTRADOR = "Administrador";
 // con el nombre que cada archivo de Server Actions le pasa a
 // resolverActor() en lib/actor.ts.
 export const MODULOS = [
-  "dashboard", "pos", "reparaciones", "citas", "clientes", "catalogo", "inventario",
+  "dashboard", "pos", "reparaciones", "citas", "expediente-clinico", "clientes", "catalogo", "inventario",
   "compras", "caja", "personal", "sucursales", "reportes", "facturacion",
   "soporte", "configuracion", "asistencia",
 ] as const;
@@ -59,7 +59,10 @@ export type RolBase = (typeof ROLES_BASE)[number];
 export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
   Gerente: "Acceso a todo el negocio excepto Personal, Facturación y Configuración.",
   Cajero: "Punto de Venta, Caja, Clientes y cobro/entrega de Reparaciones.",
-  Técnico: "Reparaciones y Clientes.",
+  // "expediente-clinico" (2026-09-18) se agregó a Técnico —piensa "doctor/
+  // dentista con PIN"— y NO a Cajero: son datos clínicos del paciente
+  // (NOM-004), no le corresponden a quien solo cobra.
+  Técnico: "Reparaciones, Citas, Clientes y Expediente Clínico.",
 };
 
 // dashboard siempre incluido — es la pantalla de aterrizaje, no tiene
@@ -73,11 +76,11 @@ export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
 // esos módulos a un rol personalizado.
 export const MATRIZ_ACCESO_BASE: Record<RolBase, ModuloKey[]> = {
   Gerente: [
-    "dashboard", "pos", "reparaciones", "citas", "clientes", "catalogo", "inventario",
+    "dashboard", "pos", "reparaciones", "citas", "expediente-clinico", "clientes", "catalogo", "inventario",
     "compras", "caja", "sucursales", "reportes", "soporte",
   ],
   Cajero: ["dashboard", "pos", "caja", "clientes", "reparaciones", "citas"],
-  Técnico: ["dashboard", "reparaciones", "citas", "clientes"],
+  Técnico: ["dashboard", "reparaciones", "citas", "expediente-clinico", "clientes"],
 };
 
 export function esRolBase(valor: string): valor is RolBase {

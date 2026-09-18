@@ -6,6 +6,7 @@ import {
   MixedPaymentMethod, PaymentScheme, CommissionBase,
   PaymentFrequency, StaffPaymentStatus, PurchaseStatus,
   InvoiceStatus, StaffPaymentMethod, StaffLoginCloseReason,
+  AppointmentStatus, ToothCondition,
 } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { randomBytes, scryptSync } from "crypto";
@@ -99,21 +100,95 @@ const DEMO_PASSWORD = "Demo2026!";
 const ACCION_UNICA = "acceso";
 const PINES = ["1111", "2222", "3333", "4444"];
 
+// M15/M16 (2026-09-18): "citas" y "expediente-clinico" se agregan aquí —
+// antes de este cambio faltaban por completo de este catálogo local, así
+// que ningún tenant demo tenía una fila TenantModule para ellos y quedaban
+// "activos por default" en los 20 rubros por igual (el criterio "sin fila =
+// activo" de TenantModule, ver schema.prisma), incluyendo rubros donde no
+// aplican (ej. "Citas" visible en Demo Taller de Celulares). Con esto, los
+// negocios demo NUEVOS (creados con el script sin --refrescar) quedan
+// exactamente igual que un negocio real recién registrado.
 const MODULE_NAMES: Record<string, string> = {
-  dashboard: "Dashboard", pos: "Punto de Venta", reparaciones: "Reparaciones", clientes: "Clientes",
+  dashboard: "Dashboard", pos: "Punto de Venta", reparaciones: "Reparaciones", citas: "Citas",
+  "expediente-clinico": "Expediente Clínico", clientes: "Clientes",
   catalogo: "Catálogo", inventario: "Inventario", compras: "Compras", caja: "Caja", personal: "Personal",
   asistencia: "Asistencia", sucursales: "Sucursales", reportes: "Reportes", facturacion: "Facturación", soporte: "Soporte",
 };
 const MODULE_CATALOG_CODES = Object.keys(MODULE_NAMES);
-const MODULOS_ASIGNABLES = ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "sucursales", "reportes", "soporte"];
+const MODULOS_ASIGNABLES = ["pos", "reparaciones", "citas", "expediente-clinico", "clientes", "catalogo", "inventario", "compras", "caja", "sucursales", "reportes", "soporte"];
 
-// Copia local de lib/modulos-rubro.ts (VERTICAL_MODULE_DEFAULTS_OFF) — solo
-// "reparaciones" depende del rubro hoy.
+// Copia local de lib/modulos-rubro.ts (VERTICAL_MODULE_DEFAULTS_OFF) — se
+// actualizó junto con ese archivo (2026-09-18) para reflejar "citas" y
+// "expediente-clinico".
 const MODULOS_OFF_POR_RUBRO: Record<string, string[]> = {
-  barberia: ["reparaciones"], consultorio_dental: ["reparaciones"], consultorio_medico: ["reparaciones"],
-  veterinaria: ["reparaciones"], estetica: ["reparaciones"], spa: ["reparaciones"], gimnasio: ["reparaciones"],
-  tatuajes: ["reparaciones"], comercio_retail: ["reparaciones"],
+  barberia: ["reparaciones", "expediente-clinico"],
+  consultorio_dental: ["reparaciones"],
+  consultorio_medico: ["reparaciones"],
+  veterinaria: ["reparaciones"],
+  estetica: ["reparaciones", "expediente-clinico"],
+  spa: ["reparaciones", "expediente-clinico"],
+  gimnasio: ["reparaciones", "expediente-clinico"],
+  tatuajes: ["reparaciones", "expediente-clinico"],
+  comercio_retail: ["reparaciones", "citas", "expediente-clinico"],
+  reparacion_celulares: ["citas", "expediente-clinico"],
+  taller_autos: ["citas", "expediente-clinico"],
+  taller_motos: ["citas", "expediente-clinico"],
+  electrodomesticos: ["citas", "expediente-clinico"],
+  computadoras: ["citas", "expediente-clinico"],
+  relojeria_joyeria: ["citas", "expediente-clinico"],
+  zapateria: ["citas", "expediente-clinico"],
+  refrigeracion_ac: ["citas", "expediente-clinico"],
+  bicicletas: ["citas", "expediente-clinico"],
+  cerrajeria: ["citas", "expediente-clinico"],
+  tapiceria: ["citas", "expediente-clinico"],
 };
+
+// Rubros con antecedentes/notas de evolución (expediente clínico real) —
+// solo los 3 de consulta clínica. "consultorio_dental" además recibe
+// odontograma (dientes), los otros dos no.
+const RUBROS_CON_EXPEDIENTE = new Set(["consultorio_dental", "consultorio_medico", "veterinaria"]);
+
+// Motivo de cita por rubro (2026-09-18) — solo se usa en rubros con "citas"
+// activo por default (los 8 de VERTICAL_MODULE_DEFAULTS_OFF que no apagan
+// "citas"); tomado del mismo catálogo de servicios de cada rubro (arriba,
+// CATALOGOS) para que el motivo de la cita coincida con lo que ese negocio
+// realmente ofrece.
+const MOTIVOS_CITA: Record<string, string[]> = {
+  barberia: ["Corte de cabello", "Corte + barba", "Diseño de cejas", "Tinte", "Barba"],
+  consultorio_dental: ["Consulta / valoración", "Limpieza dental", "Extracción simple", "Resina", "Revisión de rutina"],
+  consultorio_medico: ["Consulta general", "Consulta de seguimiento", "Certificado médico", "Curación"],
+  veterinaria: ["Consulta general", "Vacunación", "Desparasitación", "Baño y corte", "Revisión de rutina"],
+  estetica: ["Corte de cabello", "Peinado", "Manicure", "Pedicure", "Tinte"],
+  spa: ["Masaje relajante", "Masaje descontracturante", "Facial básico", "Exfoliación corporal"],
+  gimnasio: ["Evaluación física", "Sesión personalizada"],
+  tatuajes: ["Consulta de diseño", "Tatuaje pequeño", "Retoque"],
+};
+
+// Diagnóstico/tratamiento de ejemplo para las notas de evolución — solo los
+// 3 rubros de RUBROS_CON_EXPEDIENTE los usan.
+const DIAGNOSTICOS_DEMO: Record<string, string[]> = {
+  consultorio_dental: ["Caries en primer molar", "Gingivitis leve", "Sarro acumulado", "Sin hallazgos relevantes"],
+  consultorio_medico: ["Cuadro gripal", "Hipertensión controlada", "Gastritis leve", "Sin hallazgos relevantes"],
+  veterinaria: ["Otitis leve", "Sobrepeso moderado", "Parásitos intestinales", "Sin hallazgos relevantes"],
+};
+const TRATAMIENTOS_DEMO: Record<string, string[]> = {
+  consultorio_dental: ["Limpieza y aplicación de flúor", "Obturación con resina", "Indicaciones de higiene oral", "Control en 6 meses"],
+  consultorio_medico: ["Reposo e hidratación", "Ajuste de medicamento", "Dieta blanda por 3 días", "Control en 2 semanas"],
+  veterinaria: ["Limpieza de oído y gotas", "Ajuste de dieta", "Desparasitante oral", "Control en 1 mes"],
+};
+
+// Condiciones de diente usadas para poblar el odontograma demo —
+// deliberadamente sin SANO (un diente sano no necesita fila, ver
+// OdontogramaTooth en schema.prisma) ni EXTRACCION_INDICADA/AUSENTE (se
+// prefieren condiciones menos alarmantes para un demo genérico).
+const CONDICIONES_ODONTOGRAMA_DEMO: ToothCondition[] = [
+  ToothCondition.CARIES, ToothCondition.OBTURADO, ToothCondition.CORONA,
+  ToothCondition.ENDODONCIA, ToothCondition.SELLANTE, ToothCondition.FRACTURADO,
+];
+const DIENTES_FDI_DEMO = [
+  18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28,
+  48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38,
+];
 
 const PALETA = ["#4F46E5", "#06B6D4", "#8B5CF6", "#F97316", "#F59E0B", "#14B8A6", "#10B981", "#EC4899", "#EF4444", "#3B82F6"];
 
@@ -168,12 +243,18 @@ function metodoPagoVenta(): PaymentMethod {
   if (r < 0.85) return PaymentMethod.TRANSFER;
   return PaymentMethod.MIXED;
 }
-function inferirModulosPorPuesto(puesto: string, tieneReparaciones: boolean): string[] {
+function inferirModulosPorPuesto(puesto: string, tieneReparaciones: boolean, tieneCitas: boolean, tieneExpediente: boolean): string[] {
   const p = puesto.toLowerCase();
   const base = ["pos", "clientes"];
   if (tieneReparaciones) base.push("reparaciones");
+  if (tieneCitas) base.push("citas");
+  // "Doctor" en sentido amplio (dentista/médico/veterinario) — el único
+  // tipo de puesto al que le corresponde ver expediente clínico, mismo
+  // criterio que MATRIZ_ACCESO_BASE.Técnico en lib/roles.ts.
+  const esDoctor = p.includes("dentista") || p.includes("médic") || p.includes("medic") || p.includes("veterinari");
+  if (tieneExpediente && esDoctor) base.push("expediente-clinico");
   if (p.includes("recep")) return Array.from(new Set([...base, "caja"]));
-  if (p.includes("jefe") || p.includes("encargad") || p.includes("gerente") || p.includes("veterinari") || p.includes("médic") || p.includes("dentista")) {
+  if (p.includes("jefe") || p.includes("encargad") || p.includes("gerente") || esDoctor) {
     return Array.from(new Set([...base, "caja", "catalogo", "inventario", "reportes"]));
   }
   return Array.from(new Set(base));
@@ -590,16 +671,140 @@ interface ContextoNegocio {
   clientes: { id: string }[];
   empleados: EmpleadoCreado[];
   tieneReparaciones: boolean;
+  // M15/M16 (2026-09-18) — igual que tieneReparaciones, resuelto por el
+  // caller (crearNegocioDemo/refrescarNegocioDemo) a partir de qué módulos
+  // tiene apagados este tenant. `doctores` es el pool de cuentas de
+  // atribución (User.id vía Staff.userId) que puede quedar como
+  // responsable de una cita o autor de una nota de evolución — vacío cae a
+  // ownerUser.id (ver sembrarCitasYExpediente).
+  tieneCitas: boolean;
+  tieneExpediente: boolean;
+  doctores: { userId: string; name: string }[];
   cfg: RubroConfig;
   supplierId: string;
 }
 
+// Citas (Appointment) + notas de evolución (ClinicalNote) de la semana —
+// M15/M16 (2026-09-18). Se llama desde sembrarSemanaOperativa (abajo), así
+// que corre tanto al crear un negocio demo nuevo como cada vez que
+// --refrescar le da una semana nueva a uno que ya existe — igual que
+// ventas/reparaciones, son "datos operativos" de la semana, por eso
+// borrarDatosOperativos (abajo) también los limpia antes de resembrar.
+// PatientRecord (antecedentes) y OdontogramaTooth (estado del odontograma)
+// NO se tocan aquí a propósito: son el expediente acumulado del paciente,
+// no algo que deba reiniciarse cada semana — se siembran una sola vez, en
+// crearNegocioDemo (ver sembrarExpedienteYOdontograma más abajo).
+async function sembrarCitasYNotas(ctx: ContextoNegocio) {
+  if (!ctx.tieneCitas) return;
+  const { tenant, branchPrincipal, branchSecundaria, clientes, cfg, doctores, ownerUser, tieneExpediente } = ctx;
+
+  const motivos = MOTIVOS_CITA[cfg.key] ?? ["Consulta"];
+  const diagnosticos = DIAGNOSTICOS_DEMO[cfg.key];
+  const tratamientos = TRATAMIENTOS_DEMO[cfg.key];
+  const poolDoctores = doctores.length > 0 ? doctores : [{ userId: ownerUser.id, name: "Dueño Demo" }];
+
+  for (let d = 0; d < SEMANA.length; d++) {
+    const fechaStr = SEMANA[d];
+    const esDomingo = new Date(`${fechaStr}T12:00:00-06:00`).getUTCDay() === 0;
+    const esHoy = d === SEMANA.length - 1;
+    const numCitas = esDomingo ? randInt(0, 2) : randInt(2, 5);
+
+    for (let c = 0; c < numCitas; c++) {
+      const cliente = pick(clientes);
+      const doctor = pick(poolDoctores);
+      const branch = branchSecundaria && Math.random() < 0.3 ? branchSecundaria : branchPrincipal;
+      const inicio = new Date(`${fechaStr}T${horaAleatoria()}:00-06:00`);
+      const fin = new Date(inicio.getTime() + pick([30, 45, 60]) * 60000);
+      const status: AppointmentStatus = esHoy
+        ? pick([AppointmentStatus.COMPLETED, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS, AppointmentStatus.SCHEDULED])
+        : pick([AppointmentStatus.COMPLETED, AppointmentStatus.COMPLETED, AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW, AppointmentStatus.CANCELLED]);
+      const motivo = pick(motivos);
+
+      await prisma.appointment.create({
+        data: { tenantId: tenant.id, branchId: branch.id, customerId: cliente.id, userId: doctor.userId, reason: motivo, status, startsAt: inicio, endsAt: fin },
+      });
+
+      // Nota de evolución solo para las 3 rubros de consulta clínica real, y
+      // solo cuando la cita ya se atendió (no tiene sentido diagnosticar
+      // una cita cancelada/no-show/futura).
+      if (tieneExpediente && status === AppointmentStatus.COMPLETED && diagnosticos && tratamientos) {
+        await prisma.clinicalNote.create({
+          data: {
+            tenantId: tenant.id, customerId: cliente.id, userId: doctor.userId,
+            reason: motivo, diagnosis: pick(diagnosticos), treatment: pick(tratamientos),
+            createdAt: inicio,
+          },
+        });
+      }
+    }
+  }
+
+  // Citas próximas (mañana a +5 días) — SEMANA arriba solo cubre
+  // pasado+hoy (mismo criterio que ventas/reparaciones), pero una agenda de
+  // citas vacía de próximas citas no se siente "en uso" — mismo espíritu
+  // que dejar la caja de hoy abierta (ver el comentario largo en el
+  // encabezado del archivo, "Frescura de los datos").
+  const hoyBase = new Date();
+  const numFuturas = randInt(2, 5);
+  for (let f = 0; f < numFuturas; f++) {
+    const futura = new Date(hoyBase);
+    futura.setDate(futura.getDate() + randInt(1, 5));
+    const fechaStr = futura.toISOString().slice(0, 10);
+    const cliente = pick(clientes);
+    const doctor = pick(poolDoctores);
+    const branch = branchSecundaria && Math.random() < 0.3 ? branchSecundaria : branchPrincipal;
+    const inicio = new Date(`${fechaStr}T${horaAleatoria()}:00-06:00`);
+    const fin = new Date(inicio.getTime() + pick([30, 45, 60]) * 60000);
+    await prisma.appointment.create({
+      data: {
+        tenantId: tenant.id, branchId: branch.id, customerId: cliente.id, userId: doctor.userId,
+        reason: pick(motivos), status: pick([AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED]),
+        startsAt: inicio, endsAt: fin,
+      },
+    });
+  }
+}
+
+// Antecedentes (PatientRecord) + odontograma (OdontogramaTooth, solo
+// consultorio_dental) — se siembra UNA SOLA VEZ, desde crearNegocioDemo,
+// nunca desde refrescarNegocioDemo (ver el comentario largo en
+// sembrarCitasYNotas de arriba sobre por qué esto no es "dato operativo").
+async function sembrarExpedienteYOdontograma(tenantId: string, rubro: string, clientes: { id: string }[], doctorUserId: string) {
+  for (const cliente of clientes) {
+    // No todo paciente de un consultorio real tiene ficha capturada — se
+    // deja ~70% con expediente para que el demo no se vea artificialmente
+    // "perfecto" (mismo criterio que ya usa el resto del seed, ej. el
+    // producto con stock en 0 a propósito).
+    if (Math.random() < 0.3) continue;
+
+    await prisma.patientRecord.create({
+      data: {
+        tenantId, customerId: cliente.id,
+        bloodType: pick(["O+", "O-", "A+", "A-", "B+", "AB+"]),
+        allergies: Math.random() < 0.3 ? pick(["Penicilina", "Látex", "Ninguna conocida"]) : null,
+        chronicConditions: Math.random() < 0.25 ? pick(["Diabetes tipo 2 controlada", "Hipertensión controlada"]) : null,
+      },
+    });
+
+    if (rubro === "consultorio_dental") {
+      const numDientes = randInt(2, 6);
+      const elegidos = new Set<number>();
+      while (elegidos.size < numDientes) elegidos.add(pick(DIENTES_FDI_DEMO));
+      for (const numero of elegidos) {
+        await prisma.odontogramaTooth.create({
+          data: { tenantId, customerId: cliente.id, toothNumber: numero, condition: pick(CONDICIONES_ODONTOGRAMA_DEMO), updatedByUserId: doctorUserId },
+        });
+      }
+    }
+  }
+}
+
 // Semana operativa completa (compra a proveedor, caja + ventas por
-// sucursal, reparaciones si aplica, asistencia y nómina de la semana,
-// factura de la primera venta) — extraído de crearNegocioDemo (2026-09-18)
-// para que refrescarNegocioDemo pueda generarle una semana NUEVA a un
-// negocio demo que ya existe, sin repetir la lógica ni tocar su catálogo,
-// clientes o personal.
+// sucursal, reparaciones si aplica, citas/notas si aplica, asistencia y
+// nómina de la semana, factura de la primera venta) — extraído de
+// crearNegocioDemo (2026-09-18) para que refrescarNegocioDemo pueda
+// generarle una semana NUEVA a un negocio demo que ya existe, sin repetir
+// la lógica ni tocar su catálogo, clientes o personal.
 async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
   const { tenant, branchPrincipal, branchSecundaria, branches, ownerUser, productos, clientes, empleados, tieneReparaciones, cfg, supplierId } = ctx;
 
@@ -775,6 +980,8 @@ async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
     });
   }
 
+  await sembrarCitasYNotas(ctx);
+
   if (primeraVenta) {
     await prisma.invoice.create({
       data: { tenantId: tenant.id, customerId: primeraVenta.customerId ?? clientes[0].id, saleId: primeraVenta.id, folio: "F-0001", status: InvoiceStatus.STAMPED, total: primeraVenta.total },
@@ -811,6 +1018,8 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
     await prisma.tenantModule.create({ data: { tenantId: tenant.id, moduleId: mod.id, isActive: !offSet.has(code) } });
   }
   const tieneReparaciones = !offSet.has("reparaciones");
+  const tieneCitas = !offSet.has("citas");
+  const tieneExpediente = !offSet.has("expediente-clinico");
 
   const categoriasCache = new Map<string, string>();
   const productos: { id: string; type: ProductType; price: number; cost: number | null }[] = [];
@@ -855,7 +1064,7 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
   for (let i = 0; i < cfg.staff.length; i++) {
     const s = cfg.staff[i];
     const rol = await prisma.role.create({ data: { tenantId: tenant.id, name: s.puesto, description: null, isSystem: false } });
-    const modulos = inferirModulosPorPuesto(s.puesto, tieneReparaciones);
+    const modulos = inferirModulosPorPuesto(s.puesto, tieneReparaciones, tieneCitas, tieneExpediente);
     const conDashboard = new Set([...modulos, "dashboard"]);
     await prisma.rolePermission.createMany({
       data: Array.from(conDashboard).map((m) => mapaPermisos.get(m)).filter((id): id is string => Boolean(id)).map((permissionId) => ({ roleId: rol.id, permissionId })),
@@ -902,12 +1111,27 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
 
   const proveedor = await prisma.supplier.create({ data: { tenantId: tenant.id, name: cfg.proveedorNombre, phone: telefonoAleatorio(), isActive: true } });
 
+  // Pool de doctores/profesionales (cuenta de atribución vía Staff.userId,
+  // ver el comentario largo en Staff.userId, schema.prisma) para citas y
+  // notas de evolución — M15/M16, 2026-09-18.
+  const doctores = (
+    await prisma.staff.findMany({ where: { tenantId: tenant.id, userId: { not: null } }, select: { userId: true, name: true } })
+  ).map((s) => ({ userId: s.userId as string, name: s.name }));
+
+  // Antecedentes/odontograma se siembran UNA sola vez aquí (no en cada
+  // refresco semanal) — ver el comentario largo en sembrarExpedienteYOdontograma.
+  if (tieneExpediente) {
+    await sembrarExpedienteYOdontograma(tenant.id, cfg.key, clientes, doctores[0]?.userId ?? ownerUser.id);
+  }
+
   // Compra inicial + la semana operativa completa (caja, ventas,
-  // reparaciones, asistencia, nómina, factura) — ver sembrarSemanaOperativa
-  // arriba; extraído para que refrescarNegocioDemo pueda reusarlo cada
-  // semana sobre un negocio que ya existe, sin repetir esta lógica.
+  // reparaciones, citas/notas, asistencia, nómina, factura) — ver
+  // sembrarSemanaOperativa arriba; extraído para que refrescarNegocioDemo
+  // pueda reusarlo cada semana sobre un negocio que ya existe, sin repetir
+  // esta lógica.
   await sembrarSemanaOperativa({
-    tenant, branchPrincipal, branchSecundaria, branches, ownerUser, productos, clientes, empleados, tieneReparaciones, cfg,
+    tenant, branchPrincipal, branchSecundaria, branches, ownerUser, productos, clientes, empleados,
+    tieneReparaciones, tieneCitas, tieneExpediente, doctores, cfg,
     supplierId: proveedor.id,
   });
 
@@ -948,6 +1172,13 @@ async function borrarDatosOperativos(tenantId: string) {
   const purchaseIds = (await prisma.purchase.findMany({ where: { tenantId }, select: { id: true } })).map((p) => p.id);
   await prisma.purchaseItem.deleteMany({ where: { purchaseId: { in: purchaseIds } } });
   await prisma.purchase.deleteMany({ where: { tenantId } });
+
+  // Citas + notas de evolución (M15/M16, 2026-09-18) — igual que
+  // ventas/reparaciones, se resiembran cada semana (ver sembrarCitasYNotas).
+  // A propósito NO se tocan PatientRecord ni OdontogramaTooth: son el
+  // expediente acumulado del paciente, no datos "de esta semana".
+  await prisma.clinicalNote.deleteMany({ where: { tenantId } });
+  await prisma.appointment.deleteMany({ where: { tenantId } });
 }
 
 // Le da una semana operativa NUEVA (terminando hoy) a un negocio demo que
@@ -964,7 +1195,7 @@ async function refrescarNegocioDemo(cfg: RubroConfig): Promise<boolean> {
     prisma.user.findFirst({ where: { tenantId: tenant.id, email: `demo_${cfg.emailLocal}@linkitysoluciones.com` }, select: { id: true } }),
     prisma.product.findMany({ where: { tenantId: tenant.id, isActive: true }, select: { id: true, type: true, price: true, cost: true } }),
     prisma.customer.findMany({ where: { tenantId: tenant.id }, select: { id: true } }),
-    prisma.staff.findMany({ where: { tenantId: tenant.id }, select: { id: true, branchId: true, name: true, position: true } }),
+    prisma.staff.findMany({ where: { tenantId: tenant.id }, select: { id: true, branchId: true, name: true, position: true, userId: true } }),
     prisma.tenantModule.findMany({ where: { tenantId: tenant.id, isActive: false }, select: { module: { select: { code: true } } } }),
     prisma.supplier.findFirst({ where: { tenantId: tenant.id }, select: { id: true } }),
   ]);
@@ -979,6 +1210,16 @@ async function refrescarNegocioDemo(cfg: RubroConfig): Promise<boolean> {
   const productos = productosRaw.map((p) => ({ id: p.id, type: p.type, price: Number(p.price), cost: p.cost != null ? Number(p.cost) : null }));
 
   const tieneReparaciones = !tenantModulesInactivos.some((tm) => tm.module.code === "reparaciones");
+  // M15/M16 (2026-09-18): un tenant demo creado ANTES de que estos dos
+  // módulos existieran en este catálogo (MODULE_NAMES, arriba) nunca tuvo
+  // fila TenantModule para ellos — ni activa ni inactiva. Igual que en
+  // producción, "sin fila" se lee como "activo" (ver el comentario largo en
+  // TenantModule, schema.prisma), así que `.some(...)` sobre
+  // tenantModulesInactivos (que solo trae inactivos) da el resultado
+  // correcto sin necesitar una migración de backfill aparte.
+  const tieneCitas = !tenantModulesInactivos.some((tm) => tm.module.code === "citas");
+  const tieneExpediente = !tenantModulesInactivos.some((tm) => tm.module.code === "expediente-clinico");
+  const doctores = staffRows.filter((s) => s.userId != null).map((s) => ({ userId: s.userId as string, name: s.name }));
   // El PIN original no se puede recuperar de pinHash (es un hash, no texto
   // plano) — no hace falta para operar la semana; se reutiliza uno de la
   // lista fija PINES solo para que el tipo EmpleadoCreado quede completo.
@@ -992,7 +1233,8 @@ async function refrescarNegocioDemo(cfg: RubroConfig): Promise<boolean> {
   await borrarDatosOperativos(tenant.id);
 
   await sembrarSemanaOperativa({
-    tenant, branchPrincipal: branches[0], branchSecundaria: branches[1] ?? null, branches, ownerUser, productos, clientes, empleados, tieneReparaciones, cfg,
+    tenant, branchPrincipal: branches[0], branchSecundaria: branches[1] ?? null, branches, ownerUser, productos, clientes, empleados,
+    tieneReparaciones, tieneCitas, tieneExpediente, doctores, cfg,
     supplierId: proveedor.id,
   });
   return true;

@@ -70,6 +70,10 @@ export const getTenantPrisma = (tenantId: string) => {
     // comentario de este array arriba: cualquier modelo con tenantId propio
     // DEBE estar en esta lista.
     "Appointment",
+    // Expediente Clínico y Odontograma (M16, 2026-09-18) — agregados desde
+    // el primer commit de este módulo, precisamente para no repetir el
+    // descuido de Appointment de arriba.
+    "PatientRecord", "ClinicalNote", "OdontogramaTooth",
   ];
 
   return prisma.$extends({

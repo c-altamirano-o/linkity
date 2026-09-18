@@ -71,6 +71,9 @@ model Tenant {
   supportTickets SupportTicket[]
   staffLoginSessions StaffLoginSession[]
   appointments Appointment[]
+  patientRecords    PatientRecord[]
+  clinicalNotes     ClinicalNote[]
+  odontogramaTeeth  OdontogramaTooth[]
 }
 
 // Textos de UI personalizables por tenant (nombre del módulo, de la entidad,
@@ -173,6 +176,8 @@ model User {
   supportTickets  SupportTicket[]
   supportMessages SupportTicketMessage[]
   appointments    Appointment[]
+  clinicalNotesWritten     ClinicalNote[]
+  odontogramaTeethUpdated  OdontogramaTooth[]
   // Nota: StaffLoginSession NO se relaciona con User — apunta directo a
   // Staff, que es la identidad real detrás de una sesión de PIN (ver
   // comentario largo en ese modelo).
@@ -430,6 +435,9 @@ model Customer {
   repairs      Repair[]
   invoices     Invoice[]
   appointments Appointment[]
+  patientRecord    PatientRecord?
+  clinicalNotes    ClinicalNote[]
+  odontogramaTeeth OdontogramaTooth[]
 }
 
 // ============================================
@@ -1035,4 +1043,107 @@ enum AppointmentStatus {
   COMPLETED
   NO_SHOW
   CANCELLED
+}
+
+// ============================================
+// M16 - EXPEDIENTE CLÍNICO Y ODONTOGRAMA — Fase 1 de "Propuesta: Consultorio
+// Dental para Linkity" (2026-09-18), items 2 y 3 del roadmap acordado con
+// Carlos (después de M15-Citas). Cubre el mínimo que pide
+// NOM-004-SSA3-2012 para un expediente clínico: antecedentes del paciente
+// (una ficha que se acumula, no una por consulta) + notas de evolución (una
+// por consulta/cita). El odontograma usa notación FDI de dos dígitos
+// (cuadrante 1-4 + posición 1-8, ej. 11 = incisivo central superior
+// derecho) — el estándar con el que cualquier dentista mexicano ya lee un
+// odontograma en papel.
+//
+// Un solo módulo ("expediente-clinico", ver lib/modules-catalog.ts) cubre
+// ambas piezas: no todo negocio de cita necesita el odontograma (dientes),
+// pero antecedentes + notas de evolución sí le sirven a cualquier negocio
+// de tipo consulta (médico, veterinaria), así que separarlo en dos módulos
+// habría sido sobre-ingeniería para lo que pide esta fase — el odontograma
+// simplemente no se muestra en la UI para un negocio cuyo businessType no
+// es "consultorio_dental" (ver ClientesClient.tsx), sin necesidad de un
+// segundo toggle. Todo vive embebido en la ficha del cliente (módulo
+// Clientes, M7), no en una ruta propia — por eso ninguno de estos 3
+// modelos necesita folio ni aparece en TenantShell.tsx como link de menú
+// aparte.
+model PatientRecord {
+  id       String @id @default(cuid())
+  tenantId String
+  // Un expediente por paciente (no por cita) — se va acumulando con el
+  // tiempo, de ahí el @unique en vez de permitir varios por Customer.
+  customerId String @unique
+
+  bloodType          String?
+  allergies          String?
+  chronicConditions  String?
+  currentMedications String?
+  previousSurgeries  String?
+  familyHistory      String?
+  generalNotes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+}
+
+// Notas de evolución — una fila por consulta/visita, a diferencia de
+// PatientRecord (un solo registro acumulado). `userId` es la cuenta de
+// atribución del doctor/profesional que la escribió, mismo criterio que
+// Appointment.userId/Repair.userId (ver el comentario largo en
+// Staff.userId): cualquier doctor con PIN puede quedar como autor, no solo
+// el dueño.
+model ClinicalNote {
+  id         String   @id @default(cuid())
+  tenantId   String
+  customerId String
+  userId     String
+  reason     String
+  diagnosis  String?
+  treatment  String?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+}
+
+// Estado ACTUAL de cada diente del paciente — no existe una fila por cada
+// diente de entrada: solo se crea/actualiza (upsert) cuando alguien cambia
+// su condición desde "sano" (el default implícito que asume la UI cuando
+// no hay fila, mismo criterio "sin fila = default" que ya usa TenantModule
+// en este proyecto). `toothNumber` es el número FDI de dos dígitos
+// (11-18, 21-28, 31-38, 41-48 para dentición permanente — Fase 1 no cubre
+// dentición temporal/infantil, fuera de alcance de esta primera versión).
+model OdontogramaTooth {
+  id            String         @id @default(cuid())
+  tenantId      String
+  customerId    String
+  toothNumber   Int
+  condition     ToothCondition @default(SANO)
+  notes         String?
+  updatedAt     DateTime       @updatedAt
+  updatedByUserId String?
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  customer  Customer @relation(fields: [customerId], references: [id])
+  updatedBy User?    @relation(fields: [updatedByUserId], references: [id])
+
+  @@unique([customerId, toothNumber])
+}
+
+enum ToothCondition {
+  SANO
+  CARIES
+  OBTURADO
+  CORONA
+  ENDODONCIA
+  AUSENTE
+  EXTRACCION_INDICADA
+  IMPLANTE
+  FRACTURADO
+  SELLANTE
 }
