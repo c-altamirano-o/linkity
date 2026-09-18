@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateThemePreset, updateBusinessType } from "@/app/actions/tenant";
+import { updateThemePreset, updateBusinessType, updateWeekStartDay } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { THEME_PRESETS, TENANT_THEME_ROOT_ID, type ThemePresetId } from "@/lib/theme-presets";
 import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
-  LayoutGrid, Sparkles, Image as ImageIcon,
+  LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock,
 } from "lucide-react";
 
 const TIPOS_LOGO_PERMITIDOS = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
@@ -44,6 +44,10 @@ const THEMES = [
 
 const SIN_RUBRO = "";
 
+// 0=domingo…6=sábado — mismo índice que Tenant.weekStartDay (schema.prisma)
+// y lib/periodo-laboral.ts.
+const DIAS_SEMANA_COMPLETOS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
 interface ModuloPersonalizable {
   code: string;
   name: string;
@@ -57,6 +61,7 @@ interface ConfiguracionClientProps {
   modulos: ModuloPersonalizable[];
   recomendadosOff: string[];
   logoInicial: string | null;
+  weekStartDayInicial: number;
 }
 
 export default function ConfiguracionClient({
@@ -66,6 +71,7 @@ export default function ConfiguracionClient({
   modulos,
   recomendadosOff,
   logoInicial,
+  weekStartDayInicial,
 }: ConfiguracionClientProps) {
   const router = useRouter();
 
@@ -112,6 +118,27 @@ export default function ConfiguracionClient({
       const result = await updateBusinessType(tenantSlug, rubroSeleccionado === SIN_RUBRO ? null : rubroSeleccionado);
       setRubroMensaje(result.success ? "Rubro actualizado correctamente." : "Error al actualizar el rubro.");
       if (result.success) setTimeout(() => setRubroMensaje(""), 3000);
+    });
+  };
+
+  // ── Semana laboral ─────────────────────────────────────────
+  // 2026-09-18, a petición de Carlos: cada negocio elige su propio corte de
+  // semana (para "esta semana" en Dashboard, horas trabajadas en Personal,
+  // y el filtro "Semana" de Asistencia) en vez de que el sistema imponga
+  // uno solo — ver el comentario largo en Tenant.weekStartDay
+  // (schema.prisma) y lib/periodo-laboral.ts.
+  const [weekStartDaySeleccionado, setWeekStartDaySeleccionado] = useState(weekStartDayInicial);
+  const [weekStartDayPending, startWeekStartDayTransition] = useTransition();
+  const [weekStartDayMensaje, setWeekStartDayMensaje] = useState("");
+
+  const guardarWeekStartDay = () => {
+    startWeekStartDayTransition(async () => {
+      const result = await updateWeekStartDay(tenantSlug, weekStartDaySeleccionado);
+      setWeekStartDayMensaje(result.success ? "Semana laboral actualizada correctamente." : (result.error ?? "Error al actualizar."));
+      if (result.success) {
+        router.refresh();
+        setTimeout(() => setWeekStartDayMensaje(""), 3000);
+      }
     });
   };
 
@@ -378,6 +405,48 @@ export default function ConfiguracionClient({
               {rubroPending ? "Aplicando..." : "Guardar cambios"}
             </button>
             {rubroMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{rubroMensaje}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Semana laboral ─────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <CalendarClock className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold text-foreground">Semana laboral</h2>
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-muted-foreground mb-5">
+            Elige en qué día empieza tu semana de trabajo. Este es el día que usa el sistema para calcular
+            &quot;ventas de esta semana&quot; en el Dashboard, las horas trabajadas de tu personal, y el filtro
+            &quot;Semana&quot; de Asistencia — para que coincida con tu corte real de nómina, no con un calendario
+            genérico.
+          </p>
+
+          <div className="max-w-sm">
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tu semana laboral empieza el</label>
+            <select
+              value={weekStartDaySeleccionado}
+              onChange={(e) => setWeekStartDaySeleccionado(Number(e.target.value))}
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              {DIAS_SEMANA_COMPLETOS.map((nombre, i) => (
+                <option key={nombre} value={i}>{nombre}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
+            <button
+              onClick={guardarWeekStartDay}
+              disabled={weekStartDayPending}
+              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              {weekStartDayPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              {weekStartDayPending ? "Aplicando..." : "Guardar cambios"}
+            </button>
+            {weekStartDayMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{weekStartDayMensaje}</span>}
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getTenantPrisma } from "@/lib/prisma";
+import { obtenerWeekStartDay, rangoSemanaLaboral } from "@/lib/periodo-laboral";
 
 /**
  * Capa de datos reales del módulo Personal (M11). A diferencia de los demás
@@ -93,15 +94,20 @@ export async function getPersonalData(tenantId: string): Promise<PersonalData> {
   // Staff y User tienen tenantId propio → getTenantPrisma lo inyecta solo.
   const db = getTenantPrisma(tenantId);
 
-  const hace8Dias = new Date();
-  hace8Dias.setDate(hace8Dias.getDate() - 8);
+  // Semana laboral configurable por tenant (lib/periodo-laboral.ts) —
+  // horasSemana antes sumaba una ventana fija de "últimos 8 días" (ni
+  // siquiera 7), sin ninguna relación con el corte de nómina real del
+  // negocio; Carlos lo detectó al ver "40.3 hrs en los últimos 8 días" un
+  // jueves. Ver el comentario largo en Tenant.weekStartDay (schema.prisma).
+  const weekStartDay = await obtenerWeekStartDay(tenantId);
+  const { start: inicioSemana, end: finSemana } = rangoSemanaLaboral(new Date(), weekStartDay);
 
   const staffRaw = await db.staff.findMany({
     orderBy: { name: "asc" },
     include: {
       branch: { select: { name: true } },
       role: { select: { id: true, name: true, description: true } },
-      attendances: { where: { date: { gte: hace8Dias } }, orderBy: { date: "desc" } },
+      attendances: { where: { date: { gte: inicioSemana, lt: finSemana } }, orderBy: { date: "desc" } },
       payments: { orderBy: { periodStart: "desc" }, take: 6 },
     },
   });

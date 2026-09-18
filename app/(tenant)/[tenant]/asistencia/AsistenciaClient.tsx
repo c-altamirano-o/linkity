@@ -15,6 +15,12 @@ interface AsistenciaClientProps {
   registros: RegistroAsistencia[];
   branches: BranchOption[];
   tenantSlug: string;
+  // Día en que abre la semana laboral de este negocio (Tenant.weekStartDay,
+  // 0=domingo…6=sábado) — ver lib/periodo-laboral.ts. El filtro "Semana" de
+  // abajo antes era una ventana rodante de 7 días sin relación con ningún
+  // corte real (mismo problema, independiente, que tenía Personal — ver el
+  // comentario largo en schema.prisma).
+  weekStartDay: number;
 }
 
 const TODAS_SUCURSALES_ID = "__todas__";
@@ -33,7 +39,21 @@ function mxParts(d: Date) {
   return { y: mx.getUTCFullYear(), m: mx.getUTCMonth(), day: mx.getUTCDate() };
 }
 
-function coincidePeriodo(fechaISO: string, periodo: Periodo): boolean {
+// Igual fórmula que lib/periodo-laboral.ts (inicioSemanaLaboral), duplicada
+// aquí a mano — Client Component, sigue la misma convención de mxParts de
+// arriba en vez de importar el archivo server-only.
+function inicioSemanaLaboralLocal(fecha: Date, weekStartDay: number): Date {
+  const mx = new Date(fecha.getTime() - MX_OFFSET_MS);
+  const diaSemanaActual = mx.getUTCDay();
+  const diasTranscurridos = (diaSemanaActual - weekStartDay + 7) % 7;
+  const y = mx.getUTCFullYear();
+  const m = mx.getUTCMonth();
+  const d = mx.getUTCDate() - diasTranscurridos;
+  const inicioMx = new Date(Date.UTC(y, m, d, 0, 0, 0));
+  return new Date(inicioMx.getTime() + MX_OFFSET_MS);
+}
+
+function coincidePeriodo(fechaISO: string, periodo: Periodo, weekStartDay: number): boolean {
   if (periodo === "Todo") return true;
   const fecha = new Date(fechaISO);
   const ahora = new Date();
@@ -43,8 +63,9 @@ function coincidePeriodo(fechaISO: string, periodo: Periodo): boolean {
     return f.y === hoy.y && f.m === hoy.m && f.day === hoy.day;
   }
   if (periodo === "Semana") {
-    const diffDias = Math.floor((ahora.getTime() - fecha.getTime()) / (24 * 3600 * 1000));
-    return diffDias >= 0 && diffDias < 7;
+    const inicio = inicioSemanaLaboralLocal(ahora, weekStartDay);
+    const fin = new Date(inicio.getTime() + 7 * 24 * 3600 * 1000);
+    return fecha.getTime() >= inicio.getTime() && fecha.getTime() < fin.getTime();
   }
   // "Mes"
   const hoy = mxParts(ahora);
@@ -65,7 +86,7 @@ function formatDuracion(checkInISO: string, checkOutISO: string | null): string 
   return horas === 0 ? `${mins} min` : `${horas}h ${mins}min`;
 }
 
-export default function AsistenciaClient({ registros, branches, tenantSlug }: AsistenciaClientProps) {
+export default function AsistenciaClient({ registros, branches, tenantSlug, weekStartDay }: AsistenciaClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [sucursal, setSucursal] = useState(TODAS_SUCURSALES_ID);
@@ -78,11 +99,11 @@ export default function AsistenciaClient({ registros, branches, tenantSlug }: As
     const q = busqueda.trim().toLowerCase();
     return registros.filter((r) => {
       const matchSucursal = sucursal === TODAS_SUCURSALES_ID || r.branchId === sucursal;
-      const matchPeriodo = coincidePeriodo(r.checkIn, periodo);
+      const matchPeriodo = coincidePeriodo(r.checkIn, periodo, weekStartDay);
       const matchBusqueda = !q || r.staffName.toLowerCase().includes(q);
       return matchSucursal && matchPeriodo && matchBusqueda;
     });
-  }, [registros, sucursal, periodo, busqueda]);
+  }, [registros, sucursal, periodo, busqueda, weekStartDay]);
 
   const abiertosAhora = registros.filter((r) => r.abierta).length;
 

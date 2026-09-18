@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getDashboardData } from "@/lib/dashboard-data";
+import { getDashboardData, getVentasPorDia, hoyMx } from "@/lib/dashboard-data";
 import { getTenantLabels } from "@/lib/labels-server";
 import DashboardClient from "./DashboardClient";
 
@@ -24,10 +24,18 @@ export default async function DashboardPage({
 
   if (!tenant) notFound();
 
-  const [data, labels] = await Promise.all([
-    getDashboardData(tenant.id, tenant.branches),
+  const [data, labels, ventasPorDiaInicial] = await Promise.all([
+    getDashboardData(tenant.id, tenant.branches, tenant.weekStartDay),
     getTenantLabels(tenant.id, tenant.businessType),
+    getVentasPorDia(tenant.id, hoyMx()),
   ]);
 
-  return <DashboardClient data={data} labels={labels} tenantSlug={tenantSlug} />;
+  return (
+    <DashboardClient
+      data={data}
+      labels={labels}
+      tenantSlug={tenantSlug}
+      ventasPorDiaInicial={ventasPorDiaInicial}
+    />
+  );
 }

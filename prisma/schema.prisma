@@ -24,6 +24,25 @@ model Tenant {
   businessType String?
   themePreset  ThemePreset @default(NEUTRAL_TECH)
   isActive     Boolean     @default(true)
+
+  // Día en que abre la "semana laboral" de ESTE negocio (2026-09-18, a
+  // petición explícita de Carlos: "no quiero que sea un sistema cerrado...
+  // cada dueño debe poder crear su propio periodo laboral" — antes cada
+  // módulo que hablaba de "esta semana" traía su propio criterio
+  // improvisado y sin configurar: Dashboard usaba una ventana rodante de 7
+  // días terminando hoy, Personal una ventana fija de 8 días, y Asistencia
+  // otra ventana rodante de 7 días — ninguna alineada a un día real de
+  // corte de nómina, y las tres podían mostrar números distintos entre sí
+  // para la misma pregunta. 0=domingo … 6=sábado (mismo índice que
+  // DIAS_SEMANA en lib/dashboard-data.ts). Default 1 = lunes, el criterio
+  // que ya tenían las pantallas que sí usaban una semana calendario (ISO,
+  // lunes a domingo) — así ningún tenant existente cambia de comportamiento
+  // hasta que su dueño elija otro día en Configuración. Único punto de
+  // verdad: lib/periodo-laboral.ts calcula el rango real a partir de este
+  // campo, para que Dashboard/Personal/Asistencia dejen de tener cada uno
+  // su propia idea de "semana".
+  weekStartDay Int @default(1)
+
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 

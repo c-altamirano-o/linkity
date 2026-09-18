@@ -15,10 +15,17 @@ export default async function AsistenciaPage({
 }) {
   const { tenant: tenantSlug } = await params;
 
-  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
+  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true, weekStartDay: true } });
   if (!tenant) notFound();
 
   const { registros, branches } = await getAsistenciaData(tenant.id);
 
-  return <AsistenciaClient registros={registros} branches={branches} tenantSlug={tenantSlug} />;
+  return (
+    <AsistenciaClient
+      registros={registros}
+      branches={branches}
+      tenantSlug={tenantSlug}
+      weekStartDay={tenant.weekStartDay}
+    />
+  );
 }

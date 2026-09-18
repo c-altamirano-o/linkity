@@ -5,16 +5,18 @@ import { useRouter } from "next/navigation";
 import {
   ShoppingCart, Wrench, AlertTriangle, Clock, ArrowUpRight, ArrowDownRight,
   CheckCircle, RotateCcw, Receipt, Building2, X, Phone, Settings,
+  Calendar, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell,
+  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar,
 } from "recharts";
 import type { RepairStatus, Priority } from "@prisma/client";
 import { label, type LabelDictionary } from "@/lib/labels";
 import type {
-  DashboardData, RepairRow, CategoriaVenta,
+  DashboardData, RepairRow, CategoriaVenta, VentasPorDiaData, VentaPorHora,
 } from "@/lib/dashboard-data";
+import { obtenerVentasPorDiaAction } from "@/app/actions/dashboard-actions";
 
 // ── Config de presentación (claves = valores reales del enum) ───────────────
 const estadoConfig: Record<RepairStatus, { label: string; classes: string }> = {
@@ -60,6 +62,37 @@ type CatConfig = CategoriaVenta & { visible: boolean };
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
+const MESES_LARGO = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+const DIAS_LARGO = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+
+// Formatea "YYYY-MM-DD" a texto largo sin pasar por Date/huso horario real
+// (Date.UTC a mediodía es solo para leer el día de la semana de forma
+// segura) — así el resultado no depende de en qué zona horaria esté el
+// navegador de quien mira el Dashboard.
+function formatFechaLarga(fechaStr: string): string {
+  const [y, m, d] = fechaStr.split("-").map(Number);
+  const diaSemana = new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay();
+  return `${DIAS_LARGO[diaSemana]} ${d} de ${MESES_LARGO[m - 1]} de ${y}`;
+}
+
+const CustomTooltipHora = ({ active, payload }: { active?: boolean; payload?: { payload: VentaPorHora }[] }) => {
+  if (active && payload?.length) {
+    const d = payload[0].payload;
+    return (
+      <div className="bg-card border border-border rounded-lg p-2 shadow-sm">
+        <p className="text-xs font-medium text-foreground mb-0.5">{d.horaLabel}</p>
+        <p className="text-[10px] text-muted-foreground">
+          {d.numVentas} {d.numVentas === 1 ? "venta" : "ventas"} · {formatMXN(d.totalVentas)}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
 const CustomTooltip = ({ active, payload, label: lbl }: any) => {
   if (active && payload?.length) {
     return (
@@ -88,15 +121,21 @@ export default function DashboardClient({
   data,
   labels,
   tenantSlug,
+  ventasPorDiaInicial,
 }: {
   data: DashboardData;
   labels: LabelDictionary;
   tenantSlug: string;
+  ventasPorDiaInicial: VentasPorDiaData;
 }) {
   const router = useRouter();
   const t = (key: string) => label(labels, key);
 
   const [modalAbierto, setModalAbierto] = useState<ModalType>(null);
+  const [ventasPorDia, setVentasPorDia] = useState<VentasPorDiaData>(ventasPorDiaInicial);
+  const [fechaSel, setFechaSel] = useState(ventasPorDiaInicial.fecha);
+  const [hoyStr, setHoyStr] = useState(ventasPorDiaInicial.fecha);
+  const [cargandoFecha, setCargandoFecha] = useState(false);
   const [configurandoCategorias, setConfigurandoCategorias] = useState(false);
   const [categoriasConfig, setCategoriasConfig] = useState<CatConfig[]>(
     data.categorias.map((c, i) => ({ ...c, visible: i < 6 }))
@@ -114,7 +153,26 @@ export default function DashboardClient({
         timeZone: "America/Mexico_City",
       }).format(new Date())
     );
+    // "en-CA" formatea como YYYY-MM-DD directamente — mismo truco que el
+    // resto del proyecto para no reconstruir el string a mano.
+    setHoyStr(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date()));
   }, []);
+
+  const cambiarFechaVentas = async (nuevaFecha: string) => {
+    if (nuevaFecha === fechaSel || cargandoFecha) return;
+    setFechaSel(nuevaFecha);
+    setCargandoFecha(true);
+    const res = await obtenerVentasPorDiaAction(tenantSlug, nuevaFecha);
+    if (res.ok) setVentasPorDia(res.data);
+    setCargandoFecha(false);
+  };
+
+  const sumarDias = (fechaStr: string, delta: number) => {
+    const [y, m, d] = fechaStr.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
+  };
+
+  const esHoySeleccionado = fechaSel >= hoyStr;
 
   const categoriasVisibles = categoriasConfig.filter((c) => c.visible);
 
@@ -478,6 +536,71 @@ export default function DashboardClient({
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── Ventas por día y hora (selector de fecha) ─────────────────────── */}
+      <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3">
+          <div>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-primary" /> Ventas por día y hora
+            </p>
+            <p className="text-xs text-muted-foreground capitalize">{formatFechaLarga(fechaSel)}</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => cambiarFechaVentas(sumarDias(fechaSel, -1))} disabled={cargandoFecha}
+              className="w-7 h-7 rounded-lg border border-border hover:bg-muted flex items-center justify-center disabled:opacity-40 flex-shrink-0">
+              <ChevronLeft className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+            <input
+              type="date"
+              value={fechaSel}
+              max={hoyStr}
+              disabled={cargandoFecha}
+              onChange={(e) => e.target.value && cambiarFechaVentas(e.target.value)}
+              className="px-2 py-1.5 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary disabled:opacity-60"
+            />
+            <button onClick={() => cambiarFechaVentas(sumarDias(fechaSel, 1))} disabled={cargandoFecha || esHoySeleccionado}
+              className="w-7 h-7 rounded-lg border border-border hover:bg-muted flex items-center justify-center disabled:opacity-40 flex-shrink-0">
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+            {!esHoySeleccionado && (
+              <button onClick={() => cambiarFechaVentas(hoyStr)} disabled={cargandoFecha}
+                className="text-[10px] font-medium px-2 py-1.5 rounded-lg text-primary bg-primary/10 hover:opacity-80 flex-shrink-0">
+                Hoy
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+          {[
+            { label: "Total vendido", value: formatMXN(ventasPorDia.totalVentas) },
+            { label: "Ventas", value: String(ventasPorDia.numVentas) },
+            { label: "Ticket promedio", value: formatMXN(ventasPorDia.ticketPromedio) },
+            { label: "Mayor flujo", value: ventasPorDia.horaPico ? ventasPorDia.horaPico.horaLabel : "—" },
+          ].map((s) => (
+            <div key={s.label} className="bg-muted/50 rounded-xl p-2 text-center">
+              <p className="text-[9px] text-muted-foreground mb-0.5">{s.label}</p>
+              <p className="text-sm font-semibold text-foreground">{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {ventasPorDia.numVentas === 0 ? (
+          <EmptyState text="No hay ventas registradas ese día." />
+        ) : (
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={ventasPorDia.porHora} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+              <XAxis dataKey="horaLabel" tick={{ fontSize: 8, fill: "#94A3B8" }} axisLine={false} tickLine={false} interval={2} />
+              <YAxis tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} width={22} allowDecimals={false} />
+              <Tooltip content={<CustomTooltipHora />} cursor={{ fill: "var(--primary)", fillOpacity: 0.06 }} />
+              <Bar dataKey="numVentas" fill="var(--primary)" radius={[4, 4, 0, 0]} maxBarSize={18} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+        {cargandoFecha && <p className="text-[10px] text-muted-foreground text-center mt-2">Cargando…</p>}
       </div>
 
       {/* ── Reparaciones + Alertas ─────────────────────────────────────────── */}

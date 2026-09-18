@@ -1,0 +1,860 @@
+import "dotenv/config";
+import {
+  PrismaClient, ProductType, CategoryType,
+  RepairStatus, Priority, PaymentMethod, SaleStatus,
+  MovementType, CashSessionStatus,
+  MixedPaymentMethod, PaymentScheme, CommissionBase,
+  PaymentFrequency, StaffPaymentStatus, PurchaseStatus,
+  InvoiceStatus, StaffPaymentMethod, StaffLoginCloseReason,
+} from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { randomBytes, scryptSync } from "crypto";
+import { createClient } from "@supabase/supabase-js";
+import { writeFileSync } from "fs";
+
+/**
+ * Seed de 20 negocios DEMO (uno por cada rubro soportado), 2026-09-17 —
+ * a petición de Carlos: "llenar 1 base de datos de cada rubro con datos
+ * inventados para navegar... luego se las pasaré a diferentes dueños de
+ * negocios como muestra... grupo de control". Cada tenant queda con una
+ * semana completa (lunes 7 a domingo 13 de septiembre de 2026) de
+ * operación ya capturada: catálogo, inventario, clientes, personal (roles
+ * y esquemas de pago diversificados, la función que se acaba de terminar),
+ * ventas, caja, reparaciones (solo en los rubros donde aplica) y nómina.
+ *
+ * Aparte de prisma/seed.ts (el seed fijo de "Cell Express", usado para
+ * desarrollo) a propósito — este es un lote de negocios DEMO nuevos con su
+ * propio login real de Supabase Auth cada uno, pensado para mostrarse a
+ * dueños de negocio reales, no para desarrollo día a día.
+ *
+ * No importa nada de lib/*.ts que traiga la guarda "server-only" (ej.
+ * lib/catalogo-arranque.ts, lib/roles-server.ts): ese paquete revienta en
+ * cualquier ejecución que no pase por el bundler "react-server" de Next, y
+ * este script corre con tsx directo (igual que seed.ts). Por eso el
+ * catálogo de arranque por rubro, el hash de PIN y el motor de permisos se
+ * duplican aquí en su forma mínima, en vez de importarse.
+ *
+ * Cómo correrlo: `npx tsx prisma/seed-demo.ts` (requiere las mismas
+ * variables de entorno que ya usa la app: DIRECT_URL, NEXT_PUBLIC_SUPABASE_URL,
+ * SUPABASE_SERVICE_ROLE_KEY). Es seguro volver a correrlo: si un tenant con
+ * ese slug ya existe, se omite por completo (no lo duplica ni lo toca) —
+ * así que si corre y falla a la mitad, se puede volver a correr tal cual
+ * para completar los rubros que faltaron, pero no "repara" un tenant que
+ * haya quedado a medias (mejor revisar el error y, si hace falta, borrar
+ * ese tenant a mano desde Panel Maestro antes de reintentar ese rubro).
+ *
+ * Al final imprime y también guarda en prisma/DEMO_CREDENCIALES.md la
+ * lista de los 20 logins (correo + contraseña del dueño) y el PIN de cada
+ * empleado de cada negocio.
+ */
+
+const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL });
+const prisma = new PrismaClient({ adapter });
+
+function supabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
+// Copia local mínima de lib/staff-auth.ts (ese archivo tiene "server-only").
+function hashPin(pin: string): string {
+  const salt = randomBytes(16);
+  const hash = scryptSync(pin, salt, 64);
+  return `${salt.toString("hex")}:${hash.toString("hex")}`;
+}
+
+const DEMO_PASSWORD = "Demo2026!";
+const ACCION_UNICA = "acceso";
+const PINES = ["1111", "2222", "3333", "4444"];
+
+const MODULE_NAMES: Record<string, string> = {
+  dashboard: "Dashboard", pos: "Punto de Venta", reparaciones: "Reparaciones", clientes: "Clientes",
+  catalogo: "Catálogo", inventario: "Inventario", compras: "Compras", caja: "Caja", personal: "Personal",
+  asistencia: "Asistencia", sucursales: "Sucursales", reportes: "Reportes", facturacion: "Facturación", soporte: "Soporte",
+};
+const MODULE_CATALOG_CODES = Object.keys(MODULE_NAMES);
+const MODULOS_ASIGNABLES = ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "sucursales", "reportes", "soporte"];
+
+// Copia local de lib/modulos-rubro.ts (VERTICAL_MODULE_DEFAULTS_OFF) — solo
+// "reparaciones" depende del rubro hoy.
+const MODULOS_OFF_POR_RUBRO: Record<string, string[]> = {
+  barberia: ["reparaciones"], consultorio_dental: ["reparaciones"], consultorio_medico: ["reparaciones"],
+  veterinaria: ["reparaciones"], estetica: ["reparaciones"], spa: ["reparaciones"], gimnasio: ["reparaciones"],
+  tatuajes: ["reparaciones"], comercio_retail: ["reparaciones"],
+};
+
+const PALETA = ["#4F46E5", "#06B6D4", "#8B5CF6", "#F97316", "#F59E0B", "#14B8A6", "#10B981", "#EC4899", "#EF4444", "#3B82F6"];
+
+// Semana completa a sembrar: lunes 7 a domingo 13 de septiembre de 2026
+// (la última semana calendario ya cerrada antes de "hoy", 17-sep-2026).
+const SEMANA = ["2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13"];
+
+// ── utilidades ─────────────────────────────────────────────────────────
+function randInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+function pick<T>(arr: T[]): T {
+  return arr[randInt(0, arr.length - 1)];
+}
+function telefonoAleatorio(): string {
+  let s = "";
+  for (let i = 0; i < 10; i++) s += String(randInt(0, 9));
+  return s;
+}
+function horaAleatoria(): string {
+  const h = randInt(9, 19);
+  const m = pick(["00", "15", "30", "45"]);
+  return `${String(h).padStart(2, "0")}:${m}`;
+}
+function claveAleatoria18(): string {
+  let s = "014027";
+  while (s.length < 18) s += String(randInt(0, 9));
+  return s.slice(0, 18);
+}
+function metodoPagoVenta(): PaymentMethod {
+  const r = Math.random();
+  if (r < 0.45) return PaymentMethod.CASH;
+  if (r < 0.75) return PaymentMethod.CARD;
+  if (r < 0.85) return PaymentMethod.TRANSFER;
+  return PaymentMethod.MIXED;
+}
+function inferirModulosPorPuesto(puesto: string, tieneReparaciones: boolean): string[] {
+  const p = puesto.toLowerCase();
+  const base = ["pos", "clientes"];
+  if (tieneReparaciones) base.push("reparaciones");
+  if (p.includes("recep")) return Array.from(new Set([...base, "caja"]));
+  if (p.includes("jefe") || p.includes("encargad") || p.includes("gerente") || p.includes("veterinari") || p.includes("médic") || p.includes("dentista")) {
+    return Array.from(new Set([...base, "caja", "catalogo", "inventario", "reportes"]));
+  }
+  return Array.from(new Set(base));
+}
+function commissionBaseSegunRubro(tieneReparaciones: boolean, i: number, esquema: PaymentScheme): CommissionBase {
+  let base: CommissionBase = i === 0 ? CommissionBase.UTILIDAD : (tieneReparaciones && i % 2 === 1 ? CommissionBase.REPARACIONES : CommissionBase.VENTAS);
+  // UTILIDAD no aplica a destajo (ver Staff.pieceRate, schema.prisma) — si
+  // cayó ahí, se resuelve a la base "unidad" que sí le corresponda al rubro.
+  if (esquema === PaymentScheme.DESTAJO && base === CommissionBase.UTILIDAD) {
+    base = tieneReparaciones ? CommissionBase.REPARACIONES : CommissionBase.VENTAS;
+  }
+  return base;
+}
+
+async function obtenerOCrearUsuarioAuth(email: string, password: string): Promise<string> {
+  const admin = supabaseAdmin();
+  const { data, error } = await admin.auth.admin.createUser({
+    email, password, email_confirm: true, user_metadata: { demo: true },
+  });
+  if (!error && data?.user) return data.user.id;
+
+  // Ya existe (reintento de una corrida anterior que sí creó el Auth user
+  // pero falló después) — lo localizamos por correo en vez de tronar.
+  for (let page = 1; page <= 5; page++) {
+    const { data: lista, error: errLista } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (errLista || !lista) break;
+    const encontrado = lista.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+    if (encontrado) return encontrado.id;
+    if (lista.users.length < 200) break;
+  }
+  throw new Error(`No se pudo crear ni encontrar el usuario de Supabase Auth para ${email}: ${error?.message ?? "desconocido"}`);
+}
+
+async function asegurarCatalogoPermisos(): Promise<Map<string, string>> {
+  const modulos = Array.from(new Set([...MODULOS_ASIGNABLES, "dashboard"]));
+  const permisos = await Promise.all(
+    modulos.map((modulo) =>
+      prisma.permission.upsert({
+        where: { module_action: { module: modulo, action: ACCION_UNICA } },
+        update: {},
+        create: { module: modulo, action: ACCION_UNICA },
+        select: { id: true, module: true },
+      })
+    )
+  );
+  return new Map(permisos.map((p) => [p.module, p.id]));
+}
+
+// ── catálogo de arranque por rubro (copia local de lib/catalogo-arranque.ts, sin el sistema de íconos) ──
+interface ItemArranque {
+  categoryName: string;
+  categoryType: "PRODUCT" | "PART" | "SERVICE";
+  name: string;
+  type: "PRODUCT" | "PART" | "SERVICE";
+  price: number;
+  cost?: number;
+  // Clave del catálogo de íconos del sistema (lib/catalogo-iconos-base.ts,
+  // ICON_IDS) — se guarda en Product.emoji como "icon:<icon>", exactamente
+  // igual que hace cargarCatalogoArranqueAction en catalogo-actions.ts. Un
+  // emoji de texto plano ("🛠️" etc.) NO es una clave válida para ese
+  // resolver: el catálogo/POS/inventario caen a un ícono genérico de caja o
+  // llave cuando no reconocen la clave — bug real de la primera versión de
+  // este script, detectado por Carlos navegando el demo de barbería.
+  icon: string;
+}
+
+interface DispositivoReparacion { brand: string; model: string; }
+interface ConfigReparaciones { dispositivos: DispositivoReparacion[]; fallas: string[]; }
+
+interface EmpleadoConfig { puesto: string; nombre: string; }
+
+interface RubroConfig {
+  key: string;
+  tenantName: string;
+  slug: string;
+  emailLocal: string;
+  segundaSucursal: boolean;
+  proveedorNombre: string;
+  catalogo: ItemArranque[];
+  staff: EmpleadoConfig[];
+  reparaciones?: ConfigReparaciones;
+  // true = usar CLIENTES_POOL_MASCULINO en vez del pool general (ver su
+  // comentario). Por ahora solo "barberia".
+  clientelaMasculina?: boolean;
+}
+
+const CATALOGOS: Record<string, ItemArranque[]> = {
+  reparacion_celulares: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Diagnóstico", type: "SERVICE", price: 100 , icon: "Search" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de pantalla", type: "SERVICE", price: 800 , icon: "Smartphone" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de batería", type: "SERVICE", price: 450 , icon: "BatteryCharging" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de puerto de carga", type: "SERVICE", price: 350 , icon: "Plug" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Pantalla genérica", type: "PART", price: 800, cost: 450 , icon: "Smartphone" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Batería genérica", type: "PART", price: 400, cost: 220 , icon: "Battery" },
+    { categoryName: "Accesorios", categoryType: "PRODUCT", name: "Mica de cristal templado", type: "PRODUCT", price: 80, cost: 30 , icon: "ShieldCheck" },
+    { categoryName: "Accesorios", categoryType: "PRODUCT", name: "Funda protectora", type: "PRODUCT", price: 150, cost: 60 , icon: "Package" },
+    { categoryName: "Accesorios", categoryType: "PRODUCT", name: "Cargador USB-C", type: "PRODUCT", price: 200, cost: 90 , icon: "Zap" },
+  ],
+  taller_autos: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de aceite", type: "SERVICE", price: 450 , icon: "Droplet" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Afinación mayor", type: "SERVICE", price: 1800 , icon: "Wrench" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Diagnóstico computarizado", type: "SERVICE", price: 350 , icon: "Search" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Alineación y balanceo", type: "SERVICE", price: 600 , icon: "CircleGauge" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Filtro de aceite", type: "PART", price: 150, cost: 70 , icon: "Droplet" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Balatas delanteras (juego)", type: "PART", price: 900, cost: 500 , icon: "Cog" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Batería 12V", type: "PART", price: 1800, cost: 1200 , icon: "Battery" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Aceite de motor 1L", type: "PRODUCT", price: 180, cost: 100 , icon: "Droplet" },
+  ],
+  taller_motos: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de aceite", type: "SERVICE", price: 250 , icon: "Droplet" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Afinación", type: "SERVICE", price: 700 , icon: "Wrench" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de llanta", type: "SERVICE", price: 400 , icon: "Bike" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Kit de arrastre", type: "PART", price: 1200, cost: 700 , icon: "Cog" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Balatas", type: "PART", price: 350, cost: 180 , icon: "Wrench" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Batería para moto", type: "PART", price: 900, cost: 550 , icon: "Battery" },
+  ],
+  electrodomesticos: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Diagnóstico", type: "SERVICE", price: 150 , icon: "Search" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Reparación de lavadora", type: "SERVICE", price: 600 , icon: "WashingMachine" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Reparación de refrigerador", type: "SERVICE", price: 800 , icon: "Refrigerator" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Mantenimiento de aire acondicionado", type: "SERVICE", price: 500 , icon: "AirVent" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Motor de lavadora", type: "PART", price: 1200, cost: 700 , icon: "Cog" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Compresor", type: "PART", price: 1800, cost: 1100 , icon: "Fan" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Termostato", type: "PART", price: 350, cost: 180 , icon: "Thermometer" },
+  ],
+  computadoras: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Diagnóstico", type: "SERVICE", price: 150 , icon: "Search" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Formateo e instalación de sistema", type: "SERVICE", price: 350 , icon: "Laptop" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Limpieza interna", type: "SERVICE", price: 250 , icon: "Brush" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de disco a SSD", type: "SERVICE", price: 400 , icon: "HardDrive" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "SSD 480GB", type: "PART", price: 800, cost: 500 , icon: "HardDrive" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Memoria RAM 8GB", type: "PART", price: 700, cost: 450 , icon: "MemoryStick" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Fuente de poder", type: "PART", price: 600, cost: 350 , icon: "Zap" },
+    { categoryName: "Accesorios", categoryType: "PRODUCT", name: "Mouse", type: "PRODUCT", price: 150, cost: 70 , icon: "Mouse" },
+    { categoryName: "Accesorios", categoryType: "PRODUCT", name: "Teclado", type: "PRODUCT", price: 250, cost: 130 , icon: "Keyboard" },
+  ],
+  barberia: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Corte de cabello", type: "SERVICE", price: 120 , icon: "Scissors" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Barba", type: "SERVICE", price: 80 , icon: "Feather" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Corte + barba", type: "SERVICE", price: 180 , icon: "Star" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Diseño de cejas", type: "SERVICE", price: 50 , icon: "Sparkles" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Tinte", type: "SERVICE", price: 250 , icon: "Palette" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Cera para cabello", type: "PRODUCT", price: 150, cost: 70 , icon: "Brush" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Aceite para barba", type: "PRODUCT", price: 180, cost: 90 , icon: "Droplet" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Shampoo", type: "PRODUCT", price: 120, cost: 60 , icon: "SprayCan" },
+  ],
+  consultorio_dental: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Consulta / valoración", type: "SERVICE", price: 300 , icon: "Smile" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Limpieza dental", type: "SERVICE", price: 600 , icon: "Brush" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Extracción simple", type: "SERVICE", price: 800 , icon: "Cross" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Resina", type: "SERVICE", price: 700 , icon: "Droplet" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Blanqueamiento", type: "SERVICE", price: 2500 , icon: "Sparkles" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Cepillo dental", type: "PRODUCT", price: 60, cost: 25 , icon: "Brush" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Pasta dental", type: "PRODUCT", price: 80, cost: 35 , icon: "Droplet" },
+  ],
+  consultorio_medico: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Consulta general", type: "SERVICE", price: 400 , icon: "Stethoscope" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Consulta de seguimiento", type: "SERVICE", price: 250 , icon: "Cross" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Certificado médico", type: "SERVICE", price: 200 , icon: "ClipboardList" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Curación", type: "SERVICE", price: 150 , icon: "Bandage" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Kit de curación", type: "PRODUCT", price: 100, cost: 50 , icon: "Bandage" },
+  ],
+  veterinaria: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Consulta general", type: "SERVICE", price: 350 , icon: "PawPrint" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Vacunación", type: "SERVICE", price: 300 , icon: "Syringe" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Desparasitación", type: "SERVICE", price: 200 , icon: "Pill" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Baño y corte", type: "SERVICE", price: 250 , icon: "Bath" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cirugía menor", type: "SERVICE", price: 1500 , icon: "Activity" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Alimento premium 1kg", type: "PRODUCT", price: 120, cost: 70 , icon: "Bone" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Shampoo antipulgas", type: "PRODUCT", price: 150, cost: 80 , icon: "SprayCan" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Collar antipulgas", type: "PRODUCT", price: 180, cost: 90 , icon: "PawPrint" },
+  ],
+  relojeria_joyeria: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de pila de reloj", type: "SERVICE", price: 80 , icon: "Watch" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Ajuste de extensión", type: "SERVICE", price: 100 , icon: "Ruler" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Limpieza y pulido", type: "SERVICE", price: 200 , icon: "Gem" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Reparación de cierre", type: "SERVICE", price: 150 , icon: "Wrench" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Pila de reloj", type: "PART", price: 40, cost: 15 , icon: "Battery" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Correa de piel", type: "PRODUCT", price: 250, cost: 120 , icon: "Watch" },
+  ],
+  zapateria: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de suela", type: "SERVICE", price: 250 , icon: "Footprints" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de tacón", type: "SERVICE", price: 150 , icon: "Wrench" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Boleada", type: "SERVICE", price: 50 , icon: "Sparkles" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Ajuste de talla", type: "SERVICE", price: 100 , icon: "Ruler" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Plantillas", type: "PRODUCT", price: 120, cost: 55 , icon: "Footprints" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Betún", type: "PRODUCT", price: 60, cost: 25 , icon: "Droplet" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Agujetas", type: "PRODUCT", price: 40, cost: 15 , icon: "Tag" },
+  ],
+  refrigeracion_ac: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Mantenimiento preventivo", type: "SERVICE", price: 600 , icon: "Snowflake" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Carga de gas refrigerante", type: "SERVICE", price: 900 , icon: "Droplet" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Diagnóstico", type: "SERVICE", price: 250 , icon: "Search" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Instalación de minisplit", type: "SERVICE", price: 1500 , icon: "AirVent" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Capacitor", type: "PART", price: 350, cost: 180 , icon: "Cog" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Filtro de aire", type: "PART", price: 200, cost: 90 , icon: "Fan" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Termostato", type: "PART", price: 400, cost: 220 , icon: "Thermometer" },
+  ],
+  bicicletas: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Afinación completa", type: "SERVICE", price: 350 , icon: "Bike" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de llanta", type: "SERVICE", price: 150 , icon: "Wrench" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Ajuste de frenos", type: "SERVICE", price: 120 , icon: "CircleGauge" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de cadena", type: "SERVICE", price: 200 , icon: "Cog" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Cámara", type: "PART", price: 80, cost: 35 , icon: "Package" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Llanta", type: "PART", price: 350, cost: 180 , icon: "CircleGauge" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Cadena", type: "PART", price: 250, cost: 120 , icon: "Cog" },
+    { categoryName: "Refacciones", categoryType: "PART", name: "Pastillas de freno", type: "PART", price: 150, cost: 70 , icon: "Wrench" },
+  ],
+  cerrajeria: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Apertura de auto", type: "SERVICE", price: 350 , icon: "Car" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de cerradura", type: "SERVICE", price: 450 , icon: "Lock" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Duplicado de llave", type: "SERVICE", price: 60 , icon: "Key" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Programación de control", type: "SERVICE", price: 500 , icon: "Wrench" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Cerradura estándar", type: "PRODUCT", price: 400, cost: 220 , icon: "Lock" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Candado", type: "PRODUCT", price: 150, cost: 75 , icon: "KeyRound" },
+  ],
+  tapiceria: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Tapizado de sillón (por pieza)", type: "SERVICE", price: 1500 , icon: "Armchair" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Reparación de resortes", type: "SERVICE", price: 400 , icon: "Wrench" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Cambio de espuma", type: "SERVICE", price: 600 , icon: "Sofa" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Tela por metro", type: "PRODUCT", price: 180, cost: 100 , icon: "Ruler" },
+  ],
+  estetica: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Corte de cabello", type: "SERVICE", price: 150 , icon: "Scissors" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Peinado", type: "SERVICE", price: 200 , icon: "Brush" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Manicure", type: "SERVICE", price: 120 , icon: "Sparkles" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Pedicure", type: "SERVICE", price: 150 , icon: "Footprints" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Tinte", type: "SERVICE", price: 350 , icon: "Palette" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Esmalte", type: "PRODUCT", price: 80, cost: 35 , icon: "Sparkles" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Shampoo", type: "PRODUCT", price: 150, cost: 70 , icon: "SprayCan" },
+  ],
+  spa: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Masaje relajante 60 min", type: "SERVICE", price: 500 , icon: "Heart" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Masaje descontracturante", type: "SERVICE", price: 600 , icon: "HeartPulse" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Facial básico", type: "SERVICE", price: 400 , icon: "Sparkles" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Exfoliación corporal", type: "SERVICE", price: 450 , icon: "Flower2" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Aceite esencial", type: "PRODUCT", price: 200, cost: 100 , icon: "Droplet" },
+  ],
+  gimnasio: [
+    { categoryName: "Membresías", categoryType: "SERVICE", name: "Membresía mensual", type: "SERVICE", price: 450 , icon: "Dumbbell" },
+    { categoryName: "Membresías", categoryType: "SERVICE", name: "Membresía semanal", type: "SERVICE", price: 150 , icon: "Star" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Sesión personalizada", type: "SERVICE", price: 250 , icon: "HeartPulse" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Evaluación física", type: "SERVICE", price: 150 , icon: "ClipboardList" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Shaker", type: "PRODUCT", price: 100, cost: 45 , icon: "CupSoda" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Toalla deportiva", type: "PRODUCT", price: 80, cost: 35 , icon: "Shirt" },
+  ],
+  tatuajes: [
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Consulta de diseño", type: "SERVICE", price: 100 , icon: "Palette" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Tatuaje pequeño", type: "SERVICE", price: 600 , icon: "PenTool" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Tatuaje mediano", type: "SERVICE", price: 1500 , icon: "Feather" },
+    { categoryName: "Servicios", categoryType: "SERVICE", name: "Retoque", type: "SERVICE", price: 300 , icon: "Sparkles" },
+    { categoryName: "Productos", categoryType: "PRODUCT", name: "Crema cicatrizante", type: "PRODUCT", price: 150, cost: 70 , icon: "Droplet" },
+  ],
+  comercio_retail: [
+    { categoryName: "Bebidas", categoryType: "PRODUCT", name: "Agua embotellada 600ml", type: "PRODUCT", price: 15, cost: 8 , icon: "Droplets" },
+    { categoryName: "Bebidas", categoryType: "PRODUCT", name: "Refresco 600ml", type: "PRODUCT", price: 20, cost: 12 , icon: "CupSoda" },
+    { categoryName: "Snacks", categoryType: "PRODUCT", name: "Snack individual", type: "PRODUCT", price: 18, cost: 10 , icon: "Cookie" },
+    { categoryName: "Otros", categoryType: "PRODUCT", name: "Bolsa de plástico", type: "PRODUCT", price: 2, cost: 0.5 , icon: "ShoppingBag" },
+  ],
+};
+
+const REPARACIONES: Record<string, ConfigReparaciones> = {
+  reparacion_celulares: {
+    dispositivos: [{ brand: "Apple", model: "iPhone 13" }, { brand: "Samsung", model: "Galaxy A54" }, { brand: "Xiaomi", model: "Redmi Note 12" }, { brand: "Motorola", model: "Moto G84" }],
+    fallas: ["Pantalla rota", "No enciende", "Batería se descarga rápido", "No carga", "Sin señal"],
+  },
+  taller_autos: {
+    dispositivos: [{ brand: "Nissan", model: "Versa" }, { brand: "Chevrolet", model: "Aveo" }, { brand: "Volkswagen", model: "Jetta" }, { brand: "Kia", model: "Rio" }],
+    fallas: ["Ruido en frenos", "Fuga de aceite", "No enciende", "Falla en la transmisión", "Requiere afinación"],
+  },
+  taller_motos: {
+    dispositivos: [{ brand: "Honda", model: "CB190R" }, { brand: "Yamaha", model: "FZ16" }, { brand: "Suzuki", model: "Gixxer" }],
+    fallas: ["No enciende", "Ruido en motor", "Frenos gastados", "Fuga de aceite"],
+  },
+  electrodomesticos: {
+    dispositivos: [{ brand: "Whirlpool", model: "Lavadora 18kg" }, { brand: "Mabe", model: "Refrigerador" }, { brand: "LG", model: "Lavadora" }, { brand: "Samsung", model: "Refrigerador" }],
+    fallas: ["No enciende", "Hace ruido excesivo", "No enfría", "Fuga de agua", "No centrifuga"],
+  },
+  computadoras: {
+    dispositivos: [{ brand: "HP", model: "Pavilion 15" }, { brand: "Dell", model: "Inspiron 14" }, { brand: "Lenovo", model: "ThinkPad E14" }, { brand: "Apple", model: "MacBook Air" }],
+    fallas: ["No enciende", "Muy lenta", "Pantalla azul", "No carga la batería", "Sobrecalentamiento"],
+  },
+  relojeria_joyeria: {
+    dispositivos: [{ brand: "Casio", model: "Reloj análogo" }, { brand: "Fossil", model: "Reloj de cuarzo" }, { brand: "Citizen", model: "Reloj automático" }],
+    fallas: ["Pila agotada", "Cierre roto", "Cristal rayado", "Se atrasa"],
+  },
+  zapateria: {
+    dispositivos: [{ brand: "Casual", model: "Zapato de vestir" }, { brand: "Deportivo", model: "Tenis running" }, { brand: "Bota", model: "Bota de trabajo" }],
+    fallas: ["Suela despegada", "Tacón roto", "Costura abierta", "Necesita boleada"],
+  },
+  refrigeracion_ac: {
+    dispositivos: [{ brand: "Mabe", model: "Minisplit 1 tonelada" }, { brand: "LG", model: "Minisplit inverter" }, { brand: "Carrier", model: "Minisplit 2 toneladas" }],
+    fallas: ["No enfría", "Gotea agua", "Hace ruido", "Necesita mantenimiento"],
+  },
+  bicicletas: {
+    dispositivos: [{ brand: "Trek", model: "Bici de montaña" }, { brand: "Benotto", model: "Bici urbana" }, { brand: "Mercurio", model: "Bici de ruta" }],
+    fallas: ["Frenos no responden", "Cadena suelta", "Llanta ponchada", "Cambios desajustados"],
+  },
+  cerrajeria: {
+    dispositivos: [{ brand: "Kwikset", model: "Cerradura de puerta principal" }, { brand: "Genérica", model: "Chapa de auto" }, { brand: "Genérica", model: "Candado" }],
+    fallas: ["Llave atascada", "Cerradura no abre", "Perdió llaves", "Necesita cambio de chapa"],
+  },
+  tapiceria: {
+    dispositivos: [{ brand: "N/A", model: "Sillón de 3 plazas" }, { brand: "N/A", model: "Sofá cama" }, { brand: "N/A", model: "Silla de comedor (juego)" }],
+    fallas: ["Tela desgastada", "Resortes hundidos", "Espuma deteriorada", "Costura descosida"],
+  },
+};
+
+const RUBROS_DEMO: RubroConfig[] = [
+  { key: "barberia", tenantName: "Demo Barbería", slug: "demo-barberia", emailLocal: "barberia", segundaSucursal: false, clientelaMasculina: true, proveedorNombre: "Distribuidora de Insumos para Barbería", catalogo: CATALOGOS.barberia, staff: [
+    { puesto: "Jefe de Barberos", nombre: "Raúl Domínguez" }, { puesto: "Barbero", nombre: "Iván Casillas" }, { puesto: "Recepcionista", nombre: "Paola Reyes" }, { puesto: "Estilista", nombre: "Kevin Salas" },
+  ] },
+  { key: "consultorio_dental", tenantName: "Demo Consultorio Dental", slug: "demo-consultorio-dental", emailLocal: "consultoriodental", segundaSucursal: false, proveedorNombre: "Depósito Dental del Bajío", catalogo: CATALOGOS.consultorio_dental, staff: [
+    { puesto: "Dentista", nombre: "Fernanda Ibarra" }, { puesto: "Asistente dental", nombre: "Brenda Colín" }, { puesto: "Recepcionista", nombre: "Itzel Moreno" }, { puesto: "Higienista", nombre: "Sergio Nava" },
+  ] },
+  { key: "consultorio_medico", tenantName: "Demo Consultorio Médico", slug: "demo-consultorio-medico", emailLocal: "consultoriomedico", segundaSucursal: false, proveedorNombre: "Insumos Médicos Hidalgo", catalogo: CATALOGOS.consultorio_medico, staff: [
+    { puesto: "Médico", nombre: "Alberto Cabrera" }, { puesto: "Enfermero(a)", nombre: "Lucía Padilla" }, { puesto: "Recepcionista", nombre: "Diego Salinas" }, { puesto: "Asistente médico", nombre: "Marisol Pineda" },
+  ] },
+  { key: "veterinaria", tenantName: "Demo Veterinaria", slug: "demo-veterinaria", emailLocal: "veterinaria", segundaSucursal: false, proveedorNombre: "Alimentos y Fármacos Veterinarios SA", catalogo: CATALOGOS.veterinaria, staff: [
+    { puesto: "Veterinario", nombre: "Renata Solís" }, { puesto: "Asistente veterinario", nombre: "Omar Beltrán" }, { puesto: "Recepcionista", nombre: "Ximena Cordero" }, { puesto: "Groomer", nombre: "Tania Reséndiz" },
+  ] },
+  { key: "estetica", tenantName: "Demo Estética", slug: "demo-estetica", emailLocal: "estetica", segundaSucursal: false, proveedorNombre: "Distribuidora de Belleza Total", catalogo: CATALOGOS.estetica, staff: [
+    { puesto: "Encargado de sucursal", nombre: "Luis Fregoso" }, { puesto: "Esteticista", nombre: "Grecia Montoya" }, { puesto: "Recepcionista", nombre: "Nadia Ríos" },
+  ] },
+  { key: "spa", tenantName: "Demo Spa", slug: "demo-spa", emailLocal: "spa", segundaSucursal: false, proveedorNombre: "Aromas y Esencias del Spa", catalogo: CATALOGOS.spa, staff: [
+    { puesto: "Encargado de sucursal", nombre: "Héctor Villagómez" }, { puesto: "Terapeuta", nombre: "Ingrid Camacho" }, { puesto: "Masajista", nombre: "Rodolfo Aguayo" }, { puesto: "Recepcionista", nombre: "Camila Bautista" },
+  ] },
+  { key: "gimnasio", tenantName: "Demo Gimnasio", slug: "demo-gimnasio", emailLocal: "gimnasio", segundaSucursal: false, proveedorNombre: "Equipos y Suplementos Fitness", catalogo: CATALOGOS.gimnasio, staff: [
+    { puesto: "Encargado de sucursal", nombre: "Ricardo Peña" }, { puesto: "Entrenador", nombre: "Jonathan Rivas" }, { puesto: "Instructor", nombre: "Vanessa Cordero" }, { puesto: "Recepcionista", nombre: "Melissa Estrada" },
+  ] },
+  { key: "tatuajes", tenantName: "Demo Estudio de Tatuajes", slug: "demo-tatuajes", emailLocal: "tatuajes", segundaSucursal: false, proveedorNombre: "Insumos para Tatuadores MX", catalogo: CATALOGOS.tatuajes, staff: [
+    { puesto: "Encargado de estudio", nombre: "Bruno Escamilla" }, { puesto: "Tatuador", nombre: "Axel Monroy" }, { puesto: "Recepcionista", nombre: "Dulce Marín" },
+  ] },
+  { key: "comercio_retail", tenantName: "Demo Tienda de Conveniencia", slug: "demo-comercio-retail", emailLocal: "comercioretail", segundaSucursal: true, proveedorNombre: "Distribuidora Mayorista del Centro", catalogo: CATALOGOS.comercio_retail, staff: [
+    { puesto: "Encargado de tienda", nombre: "Mauricio Lerma" }, { puesto: "Cajero", nombre: "Yolanda Cisneros" }, { puesto: "Vendedor", nombre: "Alan Zapién" }, { puesto: "Almacenista", nombre: "Efraín Solano" },
+  ] },
+  { key: "reparacion_celulares", tenantName: "Demo Taller de Celulares", slug: "demo-reparacion-celulares", emailLocal: "reparacioncelulares", segundaSucursal: false, proveedorNombre: "Refaccionaria de Celulares Express", catalogo: CATALOGOS.reparacion_celulares, reparaciones: REPARACIONES.reparacion_celulares, staff: [
+    { puesto: "Técnico reparador", nombre: "Kevin Loera" }, { puesto: "Recepcionista", nombre: "Andrea Zamora" }, { puesto: "Encargado de sucursal", nombre: "Fabián Orozco" },
+  ] },
+  { key: "taller_autos", tenantName: "Demo Taller Mecánico", slug: "demo-taller-autos", emailLocal: "tallerautos", segundaSucursal: true, proveedorNombre: "Refaccionaria Automotriz del Norte", catalogo: CATALOGOS.taller_autos, reparaciones: REPARACIONES.taller_autos, staff: [
+    { puesto: "Jefe de taller", nombre: "Rubén Casares" }, { puesto: "Mecánico", nombre: "Joel Gaytán" }, { puesto: "Recepción", nombre: "Silvia Anaya" }, { puesto: "Asesor de servicio", nombre: "Gerardo Mata" },
+  ] },
+  { key: "taller_motos", tenantName: "Demo Taller de Motos", slug: "demo-taller-motos", emailLocal: "tallermotos", segundaSucursal: false, proveedorNombre: "Refaccionaria de Motopartes", catalogo: CATALOGOS.taller_motos, reparaciones: REPARACIONES.taller_motos, staff: [
+    { puesto: "Jefe de taller", nombre: "Iván Cazares" }, { puesto: "Mecánico", nombre: "Eduardo Sarabia" }, { puesto: "Recepción", nombre: "Karina Olvera" },
+  ] },
+  { key: "electrodomesticos", tenantName: "Demo Servicio de Electrodomésticos", slug: "demo-electrodomesticos", emailLocal: "electrodomesticos", segundaSucursal: false, proveedorNombre: "Refacciones para Línea Blanca SA", catalogo: CATALOGOS.electrodomesticos, reparaciones: REPARACIONES.electrodomesticos, staff: [
+    { puesto: "Técnico reparador", nombre: "Wilfrido Nájera" }, { puesto: "Recepcionista", nombre: "Perla Guízar" }, { puesto: "Encargado de sucursal", nombre: "Noé Barrientos" },
+  ] },
+  { key: "computadoras", tenantName: "Demo Taller de Computadoras", slug: "demo-computadoras", emailLocal: "computadoras", segundaSucursal: false, proveedorNombre: "Componentes y Refacciones PC", catalogo: CATALOGOS.computadoras, reparaciones: REPARACIONES.computadoras, staff: [
+    { puesto: "Técnico reparador", nombre: "Saúl Farías" }, { puesto: "Recepcionista", nombre: "Mayra Cuevas" }, { puesto: "Encargado de sucursal", nombre: "Emmanuel Rosado" },
+  ] },
+  { key: "relojeria_joyeria", tenantName: "Demo Relojería y Joyería", slug: "demo-relojeria-joyeria", emailLocal: "relojeriajoyeria", segundaSucursal: false, proveedorNombre: "Insumos de Relojería y Joyería", catalogo: CATALOGOS.relojeria_joyeria, reparaciones: REPARACIONES.relojeria_joyeria, staff: [
+    { puesto: "Relojero/Joyero", nombre: "Aarón Villaseñor" }, { puesto: "Vendedor", nombre: "Cynthia Marroquín" }, { puesto: "Encargado de tienda", nombre: "Baltazar Cordero" },
+  ] },
+  { key: "zapateria", tenantName: "Demo Zapatería", slug: "demo-zapateria", emailLocal: "zapateria", segundaSucursal: false, proveedorNombre: "Insumos para Calzado y Talabartería", catalogo: CATALOGOS.zapateria, reparaciones: REPARACIONES.zapateria, staff: [
+    { puesto: "Zapatero remendón", nombre: "Federico Macías" }, { puesto: "Vendedor", nombre: "Guadalupe Serna" }, { puesto: "Encargado de tienda", nombre: "Ismael Pantoja" },
+  ] },
+  { key: "refrigeracion_ac", tenantName: "Demo Refrigeración y A/C", slug: "demo-refrigeracion-ac", emailLocal: "refrigeracionac", segundaSucursal: false, proveedorNombre: "Refacciones de Refrigeración Industrial", catalogo: CATALOGOS.refrigeracion_ac, reparaciones: REPARACIONES.refrigeracion_ac, staff: [
+    { puesto: "Técnico instalador", nombre: "Norberto Chávez" }, { puesto: "Recepcionista", nombre: "Liliana Burciaga" }, { puesto: "Encargado de sucursal", nombre: "Alonso Trejo" },
+  ] },
+  { key: "bicicletas", tenantName: "Demo Taller de Bicicletas", slug: "demo-bicicletas", emailLocal: "bicicletas", segundaSucursal: false, proveedorNombre: "Refaccionaria de Ciclismo", catalogo: CATALOGOS.bicicletas, reparaciones: REPARACIONES.bicicletas, staff: [
+    { puesto: "Encargado de tienda", nombre: "Gilberto Nolasco" }, { puesto: "Mecánico de bicicletas", nombre: "Uriel Campos" }, { puesto: "Vendedor", nombre: "Rocío Delgadillo" },
+  ] },
+  { key: "cerrajeria", tenantName: "Demo Cerrajería", slug: "demo-cerrajeria", emailLocal: "cerrajeria", segundaSucursal: false, proveedorNombre: "Distribuidora de Herrajes y Cerraduras", catalogo: CATALOGOS.cerrajeria, reparaciones: REPARACIONES.cerrajeria, staff: [
+    { puesto: "Cerrajero", nombre: "Arturo Villalpando" }, { puesto: "Recepcionista", nombre: "Estefanía Rangel" }, { puesto: "Encargado de sucursal", nombre: "Moisés Concha" },
+  ] },
+  { key: "tapiceria", tenantName: "Demo Tapicería", slug: "demo-tapiceria", emailLocal: "tapiceria", segundaSucursal: false, proveedorNombre: "Telas y Espumas para Tapicería", catalogo: CATALOGOS.tapiceria, reparaciones: REPARACIONES.tapiceria, staff: [
+    { puesto: "Tapicero", nombre: "Leonel Guerrero" }, { puesto: "Vendedor", nombre: "Anahí Solórzano" }, { puesto: "Encargado de taller", nombre: "Fermín Ocampo" },
+  ] },
+];
+
+const CLIENTES_POOL = [
+  "Juan Hernández", "María Fernanda López", "Carlos Ramírez", "Ana Sofía Torres", "Jorge Luis Medina", "Laura Patricia Gómez", "Roberto Carlos Sánchez", "Daniela Flores",
+  "Miguel Ángel Ruiz", "Fernanda Castillo", "Alejandro Vega", "Paola Cristina Ortiz", "Ricardo Morales", "Gabriela Núñez", "Francisco Javier Rojas", "Claudia Elena Vargas",
+  "Sergio Iván Aguilar", "Mónica Reséndiz", "Héctor Manuel Cortés", "Adriana Lucía Serrano", "Enrique Paredes", "Verónica Cabrera", "Pablo César Domínguez", "Karla Jazmín Reyes",
+  "David Alberto Chávez", "Silvia Guadalupe Mendoza", "Iván Andrés Ponce", "Rosa Isela Bautista", "Óscar Eduardo Salinas", "Blanca Estela Nava", "Rubén Darío Escobar", "Teresa de Jesús Camacho",
+  "Gustavo Adolfo Ibarra", "Norma Angélica Pineda", "Raúl Fernando Beltrán", "Cecilia Montserrat Cordero", "Julio César Villagómez", "Leticia Del Carmen Estrada", "Armando Pérez", "Yolanda Marín",
+];
+
+// Clientela exclusivamente masculina — hoy solo para "barberia" (feedback de
+// Carlos: en su experiencia una barbería atiende solo hombres; el mixto de
+// hombre y mujer es "estética"/"estilista", que ya usa CLIENTES_POOL normal).
+// Si más adelante se identifica otro rubro con un perfil de clientela
+// similarmente marcado, se agrega aquí y se activa con
+// RubroConfig.clientelaMasculina — no se asume para ningún otro rubro sin
+// que Carlos lo confirme primero.
+const CLIENTES_POOL_MASCULINO = [
+  "Diego Fernández", "Mauricio Ibarra", "Emilio Castañeda", "Rodrigo Salcedo",
+  "Tomás Elizondo", "Gerardo Pineda", "Adrián Cervantes", "Bruno Manríquez",
+  "Fabricio Solano", "Renato Quintero", "Maximiliano Ochoa", "Leonardo Villaseñor",
+];
+
+interface CredencialEmpleado { name: string; puesto: string; pin: string; }
+interface CredencialNegocio { tenantName: string; slug: string; ownerEmail: string; password: string; staff: CredencialEmpleado[]; }
+const RESUMEN_CREDENCIALES: CredencialNegocio[] = [];
+
+async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: Map<string, string>) {
+  const ownerEmail = `demo_${cfg.emailLocal}@linkitysoluciones.com`;
+  console.log(`\n🌱 ${cfg.tenantName} (${ownerEmail})`);
+
+  const supabaseId = await obtenerOCrearUsuarioAuth(ownerEmail, DEMO_PASSWORD);
+
+  const tenant = await prisma.tenant.create({
+    data: { name: cfg.tenantName, slug: cfg.slug, businessType: cfg.key, email: ownerEmail, phone: telefonoAleatorio(), city: "Ciudad de México", state: "CDMX", isActive: true },
+  });
+
+  const branchPrincipal = await prisma.branch.create({ data: { tenantId: tenant.id, name: "Sucursal Principal", address: "Av. Principal 100", phone: telefonoAleatorio(), isActive: true } });
+  let branchSecundaria: { id: string } | null = null;
+  if (cfg.segundaSucursal) {
+    branchSecundaria = await prisma.branch.create({ data: { tenantId: tenant.id, name: "Sucursal Norte", address: "Blvd. Norte 250", phone: telefonoAleatorio(), isActive: true } });
+  }
+  const branches = branchSecundaria ? [branchPrincipal, branchSecundaria] : [branchPrincipal];
+
+  const ownerUser = await prisma.user.create({ data: { tenantId: tenant.id, branchId: branchPrincipal.id, email: ownerEmail, name: "Dueño Demo", supabaseId, isActive: true } });
+  const rolAdmin = await prisma.role.create({ data: { tenantId: tenant.id, name: "Administrador", description: "Acceso completo", isSystem: true } });
+  await prisma.userRole.create({ data: { userId: ownerUser.id, roleId: rolAdmin.id } });
+
+  await prisma.subscription.create({ data: { tenantId: tenant.id, plan: "Demo", price: 0 } });
+
+  const offSet = new Set(MODULOS_OFF_POR_RUBRO[cfg.key] ?? []);
+  for (const code of MODULE_CATALOG_CODES) {
+    const mod = await prisma.module.upsert({ where: { code }, update: {}, create: { code, name: MODULE_NAMES[code], isCore: code === "dashboard" } });
+    await prisma.tenantModule.create({ data: { tenantId: tenant.id, moduleId: mod.id, isActive: !offSet.has(code) } });
+  }
+  const tieneReparaciones = !offSet.has("reparaciones");
+
+  const categoriasCache = new Map<string, string>();
+  const productos: { id: string; type: ProductType; price: number; cost: number | null }[] = [];
+  let colorIdx = 0;
+  for (const item of cfg.catalogo) {
+    const catKey = `${item.categoryName}|${item.categoryType}`;
+    let catId = categoriasCache.get(catKey);
+    if (!catId) {
+      const cat = await prisma.category.create({ data: { tenantId: tenant.id, name: item.categoryName, type: item.categoryType as CategoryType, color: PALETA[colorIdx++ % PALETA.length] } });
+      catId = cat.id;
+      categoriasCache.set(catKey, catId);
+    }
+    const emoji = `icon:${item.icon}`;
+    const prod = await prisma.product.create({ data: { tenantId: tenant.id, categoryId: catId, name: item.name, type: item.type as ProductType, price: item.price, cost: item.cost ?? null, emoji, isActive: true } });
+    productos.push({ id: prod.id, type: item.type as ProductType, price: item.price, cost: item.cost ?? null });
+  }
+
+  const conStock = productos.filter((p) => p.type !== ProductType.SERVICE);
+  for (const p of conStock) {
+    const stockBase = randInt(3, 25);
+    await prisma.inventory.create({ data: { productId: p.id, branchId: branchPrincipal.id, stock: stockBase, minStock: Math.max(2, Math.round(stockBase * 0.25)) } });
+    if (branchSecundaria) {
+      await prisma.inventory.create({ data: { productId: p.id, branchId: branchSecundaria.id, stock: Math.max(0, Math.round(stockBase * 0.5)), minStock: Math.max(2, Math.round(stockBase * 0.25)) } });
+    }
+  }
+  if (conStock.length > 0) {
+    await prisma.inventory.update({ where: { productId_branchId: { productId: conStock[0].id, branchId: branchPrincipal.id } }, data: { stock: 0 } });
+  }
+  if (conStock.length > 1) {
+    await prisma.inventory.update({ where: { productId_branchId: { productId: conStock[1].id, branchId: branchPrincipal.id } }, data: { stock: 1 } });
+  }
+
+  const poolClientes = cfg.clientelaMasculina ? CLIENTES_POOL_MASCULINO : CLIENTES_POOL;
+  const clientes: { id: string }[] = [];
+  for (let i = 0; i < 8; i++) {
+    const nombre = poolClientes[(indice * 8 + i) % poolClientes.length];
+    const cliente = await prisma.customer.create({ data: { tenantId: tenant.id, name: nombre, phone: telefonoAleatorio(), phoneCountryCode: "+52" } });
+    clientes.push(cliente);
+  }
+
+  type EmpleadoCreado = { staffId: string; branchId: string; name: string; puesto: string; pin: string };
+  const empleados: EmpleadoCreado[] = [];
+  for (let i = 0; i < cfg.staff.length; i++) {
+    const s = cfg.staff[i];
+    const rol = await prisma.role.create({ data: { tenantId: tenant.id, name: s.puesto, description: null, isSystem: false } });
+    const modulos = inferirModulosPorPuesto(s.puesto, tieneReparaciones);
+    const conDashboard = new Set([...modulos, "dashboard"]);
+    await prisma.rolePermission.createMany({
+      data: Array.from(conDashboard).map((m) => mapaPermisos.get(m)).filter((id): id is string => Boolean(id)).map((permissionId) => ({ roleId: rol.id, permissionId })),
+      skipDuplicates: true,
+    });
+
+    const branchAsignada = branchSecundaria && i % 2 === 1 ? branchSecundaria : branchPrincipal;
+    const email = `staff-demo-${i}@${cfg.slug}.personal.linkity.internal`;
+    const supabaseIdFalso = `staff-placeholder-demo-${cfg.slug}-${i}`;
+    const usuarioOculto = await prisma.user.create({ data: { tenantId: tenant.id, branchId: branchAsignada.id, email, name: s.nombre, supabaseId: supabaseIdFalso, isActive: true } });
+
+    const pin = PINES[i % PINES.length];
+    const ESQUEMAS_ROTACION = [PaymentScheme.MIXTO, PaymentScheme.COMISION, PaymentScheme.DESTAJO, PaymentScheme.FIJO];
+    const FRECUENCIAS = [PaymentFrequency.SEMANAL, PaymentFrequency.CATORCENAL, PaymentFrequency.QUINCENAL, PaymentFrequency.MENSUAL];
+    const METODOS_PAGO = [StaffPaymentMethod.EFECTIVO, StaffPaymentMethod.TRANSFERENCIA, StaffPaymentMethod.CHEQUE, StaffPaymentMethod.TARJETA_NOMINA, StaffPaymentMethod.OTRO];
+    const esquema = ESQUEMAS_ROTACION[(indice + i) % ESQUEMAS_ROTACION.length];
+    const commissionBase = commissionBaseSegunRubro(tieneReparaciones, i, esquema);
+    const frecuenciaSueldo = FRECUENCIAS[(indice + i) % FRECUENCIAS.length];
+    const frecuenciaComision = FRECUENCIAS[(indice + i + 1) % FRECUENCIAS.length];
+    const metodoPago = METODOS_PAGO[(indice + i) % METODOS_PAGO.length];
+    const esLider = i === 0;
+
+    const staff = await prisma.staff.create({
+      data: {
+        tenantId: tenant.id, branchId: branchAsignada.id, userId: usuarioOculto.id,
+        name: s.nombre, phone: telefonoAleatorio(), phoneCountryCode: "+52", position: s.puesto,
+        pinHash: hashPin(pin), roleId: rol.id,
+        paymentScheme: esquema,
+        baseSalary: esquema === PaymentScheme.FIJO || esquema === PaymentScheme.MIXTO ? randInt(3500, 7000) : 0,
+        commissionRate: esquema === PaymentScheme.COMISION || esquema === PaymentScheme.MIXTO ? randInt(5, 15) : 0,
+        commissionBase,
+        paymentFrequency: frecuenciaSueldo,
+        commissionFrequency: frecuenciaComision,
+        pieceRate: esquema === PaymentScheme.DESTAJO ? randInt(30, 150) : 0,
+        teamCommissionRate: esLider ? randInt(2, 5) : 0,
+        teamCommissionBase: esLider ? commissionBase : null,
+        staffPaymentMethod: metodoPago,
+        clabe: metodoPago === StaffPaymentMethod.TRANSFERENCIA ? claveAleatoria18() : null,
+        isActive: true,
+      },
+    });
+    empleados.push({ staffId: staff.id, branchId: branchAsignada.id, name: s.nombre, puesto: s.puesto, pin });
+  }
+
+  const proveedor = await prisma.supplier.create({ data: { tenantId: tenant.id, name: cfg.proveedorNombre, phone: telefonoAleatorio(), isActive: true } });
+  const itemsCompra = conStock.slice(0, 3);
+  if (itemsCompra.length > 0) {
+    let totalCompra = 0;
+    const detalles: { productId: string; costo: number }[] = [];
+    for (const p of itemsCompra) {
+      const costo = Number(p.cost ?? p.price * 0.5);
+      totalCompra += costo * 5;
+      detalles.push({ productId: p.id, costo });
+    }
+    const compra = await prisma.purchase.create({
+      data: { tenantId: tenant.id, supplierId: proveedor.id, branchId: branchPrincipal.id, folio: "C-0001", total: totalCompra, status: PurchaseStatus.RECEIVED, receivedAt: new Date(`${SEMANA[2]}T10:00:00-06:00`) },
+    });
+    for (const d of detalles) {
+      await prisma.purchaseItem.create({ data: { purchaseId: compra.id, productId: d.productId, quantity: 5, cost: d.costo, subtotal: d.costo * 5 } });
+    }
+  }
+
+  let folioVentaN = 1;
+  let folioRepN = 1;
+  let primeraVenta: { id: string; customerId: string | null; total: number } | null = null;
+
+  for (let d = 0; d < SEMANA.length; d++) {
+    const fechaStr = SEMANA[d];
+    const esDomingo = d === 6;
+
+    for (const branch of branches) {
+      const apertura = randInt(500, 1500);
+      const sesion = await prisma.cashSession.create({
+        data: { tenantId: tenant.id, branchId: branch.id, userId: ownerUser.id, openingCash: apertura, status: CashSessionStatus.OPEN, openedAt: new Date(`${fechaStr}T09:00:00-06:00`) },
+      });
+      let ingresos = 0;
+      let egresos = 0;
+
+      const numVentas = esDomingo ? randInt(1, 3) : randInt(3, 7);
+      for (let v = 0; v < numVentas; v++) {
+        const cliente = Math.random() < 0.8 ? pick(clientes) : null;
+        const nItems = randInt(1, 3);
+        let subtotal = 0;
+        const itemsVenta: { productId: string; quantity: number; price: number; subtotal: number }[] = [];
+        for (let k = 0; k < nItems; k++) {
+          const prod = pick(productos);
+          const cantidad = prod.type === ProductType.PRODUCT ? randInt(1, 2) : 1;
+          const sub = prod.price * cantidad;
+          subtotal += sub;
+          itemsVenta.push({ productId: prod.id, quantity: cantidad, price: prod.price, subtotal: sub });
+        }
+        const impuesto = Math.round(subtotal * 16) / 100;
+        const total = Math.round((subtotal + impuesto) * 100) / 100;
+        const metodo = metodoPagoVenta();
+        const folio = `V-${String(folioVentaN++).padStart(4, "0")}`;
+        const venta = await prisma.sale.create({
+          data: {
+            tenantId: tenant.id, branchId: branch.id, customerId: cliente?.id ?? null, userId: ownerUser.id,
+            folio, subtotal, tax: impuesto, discount: 0, total, paymentMethod: metodo, status: SaleStatus.COMPLETED,
+            createdAt: new Date(`${fechaStr}T${horaAleatoria()}:00-06:00`),
+          },
+        });
+        for (const it of itemsVenta) {
+          await prisma.saleItem.create({ data: { saleId: venta.id, productId: it.productId, quantity: it.quantity, price: it.price, subtotal: it.subtotal } });
+        }
+        let parteEfectivo = 0;
+        if (metodo === PaymentMethod.MIXED) {
+          parteEfectivo = Math.round(total * 0.5 * 100) / 100;
+          await prisma.saleMixedPayment.create({ data: { saleId: venta.id, method: MixedPaymentMethod.CASH, amount: parteEfectivo } });
+          await prisma.saleMixedPayment.create({ data: { saleId: venta.id, method: MixedPaymentMethod.CARD, amount: Math.round((total - parteEfectivo) * 100) / 100 } });
+        }
+        if (metodo === PaymentMethod.CASH) ingresos += total;
+        if (metodo === PaymentMethod.MIXED) ingresos += parteEfectivo;
+        if (!primeraVenta) primeraVenta = { id: venta.id, customerId: cliente?.id ?? null, total };
+      }
+
+      const gastoDia = randInt(50, 300);
+      await prisma.cashMovement.create({ data: { cashSessionId: sesion.id, type: MovementType.EXPENSE, amount: gastoDia, concept: pick(["Compra de insumos", "Pago de servicios", "Gasolina/mensajería", "Papelería"]) } });
+      egresos += gastoDia;
+
+      const cierre = Math.round((apertura + ingresos - egresos) * 100) / 100;
+      await prisma.cashSession.update({
+        where: { id: sesion.id },
+        data: { status: CashSessionStatus.CLOSED, closingCash: cierre, expectedCash: cierre, difference: 0, closedAt: new Date(`${fechaStr}T20:30:00-06:00`) },
+      });
+    }
+
+    if (tieneReparaciones && cfg.reparaciones) {
+      const nuevas = randInt(1, 3);
+      for (let r = 0; r < nuevas; r++) {
+        const dispositivo = pick(cfg.reparaciones.dispositivos);
+        const falla = pick(cfg.reparaciones.fallas);
+        const cliente = pick(clientes);
+        const branchRep = branchSecundaria && Math.random() < 0.5 ? branchSecundaria : branchPrincipal;
+        const diasTranscurridos = 6 - d;
+        let status: RepairStatus;
+        if (diasTranscurridos >= 4) status = pick([RepairStatus.DELIVERED, RepairStatus.DELIVERED, RepairStatus.DELIVERED, RepairStatus.CANCELLED]);
+        else if (diasTranscurridos >= 2) status = pick([RepairStatus.READY, RepairStatus.IN_REPAIR]);
+        else status = pick([RepairStatus.RECEIVED, RepairStatus.DIAGNOSING, RepairStatus.IN_REPAIR]);
+
+        const partes = productos.filter((p) => p.type === ProductType.PART);
+        const servicios = productos.filter((p) => p.type === ProductType.SERVICE);
+        const parte = partes.length ? pick(partes) : null;
+        const servicio = servicios.length ? pick(servicios) : null;
+        const estimado = (parte?.price ?? 0) + (servicio?.price ?? 0) || randInt(200, 900);
+        const entregado = status === RepairStatus.DELIVERED;
+
+        const folio = `REP-${String(folioRepN++).padStart(4, "0")}`;
+        const repair = await prisma.repair.create({
+          data: {
+            tenantId: tenant.id, branchId: branchRep.id, customerId: cliente.id, userId: ownerUser.id,
+            folio, deviceBrand: dispositivo.brand, deviceModel: dispositivo.model, issueDesc: falla,
+            status, priority: pick([Priority.LOW, Priority.NORMAL, Priority.NORMAL, Priority.HIGH]),
+            estimatedCost: estimado, finalCost: entregado ? estimado : null,
+            receivedAt: new Date(`${fechaStr}T${horaAleatoria()}:00-06:00`),
+            deliveredAt: entregado ? new Date(`${SEMANA[Math.min(d + 2, 6)]}T18:00:00-06:00`) : null,
+          },
+        });
+        if (status !== RepairStatus.RECEIVED) {
+          if (parte) await prisma.repairItem.create({ data: { repairId: repair.id, productId: parte.id, quantity: 1, price: parte.price } });
+          if (servicio) await prisma.repairItem.create({ data: { repairId: repair.id, productId: servicio.id, quantity: 1, price: servicio.price } });
+        }
+        await prisma.repairHistory.create({ data: { repairId: repair.id, status: RepairStatus.RECEIVED, notes: "Equipo recibido" } });
+        if (status !== RepairStatus.RECEIVED) {
+          await prisma.repairHistory.create({ data: { repairId: repair.id, status, notes: null } });
+        }
+      }
+    }
+
+    if (!esDomingo) {
+      const datosAsistencia: { staffId: string; date: Date; checkIn: Date; checkOut: Date }[] = [];
+      const datosLogin: { tenantId: string; staffId: string; branchId: string; checkIn: Date; checkOut: Date; closedBy: StaffLoginCloseReason }[] = [];
+      for (const emp of empleados) {
+        // Jornada de exactamente 8 horas (máximo legal diario en México,
+        // LFT art. 61) — la primera versión generaba turnos de 9-10.5h sin
+        // ningún tope, detectado por Carlos al revisar Asistencia del demo.
+        const checkIn = new Date(`${fechaStr}T${pick(["08:55", "09:00", "09:10"])}:00-06:00`);
+        const checkOut = new Date(checkIn.getTime() + 8 * 60 * 60 * 1000);
+        datosAsistencia.push({ staffId: emp.staffId, date: new Date(`${fechaStr}T00:00:00-06:00`), checkIn, checkOut });
+        datosLogin.push({ tenantId: tenant.id, staffId: emp.staffId, branchId: emp.branchId, checkIn, checkOut, closedBy: StaffLoginCloseReason.MANUAL });
+      }
+      await prisma.attendance.createMany({ data: datosAsistencia });
+      await prisma.staffLoginSession.createMany({ data: datosLogin });
+    }
+  }
+
+  for (const emp of empleados) {
+    const staffInfo = await prisma.staff.findUnique({ where: { id: emp.staffId }, select: { baseSalary: true, paymentScheme: true } });
+    const base = Math.round(Number(staffInfo?.baseSalary ?? 0) / 2);
+    const comision = staffInfo?.paymentScheme !== PaymentScheme.FIJO ? randInt(200, 1200) : 0;
+    const pagado = Math.random() < 0.6;
+    await prisma.staffPayment.create({
+      data: {
+        staffId: emp.staffId, periodStart: new Date(`${SEMANA[0]}T00:00:00-06:00`), periodEnd: new Date(`${SEMANA[6]}T00:00:00-06:00`),
+        baseAmount: base, commissionAmount: comision, total: base + comision,
+        status: pagado ? StaffPaymentStatus.PAID : StaffPaymentStatus.PENDING, paidAt: pagado ? new Date(`${SEMANA[6]}T12:00:00-06:00`) : null,
+      },
+    });
+  }
+
+  if (primeraVenta) {
+    await prisma.invoice.create({
+      data: { tenantId: tenant.id, customerId: primeraVenta.customerId ?? clientes[0].id, saleId: primeraVenta.id, folio: "F-0001", status: InvoiceStatus.STAMPED, total: primeraVenta.total },
+    });
+  }
+
+  RESUMEN_CREDENCIALES.push({
+    tenantName: cfg.tenantName, slug: cfg.slug, ownerEmail, password: DEMO_PASSWORD,
+    staff: empleados.map((e) => ({ name: e.name, puesto: e.puesto, pin: e.pin })),
+  });
+}
+
+function guardarResumenCredenciales() {
+  const lineas: string[] = [
+    "# Credenciales de los 20 negocios DEMO", "",
+    `Contraseña del dueño en los 20 negocios (misma para todos, fácil de copiar/pegar): **${DEMO_PASSWORD}**`, "",
+    "El PIN de cada empleado es el mismo en todos los negocios según su posición de alta (1111, 2222, 3333, 4444) — solo aplica dentro del negocio al que pertenece, entrando por `/[negocio]/entrada`.", "",
+  ];
+  for (const c of RESUMEN_CREDENCIALES) {
+    lineas.push(`## ${c.tenantName}`);
+    lineas.push(`- URL: /${c.slug}`);
+    lineas.push(`- Dueño: ${c.ownerEmail} / ${c.password}`);
+    for (const s of c.staff) lineas.push(`- Empleado — ${s.name} (${s.puesto}): PIN ${s.pin}`);
+    lineas.push("");
+  }
+  writeFileSync("prisma/DEMO_CREDENCIALES.md", lineas.join("\n"), "utf-8");
+  console.log("\n📄 Credenciales guardadas en prisma/DEMO_CREDENCIALES.md");
+}
+
+async function main() {
+  console.log("🌱 Sembrando 20 negocios demo (uno por rubro)...");
+  const mapaPermisos = await asegurarCatalogoPermisos();
+
+  for (let i = 0; i < RUBROS_DEMO.length; i++) {
+    const cfg = RUBROS_DEMO[i];
+    try {
+      const existente = await prisma.tenant.findUnique({ where: { slug: cfg.slug } });
+      if (existente) {
+        console.log(`⏭  ${cfg.slug} ya existe, se omite.`);
+        continue;
+      }
+      await crearNegocioDemo(cfg, i, mapaPermisos);
+      console.log(`✅ ${cfg.tenantName} listo`);
+    } catch (err) {
+      console.error(`❌ Error creando ${cfg.slug}:`, err);
+    }
+  }
+
+  guardarResumenCredenciales();
+  console.log("\n🎉 Seed demo completo.");
+}
+
+main()
+  .catch((e) => {
+    console.error("❌ Error en el seed demo:", e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

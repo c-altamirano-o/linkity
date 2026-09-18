@@ -1,5 +1,6 @@
 import { getTenantPrisma } from "@/lib/prisma";
 import type { Branch, Priority, RepairStatus } from "@prisma/client";
+import { rangoSemanaLaboral } from "@/lib/periodo-laboral";
 
 // ============================================
 // Tipos que consume DashboardClient
@@ -119,8 +120,13 @@ function monthRange() {
 
 const DIAS_SEMANA = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-function diaLabel(date: Date, daysAgo: number) {
-  if (daysAgo === 0) return "Hoy";
+// "Hoy" se marca comparando fechas reales, no por posición dentro del
+// arreglo — desde que la semana es calendario (lib/periodo-laboral.ts) en
+// vez de una ventana rodante terminando siempre hoy, el día de hoy puede
+// caer en cualquier posición de la semana (ej. el 2° día si la semana
+// laboral del negocio abre en martes).
+function diaLabel(date: Date, hoyInicio: Date) {
+  if (date.getTime() === hoyInicio.getTime()) return "Hoy";
   const mxDate = new Date(date.getTime() - MX_OFFSET_MS);
   return DIAS_SEMANA[mxDate.getUTCDay()];
 }
@@ -164,7 +170,8 @@ const CATEGORY_FALLBACK_COLORS = [
 
 export async function getDashboardData(
   tenantId: string,
-  branches: Pick<Branch, "id" | "name" | "isActive">[]
+  branches: Pick<Branch, "id" | "name" | "isActive">[],
+  weekStartDay: number
 ): Promise<DashboardData> {
   // Sale y Repair tienen tenantId propio, así que getTenantPrisma se
   // encarga de inyectarlo — ya no se escribe a mano en su `where` de
@@ -175,12 +182,25 @@ export async function getDashboardData(
 
   const now = new Date();
   const today = dayRange(0);
+  const ayer = dayRange(1);
   const month = monthRange();
+
+  // Semana laboral configurable por tenant (lib/periodo-laboral.ts) — ya NO
+  // es una ventana rodante de 7 días terminando siempre hoy (eso hacía que
+  // "Total semana" fuera en realidad "últimos 7 días", sin relación con
+  // ningún corte de nómina real — ver el comentario largo en
+  // Tenant.weekStartDay, schema.prisma).
+  const { start: weekStart, end: weekEnd } = rangoSemanaLaboral(now, weekStartDay);
   const week = Array.from({ length: 7 }, (_, i) => {
-    const daysAgo = 6 - i;
-    return { daysAgo, ...dayRange(daysAgo) };
+    const start = new Date(weekStart.getTime() + i * 24 * 60 * 60 * 1000);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    return { start, end };
   });
-  const weekStart = week[0].start;
+  // "ayer" puede caer FUERA de la semana laboral en curso (ej. si hoy es el
+  // primer día de una semana nueva, ayer perteneció a la semana anterior) —
+  // por eso el query de abajo arranca en el más temprano de los dos rangos,
+  // en vez de asumir que "ayer" siempre está dentro de la semana.
+  const consultaDesde = ayer.start < weekStart ? ayer.start : weekStart;
 
   const [
     ventasHoyRaw,
@@ -197,11 +217,11 @@ export async function getDashboardData(
       orderBy: { createdAt: "desc" },
     }),
     db.sale.findMany({
-      where: { status: "COMPLETED", createdAt: { gte: weekStart, lt: today.end } },
+      where: { status: "COMPLETED", createdAt: { gte: consultaDesde, lt: today.end } },
       select: { branchId: true, total: true, createdAt: true },
     }),
     db.repair.findMany({
-      where: { deliveredAt: { gte: weekStart, lt: today.end } },
+      where: { deliveredAt: { gte: weekStart, lt: weekEnd } },
       select: { branchId: true, finalCost: true, deliveredAt: true },
     }),
     db.repair.findMany({
@@ -303,7 +323,7 @@ export async function getDashboardData(
     : [];
 
   // ── Ventas de la semana (área) ─────────────────────────
-  const ventasSemana: VentaSemanaDia[] = week.map(({ daysAgo, start, end }) => {
+  const ventasSemana: VentaSemanaDia[] = week.map(({ start, end }) => {
     const ventasDia = weekSales
       .filter((s) => s.createdAt >= start && s.createdAt < end)
       .reduce((sum, s) => sum + Number(s.total), 0);
@@ -311,7 +331,7 @@ export async function getDashboardData(
       .filter((r) => r.deliveredAt && r.deliveredAt >= start && r.deliveredAt < end)
       .reduce((sum, r) => sum + Number(r.finalCost ?? 0), 0);
     return {
-      dia: diaLabel(start, daysAgo),
+      dia: diaLabel(start, today.start),
       ventas: Math.round(ventasDia),
       reparaciones: Math.round(reparacionesDia),
       total: Math.round(ventasDia + reparacionesDia),
@@ -335,7 +355,7 @@ export async function getDashboardData(
       .filter((s) => s.branchId === b.id && s.createdAt >= today.start && s.createdAt < today.end)
       .reduce((sum, s) => sum + Number(s.total), 0);
     const ventasAyerBranch = weekSales
-      .filter((s) => s.branchId === b.id && s.createdAt >= week[5].start && s.createdAt < week[5].end)
+      .filter((s) => s.branchId === b.id && s.createdAt >= ayer.start && s.createdAt < ayer.end)
       .reduce((sum, s) => sum + Number(s.total), 0);
     const ticketsVenta = weekSales.filter(
       (s) => s.branchId === b.id && s.createdAt >= today.start && s.createdAt < today.end
@@ -380,5 +400,103 @@ export async function getDashboardData(
     promedioVentasSemana,
     sucursales,
     multiSucursal: branches.length > 1,
+  };
+}
+
+// ============================================
+// Ventas por día y hora — selector de fecha (2026-09-17, a petición de
+// Carlos: "a mí como dueño me gustaría poder checar día por día qué tanto
+// se vendió y en qué horas fue el mayor flujo de clientes"). A diferencia
+// de getDashboardData de arriba (que siempre mira "hoy"/"esta semana" en
+// tiempo real y no acepta parámetros), este bloque responde a una fecha
+// arbitraria elegida por el dueño con un selector tipo calendario en
+// DashboardClient.tsx, y se recalcula bajo demanda vía
+// obtenerVentasPorDiaAction (app/actions/dashboard-actions.ts) cada vez que
+// cambia la fecha — la carga inicial (fecha = hoy) sí va en el primer
+// render server-side, igual que el resto del Dashboard.
+// ============================================
+
+export interface VentaPorHora {
+  hora: number; // 0-23, hora civil de México
+  horaLabel: string; // "8 a.m.", "5 p.m."...
+  numVentas: number;
+  totalVentas: number;
+}
+
+export interface VentasPorDiaData {
+  fecha: string; // "YYYY-MM-DD"
+  totalVentas: number;
+  numVentas: number;
+  ticketPromedio: number;
+  porHora: VentaPorHora[]; // siempre 24 posiciones — 0 en las horas sin venta, para que la gráfica tenga el mismo eje todos los días
+  horaPico: { hora: number; horaLabel: string; numVentas: number } | null;
+}
+
+/** "YYYY-MM-DD" de hoy en México — valor por defecto del selector de fecha. */
+export function hoyMx(): string {
+  const now = new Date();
+  const mx = new Date(now.getTime() - MX_OFFSET_MS);
+  return mx.toISOString().slice(0, 10);
+}
+
+/** Igual que dayRange()/mxDayBoundary() de arriba, pero a partir de una fecha explícita ("YYYY-MM-DD") en vez de "hace N días". */
+function diaMxRangeDesdeFecha(fechaStr: string) {
+  const [y, m, d] = fechaStr.split("-").map(Number);
+  const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0).valueOf() + MX_OFFSET_MS);
+  const end = new Date(Date.UTC(y, m - 1, d + 1, 0, 0, 0).valueOf() + MX_OFFSET_MS);
+  return { start, end };
+}
+
+function formatHoraCorta(hora: number): string {
+  const d = new Date(Date.UTC(2000, 0, 1, hora, 0, 0));
+  return new Intl.DateTimeFormat("es-MX", { hour: "numeric", hour12: true, timeZone: "UTC" }).format(d);
+}
+
+export async function getVentasPorDia(tenantId: string, fechaStr: string): Promise<VentasPorDiaData> {
+  const db = getTenantPrisma(tenantId);
+  const { start, end } = diaMxRangeDesdeFecha(fechaStr);
+
+  const ventas = await db.sale.findMany({
+    where: { status: "COMPLETED", createdAt: { gte: start, lt: end } },
+    select: { total: true, createdAt: true },
+  });
+
+  // Flujo de clientes por hora = número de ventas (tickets), no el monto —
+  // un solo ticket grande no debe aparentar "mucho flujo" en su hora.
+  const porHoraMap = new Map<number, { numVentas: number; totalVentas: number }>();
+  for (const v of ventas) {
+    const horaMx = new Date(v.createdAt.getTime() - MX_OFFSET_MS).getUTCHours();
+    const prev = porHoraMap.get(horaMx) ?? { numVentas: 0, totalVentas: 0 };
+    prev.numVentas += 1;
+    prev.totalVentas += Number(v.total);
+    porHoraMap.set(horaMx, prev);
+  }
+
+  const porHora: VentaPorHora[] = Array.from({ length: 24 }, (_, hora) => {
+    const d = porHoraMap.get(hora);
+    return {
+      hora,
+      horaLabel: formatHoraCorta(hora),
+      numVentas: d?.numVentas ?? 0,
+      totalVentas: Math.round(d?.totalVentas ?? 0),
+    };
+  });
+
+  const totalVentas = ventas.reduce((s, v) => s + Number(v.total), 0);
+  const numVentas = ventas.length;
+  const ticketPromedio = numVentas > 0 ? Math.round(totalVentas / numVentas) : 0;
+
+  const horaPico = porHora.reduce<VentaPorHora | null>(
+    (max, h) => (h.numVentas > 0 && (!max || h.numVentas > max.numVentas) ? h : max),
+    null
+  );
+
+  return {
+    fecha: fechaStr,
+    totalVentas: Math.round(totalVentas),
+    numVentas,
+    ticketPromedio,
+    porHora,
+    horaPico: horaPico ? { hora: horaPico.hora, horaLabel: horaPico.horaLabel, numVentas: horaPico.numVentas } : null,
   };
 }
