@@ -11,6 +11,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { randomBytes, scryptSync } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { writeFileSync } from "fs";
+import { fileURLToPath } from "url";
+import path from "path";
 
 /**
  * Seed de 20 negocios DEMO (uno por cada rubro soportado), 2026-09-17 —
@@ -969,8 +971,11 @@ async function refrescarNegocioDemo(cfg: RubroConfig): Promise<boolean> {
   // El PIN original no se puede recuperar de pinHash (es un hash, no texto
   // plano) — no hace falta para operar la semana; se reutiliza uno de la
   // lista fija PINES solo para que el tipo EmpleadoCreado quede completo.
+  // Staff.position es opcional en el esquema (nunca debería estarlo en un
+  // negocio demo, que siempre lo crea con puesto — pero el tipo sí permite
+  // null, así que se resuelve con un valor por defecto).
   const empleados: EmpleadoCreado[] = staffRows.map((s, i) => ({
-    staffId: s.id, branchId: s.branchId, name: s.name, puesto: s.position, pin: PINES[i % PINES.length],
+    staffId: s.id, branchId: s.branchId, name: s.name, puesto: s.position ?? "Personal", pin: PINES[i % PINES.length],
   }));
 
   await borrarDatosOperativos(tenant.id);
@@ -1066,7 +1071,29 @@ async function main() {
 // refrescarTodosLosNegociosDemo de aquí; sin esta guarda, ese import por sí
 // solo dispararía una corrida completa de main() cada vez que Next carga
 // la ruta). Equivalente ESM de la guarda clásica `require.main === module`.
-const esEjecucionDirecta = Boolean(process.argv[1]) && import.meta.url === `file://${process.argv[1]}`;
+//
+// La primera versión comparaba `import.meta.url` contra
+// `file://${process.argv[1]}` armado a mano — en Windows eso nunca
+// coincide (import.meta.url usa "file:///C:/..." con diagonales; argv[1]
+// trae la ruta de Windows con backslashes, "C:\..."), así que la
+// comparación siempre daba falso y main() nunca corría (el bug que Carlos
+// encontró: `npx tsx prisma/seed-demo.ts --refrescar` no imprimía nada).
+// fileURLToPath() + path.resolve() normalizan ambos lados a una ruta real
+// del sistema operativo antes de compararlos, y en Windows además se
+// compara sin distinguir mayúsculas/minúsculas (su sistema de archivos no
+// las distingue, pero la comparación de strings sí).
+const esEjecucionDirecta = (() => {
+  if (!process.argv[1]) return false;
+  try {
+    const rutaModulo = fileURLToPath(import.meta.url);
+    const rutaArgv = path.resolve(process.argv[1]);
+    return process.platform === "win32"
+      ? rutaModulo.toLowerCase() === rutaArgv.toLowerCase()
+      : rutaModulo === rutaArgv;
+  } catch {
+    return false;
+  }
+})();
 if (esEjecucionDirecta) {
   main()
     .catch((e) => {
