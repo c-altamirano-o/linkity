@@ -36,6 +36,12 @@ export interface ReportesData {
   crecimientoVentasPct: number | null; // null = sin ventas el mes anterior para comparar
   reparacionesPorEstado: ReparacionesPorEstadoItem[];
   ventasPorMetodo: VentasPorMetodoItem[];
+  // Módulo "Reparaciones" activo para este tenant (2026-09-18) — mismo
+  // campo y mismo motivo que DashboardData.reparacionesActiva en
+  // lib/dashboard-data.ts: cuando es false, reportes/page.tsx oculta las
+  // tarjetas "Reparaciones Totales" y "Reparaciones por estatus" en vez de
+  // mostrarlas siempre en cero para un negocio que no usa ese módulo.
+  reparacionesActiva: boolean;
 }
 
 const CLOSED_STATUSES: RepairStatus[] = ["DELIVERED", "CANCELLED"];
@@ -47,7 +53,7 @@ function monthRange(monthsAgo: number) {
   return { start, end };
 }
 
-export async function getReportesData(tenantId: string): Promise<ReportesData> {
+export async function getReportesData(tenantId: string, reparacionesActiva: boolean): Promise<ReportesData> {
   // Product, Customer, Repair y Sale tienen tenantId propio → getTenantPrisma
   // lo inyecta solo en cada query de primer nivel de abajo.
   const db = getTenantPrisma(tenantId);
@@ -59,7 +65,7 @@ export async function getReportesData(tenantId: string): Promise<ReportesData> {
     totalProductos,
     totalClientes,
     totalReparaciones,
-    reparacionesActivas,
+    reparacionesActivasCount,
     reparacionesPorEstadoRaw,
     ventasMesRaw,
     ventasMesAnteriorRaw,
@@ -67,9 +73,12 @@ export async function getReportesData(tenantId: string): Promise<ReportesData> {
   ] = await Promise.all([
     db.product.count({ where: { isActive: true } }),
     db.customer.count(),
-    db.repair.count(),
-    db.repair.count({ where: { status: { notIn: CLOSED_STATUSES } } }),
-    db.repair.groupBy({ by: ["status"], _count: { _all: true } }),
+    // Con el módulo inactivo (ej. barbería) estos 3 conteos/agrupación
+    // deben quedar en cero/vacío — no solo por evitar carga a la BD, sino
+    // porque reportes/page.tsx ya no renderiza las tarjetas que los usan.
+    reparacionesActiva ? db.repair.count() : Promise.resolve(0),
+    reparacionesActiva ? db.repair.count({ where: { status: { notIn: CLOSED_STATUSES } } }) : Promise.resolve(0),
+    reparacionesActiva ? db.repair.groupBy({ by: ["status"], _count: { _all: true } }) : Promise.resolve([]),
     db.sale.aggregate({
       where: { status: "COMPLETED", createdAt: { gte: mesActual.start, lt: mesActual.end } },
       _sum: { total: true },
@@ -102,11 +111,12 @@ export async function getReportesData(tenantId: string): Promise<ReportesData> {
     totalProductos,
     totalClientes,
     totalReparaciones,
-    reparacionesActivas,
+    reparacionesActivas: reparacionesActivasCount,
     ventasMes,
     ventasMesAnterior,
     crecimientoVentasPct,
     reparacionesPorEstado,
     ventasPorMetodo,
+    reparacionesActiva,
   };
 }

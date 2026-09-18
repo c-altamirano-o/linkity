@@ -30,8 +30,19 @@ export default async function ReportesPage({ params }: PageProps) {
 
   if (!tenant) notFound();
 
+  // Mismo query de "módulo apagado" que dashboard/page.tsx y
+  // app/(tenant)/[tenant]/layout.tsx (2026-09-18) — Reportes mostraba
+  // siempre las tarjetas "Reparaciones Totales" y "Reparaciones por
+  // estatus" aunque el negocio (ej. una barbería) tuviera ese módulo
+  // apagado.
+  const reparacionesInactiva = await prisma.tenantModule.findFirst({
+    where: { tenantId: tenant.id, isActive: false, module: { code: "reparaciones" } },
+    select: { id: true },
+  });
+  const reparacionesActiva = !reparacionesInactiva;
+
   const [reportes, labels] = await Promise.all([
-    getReportesData(tenant.id),
+    getReportesData(tenant.id, reparacionesActiva),
     getTenantLabels(tenant.id, tenant.businessType),
   ]);
 
@@ -46,7 +57,7 @@ export default async function ReportesPage({ params }: PageProps) {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className={`grid gap-4 md:grid-cols-2 ${reportes.reparacionesActiva ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Productos</CardTitle>
@@ -69,16 +80,18 @@ export default async function ReportesPage({ params }: PageProps) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{label(labels, "entity.repair.plural")} Totales</CardTitle>
-            <Wrench className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{reportes.totalReparaciones}</div>
-            <p className="text-xs text-muted-foreground">{reportes.reparacionesActivas} activas ahora</p>
-          </CardContent>
-        </Card>
+        {reportes.reparacionesActiva && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{label(labels, "entity.repair.plural")} Totales</CardTitle>
+              <Wrench className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{reportes.totalReparaciones}</div>
+              <p className="text-xs text-muted-foreground">{reportes.reparacionesActivas} activas ahora</p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -99,28 +112,30 @@ export default async function ReportesPage({ params }: PageProps) {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{label(labels, "entity.repair.plural")} por estatus</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {reportes.reparacionesPorEstado.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Todavía no se ha recibido ninguna {label(labels, "entity.repair.singular").toLowerCase()}.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {reportes.reparacionesPorEstado.map((r) => (
-                  <div key={r.estado} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{label(labels, `repair.status.${r.estado}`)}</span>
-                    <span className="font-medium">{r.count}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <div className={`grid gap-4 ${reportes.reparacionesActiva ? "md:grid-cols-2" : ""}`}>
+        {reportes.reparacionesActiva && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{label(labels, "entity.repair.plural")} por estatus</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {reportes.reparacionesPorEstado.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Todavía no se ha recibido ninguna {label(labels, "entity.repair.singular").toLowerCase()}.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {reportes.reparacionesPorEstado.map((r) => (
+                    <div key={r.estado} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">{label(labels, `repair.status.${r.estado}`)}</span>
+                      <span className="font-medium">{r.count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

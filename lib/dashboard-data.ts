@@ -82,6 +82,15 @@ export interface DashboardData {
   promedioVentasSemana: number;
   sucursales: SucursalResumen[];
   multiSucursal: boolean;
+  // Módulo "Reparaciones" activo para este tenant (2026-09-18) — cuando es
+  // false (ej. una barbería, que trae este módulo apagado por default, ver
+  // lib/modulos-rubro.ts) ninguna de las queries de reparaciones de abajo
+  // se ejecuta y todos los conteos/arreglos de reparaciones quedan en
+  // cero/vacío — DashboardClient.tsx usa este campo para ocultar por
+  // completo la UI de reparaciones en vez de mostrarla con puros ceros,
+  // que es justo lo que Carlos reportó como bug ("Sigue mostrando
+  // Reparaciones activas... Es una barbería, eso no aplica ahí").
+  reparacionesActiva: boolean;
 }
 
 // ============================================
@@ -163,6 +172,11 @@ const READY_STATUSES: RepairStatus[] = ["READY", "WORKSHOP_READY", "SHOP_READY"]
 const RETURN_STATUSES: RepairStatus[] = ["WORKSHOP_RETURN", "SHOP_RETURN"];
 const CLOSED_STATUSES: RepairStatus[] = ["DELIVERED", "CANCELLED"];
 
+// Id que ningún Repair real puede tener (usado para forzar "sin resultados"
+// en las queries de reparaciones cuando el módulo está inactivo — ver el
+// comentario junto al Promise.all de getDashboardData).
+const REPARACIONES_INACTIVA_ID = "__reparaciones_modulo_inactivo__";
+
 const CATEGORY_FALLBACK_COLORS = [
   "var(--primary)", "#06B6D4", "#10B981", "#F59E0B",
   "#EF4444", "#8B5CF6", "#EC4899", "#F97316",
@@ -171,7 +185,8 @@ const CATEGORY_FALLBACK_COLORS = [
 export async function getDashboardData(
   tenantId: string,
   branches: Pick<Branch, "id" | "name" | "isActive">[],
-  weekStartDay: number
+  weekStartDay: number,
+  reparacionesActiva: boolean
 ): Promise<DashboardData> {
   // Sale y Repair tienen tenantId propio, así que getTenantPrisma se
   // encarga de inyectarlo — ya no se escribe a mano en su `where` de
@@ -220,18 +235,37 @@ export async function getDashboardData(
       where: { status: "COMPLETED", createdAt: { gte: consultaDesde, lt: today.end } },
       select: { branchId: true, total: true, createdAt: true },
     }),
+    // Las 3 queries de reparaciones de abajo llevan un filtro `id` extra
+    // (2026-09-18, módulo Reparaciones por tenant) que cuando el módulo
+    // está inactivo (ej. una barbería) usa un id imposible para forzar un
+    // resultado vacío — Prisma ignora una condición en `undefined`, así
+    // que con el módulo activo esto no cambia la query original en nada.
+    // Se prefiere este filtro sobre "no ejecutar la query" para no
+    // depender de tipos genéricos de Prisma en dos ramas distintas —
+    // openRepairsRaw en particular alimenta `(typeof openRepairsRaw)[number]`
+    // más abajo (toRepairRow), y eso se rompe si su tipo pudiera venir de
+    // dos formas de llamada distintas.
     db.repair.findMany({
-      where: { deliveredAt: { gte: weekStart, lt: weekEnd } },
+      where: {
+        deliveredAt: { gte: weekStart, lt: weekEnd },
+        id: reparacionesActiva ? undefined : REPARACIONES_INACTIVA_ID,
+      },
       select: { branchId: true, finalCost: true, deliveredAt: true },
     }),
     db.repair.findMany({
-      where: { status: { notIn: CLOSED_STATUSES } },
+      where: {
+        status: { notIn: CLOSED_STATUSES },
+        id: reparacionesActiva ? undefined : REPARACIONES_INACTIVA_ID,
+      },
       include: { customer: true, user: true },
       orderBy: { receivedAt: "desc" },
     }),
     db.repair.groupBy({
       by: ["branchId"],
-      where: { receivedAt: { gte: today.start, lt: today.end } },
+      where: {
+        receivedAt: { gte: today.start, lt: today.end },
+        id: reparacionesActiva ? undefined : REPARACIONES_INACTIVA_ID,
+      },
       _count: { _all: true },
     }),
     db.inventory.findMany({
@@ -400,6 +434,7 @@ export async function getDashboardData(
     promedioVentasSemana,
     sucursales,
     multiSucursal: branches.length > 1,
+    reparacionesActiva,
   };
 }
 

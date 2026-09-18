@@ -46,6 +46,33 @@ import { writeFileSync } from "fs";
  * Al final imprime y también guarda en prisma/DEMO_CREDENCIALES.md la
  * lista de los 20 logins (correo + contraseña del dueño) y el PIN de cada
  * empleado de cada negocio.
+ *
+ * ── Frescura de los datos (2026-09-18) ──────────────────────────────────
+ * Carlos, revisando demo-barberia en producción: "Fecha seleccionada 14 de
+ * Septiembre, ventas en $0 en lunes... para ser un demo no sirve. Ningún
+ * negocio que ocupe un SaaS debe tener ventas en $0 por día." La causa: la
+ * primera versión de este script sembraba una semana con fechas FIJAS
+ * (7-13 de septiembre de 2026); en cuanto pasaban los días esa semana
+ * quedaba en el pasado y el Dashboard —que sí mira la fecha real de
+ * "hoy"— empezaba a mostrar $0. Ahora la semana a sembrar/operar se
+ * calcula con calcularSemana(), relativa al momento en que corre el
+ * script, terminando siempre en "hoy".
+ *
+ * Eso resuelve la corrida de HOY, pero el mismo problema reaparece en 1-2
+ * semanas si nadie vuelve a correr el script — por eso este archivo ahora
+ * soporta dos modos:
+ *   1) `npx tsx prisma/seed-demo.ts` (sin flags) — comportamiento de
+ *      siempre: crea los negocios demo que falten, omite los que ya
+ *      existen. Sigue siendo la forma de dar de alta un rubro nuevo o
+ *      completar una corrida que falló a la mitad.
+ *   2) `npx tsx prisma/seed-demo.ts --refrescar` — para los negocios demo
+ *      que YA existen, borra su semana operativa anterior (ventas, caja,
+ *      reparaciones, asistencia, nómina, compras, factura — nunca el
+ *      catálogo, clientes ni personal) y siembra una semana nueva
+ *      terminando hoy. Es lo que corre solo cada semana vía Vercel Cron
+ *      (ver app/api/cron/reseed-demo/route.ts y vercel.json) para que
+ *      ningún dueño que reciba el demo se encuentre con ventas en $0 sin
+ *      que Carlos tenga que acordarse de resembrar a mano.
  */
 
 const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL });
@@ -88,9 +115,27 @@ const MODULOS_OFF_POR_RUBRO: Record<string, string[]> = {
 
 const PALETA = ["#4F46E5", "#06B6D4", "#8B5CF6", "#F97316", "#F59E0B", "#14B8A6", "#10B981", "#EC4899", "#EF4444", "#3B82F6"];
 
-// Semana completa a sembrar: lunes 7 a domingo 13 de septiembre de 2026
-// (la última semana calendario ya cerrada antes de "hoy", 17-sep-2026).
-const SEMANA = ["2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13"];
+// Ventana de 7 días a sembrar/operar, SIEMPRE relativa al momento en que
+// corre el script — termina hoy (índice 6) y arranca hace 6 días (índice
+// 0), sea cual sea el día real de la semana en que se ejecute. Antes era
+// un arreglo de fechas fijas; ver el comentario largo arriba ("Frescura de
+// los datos") para el porqué del cambio. new Date()/setDate() usan la hora
+// local del proceso que corre el script (la de la máquina de Carlos al
+// correrlo a mano, UTC en Vercel Cron) — para el grano de un día completo
+// esto es suficiente; en el peor caso, justo en la medianoche UTC, una
+// fecha podría quedar corrida por un día, sin ningún efecto real en un
+// negocio DEMO.
+function calcularSemana(): string[] {
+  const hoy = new Date();
+  const dias: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(hoy);
+    d.setDate(d.getDate() - i);
+    dias.push(d.toISOString().slice(0, 10));
+  }
+  return dias;
+}
+const SEMANA = calcularSemana();
 
 // ── utilidades ─────────────────────────────────────────────────────────
 function randInt(min: number, max: number): number {
@@ -523,126 +568,40 @@ interface CredencialEmpleado { name: string; puesto: string; pin: string; }
 interface CredencialNegocio { tenantName: string; slug: string; ownerEmail: string; password: string; staff: CredencialEmpleado[]; }
 const RESUMEN_CREDENCIALES: CredencialNegocio[] = [];
 
-async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: Map<string, string>) {
-  const ownerEmail = `demo_${cfg.emailLocal}@linkitysoluciones.com`;
-  console.log(`\n🌱 ${cfg.tenantName} (${ownerEmail})`);
+// Antes vivía declarado dentro de crearNegocioDemo — se sube a nivel de
+// módulo porque refrescarNegocioDemo (semana operativa nueva para un
+// negocio que YA existe, ver comentario "Frescura de los datos" arriba)
+// también arma un arreglo de este mismo tipo, reconstruido desde la BD en
+// vez de creado de cero.
+type EmpleadoCreado = { staffId: string; branchId: string; name: string; puesto: string; pin: string };
 
-  const supabaseId = await obtenerOCrearUsuarioAuth(ownerEmail, DEMO_PASSWORD);
+// Datos "de configuración" de un negocio ya sembrado que sembrarSemanaOperativa
+// necesita para generar ventas/reparaciones/asistencia/nómina — ya sea
+// recién creados (crearNegocioDemo) o releídos de la BD (refrescarNegocioDemo).
+interface ContextoNegocio {
+  tenant: { id: string };
+  branchPrincipal: { id: string };
+  branchSecundaria: { id: string } | null;
+  branches: { id: string }[];
+  ownerUser: { id: string };
+  productos: { id: string; type: ProductType; price: number; cost: number | null }[];
+  clientes: { id: string }[];
+  empleados: EmpleadoCreado[];
+  tieneReparaciones: boolean;
+  cfg: RubroConfig;
+  supplierId: string;
+}
 
-  const tenant = await prisma.tenant.create({
-    data: { name: cfg.tenantName, slug: cfg.slug, businessType: cfg.key, email: ownerEmail, phone: telefonoAleatorio(), city: "Ciudad de México", state: "CDMX", isActive: true },
-  });
-
-  const branchPrincipal = await prisma.branch.create({ data: { tenantId: tenant.id, name: "Sucursal Principal", address: "Av. Principal 100", phone: telefonoAleatorio(), isActive: true } });
-  let branchSecundaria: { id: string } | null = null;
-  if (cfg.segundaSucursal) {
-    branchSecundaria = await prisma.branch.create({ data: { tenantId: tenant.id, name: "Sucursal Norte", address: "Blvd. Norte 250", phone: telefonoAleatorio(), isActive: true } });
-  }
-  const branches = branchSecundaria ? [branchPrincipal, branchSecundaria] : [branchPrincipal];
-
-  const ownerUser = await prisma.user.create({ data: { tenantId: tenant.id, branchId: branchPrincipal.id, email: ownerEmail, name: "Dueño Demo", supabaseId, isActive: true } });
-  const rolAdmin = await prisma.role.create({ data: { tenantId: tenant.id, name: "Administrador", description: "Acceso completo", isSystem: true } });
-  await prisma.userRole.create({ data: { userId: ownerUser.id, roleId: rolAdmin.id } });
-
-  await prisma.subscription.create({ data: { tenantId: tenant.id, plan: "Demo", price: 0 } });
-
-  const offSet = new Set(MODULOS_OFF_POR_RUBRO[cfg.key] ?? []);
-  for (const code of MODULE_CATALOG_CODES) {
-    const mod = await prisma.module.upsert({ where: { code }, update: {}, create: { code, name: MODULE_NAMES[code], isCore: code === "dashboard" } });
-    await prisma.tenantModule.create({ data: { tenantId: tenant.id, moduleId: mod.id, isActive: !offSet.has(code) } });
-  }
-  const tieneReparaciones = !offSet.has("reparaciones");
-
-  const categoriasCache = new Map<string, string>();
-  const productos: { id: string; type: ProductType; price: number; cost: number | null }[] = [];
-  let colorIdx = 0;
-  for (const item of cfg.catalogo) {
-    const catKey = `${item.categoryName}|${item.categoryType}`;
-    let catId = categoriasCache.get(catKey);
-    if (!catId) {
-      const cat = await prisma.category.create({ data: { tenantId: tenant.id, name: item.categoryName, type: item.categoryType as CategoryType, color: PALETA[colorIdx++ % PALETA.length] } });
-      catId = cat.id;
-      categoriasCache.set(catKey, catId);
-    }
-    const emoji = `icon:${item.icon}`;
-    const prod = await prisma.product.create({ data: { tenantId: tenant.id, categoryId: catId, name: item.name, type: item.type as ProductType, price: item.price, cost: item.cost ?? null, emoji, isActive: true } });
-    productos.push({ id: prod.id, type: item.type as ProductType, price: item.price, cost: item.cost ?? null });
-  }
+// Semana operativa completa (compra a proveedor, caja + ventas por
+// sucursal, reparaciones si aplica, asistencia y nómina de la semana,
+// factura de la primera venta) — extraído de crearNegocioDemo (2026-09-18)
+// para que refrescarNegocioDemo pueda generarle una semana NUEVA a un
+// negocio demo que ya existe, sin repetir la lógica ni tocar su catálogo,
+// clientes o personal.
+async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
+  const { tenant, branchPrincipal, branchSecundaria, branches, ownerUser, productos, clientes, empleados, tieneReparaciones, cfg, supplierId } = ctx;
 
   const conStock = productos.filter((p) => p.type !== ProductType.SERVICE);
-  for (const p of conStock) {
-    const stockBase = randInt(3, 25);
-    await prisma.inventory.create({ data: { productId: p.id, branchId: branchPrincipal.id, stock: stockBase, minStock: Math.max(2, Math.round(stockBase * 0.25)) } });
-    if (branchSecundaria) {
-      await prisma.inventory.create({ data: { productId: p.id, branchId: branchSecundaria.id, stock: Math.max(0, Math.round(stockBase * 0.5)), minStock: Math.max(2, Math.round(stockBase * 0.25)) } });
-    }
-  }
-  if (conStock.length > 0) {
-    await prisma.inventory.update({ where: { productId_branchId: { productId: conStock[0].id, branchId: branchPrincipal.id } }, data: { stock: 0 } });
-  }
-  if (conStock.length > 1) {
-    await prisma.inventory.update({ where: { productId_branchId: { productId: conStock[1].id, branchId: branchPrincipal.id } }, data: { stock: 1 } });
-  }
-
-  const poolClientes = cfg.clientelaMasculina ? CLIENTES_POOL_MASCULINO : CLIENTES_POOL;
-  const clientes: { id: string }[] = [];
-  for (let i = 0; i < 8; i++) {
-    const nombre = poolClientes[(indice * 8 + i) % poolClientes.length];
-    const cliente = await prisma.customer.create({ data: { tenantId: tenant.id, name: nombre, phone: telefonoAleatorio(), phoneCountryCode: "+52" } });
-    clientes.push(cliente);
-  }
-
-  type EmpleadoCreado = { staffId: string; branchId: string; name: string; puesto: string; pin: string };
-  const empleados: EmpleadoCreado[] = [];
-  for (let i = 0; i < cfg.staff.length; i++) {
-    const s = cfg.staff[i];
-    const rol = await prisma.role.create({ data: { tenantId: tenant.id, name: s.puesto, description: null, isSystem: false } });
-    const modulos = inferirModulosPorPuesto(s.puesto, tieneReparaciones);
-    const conDashboard = new Set([...modulos, "dashboard"]);
-    await prisma.rolePermission.createMany({
-      data: Array.from(conDashboard).map((m) => mapaPermisos.get(m)).filter((id): id is string => Boolean(id)).map((permissionId) => ({ roleId: rol.id, permissionId })),
-      skipDuplicates: true,
-    });
-
-    const branchAsignada = branchSecundaria && i % 2 === 1 ? branchSecundaria : branchPrincipal;
-    const email = `staff-demo-${i}@${cfg.slug}.personal.linkity.internal`;
-    const supabaseIdFalso = `staff-placeholder-demo-${cfg.slug}-${i}`;
-    const usuarioOculto = await prisma.user.create({ data: { tenantId: tenant.id, branchId: branchAsignada.id, email, name: s.nombre, supabaseId: supabaseIdFalso, isActive: true } });
-
-    const pin = PINES[i % PINES.length];
-    const ESQUEMAS_ROTACION = [PaymentScheme.MIXTO, PaymentScheme.COMISION, PaymentScheme.DESTAJO, PaymentScheme.FIJO];
-    const FRECUENCIAS = [PaymentFrequency.SEMANAL, PaymentFrequency.CATORCENAL, PaymentFrequency.QUINCENAL, PaymentFrequency.MENSUAL];
-    const METODOS_PAGO = [StaffPaymentMethod.EFECTIVO, StaffPaymentMethod.TRANSFERENCIA, StaffPaymentMethod.CHEQUE, StaffPaymentMethod.TARJETA_NOMINA, StaffPaymentMethod.OTRO];
-    const esquema = ESQUEMAS_ROTACION[(indice + i) % ESQUEMAS_ROTACION.length];
-    const commissionBase = commissionBaseSegunRubro(tieneReparaciones, i, esquema);
-    const frecuenciaSueldo = FRECUENCIAS[(indice + i) % FRECUENCIAS.length];
-    const frecuenciaComision = FRECUENCIAS[(indice + i + 1) % FRECUENCIAS.length];
-    const metodoPago = METODOS_PAGO[(indice + i) % METODOS_PAGO.length];
-    const esLider = i === 0;
-
-    const staff = await prisma.staff.create({
-      data: {
-        tenantId: tenant.id, branchId: branchAsignada.id, userId: usuarioOculto.id,
-        name: s.nombre, phone: telefonoAleatorio(), phoneCountryCode: "+52", position: s.puesto,
-        pinHash: hashPin(pin), roleId: rol.id,
-        paymentScheme: esquema,
-        baseSalary: esquema === PaymentScheme.FIJO || esquema === PaymentScheme.MIXTO ? randInt(3500, 7000) : 0,
-        commissionRate: esquema === PaymentScheme.COMISION || esquema === PaymentScheme.MIXTO ? randInt(5, 15) : 0,
-        commissionBase,
-        paymentFrequency: frecuenciaSueldo,
-        commissionFrequency: frecuenciaComision,
-        pieceRate: esquema === PaymentScheme.DESTAJO ? randInt(30, 150) : 0,
-        teamCommissionRate: esLider ? randInt(2, 5) : 0,
-        teamCommissionBase: esLider ? commissionBase : null,
-        staffPaymentMethod: metodoPago,
-        clabe: metodoPago === StaffPaymentMethod.TRANSFERENCIA ? claveAleatoria18() : null,
-        isActive: true,
-      },
-    });
-    empleados.push({ staffId: staff.id, branchId: branchAsignada.id, name: s.nombre, puesto: s.puesto, pin });
-  }
-
-  const proveedor = await prisma.supplier.create({ data: { tenantId: tenant.id, name: cfg.proveedorNombre, phone: telefonoAleatorio(), isActive: true } });
   const itemsCompra = conStock.slice(0, 3);
   if (itemsCompra.length > 0) {
     let totalCompra = 0;
@@ -653,7 +612,7 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
       detalles.push({ productId: p.id, costo });
     }
     const compra = await prisma.purchase.create({
-      data: { tenantId: tenant.id, supplierId: proveedor.id, branchId: branchPrincipal.id, folio: "C-0001", total: totalCompra, status: PurchaseStatus.RECEIVED, receivedAt: new Date(`${SEMANA[2]}T10:00:00-06:00`) },
+      data: { tenantId: tenant.id, supplierId, branchId: branchPrincipal.id, folio: "C-0001", total: totalCompra, status: PurchaseStatus.RECEIVED, receivedAt: new Date(`${SEMANA[2]}T10:00:00-06:00`) },
     });
     for (const d of detalles) {
       await prisma.purchaseItem.create({ data: { purchaseId: compra.id, productId: d.productId, quantity: 5, cost: d.costo, subtotal: d.costo * 5 } });
@@ -666,7 +625,12 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
 
   for (let d = 0; d < SEMANA.length; d++) {
     const fechaStr = SEMANA[d];
-    const esDomingo = d === 6;
+    // Antes era `d === 6` (asumiendo que el arreglo siempre arrancaba en
+    // lunes y el índice 6 caía en domingo, cierto solo cuando SEMANA era
+    // la semana fija 7-13 sep). Ahora SEMANA es una ventana de 7 días que
+    // puede empezar cualquier día, así que "es domingo" se calcula del
+    // día calendario real de fechaStr, no de su posición en el arreglo.
+    const esDomingo = new Date(`${fechaStr}T12:00:00-06:00`).getUTCDay() === 0;
 
     for (const branch of branches) {
       const apertura = randInt(500, 1500);
@@ -803,11 +767,241 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
       data: { tenantId: tenant.id, customerId: primeraVenta.customerId ?? clientes[0].id, saleId: primeraVenta.id, folio: "F-0001", status: InvoiceStatus.STAMPED, total: primeraVenta.total },
     });
   }
+}
+
+async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: Map<string, string>) {
+  const ownerEmail = `demo_${cfg.emailLocal}@linkitysoluciones.com`;
+  console.log(`\n🌱 ${cfg.tenantName} (${ownerEmail})`);
+
+  const supabaseId = await obtenerOCrearUsuarioAuth(ownerEmail, DEMO_PASSWORD);
+
+  const tenant = await prisma.tenant.create({
+    data: { name: cfg.tenantName, slug: cfg.slug, businessType: cfg.key, email: ownerEmail, phone: telefonoAleatorio(), city: "Ciudad de México", state: "CDMX", isActive: true },
+  });
+
+  const branchPrincipal = await prisma.branch.create({ data: { tenantId: tenant.id, name: "Sucursal Principal", address: "Av. Principal 100", phone: telefonoAleatorio(), isActive: true } });
+  let branchSecundaria: { id: string } | null = null;
+  if (cfg.segundaSucursal) {
+    branchSecundaria = await prisma.branch.create({ data: { tenantId: tenant.id, name: "Sucursal Norte", address: "Blvd. Norte 250", phone: telefonoAleatorio(), isActive: true } });
+  }
+  const branches = branchSecundaria ? [branchPrincipal, branchSecundaria] : [branchPrincipal];
+
+  const ownerUser = await prisma.user.create({ data: { tenantId: tenant.id, branchId: branchPrincipal.id, email: ownerEmail, name: "Dueño Demo", supabaseId, isActive: true } });
+  const rolAdmin = await prisma.role.create({ data: { tenantId: tenant.id, name: "Administrador", description: "Acceso completo", isSystem: true } });
+  await prisma.userRole.create({ data: { userId: ownerUser.id, roleId: rolAdmin.id } });
+
+  await prisma.subscription.create({ data: { tenantId: tenant.id, plan: "Demo", price: 0 } });
+
+  const offSet = new Set(MODULOS_OFF_POR_RUBRO[cfg.key] ?? []);
+  for (const code of MODULE_CATALOG_CODES) {
+    const mod = await prisma.module.upsert({ where: { code }, update: {}, create: { code, name: MODULE_NAMES[code], isCore: code === "dashboard" } });
+    await prisma.tenantModule.create({ data: { tenantId: tenant.id, moduleId: mod.id, isActive: !offSet.has(code) } });
+  }
+  const tieneReparaciones = !offSet.has("reparaciones");
+
+  const categoriasCache = new Map<string, string>();
+  const productos: { id: string; type: ProductType; price: number; cost: number | null }[] = [];
+  let colorIdx = 0;
+  for (const item of cfg.catalogo) {
+    const catKey = `${item.categoryName}|${item.categoryType}`;
+    let catId = categoriasCache.get(catKey);
+    if (!catId) {
+      const cat = await prisma.category.create({ data: { tenantId: tenant.id, name: item.categoryName, type: item.categoryType as CategoryType, color: PALETA[colorIdx++ % PALETA.length] } });
+      catId = cat.id;
+      categoriasCache.set(catKey, catId);
+    }
+    const emoji = `icon:${item.icon}`;
+    const prod = await prisma.product.create({ data: { tenantId: tenant.id, categoryId: catId, name: item.name, type: item.type as ProductType, price: item.price, cost: item.cost ?? null, emoji, isActive: true } });
+    productos.push({ id: prod.id, type: item.type as ProductType, price: item.price, cost: item.cost ?? null });
+  }
+
+  const conStock = productos.filter((p) => p.type !== ProductType.SERVICE);
+  for (const p of conStock) {
+    const stockBase = randInt(3, 25);
+    await prisma.inventory.create({ data: { productId: p.id, branchId: branchPrincipal.id, stock: stockBase, minStock: Math.max(2, Math.round(stockBase * 0.25)) } });
+    if (branchSecundaria) {
+      await prisma.inventory.create({ data: { productId: p.id, branchId: branchSecundaria.id, stock: Math.max(0, Math.round(stockBase * 0.5)), minStock: Math.max(2, Math.round(stockBase * 0.25)) } });
+    }
+  }
+  if (conStock.length > 0) {
+    await prisma.inventory.update({ where: { productId_branchId: { productId: conStock[0].id, branchId: branchPrincipal.id } }, data: { stock: 0 } });
+  }
+  if (conStock.length > 1) {
+    await prisma.inventory.update({ where: { productId_branchId: { productId: conStock[1].id, branchId: branchPrincipal.id } }, data: { stock: 1 } });
+  }
+
+  const poolClientes = cfg.clientelaMasculina ? CLIENTES_POOL_MASCULINO : CLIENTES_POOL;
+  const clientes: { id: string }[] = [];
+  for (let i = 0; i < 8; i++) {
+    const nombre = poolClientes[(indice * 8 + i) % poolClientes.length];
+    const cliente = await prisma.customer.create({ data: { tenantId: tenant.id, name: nombre, phone: telefonoAleatorio(), phoneCountryCode: "+52" } });
+    clientes.push(cliente);
+  }
+
+  const empleados: EmpleadoCreado[] = [];
+  for (let i = 0; i < cfg.staff.length; i++) {
+    const s = cfg.staff[i];
+    const rol = await prisma.role.create({ data: { tenantId: tenant.id, name: s.puesto, description: null, isSystem: false } });
+    const modulos = inferirModulosPorPuesto(s.puesto, tieneReparaciones);
+    const conDashboard = new Set([...modulos, "dashboard"]);
+    await prisma.rolePermission.createMany({
+      data: Array.from(conDashboard).map((m) => mapaPermisos.get(m)).filter((id): id is string => Boolean(id)).map((permissionId) => ({ roleId: rol.id, permissionId })),
+      skipDuplicates: true,
+    });
+
+    const branchAsignada = branchSecundaria && i % 2 === 1 ? branchSecundaria : branchPrincipal;
+    const email = `staff-demo-${i}@${cfg.slug}.personal.linkity.internal`;
+    const supabaseIdFalso = `staff-placeholder-demo-${cfg.slug}-${i}`;
+    const usuarioOculto = await prisma.user.create({ data: { tenantId: tenant.id, branchId: branchAsignada.id, email, name: s.nombre, supabaseId: supabaseIdFalso, isActive: true } });
+
+    const pin = PINES[i % PINES.length];
+    const ESQUEMAS_ROTACION = [PaymentScheme.MIXTO, PaymentScheme.COMISION, PaymentScheme.DESTAJO, PaymentScheme.FIJO];
+    const FRECUENCIAS = [PaymentFrequency.SEMANAL, PaymentFrequency.CATORCENAL, PaymentFrequency.QUINCENAL, PaymentFrequency.MENSUAL];
+    const METODOS_PAGO = [StaffPaymentMethod.EFECTIVO, StaffPaymentMethod.TRANSFERENCIA, StaffPaymentMethod.CHEQUE, StaffPaymentMethod.TARJETA_NOMINA, StaffPaymentMethod.OTRO];
+    const esquema = ESQUEMAS_ROTACION[(indice + i) % ESQUEMAS_ROTACION.length];
+    const commissionBase = commissionBaseSegunRubro(tieneReparaciones, i, esquema);
+    const frecuenciaSueldo = FRECUENCIAS[(indice + i) % FRECUENCIAS.length];
+    const frecuenciaComision = FRECUENCIAS[(indice + i + 1) % FRECUENCIAS.length];
+    const metodoPago = METODOS_PAGO[(indice + i) % METODOS_PAGO.length];
+    const esLider = i === 0;
+
+    const staff = await prisma.staff.create({
+      data: {
+        tenantId: tenant.id, branchId: branchAsignada.id, userId: usuarioOculto.id,
+        name: s.nombre, phone: telefonoAleatorio(), phoneCountryCode: "+52", position: s.puesto,
+        pinHash: hashPin(pin), roleId: rol.id,
+        paymentScheme: esquema,
+        baseSalary: esquema === PaymentScheme.FIJO || esquema === PaymentScheme.MIXTO ? randInt(3500, 7000) : 0,
+        commissionRate: esquema === PaymentScheme.COMISION || esquema === PaymentScheme.MIXTO ? randInt(5, 15) : 0,
+        commissionBase,
+        paymentFrequency: frecuenciaSueldo,
+        commissionFrequency: frecuenciaComision,
+        pieceRate: esquema === PaymentScheme.DESTAJO ? randInt(30, 150) : 0,
+        teamCommissionRate: esLider ? randInt(2, 5) : 0,
+        teamCommissionBase: esLider ? commissionBase : null,
+        staffPaymentMethod: metodoPago,
+        clabe: metodoPago === StaffPaymentMethod.TRANSFERENCIA ? claveAleatoria18() : null,
+        isActive: true,
+      },
+    });
+    empleados.push({ staffId: staff.id, branchId: branchAsignada.id, name: s.nombre, puesto: s.puesto, pin });
+  }
+
+  const proveedor = await prisma.supplier.create({ data: { tenantId: tenant.id, name: cfg.proveedorNombre, phone: telefonoAleatorio(), isActive: true } });
+
+  // Compra inicial + la semana operativa completa (caja, ventas,
+  // reparaciones, asistencia, nómina, factura) — ver sembrarSemanaOperativa
+  // arriba; extraído para que refrescarNegocioDemo pueda reusarlo cada
+  // semana sobre un negocio que ya existe, sin repetir esta lógica.
+  await sembrarSemanaOperativa({
+    tenant, branchPrincipal, branchSecundaria, branches, ownerUser, productos, clientes, empleados, tieneReparaciones, cfg,
+    supplierId: proveedor.id,
+  });
 
   RESUMEN_CREDENCIALES.push({
     tenantName: cfg.tenantName, slug: cfg.slug, ownerEmail, password: DEMO_PASSWORD,
     staff: empleados.map((e) => ({ name: e.name, puesto: e.puesto, pin: e.pin })),
   });
+}
+
+// Borra SOLO los datos OPERATIVOS de un negocio demo (ventas, caja,
+// reparaciones, asistencia, nómina, compras, factura) antes de sembrarle
+// una semana nueva — nunca Tenant, Branch, User, Role, Category, Product,
+// Inventory, Customer, Staff ni Supplier, que son la "configuración" del
+// negocio y deben sobrevivir intactos de una semana a la siguiente (ver
+// comentario "Frescura de los datos" al inicio del archivo). Borra en
+// orden hijo→padre para no chocar con las llaves foráneas.
+async function borrarDatosOperativos(tenantId: string) {
+  const ventaIds = (await prisma.sale.findMany({ where: { tenantId }, select: { id: true } })).map((v) => v.id);
+  await prisma.saleMixedPayment.deleteMany({ where: { saleId: { in: ventaIds } } });
+  await prisma.saleItem.deleteMany({ where: { saleId: { in: ventaIds } } });
+  await prisma.invoice.deleteMany({ where: { tenantId } });
+  await prisma.sale.deleteMany({ where: { tenantId } });
+
+  const repairIds = (await prisma.repair.findMany({ where: { tenantId }, select: { id: true } })).map((r) => r.id);
+  await prisma.repairHistory.deleteMany({ where: { repairId: { in: repairIds } } });
+  await prisma.repairItem.deleteMany({ where: { repairId: { in: repairIds } } });
+  await prisma.repair.deleteMany({ where: { tenantId } });
+
+  const sesionIds = (await prisma.cashSession.findMany({ where: { tenantId }, select: { id: true } })).map((s) => s.id);
+  await prisma.cashMovement.deleteMany({ where: { cashSessionId: { in: sesionIds } } });
+  await prisma.cashSession.deleteMany({ where: { tenantId } });
+
+  const staffIds = (await prisma.staff.findMany({ where: { tenantId }, select: { id: true } })).map((s) => s.id);
+  await prisma.staffPayment.deleteMany({ where: { staffId: { in: staffIds } } });
+  await prisma.attendance.deleteMany({ where: { staffId: { in: staffIds } } });
+  await prisma.staffLoginSession.deleteMany({ where: { tenantId } });
+
+  const purchaseIds = (await prisma.purchase.findMany({ where: { tenantId }, select: { id: true } })).map((p) => p.id);
+  await prisma.purchaseItem.deleteMany({ where: { purchaseId: { in: purchaseIds } } });
+  await prisma.purchase.deleteMany({ where: { tenantId } });
+}
+
+// Le da una semana operativa NUEVA (terminando hoy) a un negocio demo que
+// YA EXISTE, releyendo de la BD todo lo que sembrarSemanaOperativa
+// necesita (nunca se recrea el tenant/catálogo/clientes/personal). Si el
+// slug no existe todavía, no hace nada — ese caso lo cubre
+// crearNegocioDemo desde el modo normal del script (sin --refrescar).
+async function refrescarNegocioDemo(cfg: RubroConfig): Promise<boolean> {
+  const tenant = await prisma.tenant.findUnique({ where: { slug: cfg.slug }, select: { id: true } });
+  if (!tenant) return false;
+
+  const [branches, ownerUser, productosRaw, clientes, staffRows, tenantModulesInactivos, proveedor] = await Promise.all([
+    prisma.branch.findMany({ where: { tenantId: tenant.id }, orderBy: { createdAt: "asc" }, select: { id: true } }),
+    prisma.user.findFirst({ where: { tenantId: tenant.id, email: `demo_${cfg.emailLocal}@linkitysoluciones.com` }, select: { id: true } }),
+    prisma.product.findMany({ where: { tenantId: tenant.id, isActive: true }, select: { id: true, type: true, price: true, cost: true } }),
+    prisma.customer.findMany({ where: { tenantId: tenant.id }, select: { id: true } }),
+    prisma.staff.findMany({ where: { tenantId: tenant.id }, select: { id: true, branchId: true, name: true, position: true } }),
+    prisma.tenantModule.findMany({ where: { tenantId: tenant.id, isActive: false }, select: { module: { select: { code: true } } } }),
+    prisma.supplier.findFirst({ where: { tenantId: tenant.id }, select: { id: true } }),
+  ]);
+
+  if (!ownerUser || !proveedor || branches.length === 0) {
+    throw new Error(`refrescarNegocioDemo: ${cfg.slug} existe pero le falta dueño/proveedor/sucursal — no se puede refrescar (¿quedó a medias una corrida anterior?).`);
+  }
+
+  // Product.price/cost llegan de Prisma como Decimal — sembrarSemanaOperativa
+  // (y ContextoNegocio) esperan `number`, igual que crearNegocioDemo ya les
+  // pasa números planos desde ItemArranque.
+  const productos = productosRaw.map((p) => ({ id: p.id, type: p.type, price: Number(p.price), cost: p.cost != null ? Number(p.cost) : null }));
+
+  const tieneReparaciones = !tenantModulesInactivos.some((tm) => tm.module.code === "reparaciones");
+  // El PIN original no se puede recuperar de pinHash (es un hash, no texto
+  // plano) — no hace falta para operar la semana; se reutiliza uno de la
+  // lista fija PINES solo para que el tipo EmpleadoCreado quede completo.
+  const empleados: EmpleadoCreado[] = staffRows.map((s, i) => ({
+    staffId: s.id, branchId: s.branchId, name: s.name, puesto: s.position, pin: PINES[i % PINES.length],
+  }));
+
+  await borrarDatosOperativos(tenant.id);
+
+  await sembrarSemanaOperativa({
+    tenant, branchPrincipal: branches[0], branchSecundaria: branches[1] ?? null, branches, ownerUser, productos, clientes, empleados, tieneReparaciones, cfg,
+    supplierId: proveedor.id,
+  });
+  return true;
+}
+
+/**
+ * Refresca la semana operativa de TODOS los negocios demo que ya existan
+ * (nunca crea uno nuevo — eso solo pasa vía `npx tsx prisma/seed-demo.ts`
+ * sin flags). Es lo que llama app/api/cron/reseed-demo/route.ts cada
+ * semana vía Vercel Cron para que el demo nunca se vea con ventas en $0.
+ */
+export async function refrescarTodosLosNegociosDemo(): Promise<{ actualizados: string[]; omitidos: string[] }> {
+  const actualizados: string[] = [];
+  const omitidos: string[] = [];
+  for (const cfg of RUBROS_DEMO) {
+    try {
+      const seActualizo = await refrescarNegocioDemo(cfg);
+      if (seActualizo) actualizados.push(cfg.slug);
+      else omitidos.push(cfg.slug);
+    } catch (err) {
+      console.error(`❌ Error refrescando ${cfg.slug}:`, err);
+      omitidos.push(cfg.slug);
+    }
+  }
+  return { actualizados, omitidos };
 }
 
 function guardarResumenCredenciales() {
@@ -827,8 +1021,12 @@ function guardarResumenCredenciales() {
   console.log("\n📄 Credenciales guardadas en prisma/DEMO_CREDENCIALES.md");
 }
 
+// `npx tsx prisma/seed-demo.ts --refrescar` — ver el comentario "Frescura
+// de los datos" al inicio del archivo para el porqué de este modo.
+const REFRESCAR = process.argv.includes("--refrescar");
+
 async function main() {
-  console.log("🌱 Sembrando 20 negocios demo (uno por rubro)...");
+  console.log(REFRESCAR ? "🔄 Refrescando la semana operativa de los negocios demo existentes..." : "🌱 Sembrando 20 negocios demo (uno por rubro)...");
   const mapaPermisos = await asegurarCatalogoPermisos();
 
   for (let i = 0; i < RUBROS_DEMO.length; i++) {
@@ -836,25 +1034,46 @@ async function main() {
     try {
       const existente = await prisma.tenant.findUnique({ where: { slug: cfg.slug } });
       if (existente) {
-        console.log(`⏭  ${cfg.slug} ya existe, se omite.`);
+        if (REFRESCAR) {
+          await refrescarNegocioDemo(cfg);
+          console.log(`🔄 ${cfg.tenantName} — semana operativa refrescada`);
+        } else {
+          console.log(`⏭  ${cfg.slug} ya existe, se omite.`);
+        }
+        continue;
+      }
+      if (REFRESCAR) {
+        // --refrescar nunca crea negocios nuevos, solo les da semana nueva
+        // a los que ya existen — si falta alguno, se corre el script sin
+        // el flag para completarlo.
+        console.log(`⏭  ${cfg.slug} no existe todavía, --refrescar no lo crea (usa el script sin flags para eso).`);
         continue;
       }
       await crearNegocioDemo(cfg, i, mapaPermisos);
       console.log(`✅ ${cfg.tenantName} listo`);
     } catch (err) {
-      console.error(`❌ Error creando ${cfg.slug}:`, err);
+      console.error(`❌ Error ${REFRESCAR ? "refrescando" : "creando"} ${cfg.slug}:`, err);
     }
   }
 
-  guardarResumenCredenciales();
-  console.log("\n🎉 Seed demo completo.");
+  if (!REFRESCAR) guardarResumenCredenciales();
+  console.log(REFRESCAR ? "\n🎉 Refresco de datos demo completo." : "\n🎉 Seed demo completo.");
 }
 
-main()
-  .catch((e) => {
-    console.error("❌ Error en el seed demo:", e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// Solo corre main() automáticamente cuando el archivo se ejecuta
+// directamente por CLI (`npx tsx prisma/seed-demo.ts`) — no cuando se
+// importa como módulo (app/api/cron/reseed-demo/route.ts importa
+// refrescarTodosLosNegociosDemo de aquí; sin esta guarda, ese import por sí
+// solo dispararía una corrida completa de main() cada vez que Next carga
+// la ruta). Equivalente ESM de la guarda clásica `require.main === module`.
+const esEjecucionDirecta = Boolean(process.argv[1]) && import.meta.url === `file://${process.argv[1]}`;
+if (esEjecucionDirecta) {
+  main()
+    .catch((e) => {
+      console.error("❌ Error en el seed demo:", e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

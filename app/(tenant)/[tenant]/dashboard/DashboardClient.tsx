@@ -408,12 +408,21 @@ export default function DashboardClient({
     );
   };
 
+  // Las 3 fichas de reparaciones (2026-09-18) solo se agregan cuando el
+  // módulo está activo para este tenant — antes se mostraban siempre, aun
+  // en negocios como una barbería que no lo usan ("Sigue mostrando
+  // Reparaciones activas, dispositivos listos y devolución... Es una
+  // barbería, eso no aplica ahí" — reporte de Carlos en producción).
   const metricas = [
     { label: "Ventas del día", value: formatMXN(data.totalVentasHoy), sub: data.numVentasHoy > 0 ? `${data.numVentasHoy} ${data.numVentasHoy === 1 ? "venta" : "ventas"} hoy` : "Sin ventas aún", positive: true, icon: ShoppingCart, iconBg: "bg-primary/10", iconColor: "text-primary", modal: "ventas" as ModalType, btnColor: "text-primary bg-primary/10" },
     { label: "Total de tickets", value: String(data.numVentasHoy), sub: "Transacciones hoy", positive: true, icon: Receipt, iconBg: "bg-cyan-50", iconColor: "text-cyan-600", modal: "tickets" as ModalType, btnColor: "text-cyan-600 bg-cyan-50" },
-    { label: `${t("entity.repair.plural")} activas`, value: String(data.reparacionesActivasCount), sub: "En proceso", positive: true, icon: Wrench, iconBg: "bg-amber-50", iconColor: "text-amber-600", modal: "reparaciones" as ModalType, btnColor: "text-amber-600 bg-amber-50" },
-    { label: `${t("entity.repair.asset")}s listos`, value: String(data.equiposListosCount), sub: "Pendientes entregar", positive: true, icon: CheckCircle, iconBg: "bg-emerald-50", iconColor: "text-emerald-600", modal: "listos" as ModalType, btnColor: "text-emerald-600 bg-emerald-50" },
-    { label: `${t("entity.repair.asset")}s devolución`, value: String(data.equiposDevolucionCount), sub: "Sin reparación", positive: false, icon: RotateCcw, iconBg: "bg-red-50", iconColor: "text-red-500", modal: "devoluciones" as ModalType, btnColor: "text-red-600 bg-red-50" },
+    ...(data.reparacionesActiva
+      ? [
+          { label: `${t("entity.repair.plural")} activas`, value: String(data.reparacionesActivasCount), sub: "En proceso", positive: true, icon: Wrench, iconBg: "bg-amber-50", iconColor: "text-amber-600", modal: "reparaciones" as ModalType, btnColor: "text-amber-600 bg-amber-50" },
+          { label: `${t("entity.repair.asset")}s listos`, value: String(data.equiposListosCount), sub: "Pendientes entregar", positive: true, icon: CheckCircle, iconBg: "bg-emerald-50", iconColor: "text-emerald-600", modal: "listos" as ModalType, btnColor: "text-emerald-600 bg-emerald-50" },
+          { label: `${t("entity.repair.asset")}s devolución`, value: String(data.equiposDevolucionCount), sub: "Sin reparación", positive: false, icon: RotateCcw, iconBg: "bg-red-50", iconColor: "text-red-500", modal: "devoluciones" as ModalType, btnColor: "text-red-600 bg-red-50" },
+        ]
+      : []),
   ];
 
   return (
@@ -469,8 +478,12 @@ export default function DashboardClient({
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
               <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /><span className="text-[10px] sm:text-xs text-muted-foreground">Ventas</span></div>
-              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#06B6D4]" /><span className="text-[10px] sm:text-xs text-muted-foreground">Rep.</span></div>
-              <div className="flex items-center gap-1"><div className="w-3 h-0 border-t-2 border-dashed border-emerald-500" /><span className="text-[10px] sm:text-xs text-muted-foreground">Total</span></div>
+              {data.reparacionesActiva && (
+                <>
+                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#06B6D4]" /><span className="text-[10px] sm:text-xs text-muted-foreground">Rep.</span></div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-0 border-t-2 border-dashed border-emerald-500" /><span className="text-[10px] sm:text-xs text-muted-foreground">Total</span></div>
+                </>
+              )}
             </div>
           </div>
           <ResponsiveContainer width="100%" height={140}>
@@ -480,22 +493,30 @@ export default function DashboardClient({
                   <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.15} />
                   <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                 </linearGradient>
-                <linearGradient id="cR" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="cT" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10B981" stopOpacity={0.10} />
-                  <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                </linearGradient>
+                {data.reparacionesActiva && (
+                  <>
+                    <linearGradient id="cR" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="cT" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.10} />
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                    </linearGradient>
+                  </>
+                )}
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
               <XAxis dataKey="dia" tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} width={36} />
               <Tooltip content={<CustomTooltip />} />
               <Area type="monotone" dataKey="ventas" stroke="var(--primary)" strokeWidth={2} fill="url(#cV)" />
-              <Area type="monotone" dataKey="reparaciones" stroke="#06B6D4" strokeWidth={2} fill="url(#cR)" />
-              <Area type="monotone" dataKey="total" stroke="#10B981" strokeWidth={2} strokeDasharray="5 3" fill="url(#cT)" />
+              {data.reparacionesActiva && (
+                <>
+                  <Area type="monotone" dataKey="reparaciones" stroke="#06B6D4" strokeWidth={2} fill="url(#cR)" />
+                  <Area type="monotone" dataKey="total" stroke="#10B981" strokeWidth={2} strokeDasharray="5 3" fill="url(#cT)" />
+                </>
+              )}
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -604,31 +625,37 @@ export default function DashboardClient({
       </div>
 
       {/* ── Reparaciones + Alertas ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <p className="text-sm font-medium text-foreground">{t("entity.repair.plural")} activas</p>
-            <button onClick={() => setModalAbierto("reparaciones")} className="text-xs text-primary hover:underline">Ver todas</button>
-          </div>
-          <div className="divide-y divide-border/60">
-            {data.reparacionesActivas.length === 0 ? (
-              <EmptyState text={`No hay ${t("entity.repair.plural").toLowerCase()} activas por ahora.`} />
-            ) : (
-              data.reparacionesActivas.slice(0, 4).map((r) => (
-                <div key={r.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40">
-                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${prioridadDot[r.prioridad]}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">{r.equipo}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{r.cliente}</p>
+      {/* El panel "Reparaciones activas" (izquierda) solo aparece con el
+          módulo activo — mismo reporte de Carlos citado arriba. Sin él, el
+          grid pasa de 2 columnas a 1 sola (Alertas) en vez de dejar un
+          hueco vacío al lado. */}
+      <div className={`grid grid-cols-1 ${data.reparacionesActiva ? "lg:grid-cols-2" : ""} gap-3 sm:gap-4`}>
+        {data.reparacionesActiva && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <p className="text-sm font-medium text-foreground">{t("entity.repair.plural")} activas</p>
+              <button onClick={() => setModalAbierto("reparaciones")} className="text-xs text-primary hover:underline">Ver todas</button>
+            </div>
+            <div className="divide-y divide-border/60">
+              {data.reparacionesActivas.length === 0 ? (
+                <EmptyState text={`No hay ${t("entity.repair.plural").toLowerCase()} activas por ahora.`} />
+              ) : (
+                data.reparacionesActivas.slice(0, 4).map((r) => (
+                  <div key={r.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40">
+                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${prioridadDot[r.prioridad]}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate">{r.equipo}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{r.cliente}</p>
+                    </div>
+                    <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${estadoConfig[r.status].classes}`}>
+                      {estadoConfig[r.status].label}
+                    </span>
                   </div>
-                  <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${estadoConfig[r.status].classes}`}>
-                    {estadoConfig[r.status].label}
-                  </span>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
@@ -655,7 +682,9 @@ export default function DashboardClient({
             <div className="grid grid-cols-2 gap-1.5">
               {[
                 { label: "Nueva venta", color: "bg-primary", href: `/${tenantSlug}/pos` },
-                { label: `Nueva ${t("entity.repair.singular").toLowerCase()}`, color: "bg-cyan-500", href: `/${tenantSlug}/reparaciones` },
+                ...(data.reparacionesActiva
+                  ? [{ label: `Nueva ${t("entity.repair.singular").toLowerCase()}`, color: "bg-cyan-500", href: `/${tenantSlug}/reparaciones` }]
+                  : []),
                 { label: "Abrir caja", color: "bg-emerald-500", href: `/${tenantSlug}/caja` },
                 { label: "Nuevo cliente", color: "bg-amber-500", href: `/${tenantSlug}/clientes` },
               ].map((btn) => (
@@ -693,10 +722,14 @@ export default function DashboardClient({
                   <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-2 divide-x divide-y divide-border">
                     {[
                       { label: "Ventas del día", value: formatMXN(suc.ventasDia), color: "text-primary", sub: suc.vsAyer != null ? `${suc.vsAyer >= 0 ? "↑" : "↓"} ${Math.abs(suc.vsAyer)}% vs ayer` : "Sin datos de ayer" },
-                      { label: "Equipos recibidos", value: String(suc.equiposRecibidos), color: "text-foreground", sub: "Hoy" },
-                      { label: "Listos entrega", value: String(suc.listosEntrega), color: suc.listosEntrega > 0 ? "text-emerald-600" : "text-muted-foreground", sub: "En tienda" },
-                      { label: "Devoluciones", value: String(suc.devoluciones), color: suc.devoluciones > 0 ? "text-amber-600" : "text-muted-foreground", sub: "Pendientes" },
-                      { label: "Rep. activas", value: String(suc.repActivas), color: "text-foreground", sub: "En proceso" },
+                      ...(data.reparacionesActiva
+                        ? [
+                            { label: "Equipos recibidos", value: String(suc.equiposRecibidos), color: "text-foreground", sub: "Hoy" },
+                            { label: "Listos entrega", value: String(suc.listosEntrega), color: suc.listosEntrega > 0 ? "text-emerald-600" : "text-muted-foreground", sub: "En tienda" },
+                            { label: "Devoluciones", value: String(suc.devoluciones), color: suc.devoluciones > 0 ? "text-amber-600" : "text-muted-foreground", sub: "Pendientes" },
+                            { label: "Rep. activas", value: String(suc.repActivas), color: "text-foreground", sub: "En proceso" },
+                          ]
+                        : []),
                       { label: "Ticket promedio", value: formatMXN(suc.ticketsVenta > 0 ? Math.round(suc.ventasDia / suc.ticketsVenta) : 0), color: "text-primary", sub: "Por venta" },
                     ].map((m) => (
                       <div key={m.label} className="px-3 py-2.5">
@@ -709,7 +742,9 @@ export default function DashboardClient({
                   <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-t border-border">
                     <div className="flex gap-2">
                       <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-purple-50 text-purple-700">{suc.ticketsVenta} ventas</span>
-                      <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-orange-50 text-orange-700">{suc.ticketsRep} {t("entity.repair.plural").toLowerCase()}</span>
+                      {data.reparacionesActiva && (
+                        <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-orange-50 text-orange-700">{suc.ticketsRep} {t("entity.repair.plural").toLowerCase()}</span>
+                      )}
                     </div>
                     <span className="text-[10px] text-muted-foreground">Total: <span className="font-semibold text-foreground">{formatMXN(suc.ventasDia)}</span></span>
                   </div>

@@ -24,8 +24,22 @@ export default async function DashboardPage({
 
   if (!tenant) notFound();
 
+  // Mismo query de "módulos apagados" que app/(tenant)/[tenant]/layout.tsx
+  // y configuracion/page.tsx (2026-09-18) — "default abierto": sin fila en
+  // TenantModule, o fila con isActive:true, es módulo activo; solo una fila
+  // explícita isActive:false lo apaga. Se necesita aquí porque el Dashboard
+  // mostraba "Reparaciones activas", "dispositivos listos" y "devolución"
+  // aun en negocios como una barbería que tienen Reparaciones apagado —
+  // el guard de layout.tsx solo protege la RUTA /reparaciones, no las
+  // tarjetas de resumen que el propio Dashboard arma con sus datos.
+  const reparacionesInactiva = await prisma.tenantModule.findFirst({
+    where: { tenantId: tenant.id, isActive: false, module: { code: "reparaciones" } },
+    select: { id: true },
+  });
+  const reparacionesActiva = !reparacionesInactiva;
+
   const [data, labels, ventasPorDiaInicial] = await Promise.all([
-    getDashboardData(tenant.id, tenant.branches, tenant.weekStartDay),
+    getDashboardData(tenant.id, tenant.branches, tenant.weekStartDay, reparacionesActiva),
     getTenantLabels(tenant.id, tenant.businessType),
     getVentasPorDia(tenant.id, hoyMx()),
   ]);
