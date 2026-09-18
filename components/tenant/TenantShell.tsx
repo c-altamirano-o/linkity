@@ -12,7 +12,7 @@ import {
   LayoutDashboard, ShoppingCart, Wrench, Users, Package,
   Warehouse, DollarSign, UserCog, BarChart3, FileText,
   GitBranch, BookOpen, LogOut, Bell, ChevronDown,
-  Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck
+  Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck, CalendarDays
 } from "lucide-react";
 
 // Estructura fija (secciones, orden, ícono) — el NOMBRE de cada ítem ya no
@@ -26,6 +26,7 @@ const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloK
     items: [
       { labelKey: "module.dashboard.name", href: "dashboard", icon: LayoutDashboard },
       { labelKey: "module.pos.name", href: "pos", icon: ShoppingCart },
+      { labelKey: "module.appointments.name", href: "citas", icon: CalendarDays },
       { labelKey: "module.repair.name", href: "reparaciones", icon: Wrench },
     ]
   },

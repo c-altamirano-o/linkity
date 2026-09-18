@@ -44,6 +44,13 @@ export const MODULE_CATALOG: Record<string, ModuloInfo> = {
   dashboard: { name: "Dashboard", isCore: true },
   pos: { name: "Punto de Venta", isCore: false },
   reparaciones: { name: "Reparaciones", isCore: false },
+  // Agenda de citas (2026-09-18, Fase 1 de la propuesta de Consultorio
+  // Dental) — el equivalente de Reparaciones para negocios de cita
+  // (dentista, médico, veterinaria, estética, spa, gimnasio, tatuajes,
+  // barbería): agendar la atención de un cliente/paciente en un horario, en
+  // vez de recibir un aparato a reparar. Ver lib/modulos-rubro.ts para qué
+  // rubro lo trae activado por default.
+  citas: { name: "Citas", isCore: false },
   clientes: { name: "Clientes", isCore: false },
   catalogo: { name: "Catálogo", isCore: false },
   inventario: { name: "Inventario", isCore: false },

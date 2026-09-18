@@ -36,7 +36,7 @@ export const ROL_ADMINISTRADOR = "Administrador";
 // con el nombre que cada archivo de Server Actions le pasa a
 // resolverActor() en lib/actor.ts.
 export const MODULOS = [
-  "dashboard", "pos", "reparaciones", "clientes", "catalogo", "inventario",
+  "dashboard", "pos", "reparaciones", "citas", "clientes", "catalogo", "inventario",
   "compras", "caja", "personal", "sucursales", "reportes", "facturacion",
   "soporte", "configuracion", "asistencia",
 ] as const;
@@ -73,11 +73,11 @@ export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
 // esos módulos a un rol personalizado.
 export const MATRIZ_ACCESO_BASE: Record<RolBase, ModuloKey[]> = {
   Gerente: [
-    "dashboard", "pos", "reparaciones", "clientes", "catalogo", "inventario",
+    "dashboard", "pos", "reparaciones", "citas", "clientes", "catalogo", "inventario",
     "compras", "caja", "sucursales", "reportes", "soporte",
   ],
-  Cajero: ["dashboard", "pos", "caja", "clientes", "reparaciones"],
-  Técnico: ["dashboard", "reparaciones", "clientes"],
+  Cajero: ["dashboard", "pos", "caja", "clientes", "reparaciones", "citas"],
+  Técnico: ["dashboard", "reparaciones", "citas", "clientes"],
 };
 
 export function esRolBase(valor: string): valor is RolBase {

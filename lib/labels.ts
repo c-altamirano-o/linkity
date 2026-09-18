@@ -51,11 +51,27 @@ export const DEFAULT_LABELS: LabelDictionary = {
   "module.reports.name": "Reportes",
   "module.support.name": "Soporte",
   "module.attendance.name": "Asistencia",
+  // Agenda de citas (2026-09-18) — ver el comentario largo en
+  // lib/modules-catalog.ts sobre por qué este módulo es distinto de
+  // Reparaciones.
+  "module.appointments.name": "Citas",
 
   // Nombre de la entidad principal del módulo de reparaciones
   "entity.repair.singular": "Reparación",
   "entity.repair.plural": "Reparaciones",
   "entity.repair.asset": "Dispositivo",
+
+  // Nombre de la entidad principal del módulo de citas, y estatus de
+  // AppointmentStatus — igual que repair.status.*, personalizable por rubro
+  // si algún negocio quiere otro texto (ej. "Sesión" en un spa).
+  "entity.appointment.singular": "Cita",
+  "entity.appointment.plural": "Citas",
+  "appointment.status.SCHEDULED": "Programada",
+  "appointment.status.CONFIRMED": "Confirmada",
+  "appointment.status.IN_PROGRESS": "En curso",
+  "appointment.status.COMPLETED": "Completada",
+  "appointment.status.NO_SHOW": "No se presentó",
+  "appointment.status.CANCELLED": "Cancelada",
 
   // Estatus del flujo de reparación (RepairStatus)
   "repair.status.RECEIVED": "Recibido",

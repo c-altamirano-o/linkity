@@ -70,6 +70,7 @@ model Tenant {
   labels       TenantLabel[]
   supportTickets SupportTicket[]
   staffLoginSessions StaffLoginSession[]
+  appointments Appointment[]
 }
 
 // Textos de UI personalizables por tenant (nombre del módulo, de la entidad,
@@ -116,6 +117,7 @@ model Branch {
   staff        Staff[]
   purchases    Purchase[]
   staffLoginSessions StaffLoginSession[]
+  appointments Appointment[]
 }
 
 // ============================================
@@ -170,6 +172,7 @@ model User {
   staff        Staff?
   supportTickets  SupportTicket[]
   supportMessages SupportTicketMessage[]
+  appointments    Appointment[]
   // Nota: StaffLoginSession NO se relaciona con User — apunta directo a
   // Staff, que es la identidad real detrás de una sesión de PIN (ver
   // comentario largo en ese modelo).
@@ -422,10 +425,11 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  sales    Sale[]
-  repairs  Repair[]
-  invoices Invoice[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  sales        Sale[]
+  repairs      Repair[]
+  invoices     Invoice[]
+  appointments Appointment[]
 }
 
 // ============================================
@@ -985,4 +989,50 @@ enum SupportTicketStatus {
   IN_PROGRESS
   RESOLVED
   CLOSED
+}
+
+// ============================================
+// M15 - CITAS (AGENDA) — Fase 1 de "Propuesta: Consultorio Dental para
+// Linkity" (2026-09-18): el módulo de Reparaciones no le sirve a un negocio
+// de cita (dentista, médico, veterinaria, estética, spa, gimnasio, tatuajes,
+// barbería) porque pide marca/modelo/falla de un APARATO — esos negocios
+// necesitan agendar la atención de un PACIENTE/CLIENTE en un horario. Sigue
+// el mismo patrón multi-tenant que Repair/Sale (tenantId propio, folio NO
+// necesario aquí porque una cita no se factura por sí misma — ver notes de
+// abajo). `userId` es la cuenta de atribución del profesional que atiende
+// la cita, mismo criterio que Repair.userId/Sale.userId (ver el comentario
+// largo en Staff.userId): en modo "staff" (sesión de PIN) resolverActor ya
+// entrega el userId correcto, así que esta cita se puede atribuir a
+// cualquier doctor/estilista/entrenador con PIN, no solo al dueño.
+model Appointment {
+  id         String            @id @default(cuid())
+  tenantId   String
+  branchId   String
+  customerId String
+  userId     String
+  // Motivo breve de la cita (ej. "Limpieza dental", "Consulta general",
+  // "Corte de cabello") — texto libre a propósito: a diferencia de
+  // Repair.issueDesc (una falla reportada), aquí no hay un catálogo fijo de
+  // motivos que aplique por igual a los 8 rubros de cita.
+  reason    String
+  status    AppointmentStatus @default(SCHEDULED)
+  startsAt  DateTime
+  endsAt    DateTime
+  notes     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  branch   Branch   @relation(fields: [branchId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  NO_SHOW
+  CANCELLED
 }

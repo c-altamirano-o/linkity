@@ -34,7 +34,9 @@
 
 export const VERTICAL_MODULE_DEFAULTS_OFF: Record<string, string[]> = {
   // Rubros de cita/servicio — no reciben un "aparato" a reparar, así que
-  // el molde de Reparaciones (marca, modelo, falla) no les aplica.
+  // el molde de Reparaciones (marca, modelo, falla) no les aplica. "citas"
+  // (2026-09-18) sí les aplica, así que se queda activo por default para
+  // estos 8 — no aparece en su arreglo de apagados.
   barberia: ["reparaciones"],
   consultorio_dental: ["reparaciones"],
   consultorio_medico: ["reparaciones"],
@@ -43,14 +45,25 @@ export const VERTICAL_MODULE_DEFAULTS_OFF: Record<string, string[]> = {
   spa: ["reparaciones"],
   gimnasio: ["reparaciones"],
   tatuajes: ["reparaciones"],
-  // Retail puro — vende producto terminado, no repara nada.
-  comercio_retail: ["reparaciones"],
+  // Retail puro — vende producto terminado, no repara nada, y no agenda
+  // citas (una venta de mostrador no se programa con anticipación).
+  comercio_retail: ["reparaciones", "citas"],
 
-  // Los 11 rubros de reparación de aparato/vehículo (reparacion_celulares,
-  // taller_autos, taller_motos, electrodomesticos, computadoras,
-  // relojeria_joyeria, zapateria, refrigeracion_ac, bicicletas, cerrajeria,
-  // tapiceria) no aparecen aquí a propósito — Reparaciones es justo su
-  // módulo central, se queda activo por default.
+  // Los 11 rubros de reparación de aparato/vehículo — Reparaciones es su
+  // módulo central (se queda activo por default, por eso no aparece en su
+  // arreglo), pero tampoco agendan "citas" — reciben el aparato cuando el
+  // cliente llega, no antes (2026-09-18).
+  reparacion_celulares: ["citas"],
+  taller_autos: ["citas"],
+  taller_motos: ["citas"],
+  electrodomesticos: ["citas"],
+  computadoras: ["citas"],
+  relojeria_joyeria: ["citas"],
+  zapateria: ["citas"],
+  refrigeracion_ac: ["citas"],
+  bicicletas: ["citas"],
+  cerrajeria: ["citas"],
+  tapiceria: ["citas"],
 };
 
 /** Códigos de módulo recomendados como inactivos para un rubro dado (arreglo vacío = ninguno). */
