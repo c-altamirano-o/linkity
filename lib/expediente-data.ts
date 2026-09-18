@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getTenantPrisma } from "@/lib/prisma";
+import { type CondicionDiente, DIENTES_SUPERIOR, DIENTES_INFERIOR, DIENTES_FDI_VALIDOS } from "@/lib/odontograma-fdi";
 
 /**
  * Capa de datos reales del módulo Expediente Clínico + Odontograma (M16 —
@@ -12,11 +13,17 @@ import { getTenantPrisma } from "@/lib/prisma";
  * historial de ventas/reparaciones se carga junto en clientes/page.tsx en
  * vez de pedirlo bajo demanda al seleccionar un cliente), para no tener que
  * introducir un mecanismo de carga diferida solo para este módulo.
+ *
+ * CondicionDiente y las constantes FDI (DIENTES_SUPERIOR/INFERIOR/VALIDOS)
+ * viven en lib/odontograma-fdi.ts, no aquí — ver el comentario largo en ese
+ * archivo (fix de build 2026-09-18: ClientesClient.tsx necesita esos
+ * arreglos como VALORES en tiempo de ejecución, y este archivo trae
+ * "server-only"). Se re-exportan abajo para no romper a quien ya los
+ * importaba desde aquí (getExpedientesData, expediente-actions.ts).
  */
 
-export type CondicionDiente =
-  | "SANO" | "CARIES" | "OBTURADO" | "CORONA" | "ENDODONCIA" | "AUSENTE"
-  | "EXTRACCION_INDICADA" | "IMPLANTE" | "FRACTURADO" | "SELLANTE";
+export type { CondicionDiente };
+export { DIENTES_SUPERIOR, DIENTES_INFERIOR, DIENTES_FDI_VALIDOS };
 
 export interface AntecedentesUI {
   tipoSangre: string | null;
@@ -56,16 +63,6 @@ export interface ExpedienteCliente {
   notas: NotaEvolucionUI[];
   dientes: DienteUI[];
 }
-
-// Notación FDI, dispuesta como se dibuja un odontograma en dos filas (visto
-// de frente al paciente, como lo lee cualquier dentista mexicano):
-//   Superior: 18 17 16 15 14 13 12 11 | 21 22 23 24 25 26 27 28
-//   Inferior: 48 47 46 45 44 43 42 41 | 31 32 33 34 35 36 37 38
-// Fase 1 cubre solo dentición permanente (32 piezas) — dentición temporal/
-// infantil (serie 51-85) queda fuera de alcance de esta primera versión.
-export const DIENTES_SUPERIOR: number[] = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
-export const DIENTES_INFERIOR: number[] = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
-export const DIENTES_FDI_VALIDOS = new Set([...DIENTES_SUPERIOR, ...DIENTES_INFERIOR]);
 
 export async function getExpedientesData(tenantId: string): Promise<Record<string, ExpedienteCliente>> {
   // PatientRecord, ClinicalNote y OdontogramaTooth tienen tenantId propio →

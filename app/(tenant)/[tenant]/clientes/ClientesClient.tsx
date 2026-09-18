@@ -7,8 +7,8 @@ import {
   Search, Plus, Edit, ShoppingCart, Wrench, Phone, ChevronLeft, X, Users, Stethoscope,
 } from "lucide-react";
 import type { ClienteUI, EstadoReparacionCliente, EstadoVentaCliente } from "@/lib/clientes-data";
-import type { ExpedienteCliente, CondicionDiente } from "@/lib/expediente-data";
-import { DIENTES_SUPERIOR, DIENTES_INFERIOR } from "@/lib/expediente-data";
+import type { ExpedienteCliente } from "@/lib/expediente-data";
+import { type CondicionDiente, DIENTES_SUPERIOR, DIENTES_INFERIOR } from "@/lib/odontograma-fdi";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearClienteAction, editarClienteAction, type DatosCliente } from "@/app/actions/clientes-actions";
 import {
