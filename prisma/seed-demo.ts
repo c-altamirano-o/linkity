@@ -684,11 +684,22 @@ async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
       await prisma.cashMovement.create({ data: { cashSessionId: sesion.id, type: MovementType.EXPENSE, amount: gastoDia, concept: pick(["Compra de insumos", "Pago de servicios", "Gasolina/mensajería", "Papelería"]) } });
       egresos += gastoDia;
 
-      const cierre = Math.round((apertura + ingresos - egresos) * 100) / 100;
-      await prisma.cashSession.update({
-        where: { id: sesion.id },
-        data: { status: CashSessionStatus.CLOSED, closingCash: cierre, expectedCash: cierre, difference: 0, closedAt: new Date(`${fechaStr}T20:30:00-06:00`) },
-      });
+      // La caja de "hoy" (el último día de SEMANA) se deja ABIERTA a
+      // propósito — Carlos: "para que el cliente aprecie un entorno como
+      // si estuviera trabajando en tiempo real, tipo simulador" (2026-09-18).
+      // Antes se cerraba igual que cualquier otro día del historial (con
+      // closedAt fijo a las 20:30), así que un demo se veía con "Caja
+      // cerrada" sin importar la hora real en que alguien lo visitara.
+      // Los días anteriores (historial ya "pasado") sí se cierran, porque
+      // esos representan jornadas completas y ya facturadas.
+      const esHoy = d === SEMANA.length - 1;
+      if (!esHoy) {
+        const cierre = Math.round((apertura + ingresos - egresos) * 100) / 100;
+        await prisma.cashSession.update({
+          where: { id: sesion.id },
+          data: { status: CashSessionStatus.CLOSED, closingCash: cierre, expectedCash: cierre, difference: 0, closedAt: new Date(`${fechaStr}T20:30:00-06:00`) },
+        });
+      }
     }
 
     if (tieneReparaciones && cfg.reparaciones) {
