@@ -59,7 +59,17 @@ export const getTenantPrisma = (tenantId: string) => {
   const tenantModels = [
     "TenantLabel", "Branch", "User", "Role", "TenantModule", "Subscription",
     "Category", "Product", "Customer", "Sale", "Repair", "CashSession",
-    "Staff", "Supplier", "Purchase", "Invoice", "SupportTicket", "StaffLoginSession"
+    "Staff", "Supplier", "Purchase", "Invoice", "SupportTicket", "StaffLoginSession",
+    // Appointment (M15 — Citas, 2026-09-18): se quedó fuera por descuido al
+    // construir el módulo — sin esto, getCitasData().db.appointment.findMany()
+    // corría SIN where de tenantId (regresaba las citas de TODOS los
+    // tenants mezcladas) y editarCitaAction/cambiarEstadoCitaAction no
+    // verificaban ownership antes de mutar, permitiendo en teoría editar la
+    // cita de un tenant ajeno si se conocía su id. Bug de aislamiento
+    // multi-tenant real, corregido el mismo día que se detectó — ver el
+    // comentario de este array arriba: cualquier modelo con tenantId propio
+    // DEBE estar en esta lista.
+    "Appointment",
   ];
 
   return prisma.$extends({
