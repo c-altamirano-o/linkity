@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getClientesData } from "@/lib/clientes-data";
 import { getExpedientesData } from "@/lib/expediente-data";
+import { getPlanesTratamientoData } from "@/lib/tratamiento-data";
 import { getTenantLabels } from "@/lib/labels-server";
 import ClientesClient from "./ClientesClient";
 
@@ -18,6 +19,14 @@ export default async function ClientesPage({
   });
 
   if (!tenant) notFound();
+
+  // Sucursales activas — igual que citas/page.tsx, hacen falta para el
+  // selector de sucursal al crear un Plan de Tratamiento (M17, Fase 2).
+  const branches = await prisma.branch.findMany({
+    where: { tenantId: tenant.id, isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true },
+  });
 
   // Mismo query de "módulo apagado" que dashboard/page.tsx, reportes/page.tsx
   // y layout.tsx (2026-09-18) — la ficha de un cliente mostraba siempre la
@@ -43,9 +52,15 @@ export default async function ClientesPage({
   const reparacionesActiva = !reparacionesInactiva;
   const expedienteActiva = !expedienteInactivo;
 
-  const [clientes, expedientes, labels] = await Promise.all([
+  const [clientes, expedientes, planesTratamiento, labels] = await Promise.all([
     getClientesData(tenant.id),
     expedienteActiva ? getExpedientesData(tenant.id) : Promise.resolve({}),
+    // Plan de Tratamiento (M17, Fase 2) vive bajo el mismo módulo
+    // expediente-clinico — mismo criterio "apagado = no se consulta ni se
+    // manda al cliente" que expedientes arriba.
+    expedienteActiva
+      ? getPlanesTratamientoData(tenant.id)
+      : Promise.resolve({ planes: {}, doctores: [] }),
     getTenantLabels(tenant.id, tenant.businessType),
   ]);
 
@@ -60,6 +75,9 @@ export default async function ClientesPage({
       // el comentario largo en schema.prisma (M16).
       odontogramaActivo={tenant.businessType === "consultorio_dental"}
       expedientes={expedientes}
+      planesTratamiento={planesTratamiento.planes}
+      doctores={planesTratamiento.doctores}
+      branches={branches}
     />
   );
 }

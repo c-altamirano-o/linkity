@@ -5,16 +5,23 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Plus, Edit, ShoppingCart, Wrench, Phone, ChevronLeft, X, Users, Stethoscope,
+  ClipboardList, Trash2, Check, Ban, DollarSign,
 } from "lucide-react";
 import type { ClienteUI, EstadoReparacionCliente, EstadoVentaCliente } from "@/lib/clientes-data";
 import type { ExpedienteCliente } from "@/lib/expediente-data";
 import { type CondicionDiente, DIENTES_SUPERIOR, DIENTES_INFERIOR } from "@/lib/odontograma-fdi";
+import type { PlanTratamientoUI } from "@/lib/tratamiento-data";
+import type { DoctorOption } from "@/lib/citas-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearClienteAction, editarClienteAction, type DatosCliente } from "@/app/actions/clientes-actions";
 import {
   guardarAntecedentesAction, crearNotaEvolucionAction, actualizarDienteAction,
   type DatosAntecedentes, type DatosNotaEvolucion,
 } from "@/app/actions/expediente-actions";
+import {
+  crearPlanTratamientoAction, actualizarEstadoItemAction, cobrarItemPlanAction,
+  type NuevoItemPlan, type MetodoPagoPlanInput,
+} from "@/app/actions/tratamiento-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp, formatoTelefono } from "@/lib/paises";
 
 interface ClientesClientProps {
@@ -31,6 +38,11 @@ interface ClientesClientProps {
   expedienteActiva: boolean;
   odontogramaActivo: boolean;
   expedientes: Record<string, ExpedienteCliente>;
+  // Plan de Tratamiento (M17, Fase 2, 2026-09-19) — igual que expedientes,
+  // ya viene resuelto por cliente desde el servidor.
+  planesTratamiento: Record<string, PlanTratamientoUI[]>;
+  doctores: DoctorOption[];
+  branches: { id: string; name: string }[];
 }
 
 const EXPEDIENTE_VACIO: ExpedienteCliente = { antecedentes: null, notas: [], dientes: [] };
@@ -41,6 +53,47 @@ const ANTECEDENTES_VACIO: DatosAntecedentes = {
 };
 
 const NOTA_VACIA: DatosNotaEvolucion = { motivo: "", diagnostico: "", tratamiento: "", notas: "" };
+
+// Plan de Tratamiento (M17, Fase 2, 2026-09-19). El formulario guarda
+// diente/costo como texto (no number) porque son <input> controlados — se
+// parsean recién al enviar (handleGuardarPlan), mismo criterio que ya usa
+// el resto de los formularios numéricos de este archivo.
+interface ItemPlanFormRow {
+  descripcion: string;
+  diente: string;
+  costo: string;
+}
+
+interface PlanFormState {
+  branchId: string;
+  doctorUserId: string;
+  titulo: string;
+  notas: string;
+  items: ItemPlanFormRow[];
+}
+
+function planFormVacio(branches: { id: string; name: string }[], doctores: DoctorOption[]): PlanFormState {
+  return {
+    branchId: branches[0]?.id ?? "",
+    doctorUserId: doctores[0]?.userId ?? "",
+    titulo: "",
+    notas: "",
+    items: [{ descripcion: "", diente: "", costo: "" }],
+  };
+}
+
+type ItemPlanFormEstado = "PROPUESTO" | "ACEPTADO" | "RECHAZADO" | "PAGADO";
+
+const ESTADO_ITEM_TEXTO: Record<ItemPlanFormEstado, string> = {
+  PROPUESTO: "Propuesto", ACEPTADO: "Aceptado", RECHAZADO: "Rechazado", PAGADO: "Pagado",
+};
+
+const ESTADO_ITEM_COLOR: Record<ItemPlanFormEstado, string> = {
+  PROPUESTO: "bg-amber-50 text-amber-700",
+  ACEPTADO: "bg-blue-50 text-blue-700",
+  RECHAZADO: "bg-red-50 text-red-700 line-through",
+  PAGADO: "bg-emerald-50 text-emerald-700",
+};
 
 // Los 10 valores del enum ToothCondition, en el mismo orden en que se
 // declaran en schema.prisma — el texto que ve el usuario sale de
@@ -214,6 +267,7 @@ const FORM_VACIO: DatosCliente = { name: "", phone: "", phoneCountryCode: PAIS_T
 
 export default function ClientesClient({
   clientes, labels, tenantSlug, reparacionesActiva, expedienteActiva, odontogramaActivo, expedientes,
+  planesTratamiento, doctores, branches,
 }: ClientesClientProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -240,6 +294,18 @@ export default function ClientesClient({
   const [dienteNotas, setDienteNotas] = useState("");
   const [dienteGuardando, startDienteGuardar] = useTransition();
 
+  // Plan de Tratamiento (M17, Fase 2, 2026-09-19).
+  const [planModalAbierto, setPlanModalAbierto] = useState(false);
+  const [planForm, setPlanForm] = useState<PlanFormState>(() => planFormVacio(branches, doctores));
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [planGuardando, startPlanGuardar] = useTransition();
+  // itemId del botón que está procesando una acción (aceptar/rechazar/cobrar)
+  // — evita doble clic mientras la Server Action está en vuelo, sin
+  // necesitar un useTransition por cada fase de cada plan.
+  const [itemEnCurso, setItemEnCurso] = useState<string | null>(null);
+  const [cobroModal, setCobroModal] = useState<{ itemId: string; descripcion: string; costo: number } | null>(null);
+  const [cobroMetodo, setCobroMetodo] = useState<MetodoPagoPlanInput>("CASH");
+
   // Negocio con el módulo de Reparaciones apagado (ej. una barbería): ni la
   // pestaña "Reparaciones" del historial ni ningún registro de tipo
   // "reparacion" que pudiera haber quedado de antes deben aparecer aquí.
@@ -259,6 +325,8 @@ export default function ClientesClient({
   const seleccionado = clientes.find((c) => c.id === seleccionadoId) ?? null;
   const expedienteSeleccionado: ExpedienteCliente =
     (seleccionado && expedientes[seleccionado.id]) || EXPEDIENTE_VACIO;
+  const planesSeleccionado: PlanTratamientoUI[] =
+    (seleccionado && planesTratamiento[seleccionado.id]) || [];
 
   // Al cambiar de cliente (o de antecedentes ya guardados desde el server
   // tras un router.refresh()), el formulario de antecedentes se re-sincroniza
@@ -340,6 +408,95 @@ export default function ClientesClient({
         setDienteSeleccionado(null);
         router.refresh();
       }
+    });
+  }
+
+  // Plan de Tratamiento (M17, Fase 2, 2026-09-19).
+  function abrirModalPlan() {
+    setPlanForm(planFormVacio(branches, doctores));
+    setPlanError(null);
+    setPlanModalAbierto(true);
+  }
+
+  function actualizarFilaItem(i: number, campo: keyof ItemPlanFormRow, valor: string) {
+    setPlanForm((f) => ({
+      ...f,
+      items: f.items.map((it, idx) => (idx === i ? { ...it, [campo]: valor } : it)),
+    }));
+  }
+
+  function agregarFilaItem() {
+    setPlanForm((f) => ({ ...f, items: [...f.items, { descripcion: "", diente: "", costo: "" }] }));
+  }
+
+  function quitarFilaItem(i: number) {
+    setPlanForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
+  }
+
+  function handleGuardarPlan() {
+    if (!seleccionado) return;
+    if (!planForm.titulo.trim()) {
+      setPlanError("Dale un título al plan de tratamiento");
+      return;
+    }
+    const items: NuevoItemPlan[] = [];
+    for (const it of planForm.items) {
+      if (!it.descripcion.trim()) continue; // fila vacía, se ignora en vez de forzar a borrarla
+      const costo = Number(it.costo);
+      if (!Number.isFinite(costo) || costo < 0) {
+        setPlanError(`Costo no válido en "${it.descripcion}"`);
+        return;
+      }
+      const diente = it.diente.trim() ? Number(it.diente) : null;
+      items.push({ descripcion: it.descripcion.trim(), diente, costo });
+    }
+    if (items.length === 0) {
+      setPlanError("Agrega al menos una fase con descripción");
+      return;
+    }
+    setPlanError(null);
+    startPlanGuardar(async () => {
+      const res = await crearPlanTratamientoAction({
+        tenantSlug,
+        customerId: seleccionado.id,
+        branchId: planForm.branchId,
+        doctorUserId: planForm.doctorUserId,
+        titulo: planForm.titulo,
+        notas: planForm.notas,
+        items,
+      });
+      if (res.ok) {
+        setPlanModalAbierto(false);
+        router.refresh();
+      } else {
+        setPlanError(res.error);
+      }
+    });
+  }
+
+  function handleAccionItem(itemId: string, estado: "ACEPTADO" | "RECHAZADO") {
+    setItemEnCurso(itemId);
+    startPlanGuardar(async () => {
+      await actualizarEstadoItemAction({ tenantSlug, itemId, estado });
+      setItemEnCurso(null);
+      router.refresh();
+    });
+  }
+
+  function abrirCobro(itemId: string, descripcion: string, costo: number) {
+    setCobroMetodo("CASH");
+    setCobroModal({ itemId, descripcion, costo });
+  }
+
+  function handleConfirmarCobro() {
+    if (!cobroModal) return;
+    const itemId = cobroModal.itemId;
+    setItemEnCurso(itemId);
+    startPlanGuardar(async () => {
+      await cobrarItemPlanAction({ tenantSlug, itemId, metodoPago: cobroMetodo });
+      setItemEnCurso(null);
+      setCobroModal(null);
+      router.refresh();
     });
   }
 
@@ -942,6 +1099,99 @@ export default function ClientesClient({
                     </div>
                   )}
 
+                  {/* Plan de Tratamiento por fases — M17, Fase 2, 2026-09-19.
+                      No se condiciona a odontogramaActivo: un consultorio
+                      médico o una veterinaria también cotizan tratamientos
+                      por fases, solo un consultorio dental además puede
+                      ligar una fase a un diente FDI (campo opcional). */}
+                  <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest">PLAN DE TRATAMIENTO</p>
+                      <button
+                        onClick={abrirModalPlan}
+                        className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg"
+                      >
+                        <ClipboardList className="w-3 h-3" /> Nuevo plan
+                      </button>
+                    </div>
+                    {planesSeleccionado.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground text-xs">Sin planes de tratamiento todavía</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {planesSeleccionado.map((plan) => {
+                          const total = plan.items.reduce((s, it) => s + it.costo, 0);
+                          const pagado = plan.items.filter((it) => it.estado === "PAGADO").reduce((s, it) => s + it.costo, 0);
+                          return (
+                            <div key={plan.id} className="border border-border rounded-lg p-3">
+                              <div className="flex items-start justify-between gap-3 mb-1">
+                                <div>
+                                  <p className="text-xs font-medium text-foreground">{plan.titulo}</p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Dr(a). {plan.doctor} · {new Date(plan.creadoEn).toLocaleDateString("es-MX")}
+                                  </p>
+                                </div>
+                                <div className="text-right whitespace-nowrap">
+                                  <p className="text-xs font-semibold text-foreground">
+                                    {total.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {pagado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} pagado
+                                  </p>
+                                </div>
+                              </div>
+                              {plan.notas && <p className="text-[11px] text-muted-foreground mb-2">{plan.notas}</p>}
+                              <div className="space-y-1.5 mt-2">
+                                {plan.items.map((it) => (
+                                  <div key={it.id} className="flex items-center justify-between gap-2 text-xs py-1.5 px-2 rounded-md bg-muted/30">
+                                    <div className="flex-1 min-w-0 truncate">
+                                      <span className="text-foreground">{it.descripcion}</span>
+                                      {it.diente != null && <span className="text-muted-foreground"> · Diente {it.diente}</span>}
+                                    </div>
+                                    <span className="text-muted-foreground whitespace-nowrap">
+                                      {it.costo.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}
+                                    </span>
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${ESTADO_ITEM_COLOR[it.estado]}`}>
+                                      {ESTADO_ITEM_TEXTO[it.estado]}
+                                    </span>
+                                    {it.estado === "PROPUESTO" && (
+                                      <div className="flex gap-1 shrink-0">
+                                        <button
+                                          disabled={itemEnCurso === it.id}
+                                          onClick={() => handleAccionItem(it.id, "ACEPTADO")}
+                                          title="El paciente acepta esta fase"
+                                          className="p-1 rounded hover:bg-emerald-100 text-emerald-700 disabled:opacity-50"
+                                        >
+                                          <Check className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          disabled={itemEnCurso === it.id}
+                                          onClick={() => handleAccionItem(it.id, "RECHAZADO")}
+                                          title="El paciente rechaza esta fase"
+                                          className="p-1 rounded hover:bg-red-100 text-red-700 disabled:opacity-50"
+                                        >
+                                          <Ban className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                    {it.estado === "ACEPTADO" && (
+                                      <button
+                                        disabled={itemEnCurso === it.id}
+                                        onClick={() => abrirCobro(it.id, it.descripcion, it.costo)}
+                                        className="flex items-center gap-1 px-2 py-1 rounded bg-primary hover:bg-primary/90 text-primary-foreground text-[10px] font-medium disabled:opacity-50 shrink-0"
+                                      >
+                                        <DollarSign className="w-3 h-3" /> Cobrar
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Notas de evolución */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
@@ -1046,6 +1296,176 @@ export default function ClientesClient({
                 className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
               >
                 {notaGuardando ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {planModalAbierto && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <p className="text-sm font-semibold text-foreground">Nuevo plan de tratamiento</p>
+              <button onClick={() => setPlanModalAbierto(false)} className="p-1 rounded-md hover:bg-muted">
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Título *</label>
+                <input
+                  type="text"
+                  value={planForm.titulo}
+                  onChange={(e) => setPlanForm({ ...planForm, titulo: e.target.value })}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  placeholder="ej. Rehabilitación oral, Plan de ortodoncia"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Sucursal</label>
+                  <select
+                    value={planForm.branchId}
+                    onChange={(e) => setPlanForm({ ...planForm, branchId: e.target.value })}
+                    className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Doctor</label>
+                  <select
+                    value={planForm.doctorUserId}
+                    onChange={(e) => setPlanForm({ ...planForm, doctorUserId: e.target.value })}
+                    className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  >
+                    {doctores.map((d) => (
+                      <option key={d.userId} value={d.userId}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Fases del plan *</label>
+                  <button onClick={agregarFilaItem} className="text-xs text-primary hover:underline flex items-center gap-0.5">
+                    <Plus className="w-3 h-3" /> Agregar fase
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {planForm.items.map((it, i) => (
+                    <div key={i} className="flex gap-1.5 items-start">
+                      <input
+                        type="text"
+                        value={it.descripcion}
+                        onChange={(e) => actualizarFilaItem(i, "descripcion", e.target.value)}
+                        placeholder="Descripción (ej. Corona diente 16)"
+                        className="flex-1 min-w-0 px-2.5 py-1.5 border border-border rounded-lg text-xs bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      />
+                      {odontogramaActivo && (
+                        <input
+                          type="text"
+                          value={it.diente}
+                          onChange={(e) => actualizarFilaItem(i, "diente", e.target.value)}
+                          placeholder="Diente"
+                          title="Número FDI (opcional)"
+                          className="w-16 px-2.5 py-1.5 border border-border rounded-lg text-xs bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        />
+                      )}
+                      <input
+                        type="number"
+                        value={it.costo}
+                        onChange={(e) => actualizarFilaItem(i, "costo", e.target.value)}
+                        placeholder="Costo"
+                        className="w-24 px-2.5 py-1.5 border border-border rounded-lg text-xs bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      />
+                      <button
+                        onClick={() => quitarFilaItem(i)}
+                        disabled={planForm.items.length === 1}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted disabled:opacity-30"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Notas</label>
+                <textarea
+                  value={planForm.notas}
+                  onChange={(e) => setPlanForm({ ...planForm, notas: e.target.value })}
+                  rows={2}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  placeholder="opcional"
+                />
+              </div>
+              {planError && <p className="text-xs text-red-600">{planError}</p>}
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <button
+                onClick={() => setPlanModalAbierto(false)}
+                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGuardarPlan}
+                disabled={planGuardando}
+                className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+              >
+                {planGuardando ? "Guardando…" : "Guardar plan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cobroModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <p className="text-sm font-semibold text-foreground">Cobrar fase</p>
+              <button onClick={() => setCobroModal(null)} className="p-1 rounded-md hover:bg-muted">
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-muted-foreground">{cobroModal.descripcion}</p>
+              <p className="text-xl font-semibold text-foreground">
+                {cobroModal.costo.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}
+              </p>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Método de pago</label>
+                <select
+                  value={cobroMetodo}
+                  onChange={(e) => setCobroMetodo(e.target.value as MetodoPagoPlanInput)}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                >
+                  <option value="CASH">Efectivo</option>
+                  <option value="CARD">Tarjeta</option>
+                  <option value="TRANSFER">Transferencia</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <button
+                onClick={() => setCobroModal(null)}
+                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmarCobro}
+                disabled={itemEnCurso === cobroModal.itemId}
+                className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+              >
+                {itemEnCurso === cobroModal.itemId ? "Cobrando…" : "Confirmar cobro"}
               </button>
             </div>
           </div>

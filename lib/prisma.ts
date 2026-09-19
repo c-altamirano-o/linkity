@@ -74,6 +74,13 @@ export const getTenantPrisma = (tenantId: string) => {
     // el primer commit de este módulo, precisamente para no repetir el
     // descuido de Appointment de arriba.
     "PatientRecord", "ClinicalNote", "OdontogramaTooth",
+    // Plan de Tratamiento, Consentimiento Informado y Recetas (M17 — Fase 2,
+    // 2026-09-19) — igual que arriba, agregados desde el primer commit.
+    // TreatmentPlanItem NO va aquí a propósito: no tiene tenantId propio,
+    // mismo criterio que RepairItem/SaleItem (ver el comentario largo arriba
+    // de este array) — siempre se lee/escribe a través de su TreatmentPlan
+    // padre, que sí está en esta lista.
+    "TreatmentPlan", "InformedConsent", "Prescription",
   ];
 
   return prisma.$extends({

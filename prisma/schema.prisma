@@ -74,6 +74,9 @@ model Tenant {
   patientRecords    PatientRecord[]
   clinicalNotes     ClinicalNote[]
   odontogramaTeeth  OdontogramaTooth[]
+  treatmentPlans    TreatmentPlan[]
+  informedConsents  InformedConsent[]
+  prescriptions     Prescription[]
 }
 
 // Textos de UI personalizables por tenant (nombre del módulo, de la entidad,
@@ -121,6 +124,7 @@ model Branch {
   purchases    Purchase[]
   staffLoginSessions StaffLoginSession[]
   appointments Appointment[]
+  treatmentPlans TreatmentPlan[]
 }
 
 // ============================================
@@ -178,6 +182,9 @@ model User {
   appointments    Appointment[]
   clinicalNotesWritten     ClinicalNote[]
   odontogramaTeethUpdated  OdontogramaTooth[]
+  treatmentPlansCreated    TreatmentPlan[]
+  informedConsentsTaken    InformedConsent[]
+  prescriptionsWritten     Prescription[]
   // Nota: StaffLoginSession NO se relaciona con User — apunta directo a
   // Staff, que es la identidad real detrás de una sesión de PIN (ver
   // comentario largo en ese modelo).
@@ -438,6 +445,9 @@ model Customer {
   patientRecord    PatientRecord?
   clinicalNotes    ClinicalNote[]
   odontogramaTeeth OdontogramaTooth[]
+  treatmentPlans   TreatmentPlan[]
+  informedConsents InformedConsent[]
+  prescriptions    Prescription[]
 }
 
 // ============================================
@@ -1146,4 +1156,132 @@ enum ToothCondition {
   IMPLANTE
   FRACTURADO
   SELLANTE
+}
+
+// ============================================
+// M17 - PLAN DE TRATAMIENTO, CONSENTIMIENTO INFORMADO Y RECETAS — Fase 2 de
+// "Propuesta: Consultorio Dental para Linkity" (2026-09-18), tres de los
+// cuatro puntos de "Diferenciación comercial" (el cuarto, Reportes
+// clínicos, no necesita modelos nuevos — lee estos de aquí). Igual que
+// M16, vive embebido en la ficha del cliente (módulo Clientes, M7) bajo el
+// mismo módulo "expediente-clinico" — no es exclusivo de consultorio
+// dental (un consultorio médico también cotiza tratamientos por fases y
+// receta medicamentos; una veterinaria también receta), así que ninguno de
+// los 3 se condiciona a `businessType === "consultorio_dental"` como sí
+// pasa con OdontogramaTooth arriba.
+model TreatmentPlan {
+  id         String   @id @default(cuid())
+  tenantId   String
+  // Igual que Repair/Appointment: fija en qué sucursal se cobra cada fase
+  // (busca la CashSession abierta de ESA sucursal, ver
+  // cobrarItemPlanAction en tratamiento-actions.ts) — no hace falta elegir
+  // sucursal en cada cobro individual.
+  branchId   String
+  customerId String
+  // Doctor que propone el plan — cuenta de atribución, mismo criterio que
+  // ClinicalNote.userId/Appointment.userId (ver Staff.userId).
+  userId     String
+  title      String
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id])
+  branch   Branch              @relation(fields: [branchId], references: [id])
+  customer Customer            @relation(fields: [customerId], references: [id])
+  user     User                @relation(fields: [userId], references: [id])
+  items    TreatmentPlanItem[]
+}
+
+// No hay status a nivel TreatmentPlan a propósito: la propuesta pide dar
+// seguimiento a "qué propone el doctor vs. qué acepta el paciente"
+// FASE POR FASE (ej. el paciente acepta la limpieza pero rechaza la
+// corona) — un status único por plan perdería esa granularidad, así que
+// PROPUESTO/ACEPTADO/RECHAZADO/PAGADO vive en cada item, y "tasa de
+// aceptación" (Reportes clínicos) se calcula sobre items, no sobre planes.
+//
+// Sin tenantId propio ni entrada en getTenantPrisma/tenantModels (mismo
+// criterio que RepairItem/SaleItem, ver el comentario largo de
+// tenantModels en lib/prisma.ts): siempre se lee/escribe a través de un
+// TreatmentPlan ya aislado por tenant, nunca por su cuenta.
+model TreatmentPlanItem {
+  id              String                  @id @default(cuid())
+  treatmentPlanId String
+  description     String
+  // FDI, igual que OdontogramaTooth.toothNumber — opcional porque no todo
+  // tratamiento es de un diente específico (ej. "Ortodoncia completa",
+  // "Limpieza general").
+  toothNumber     Int?
+  cost            Decimal                 @db.Decimal(10, 2)
+  status          TreatmentPlanItemStatus @default(PROPUESTO)
+  order           Int                     @default(0)
+  paidAt          DateTime?
+  // Mismo enum PaymentMethod que ya usa Sale — es la misma "caja física"
+  // del negocio la que recibe este cobro (ver cobrarTreatmentPlanItemAction
+  // en expediente-actions.ts, calcado de cobrarYEntregarAction de
+  // Reparaciones: solo CASH genera un CashMovement real).
+  paymentMethod   PaymentMethod?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  treatmentPlan TreatmentPlan @relation(fields: [treatmentPlanId], references: [id])
+}
+
+enum TreatmentPlanItemStatus {
+  PROPUESTO
+  ACEPTADO
+  RECHAZADO
+  PAGADO
+}
+
+// Consentimiento informado — NOM-004 lo exige para procedimientos con
+// riesgo. `content` es el texto de la plantilla YA COPIADO al momento de
+// generar el consentimiento (no una referencia a la plantilla): si Carlos
+// edita el texto de una plantilla después, los consentimientos ya firmados
+// no deben cambiar retroactivamente — es un documento legal congelado en
+// el tiempo, igual que una factura ya timbrada no cambia si el catálogo de
+// productos cambia después.
+//
+// `patientSignature` es una FIRMA DIBUJADA (canvas, PNG en base64) — no es
+// una firma electrónica avanzada / e.firma del SAT ni tiene validez legal
+// equivalente a una firma autógrafa notariada. Mismo criterio de
+// "simulación honesta y documentada" que ya usa Linkity para CFDI (sin
+// PAC/SAT real) — se lo advertimos a Carlos explícitamente, no es letra
+// chica escondida.
+model InformedConsent {
+  id             String    @id @default(cuid())
+  tenantId       String
+  customerId     String
+  userId         String
+  procedureType  String
+  content        String
+  patientSignature String?
+  signedByName   String?
+  signedAt       DateTime?
+  createdAt      DateTime  @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+}
+
+// Receta digital. `medications` queda como texto libre (no una tabla
+// estructurada de medicamento+dosis+frecuencia) — mismo criterio que
+// ClinicalNote.notes: modelar eso a detalle es sobreingeniería para lo que
+// pide esta fase, y un doctor ya está acostumbrado a escribir una receta
+// como texto corrido. `doctorSignature` es la misma firma dibujada
+// simulada que InformedConsent.patientSignature, ver ese comentario.
+model Prescription {
+  id               String   @id @default(cuid())
+  tenantId         String
+  customerId       String
+  userId           String
+  medications      String
+  indications      String?
+  doctorSignature  String?
+  createdAt        DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
 }
