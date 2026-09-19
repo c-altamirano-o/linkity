@@ -16,6 +16,17 @@ import { createClient } from "@/lib/supabase/client";
  * supabase.auth.resetPasswordForEmail — Supabase decide si ese correo
  * existe o no; a propósito mostramos el mismo mensaje de éxito en ambos
  * casos (no confirmamos ni negamos si una cuenta existe).
+ *
+ * redirectTo apunta a /auth/confirm (route handler) y NO directo a
+ * /reset-password (2026-09-19, bug reportado por Carlos: el link llegaba
+ * pero nunca mostraba la pantalla de contraseña nueva). El cliente de
+ * Supabase usa flowType "pkce" (default de createBrowserClient), así que el
+ * link del correo no trae una sesión lista para usar — /auth/confirm hace
+ * el intercambio del lado del servidor (verifyOtp) antes de mandar aquí.
+ * Para que esto funcione hace falta ADEMÁS cambiar a mano la plantilla
+ * "Reset Password" en el dashboard de Supabase (Authentication → Emails →
+ * Templates) para que use token_hash+type en vez de
+ * {{ .ConfirmationURL }} — ver el comentario en app/auth/confirm/route.ts.
  */
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -30,7 +41,7 @@ export default function ForgotPasswordPage() {
 
     const supabase = createClient();
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${window.location.origin}/auth/confirm?next=/reset-password`,
     });
 
     setLoading(false);
