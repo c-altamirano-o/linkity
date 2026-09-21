@@ -83,7 +83,11 @@ export default async function ClientesPage({
       doctores={planesTratamiento.doctores}
       branches={branches}
       consentimientos={consentimientos}
-      plantillasConsentimiento={PLANTILLAS_CONSENTIMIENTO[tenant.businessType] ?? []}
+      // businessType es String? en schema.prisma (puede ser null en un
+      // tenant sin rubro configurado) — "" nunca es llave de
+      // PLANTILLAS_CONSENTIMIENTO, así que cae al arreglo vacío igual que
+      // un rubro sin plantillas definidas.
+      plantillasConsentimiento={PLANTILLAS_CONSENTIMIENTO[tenant.businessType ?? ""] ?? []}
     />
   );
 }
