@@ -46,7 +46,19 @@ export default async function TenantLayout({
   // calendario (lib/asistencia.ts) — así ninguna sesión de personal se
   // queda abierta de un día para otro sin que el empleado vuelva a teclear
   // su PIN.
-  const sesionPersonal = user ? null : await verificarSesionPersonalVigente();
+  //
+  // IMPORTANTE (2026-09-21, corregido a pedido de Carlos): esta llamada YA
+  // NO se salta cuando hay un `user` de Supabase — antes decía
+  // `user ? null : await verificarSesionPersonalVigente()`, lo que abría un
+  // hueco de privilegios real. /[tenant]/entrada es una pantalla pensada
+  // para una COMPUTADORA COMPARTIDA (mostrador, caja): si el administrador
+  // alguna vez inició sesión ahí y solo cerró la pestaña sin cerrar sesión,
+  // su cookie de Supabase Auth seguía viva, y cualquier empleado que
+  // después entrara con su PIN en esa misma computadora heredaba el panel
+  // COMPLETO de administrador — el PIN de 4 dígitos no protegía nada. Ahora
+  // se revisan y resuelven ambas sesiones, y más abajo se le da prioridad a
+  // la de personal cuando las dos existen (ver el "if" de abajo).
+  const sesionPersonal = await verificarSesionPersonalVigente();
 
   if (!user && !sesionPersonal) {
     redirect(`/entrada/${tenant}`);
@@ -107,35 +119,18 @@ export default async function TenantLayout({
     modulosInactivos = inactivos.map((tm) => tm.module.code);
   }
 
-  if (dbTenant && user) {
-    // Modo administrador/gerente con cuenta real — mismo guard de siempre,
-    // sin ningún cambio de comportamiento para el dueño.
-    const dbUser = await prisma.user.findUnique({
-      where: { supabaseId: user.id },
-      include: { role: { include: { role: true } }, tenant: { select: { slug: true } } },
-    });
-
-    // Aislamiento multi-tenant: sin esto, un usuario autenticado de OTRO
-    // negocio podía entrar aquí con solo cambiar el slug en la URL (ej. un
-    // empleado de "fix-expert" visitando /difussion-barberia/dashboard) y ver
-    // los datos reales de un negocio ajeno — cada pantalla de adentro confía
-    // en que este layout ya validó la pertenencia. También cierra la sesión
-    // de una cuenta desactivada desde Panel Maestro (Usuarios) aunque ya
-    // tuviera una sesión abierta.
-    if (!dbUser || !dbUser.isActive) {
-      redirect(`/entrada/${tenant}`);
-    } else if (dbUser.tenantId !== dbTenant.id) {
-      redirect(`/${dbUser.tenant.slug}/dashboard`);
-    }
-
-    userName = dbUser.name;
-    userRole = dbUser.role?.role.name ?? "";
-  } else if (dbTenant && sesionPersonal) {
-    // Mismo aislamiento multi-tenant que arriba, pero para una sesión de
-    // PIN: si por lo que sea trae el tenantId de OTRO negocio (cookie
-    // vieja de una sesión anterior en el mismo navegador/dispositivo
-    // compartido), se manda a la entrada del negocio correcto en vez de
-    // dejarla pasar.
+  // Prioridad: personal (PIN) primero, administrador como fallback — ver el
+  // comentario largo junto a `sesionPersonal` arriba. Si en este navegador
+  // hay AMBAS sesiones vivas (el caso real que reportó Carlos: dueño que no
+  // cerró sesión + empleado que entra después por PIN en la misma
+  // computadora), la de personal manda mientras dure — nunca se le da el
+  // panel de administrador a alguien que solo tecleó un PIN de 4 dígitos.
+  if (dbTenant && sesionPersonal) {
+    // Mismo aislamiento multi-tenant que el bloque de administrador de
+    // abajo, pero para una sesión de PIN: si por lo que sea trae el
+    // tenantId de OTRO negocio (cookie vieja de una sesión anterior en el
+    // mismo navegador/dispositivo compartido), se manda a la entrada del
+    // negocio correcto en vez de dejarla pasar.
     if (sesionPersonal.tenantId !== dbTenant.id) {
       redirect(`/entrada/${tenant}`);
     }
@@ -159,6 +154,30 @@ export default async function TenantLayout({
     if (modulo && !modulosPermitidosParaNav.includes(modulo)) {
       redirect(`/${tenant}/${modulosPermitidosParaNav[0] ?? "dashboard"}`);
     }
+  } else if (dbTenant && user) {
+    // Modo administrador/gerente con cuenta real — mismo guard de siempre,
+    // sin ningún cambio de comportamiento para el dueño cuando NO hay
+    // ninguna sesión de personal compitiendo en este navegador.
+    const dbUser = await prisma.user.findUnique({
+      where: { supabaseId: user.id },
+      include: { role: { include: { role: true } }, tenant: { select: { slug: true } } },
+    });
+
+    // Aislamiento multi-tenant: sin esto, un usuario autenticado de OTRO
+    // negocio podía entrar aquí con solo cambiar el slug en la URL (ej. un
+    // empleado de "fix-expert" visitando /difussion-barberia/dashboard) y ver
+    // los datos reales de un negocio ajeno — cada pantalla de adentro confía
+    // en que este layout ya validó la pertenencia. También cierra la sesión
+    // de una cuenta desactivada desde Panel Maestro (Usuarios) aunque ya
+    // tuviera una sesión abierta.
+    if (!dbUser || !dbUser.isActive) {
+      redirect(`/entrada/${tenant}`);
+    } else if (dbUser.tenantId !== dbTenant.id) {
+      redirect(`/${dbUser.tenant.slug}/dashboard`);
+    }
+
+    userName = dbUser.name;
+    userRole = dbUser.role?.role.name ?? "";
   }
 
   // Guard de módulo desactivado por rubro/negocio (2026-09-17) — a
