@@ -119,23 +119,65 @@ const CONDICIONES_DIENTE: CondicionDiente[] = [
   "EXTRACCION_INDICADA", "IMPLANTE", "FRACTURADO", "SELLANTE",
 ];
 
-// Silueta anatómica de diente (corona flareada + dos raíces + línea
-// cervical sutil) para el ícono del odontograma — no es una radiografía
-// real (eso implicaría subir/almacenar una imagen por diente, fuera de
-// alcance de Fase 1), es un dibujo pulido pero plano, pensado para
-// reconocerse de un vistazo entre 32 dientes en pantalla. Reemplaza el
-// diseño anterior (una casilla lisa con solo el número) a pedido de Carlos
-// (2026-09-18), y luego el primer rediseño (cápsula genérica) se refinó de
-// nuevo (2026-09-21) con proporciones más parecidas a un diente real. La
-// condición se codifica con la FORMA del ícono (implante = tornillo, no
-// diente) y con relleno/marcas superpuestas (mancha=caries, parche=
-// obturado, grieta=fracturado, línea de canal=endodoncia, puntos=sellante,
-// X=extracción indicada, contorno punteado sin relleno=ausente).
-const DIENTE_PATH =
-  "M12,2 C8.7,2 6,3.6 5.3,6.8 C4.9,8.6 5.4,10.1 6.2,11.7 C6.8,12.9 7.1,13.9 7.2,15.3 C7.3,18 6.9,20.8 6.3,23.7 C6,25.1 6.1,26.8 7.4,27.4 C8.5,27.9 9.2,26.6 9.6,24.9 C9.9,23.6 10.2,22.2 12,22.2 C13.8,22.2 14.1,23.6 14.4,24.9 C14.8,26.6 15.5,27.9 16.6,27.4 C17.9,26.8 18,25.1 17.7,23.7 C17.1,20.8 16.7,18 16.8,15.3 C16.9,13.9 17.2,12.9 17.8,11.7 C18.6,10.1 19.1,8.6 18.7,6.8 C18,3.6 15.3,2 12,2 Z";
-// Línea cervical (unión corona/raíz) — solo un detalle sutil de acabado,
-// se dibuja encima del relleno en todas las condiciones excepto ausente/implante.
-const DIENTE_CUELLO = "M7.3,14.2 Q12,16.6 16.7,14.2";
+// Silueta anatómica de diente (corona + raíz(es) + línea cervical sutil)
+// para el ícono del odontograma — no es una radiografía real (eso
+// implicaría subir/almacenar una imagen por diente, fuera de alcance de
+// Fase 1), es un dibujo pulido pero plano, pensado para reconocerse de un
+// vistazo entre 32 dientes en pantalla. Reemplaza el diseño anterior (una
+// casilla lisa con solo el número) a pedido de Carlos (2026-09-18); el
+// primer rediseño (cápsula genérica) se refinó (2026-09-21) con
+// proporciones más parecidas a un diente real, y luego (mismo día, a
+// pedido explícito de Carlos: "sería una representación vectorial precisa
+// de cada diente no el mismo para todos") se reemplazó por 5 familias de
+// forma según la posición FDI real — no eran 32 formas 100% únicas (no
+// aporta legibilidad extra a este tamaño de ícono y multiplica el riesgo
+// de errores de trazo), sino las familias que un dentista reconocería:
+// incisivo (corona angosta y plana, raíz única), canino (la corona y la
+// raíz más puntiagudas — el "colmillo" clásico, y la raíz más larga de
+// todas), premolar (corona bicúspide, dos lóbulos suaves arriba), molar
+// superior (corona ancha, 3 raíces — trifurcada, anatómicamente correcto)
+// y molar inferior (corona ancha, 2 raíces — bifurcada). La condición se
+// codifica con la FORMA del ícono (implante = tornillo, no diente) y con
+// relleno/marcas superpuestas (mancha=caries, parche=obturado, grieta=
+// fracturado, línea de canal=endodoncia, puntos=sellante, X=extracción
+// indicada, contorno punteado sin relleno=ausente).
+type FamiliaDiente = "INCISIVO" | "CANINO" | "PREMOLAR" | "MOLAR_SUPERIOR" | "MOLAR_INFERIOR";
+
+const DIENTE_FORMA: Record<FamiliaDiente, string> = {
+  INCISIVO:
+    "M12,2.3 C9.9,2.3 9.1,3.1 9.3,4.3 C9.5,6.1 10,7.6 9.9,9.4 C9.8,10.9 9.6,12 9.5,13 C9.3,17 9.1,20.5 8.9,23.5 C8.8,25.5 8.9,27.3 9.5,28.5 L12,30.3 L14.5,28.5 C15.1,27.3 15.2,25.5 15.1,23.5 C14.9,20.5 14.7,17 14.5,13 C14.4,12 14.2,10.9 14.1,9.4 C14,7.6 14.5,6.1 14.7,4.3 C14.9,3.1 14.1,2.3 12,2.3 Z",
+  CANINO:
+    "M12,1.8 L14.8,6.5 C14.5,8 14,9 13.8,10.5 C13.6,11.7 13.6,12.4 13.6,13 C13.8,17.5 14.1,21.5 14.4,25 C14.5,27 14.6,28.8 14.1,30 L12,31.8 L9.9,30 C9.4,28.8 9.5,27 9.6,25 C9.9,21.5 10.2,17.5 10.4,13 C10.4,12.4 10.4,11.7 10.2,10.5 C10,9 9.5,8 9.2,6.5 L12,1.8 Z",
+  PREMOLAR:
+    "M8.7,4.5 C8.6,3 9.5,2.3 10.6,3.2 C11.1,3.6 11.6,3.6 12,3.6 C12.4,3.6 12.9,3.6 13.4,3.2 C14.5,2.3 15.4,3 15.3,4.5 C15.2,6.2 14.6,7.6 14.5,9.3 C14.4,10.8 14.5,11.9 14.6,13 C14.8,16.3 15,19.8 15.1,23 C15.2,25.2 15.2,27 14.6,28.2 L12,29.8 L9.4,28.2 C8.8,27 8.8,25.2 8.9,23 C9,19.8 9.2,16.3 9.4,13 C9.5,11.9 9.6,10.8 9.5,9.3 C9.4,7.6 8.8,6.2 8.7,4.5 Z",
+  MOLAR_INFERIOR:
+    "M12,2 C8.7,2 6,3.6 5.3,6.8 C4.9,8.6 5.4,10.1 6.2,11.7 C6.8,12.9 7.1,13.9 7.2,15.3 C7.3,18 6.9,20.8 6.3,23.7 C6,25.1 6.1,26.8 7.4,27.4 C8.5,27.9 9.2,26.6 9.6,24.9 C9.9,23.6 10.2,22.2 12,22.2 C13.8,22.2 14.1,23.6 14.4,24.9 C14.8,26.6 15.5,27.9 16.6,27.4 C17.9,26.8 18,25.1 17.7,23.7 C17.1,20.8 16.7,18 16.8,15.3 C16.9,13.9 17.2,12.9 17.8,11.7 C18.6,10.1 19.1,8.6 18.7,6.8 C18,3.6 15.3,2 12,2 Z",
+  MOLAR_SUPERIOR:
+    "M12,2 C8.7,2 6,3.6 5.3,6.8 C4.9,8.6 5.4,10.1 6.2,11.7 C6.8,12.9 7.1,13.9 7.2,15.3 C7.3,18 6.9,20.8 6.3,23.7 C6,25.1 6.1,26.8 7.4,27.4 C8.5,27.9 9.2,26.6 9.6,24.9 C9.8,24 10,23.1 10.6,22.5 C10.9,23.7 11.1,25.6 11.3,26.6 C11.45,27.3 11.75,27.4 11.9,26.7 C12.05,27.4 12.35,27.3 12.5,26.6 C12.7,25.6 12.9,23.7 13.2,22.5 C13.8,23.1 14,24 14.2,24.9 C14.6,26.6 15.5,27.9 16.6,27.4 C17.9,26.8 18,25.1 17.7,23.7 C17.1,20.8 16.7,18 16.8,15.3 C16.9,13.9 17.2,12.9 17.8,11.7 C18.6,10.1 19.1,8.6 18.7,6.8 C18,3.6 15.3,2 12,2 Z",
+};
+// Línea cervical (unión corona/raíz) — un trazo por familia, para que
+// quede a la altura correcta de cada silueta (los dientes angostos tienen
+// el cuello más arriba que los molares anchos).
+const DIENTE_CUELLO: Record<FamiliaDiente, string> = {
+  INCISIVO: "M9.3,12.6 Q12,14.2 14.7,12.6",
+  CANINO: "M9.6,11.3 Q12,12.6 14.4,11.3",
+  PREMOLAR: "M8.9,12.8 Q12,14.6 15.1,12.8",
+  MOLAR_INFERIOR: "M7.3,14.2 Q12,16.6 16.7,14.2",
+  MOLAR_SUPERIOR: "M7.3,14.2 Q12,16.6 16.7,14.2",
+};
+
+// Determina la familia anatómica a partir del número FDI: el dígito de las
+// unidades da la posición dentro del cuadrante (1-8) y el número completo
+// da el arco (superior si < 30, inferior si >= 30) — así los molares
+// superiores (3 raíces) se distinguen de los inferiores (2 raíces).
+function familiaDiente(numero: number): FamiliaDiente {
+  const posicion = numero % 10;
+  const superior = numero < 30;
+  if (posicion === 1 || posicion === 2) return "INCISIVO";
+  if (posicion === 3) return "CANINO";
+  if (posicion === 4 || posicion === 5) return "PREMOLAR";
+  return superior ? "MOLAR_SUPERIOR" : "MOLAR_INFERIOR";
+}
 
 // Los estados NEUTROS (diente sano, contorno base, contorno de "ausente")
 // usan tokens de tema — se ven bien en los 5 temas de color de Linkity. Los
@@ -164,7 +206,15 @@ const CATEGORIAS_CONDICION: { etiqueta: string; items: CondicionDiente[] }[] = [
   { etiqueta: "Endodoncia", items: ["ENDODONCIA"] },
 ];
 
-function ToothIcon({ condicion, className }: { condicion: CondicionDiente; className?: string }) {
+// numero: posición FDI del diente (1-8, 11-18, 21-28, 31-38, 41-48) — decide
+// qué familia de forma (ver familiaDiente) se dibuja. Los call-sites que no
+// representan un diente físico real en el mapa (la leyenda de condiciones,
+// el encabezado/la barra de condición cuando aún no hay diente seleccionado)
+// pasan un número representativo fijo en vez de omitirlo, para que siempre
+// se dibuje una silueta con proporciones válidas.
+function ToothIcon({ condicion, numero, className }: { condicion: CondicionDiente; numero: number; className?: string }) {
+  const familia = familiaDiente(numero);
+
   if (condicion === "IMPLANTE") {
     // No es un diente natural — se dibuja como un tornillo para que se
     // distinga de un vistazo del resto de las condiciones.
@@ -182,15 +232,15 @@ function ToothIcon({ condicion, className }: { condicion: CondicionDiente; class
   if (condicion === "AUSENTE") {
     return (
       <svg viewBox="0 0 24 32" className={className} fill="none">
-        <path d={DIENTE_PATH} stroke={DIENTE_BORDE.AUSENTE} strokeWidth="1.2" strokeDasharray="2.2 2" />
+        <path d={DIENTE_FORMA[familia]} stroke={DIENTE_BORDE.AUSENTE} strokeWidth="1.2" strokeDasharray="2.2 2" />
       </svg>
     );
   }
 
   return (
     <svg viewBox="0 0 24 32" className={className} fill="none">
-      <path d={DIENTE_PATH} fill={DIENTE_RELLENO[condicion]} stroke={DIENTE_BORDE[condicion]} strokeWidth="1.3" />
-      <path d={DIENTE_CUELLO} stroke="var(--border)" strokeWidth="0.8" fill="none" opacity={0.6} />
+      <path d={DIENTE_FORMA[familia]} fill={DIENTE_RELLENO[condicion]} stroke={DIENTE_BORDE[condicion]} strokeWidth="1.3" />
+      <path d={DIENTE_CUELLO[familia]} stroke="var(--border)" strokeWidth="0.8" fill="none" opacity={0.6} />
       {condicion === "CARIES" && <circle cx="10.3" cy="9.5" r="2" fill="#7f1d1d" />}
       {condicion === "OBTURADO" && <circle cx="10.3" cy="9.5" r="2" fill="#93c5fd" stroke="#1d4ed8" strokeWidth="0.6" />}
       {condicion === "SELLANTE" && (
@@ -1210,7 +1260,7 @@ export default function ClientesClient({
                                   title={`Diente ${numero} — ${label(labels, `tooth.condition.${condicion}`)}${pendiente ? ` · Tratamiento ${pendiente === "PROPUESTO" ? "propuesto" : "aceptado"}` : ""}`}
                                   className={`relative w-9 h-11 sm:w-10 sm:h-12 rounded-md border bg-card flex flex-col items-center justify-center gap-0.5 transition-colors ${dienteSeleccionado === numero ? "border-primary ring-2 ring-primary" : "border-border hover:border-foreground/40"}`}
                                 >
-                                  <ToothIcon condicion={condicion} className="w-5 h-6 sm:w-6 sm:h-7" />
+                                  <ToothIcon condicion={condicion} numero={numero} className="w-5 h-6 sm:w-6 sm:h-7" />
                                   <span className="text-[9.5px] font-semibold text-muted-foreground leading-none">{numero}</span>
                                   {pendiente && (
                                     <span
@@ -1229,7 +1279,7 @@ export default function ClientesClient({
                       <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-3 pt-3 border-t border-border">
                         {CONDICIONES_DIENTE.map((c) => (
                           <div key={c} className="flex items-center gap-1">
-                            <ToothIcon condicion={c} className="w-3.5 h-4" />
+                            <ToothIcon condicion={c} numero={11} className="w-3.5 h-4" />
                             <span className="text-[11.5px] text-muted-foreground">{label(labels, `tooth.condition.${c}`)}</span>
                           </div>
                         ))}
@@ -1246,7 +1296,7 @@ export default function ClientesClient({
                       {dienteSeleccionado != null && (
                         <div className="mt-4 p-3 rounded-lg bg-muted/40 border border-border">
                           <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5">
-                            <ToothIcon condicion={dienteCondicion} className="w-4 h-5" />
+                            <ToothIcon condicion={dienteCondicion} numero={dienteSeleccionado ?? 11} className="w-4 h-5" />
                             Diente {dienteSeleccionado} — {label(labels, `tooth.condition.${dienteCondicion}`)}
                           </p>
                           {/* Barra de condición agrupada por categoría — reemplaza el
@@ -1268,7 +1318,7 @@ export default function ClientesClient({
                                       title={label(labels, `tooth.condition.${c}`)}
                                       className={`w-9 h-10 rounded-md border bg-card flex items-center justify-center transition-colors ${dienteCondicion === c ? "border-primary ring-2 ring-primary" : "border-border hover:border-foreground/40"}`}
                                     >
-                                      <ToothIcon condicion={c} className="w-5 h-6" />
+                                      <ToothIcon condicion={c} numero={dienteSeleccionado ?? 11} className="w-5 h-6" />
                                     </button>
                                   ))}
                                 </div>
