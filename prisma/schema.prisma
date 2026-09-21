@@ -1224,7 +1224,11 @@ model TreatmentPlanItem {
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
 
-  treatmentPlan TreatmentPlan @relation(fields: [treatmentPlanId], references: [id])
+  treatmentPlan     TreatmentPlan      @relation(fields: [treatmentPlanId], references: [id])
+  // Opcional — un consentimiento puede generarse suelto (ej. "tratamiento
+  // general") o ligado a la fase específica del plan que lo motiva (ej. la
+  // fase de "Extracción de tercer molar"). Ver InformedConsent más abajo.
+  informedConsents InformedConsent[]
 }
 
 enum TreatmentPlanItemStatus {
@@ -1249,20 +1253,28 @@ enum TreatmentPlanItemStatus {
 // PAC/SAT real) — se lo advertimos a Carlos explícitamente, no es letra
 // chica escondida.
 model InformedConsent {
-  id             String    @id @default(cuid())
-  tenantId       String
-  customerId     String
-  userId         String
-  procedureType  String
-  content        String
-  patientSignature String?
-  signedByName   String?
-  signedAt       DateTime?
-  createdAt      DateTime  @default(now())
+  id                String    @id @default(cuid())
+  tenantId          String
+  customerId        String
+  userId            String
+  procedureType     String
+  content           String
+  patientSignature  String?
+  signedByName      String?
+  signedAt          DateTime?
+  // Opcional (ver el comentario en TreatmentPlanItem.informedConsents) — NO
+  // es tenantId propio de este lado, es solo el vínculo narrativo; el
+  // aislamiento por tenant lo sigue dando InformedConsent.tenantId de
+  // siempre. Al igual que TreatmentPlanItem, verificar a mano en la Server
+  // Action que el item (si viene) es del mismo tenant/paciente antes de
+  // guardar.
+  treatmentPlanItemId String?
+  createdAt         DateTime  @default(now())
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  customer Customer @relation(fields: [customerId], references: [id])
-  user     User     @relation(fields: [userId], references: [id])
+  tenant           Tenant             @relation(fields: [tenantId], references: [id])
+  customer         Customer           @relation(fields: [customerId], references: [id])
+  user             User               @relation(fields: [userId], references: [id])
+  treatmentPlanItem TreatmentPlanItem? @relation(fields: [treatmentPlanItemId], references: [id])
 }
 
 // Receta digital. `medications` queda como texto libre (no una tabla

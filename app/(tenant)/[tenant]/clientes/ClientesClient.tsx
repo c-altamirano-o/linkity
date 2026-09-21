@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Plus, Edit, ShoppingCart, Wrench, Phone, ChevronLeft, X, Users, Stethoscope,
-  ClipboardList, Trash2, Check, Ban, DollarSign,
+  ClipboardList, Trash2, Check, Ban, DollarSign, FileSignature, Eye,
 } from "lucide-react";
 import type { ClienteUI, EstadoReparacionCliente, EstadoVentaCliente } from "@/lib/clientes-data";
 import type { ExpedienteCliente } from "@/lib/expediente-data";
 import { type CondicionDiente, DIENTES_SUPERIOR, DIENTES_INFERIOR } from "@/lib/odontograma-fdi";
 import type { PlanTratamientoUI } from "@/lib/tratamiento-data";
+import type { ConsentimientoUI } from "@/lib/consentimiento-data";
+import { type PlantillaConsentimiento, NOTA_FIRMA_SIMULADA } from "@/lib/consentimiento-templates";
 import type { DoctorOption } from "@/lib/citas-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearClienteAction, editarClienteAction, type DatosCliente } from "@/app/actions/clientes-actions";
@@ -22,6 +24,8 @@ import {
   crearPlanTratamientoAction, actualizarEstadoItemAction, cobrarItemPlanAction,
   type NuevoItemPlan, type MetodoPagoPlanInput,
 } from "@/app/actions/tratamiento-actions";
+import { crearConsentimientoAction } from "@/app/actions/consentimiento-actions";
+import FirmaCanvas from "@/components/tenant/FirmaCanvas";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp, formatoTelefono } from "@/lib/paises";
 
 interface ClientesClientProps {
@@ -43,6 +47,12 @@ interface ClientesClientProps {
   planesTratamiento: Record<string, PlanTratamientoUI[]>;
   doctores: DoctorOption[];
   branches: { id: string; name: string }[];
+  // Consentimiento Informado (M17, Fase 2, 2026-09-21) — igual que
+  // planesTratamiento, ya viene resuelto por cliente desde el servidor.
+  // plantillasConsentimiento ya viene filtrada al rubro del tenant (ver
+  // clientes/page.tsx) para no repetir esa lógica en el cliente.
+  consentimientos: Record<string, ConsentimientoUI[]>;
+  plantillasConsentimiento: PlantillaConsentimiento[];
 }
 
 const EXPEDIENTE_VACIO: ExpedienteCliente = { antecedentes: null, notas: [], dientes: [] };
@@ -267,7 +277,7 @@ const FORM_VACIO: DatosCliente = { name: "", phone: "", phoneCountryCode: PAIS_T
 
 export default function ClientesClient({
   clientes, labels, tenantSlug, reparacionesActiva, expedienteActiva, odontogramaActivo, expedientes,
-  planesTratamiento, doctores, branches,
+  planesTratamiento, doctores, branches, consentimientos, plantillasConsentimiento,
 }: ClientesClientProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -306,6 +316,16 @@ export default function ClientesClient({
   const [cobroModal, setCobroModal] = useState<{ itemId: string; descripcion: string; costo: number } | null>(null);
   const [cobroMetodo, setCobroMetodo] = useState<MetodoPagoPlanInput>("CASH");
 
+  // Consentimiento Informado (M17, Fase 2, 2026-09-21).
+  const [consentModalAbierto, setConsentModalAbierto] = useState(false);
+  const [consentProcedureType, setConsentProcedureType] = useState("");
+  const [consentItemPlanId, setConsentItemPlanId] = useState("");
+  const [consentFirmadoPor, setConsentFirmadoPor] = useState("");
+  const [consentFirma, setConsentFirma] = useState<string | null>(null);
+  const [consentError, setConsentError] = useState<string | null>(null);
+  const [consentGuardando, startConsentGuardar] = useTransition();
+  const [consentVerModal, setConsentVerModal] = useState<ConsentimientoUI | null>(null);
+
   // Negocio con el módulo de Reparaciones apagado (ej. una barbería): ni la
   // pestaña "Reparaciones" del historial ni ningún registro de tipo
   // "reparacion" que pudiera haber quedado de antes deben aparecer aquí.
@@ -327,6 +347,18 @@ export default function ClientesClient({
     (seleccionado && expedientes[seleccionado.id]) || EXPEDIENTE_VACIO;
   const planesSeleccionado: PlanTratamientoUI[] =
     (seleccionado && planesTratamiento[seleccionado.id]) || [];
+  const consentimientosSeleccionado: ConsentimientoUI[] =
+    (seleccionado && consentimientos[seleccionado.id]) || [];
+  const plantillaConsentSeleccionada: PlantillaConsentimiento | null =
+    plantillasConsentimiento.find((p) => p.id === consentProcedureType) ?? null;
+  // Fases del plan de tratamiento del paciente seleccionado, aplanadas, para
+  // el selector opcional "ligar a fase" del modal de nuevo consentimiento.
+  const fasesPlanParaConsentimiento = planesSeleccionado.flatMap((plan) =>
+    plan.items.map((it) => ({
+      id: it.id,
+      etiqueta: it.diente != null ? `${it.descripcion} · Diente ${it.diente}` : it.descripcion,
+    }))
+  );
 
   // Al cambiar de cliente (o de antecedentes ya guardados desde el server
   // tras un router.refresh()), el formulario de antecedentes se re-sincroniza
@@ -497,6 +529,49 @@ export default function ClientesClient({
       setItemEnCurso(null);
       setCobroModal(null);
       router.refresh();
+    });
+  }
+
+  // Consentimiento Informado (M17, Fase 2, 2026-09-21).
+  function abrirModalConsentimiento() {
+    setConsentProcedureType(plantillasConsentimiento[0]?.id ?? "");
+    setConsentItemPlanId("");
+    setConsentFirmadoPor(seleccionado?.name ?? "");
+    setConsentFirma(null);
+    setConsentError(null);
+    setConsentModalAbierto(true);
+  }
+
+  function handleGuardarConsentimiento() {
+    if (!seleccionado) return;
+    if (!consentProcedureType) {
+      setConsentError("Selecciona el tipo de procedimiento");
+      return;
+    }
+    if (!consentFirmadoPor.trim()) {
+      setConsentError("Escribe el nombre de quien firma");
+      return;
+    }
+    if (!consentFirma) {
+      setConsentError("Falta capturar la firma");
+      return;
+    }
+    setConsentError(null);
+    startConsentGuardar(async () => {
+      const res = await crearConsentimientoAction({
+        tenantSlug,
+        customerId: seleccionado.id,
+        procedureType: consentProcedureType,
+        treatmentPlanItemId: consentItemPlanId || null,
+        firmaImagen: consentFirma,
+        firmadoPor: consentFirmadoPor,
+      });
+      if (res.ok) {
+        setConsentModalAbierto(false);
+        router.refresh();
+      } else {
+        setConsentError(res.error);
+      }
     });
   }
 
@@ -1192,6 +1267,49 @@ export default function ClientesClient({
                     )}
                   </div>
 
+                  {/* Consentimiento Informado — M17, Fase 2, 2026-09-21.
+                      Firma dibujada (canvas) simulada, no e.firma real — ver
+                      NOTA_FIRMA_SIMULADA en lib/consentimiento-templates.ts,
+                      que se muestra en el modal antes de firmar. */}
+                  <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest">CONSENTIMIENTO INFORMADO</p>
+                      <button
+                        onClick={abrirModalConsentimiento}
+                        disabled={plantillasConsentimiento.length === 0}
+                        className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg disabled:opacity-50"
+                      >
+                        <FileSignature className="w-3 h-3" /> Nuevo consentimiento
+                      </button>
+                    </div>
+                    {consentimientosSeleccionado.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground text-xs">Sin consentimientos firmados todavía</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {consentimientosSeleccionado.map((c) => {
+                          const etiqueta = plantillasConsentimiento.find((p) => p.id === c.procedureType)?.etiqueta ?? c.procedureType;
+                          return (
+                            <div key={c.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-muted/30">
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-foreground truncate">{etiqueta}</p>
+                                <p className="text-[10px] text-muted-foreground truncate">
+                                  Dr(a). {c.doctor} · {new Date(c.creadoEn).toLocaleDateString("es-MX")}
+                                  {c.itemPlanDescripcion && ` · ${c.itemPlanDescripcion}`}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => setConsentVerModal(c)}
+                                className="flex items-center gap-1 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted text-[10px] font-medium shrink-0"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> Ver
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Notas de evolución */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
@@ -1466,6 +1584,135 @@ export default function ClientesClient({
                 className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
               >
                 {itemEnCurso === cobroModal.itemId ? "Cobrando…" : "Confirmar cobro"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {consentModalAbierto && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <p className="text-sm font-semibold text-foreground">Nuevo consentimiento informado</p>
+              <button onClick={() => setConsentModalAbierto(false)} className="p-1 rounded-md hover:bg-muted">
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Tipo de procedimiento *</label>
+                <select
+                  value={consentProcedureType}
+                  onChange={(e) => setConsentProcedureType(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                >
+                  {plantillasConsentimiento.map((p) => (
+                    <option key={p.id} value={p.id}>{p.etiqueta}</option>
+                  ))}
+                </select>
+              </div>
+
+              {fasesPlanParaConsentimiento.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Ligar a una fase del plan de tratamiento (opcional)</label>
+                  <select
+                    value={consentItemPlanId}
+                    onChange={(e) => setConsentItemPlanId(e.target.value)}
+                    className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  >
+                    <option value="">Ninguna</option>
+                    {fasesPlanParaConsentimiento.map((f) => (
+                      <option key={f.id} value={f.id}>{f.etiqueta}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {plantillaConsentSeleccionada && (
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-xs text-foreground whitespace-pre-line">{plantillaConsentSeleccionada.cuerpo}</p>
+                  <p className="text-[10px] text-muted-foreground mt-2 italic">{NOTA_FIRMA_SIMULADA}</p>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Firmado por *</label>
+                <input
+                  type="text"
+                  value={consentFirmadoPor}
+                  onChange={(e) => setConsentFirmadoPor(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  placeholder="Nombre del paciente o su representante"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Firma *</label>
+                <FirmaCanvas onChange={setConsentFirma} className="mt-1" />
+              </div>
+
+              {consentError && <p className="text-xs text-red-600">{consentError}</p>}
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <button
+                onClick={() => setConsentModalAbierto(false)}
+                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGuardarConsentimiento}
+                disabled={consentGuardando}
+                className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+              >
+                {consentGuardando ? "Guardando…" : "Guardar y firmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {consentVerModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <p className="text-sm font-semibold text-foreground">
+                {plantillasConsentimiento.find((p) => p.id === consentVerModal.procedureType)?.etiqueta ?? consentVerModal.procedureType}
+              </p>
+              <button onClick={() => setConsentVerModal(null)} className="p-1 rounded-md hover:bg-muted">
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Dr(a). {consentVerModal.doctor} · {new Date(consentVerModal.creadoEn).toLocaleDateString("es-MX")}
+                {consentVerModal.itemPlanDescripcion && ` · ${consentVerModal.itemPlanDescripcion}`}
+              </p>
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <p className="text-xs text-foreground whitespace-pre-line">{consentVerModal.content}</p>
+              </div>
+              {consentVerModal.firmaImagen && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Firmado por {consentVerModal.firmadoPor}
+                    {consentVerModal.firmadoEn && ` · ${new Date(consentVerModal.firmadoEn).toLocaleString("es-MX")}`}
+                  </label>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={consentVerModal.firmaImagen}
+                    alt="Firma del paciente"
+                    className="mt-1 w-full rounded-lg border border-border bg-white"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <button
+                onClick={() => setConsentVerModal(null)}
+                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+              >
+                Cerrar
               </button>
             </div>
           </div>

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getClientesData } from "@/lib/clientes-data";
 import { getExpedientesData } from "@/lib/expediente-data";
 import { getPlanesTratamientoData } from "@/lib/tratamiento-data";
+import { getConsentimientosData } from "@/lib/consentimiento-data";
+import { PLANTILLAS_CONSENTIMIENTO } from "@/lib/consentimiento-templates";
 import { getTenantLabels } from "@/lib/labels-server";
 import ClientesClient from "./ClientesClient";
 
@@ -52,7 +54,7 @@ export default async function ClientesPage({
   const reparacionesActiva = !reparacionesInactiva;
   const expedienteActiva = !expedienteInactivo;
 
-  const [clientes, expedientes, planesTratamiento, labels] = await Promise.all([
+  const [clientes, expedientes, planesTratamiento, consentimientos, labels] = await Promise.all([
     getClientesData(tenant.id),
     expedienteActiva ? getExpedientesData(tenant.id) : Promise.resolve({}),
     // Plan de Tratamiento (M17, Fase 2) vive bajo el mismo módulo
@@ -61,6 +63,8 @@ export default async function ClientesPage({
     expedienteActiva
       ? getPlanesTratamientoData(tenant.id)
       : Promise.resolve({ planes: {}, doctores: [] }),
+    // Consentimiento Informado (M17, Fase 2) — mismo criterio.
+    expedienteActiva ? getConsentimientosData(tenant.id) : Promise.resolve({}),
     getTenantLabels(tenant.id, tenant.businessType),
   ]);
 
@@ -78,6 +82,8 @@ export default async function ClientesPage({
       planesTratamiento={planesTratamiento.planes}
       doctores={planesTratamiento.doctores}
       branches={branches}
+      consentimientos={consentimientos}
+      plantillasConsentimiento={PLANTILLAS_CONSENTIMIENTO[tenant.businessType] ?? []}
     />
   );
 }

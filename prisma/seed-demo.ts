@@ -6,7 +6,7 @@ import {
   MixedPaymentMethod, PaymentScheme, CommissionBase,
   PaymentFrequency, StaffPaymentStatus, PurchaseStatus,
   InvoiceStatus, StaffPaymentMethod, StaffLoginCloseReason,
-  AppointmentStatus, ToothCondition,
+  AppointmentStatus, ToothCondition, TreatmentPlanItemStatus,
 } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { randomBytes, scryptSync } from "crypto";
@@ -175,6 +175,44 @@ const TRATAMIENTOS_DEMO: Record<string, string[]> = {
   consultorio_dental: ["Limpieza y aplicación de flúor", "Obturación con resina", "Indicaciones de higiene oral", "Control en 6 meses"],
   consultorio_medico: ["Reposo e hidratación", "Ajuste de medicamento", "Dieta blanda por 3 días", "Control en 2 semanas"],
   veterinaria: ["Limpieza de oído y gotas", "Ajuste de dieta", "Desparasitante oral", "Control en 1 mes"],
+};
+
+// Plan de Tratamiento demo (M17, Fase 2, 2026-09-19) — solo los 3 rubros de
+// RUBROS_CON_EXPEDIENTE. "diente" es opcional y solo se asigna al azar
+// (desde DIENTES_FDI_DEMO) en consultorio_dental — los otros 2 rubros nunca
+// llevan diente, mismo criterio que TreatmentPlanItem.toothNumber en el
+// schema (opcional, no todo tratamiento es de una pieza dental).
+const TITULOS_PLAN_DEMO: Record<string, string[]> = {
+  consultorio_dental: ["Rehabilitación oral", "Plan de ortodoncia", "Plan de limpieza y prevención", "Plan de endodoncia y corona"],
+  consultorio_medico: ["Plan de control de peso", "Plan de rehabilitación física", "Plan de seguimiento crónico"],
+  veterinaria: ["Plan dental canino", "Plan de rehabilitación post-cirugía", "Plan de control de peso"],
+};
+// condicionDiente (2026-09-19, reporte de Carlos): cuando una fase lleva
+// diente, también dice qué condición debe reflejar ESE diente en el
+// odontograma — sembrarPlanesTratamiento usa esto para sincronizar ambos en
+// vez de sortear el diente del plan y la condición del odontograma por
+// separado (que es justo lo que producía el mismo diente con dos historias
+// distintas: "Endodoncia" en el plan y "Sano" en el odontograma).
+interface FasePlanDemo { descripcion: string; costoMin: number; costoMax: number; conDiente?: boolean; condicionDiente?: ToothCondition }
+const FASES_PLAN_DEMO: Record<string, FasePlanDemo[]> = {
+  consultorio_dental: [
+    { descripcion: "Limpieza dental profunda", costoMin: 800, costoMax: 1200 },
+    { descripcion: "Resina dental", costoMin: 900, costoMax: 1500, conDiente: true, condicionDiente: ToothCondition.OBTURADO },
+    { descripcion: "Corona de porcelana", costoMin: 4500, costoMax: 7000, conDiente: true, condicionDiente: ToothCondition.CORONA },
+    { descripcion: "Endodoncia", costoMin: 3500, costoMax: 6000, conDiente: true, condicionDiente: ToothCondition.ENDODONCIA },
+    { descripcion: "Extracción de tercer molar", costoMin: 1200, costoMax: 2200, conDiente: true, condicionDiente: ToothCondition.EXTRACCION_INDICADA },
+    { descripcion: "Blanqueamiento dental", costoMin: 2500, costoMax: 4000 },
+  ],
+  consultorio_medico: [
+    { descripcion: "Consulta de seguimiento mensual", costoMin: 400, costoMax: 700 },
+    { descripcion: "Estudios de laboratorio completos", costoMin: 800, costoMax: 1500 },
+    { descripcion: "Sesión de fisioterapia", costoMin: 350, costoMax: 600 },
+  ],
+  veterinaria: [
+    { descripcion: "Limpieza dental canina", costoMin: 900, costoMax: 1600 },
+    { descripcion: "Radiografía y valoración", costoMin: 500, costoMax: 900 },
+    { descripcion: "Cirugía menor", costoMin: 1800, costoMax: 3500 },
+  ],
 };
 
 // Condiciones de diente usadas para poblar el odontograma demo —
@@ -799,6 +837,165 @@ async function sembrarExpedienteYOdontograma(tenantId: string, rubro: string, cl
   }
 }
 
+// Plan de Tratamiento (M17, Fase 2, 2026-09-19) — igual que
+// sembrarExpedienteYOdontograma arriba: se siembra UNA SOLA VEZ desde
+// crearNegocioDemo, nunca desde refrescarNegocioDemo (es historial clínico
+// acumulado del paciente, no dato "de esta semana"). A propósito NO se
+// generan items en estado PAGADO: eso implicaría además sintetizar un
+// CashMovement coherente en una CashSession ya cerrada de una semana
+// anterior — se deja como PROPUESTO/ACEPTADO/RECHAZADO para que Carlos
+// pueda probar el flujo real de aceptar/rechazar/cobrar con datos frescos,
+// que es más útil para un demo que ver todo ya resuelto.
+//
+// Coherencia con el odontograma (2026-09-19, reporte de Carlos): esta
+// función y sembrarExpedienteYOdontograma sorteaban cada una su propio
+// diente FDI de forma independiente, así que un plan podía decir
+// "Endodoncia · Diente 13" mientras el odontograma mostraba el diente 13
+// como Sano (o con otra condición). Ahora, cada fase con `condicionDiente`
+// hace un upsert de ESE diente en OdontogramaTooth con la condición que le
+// corresponde, sin importar si sembrarExpedienteYOdontograma ya había
+// tocado ese diente o no — así el plan y el odontograma siempre cuentan la
+// misma historia para ese paciente.
+async function sembrarPlanesTratamiento(tenantId: string, branchId: string, rubro: string, clientes: { id: string }[], doctorUserId: string) {
+  const titulos = TITULOS_PLAN_DEMO[rubro];
+  const fasesDisponibles = FASES_PLAN_DEMO[rubro];
+  if (!titulos || !fasesDisponibles) return;
+
+  for (const cliente of clientes) {
+    // No todo paciente tiene un plan de tratamiento en curso — mismo
+    // criterio de "no todo perfecto" que el resto del seed.
+    if (Math.random() < 0.6) continue;
+
+    const numFases = randInt(1, 3);
+    const fases = [...fasesDisponibles].sort(() => Math.random() - 0.5).slice(0, numFases);
+
+    const items = fases.map((fase, i) => {
+      const costo = Math.round((fase.costoMin + Math.random() * (fase.costoMax - fase.costoMin)) / 50) * 50;
+      const r = Math.random();
+      const status = r < 0.4 ? TreatmentPlanItemStatus.ACEPTADO
+        : r < 0.55 ? TreatmentPlanItemStatus.RECHAZADO
+        : TreatmentPlanItemStatus.PROPUESTO;
+      return {
+        descripcion: fase.descripcion,
+        toothNumber: fase.conDiente ? pick(DIENTES_FDI_DEMO) : null,
+        condicionDiente: fase.condicionDiente,
+        costo,
+        order: i,
+        status,
+      };
+    });
+
+    await prisma.treatmentPlan.create({
+      data: {
+        tenantId, branchId, customerId: cliente.id, userId: doctorUserId,
+        title: pick(titulos),
+        items: {
+          create: items.map((it) => ({
+            description: it.descripcion,
+            toothNumber: it.toothNumber,
+            cost: it.costo,
+            order: it.order,
+            status: it.status,
+          })),
+        },
+      },
+    });
+
+    for (const it of items) {
+      if (it.toothNumber == null || !it.condicionDiente) continue;
+      await prisma.odontogramaTooth.upsert({
+        where: { customerId_toothNumber: { customerId: cliente.id, toothNumber: it.toothNumber } },
+        create: { tenantId, customerId: cliente.id, toothNumber: it.toothNumber, condition: it.condicionDiente, updatedByUserId: doctorUserId },
+        update: { condition: it.condicionDiente, updatedByUserId: doctorUserId },
+      });
+    }
+  }
+}
+
+// Consentimiento Informado demo (M17, Fase 2, 2026-09-21) — mismo criterio
+// que sembrarPlanesTratamiento: se corre UNA SOLA VEZ desde
+// crearNegocioDemo, con backfill idempotente en refrescarNegocioDemo. Los
+// ids y etiquetas de procedimiento son una copia reducida de
+// lib/consentimiento-templates.ts (fuente real que usa la app) — este
+// script no puede usar el alias "@/..." porque corre fuera de Next con
+// tsx, mismo motivo por el que DIENTES_FDI_DEMO/CONDICIONES_ODONTOGRAMA_DEMO
+// arriba también están duplicados en vez de importados. El `content` aquí
+// es un texto corto de relleno, no el texto legal completo de la plantilla
+// real — para datos de demo no vale la pena duplicar los 12 textos largos.
+interface ProcedimientoConsentDemo { id: string; etiqueta: string }
+const PROCEDIMIENTOS_CONSENT_DEMO: Record<string, ProcedimientoConsentDemo[]> = {
+  consultorio_dental: [
+    { id: "extraccion", etiqueta: "Extracción dental" },
+    { id: "endodoncia", etiqueta: "Endodoncia (tratamiento de conducto)" },
+    { id: "cirugia_oral", etiqueta: "Cirugía oral" },
+    { id: "tratamiento_general", etiqueta: "Tratamiento dental general" },
+  ],
+  consultorio_medico: [
+    { id: "procedimiento_menor", etiqueta: "Procedimiento médico menor" },
+    { id: "estudio_diagnostico", etiqueta: "Estudio o toma de muestra" },
+    { id: "cirugia_ambulatoria", etiqueta: "Cirugía ambulatoria" },
+    { id: "tratamiento_general", etiqueta: "Tratamiento médico general" },
+  ],
+  veterinaria: [
+    { id: "cirugia_esterilizacion", etiqueta: "Cirugía o esterilización" },
+    { id: "procedimiento_sedacion", etiqueta: "Procedimiento con sedación" },
+    { id: "estudio_diagnostico", etiqueta: "Estudio o toma de muestra" },
+    { id: "tratamiento_general", etiqueta: "Tratamiento veterinario general" },
+  ],
+};
+
+// Mismo texto que NOTA_FIRMA_SIMULADA en lib/consentimiento-templates.ts —
+// duplicado por el mismo motivo de arriba (sin alias "@/..." disponible).
+const NOTA_FIRMA_SIMULADA_DEMO =
+  "Nota: esta firma se capturó de forma digital dentro del sistema, como respaldo de que el procedimiento fue explicado y aceptado por el paciente (o su representante). No es una firma electrónica avanzada (e.firma) ni sustituye, para efectos legales o notariales, una firma autógrafa en papel.";
+
+// PNG 1x1 transparente en base64 — placeholder honesto de "aquí hay una
+// firma capturada" para datos de demo, no se pretende que sea un trazo
+// real (ver FirmaCanvas.tsx para la captura real en la app).
+const FIRMA_DEMO_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+async function sembrarConsentimientos(tenantId: string, rubro: string, clientes: { id: string }[], doctorUserId: string) {
+  const procedimientos = PROCEDIMIENTOS_CONSENT_DEMO[rubro];
+  if (!procedimientos) return;
+
+  for (const cliente of clientes) {
+    // ~35% de los pacientes tienen un consentimiento firmado — mismo
+    // criterio de "no todo perfecto" que el resto del seed.
+    if (Math.random() < 0.65) continue;
+
+    const procedimiento = pick(procedimientos);
+
+    // Si el paciente ya tiene alguna fase de plan de tratamiento (sembrada
+    // arriba en sembrarPlanesTratamiento, que siempre corre antes que esta
+    // función), ~50% de las veces se liga el consentimiento a esa fase —
+    // mismo espíritu de coherencia que ya se aplicó entre el plan y el
+    // odontograma.
+    let treatmentPlanItemId: string | null = null;
+    if (Math.random() < 0.5) {
+      const item = await prisma.treatmentPlanItem.findFirst({
+        where: { treatmentPlan: { tenantId, customerId: cliente.id } },
+        select: { id: true },
+      });
+      if (item) treatmentPlanItemId = item.id;
+    }
+
+    await prisma.informedConsent.create({
+      data: {
+        tenantId,
+        customerId: cliente.id,
+        userId: doctorUserId,
+        procedureType: procedimiento.id,
+        content: `Consentimiento informado para: ${procedimiento.etiqueta}.\n\n${NOTA_FIRMA_SIMULADA_DEMO}`,
+        treatmentPlanItemId,
+        patientSignature: FIRMA_DEMO_PNG,
+        signedByName: "Firmado por el paciente (dato de demo)",
+        signedAt: new Date(),
+      },
+    });
+  }
+}
+
 // Semana operativa completa (compra a proveedor, caja + ventas por
 // sucursal, reparaciones si aplica, citas/notas si aplica, asistencia y
 // nómina de la semana, factura de la primera venta) — extraído de
@@ -1118,10 +1315,15 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
     await prisma.staff.findMany({ where: { tenantId: tenant.id, userId: { not: null } }, select: { userId: true, name: true } })
   ).map((s) => ({ userId: s.userId as string, name: s.name }));
 
-  // Antecedentes/odontograma se siembran UNA sola vez aquí (no en cada
-  // refresco semanal) — ver el comentario largo en sembrarExpedienteYOdontograma.
+  // Antecedentes/odontograma/planes de tratamiento/consentimientos se
+  // siembran UNA sola vez aquí (no en cada refresco semanal) — ver el
+  // comentario largo en
+  // sembrarExpedienteYOdontograma/sembrarPlanesTratamiento/sembrarConsentimientos.
   if (tieneExpediente) {
-    await sembrarExpedienteYOdontograma(tenant.id, cfg.key, clientes, doctores[0]?.userId ?? ownerUser.id);
+    const doctorUserId = doctores[0]?.userId ?? ownerUser.id;
+    await sembrarExpedienteYOdontograma(tenant.id, cfg.key, clientes, doctorUserId);
+    await sembrarPlanesTratamiento(tenant.id, branchPrincipal.id, cfg.key, clientes, doctorUserId);
+    await sembrarConsentimientos(tenant.id, cfg.key, clientes, doctorUserId);
   }
 
   // Compra inicial + la semana operativa completa (caja, ventas,
@@ -1229,6 +1431,28 @@ async function refrescarNegocioDemo(cfg: RubroConfig): Promise<boolean> {
   const empleados: EmpleadoCreado[] = staffRows.map((s, i) => ({
     staffId: s.id, branchId: s.branchId, name: s.name, puesto: s.position ?? "Personal", pin: PINES[i % PINES.length],
   }));
+
+  // Backfill único de Plan de Tratamiento (M17, Fase 2, 2026-09-19): un
+  // tenant demo creado ANTES de que este modelo existiera nunca tuvo uno —
+  // se siembra aquí la PRIMERA vez que se refresca después de este cambio,
+  // idéntico al criterio de "accumulated, not weekly" ya usado para
+  // antecedentes/odontograma (nunca se vuelve a tocar en refrescos
+  // posteriores). Idempotente vía el propio dato: si el tenant ya tiene al
+  // menos un TreatmentPlan, no se vuelve a sembrar.
+  if (tieneExpediente) {
+    const doctorBackfillId = doctores[0]?.userId ?? ownerUser.id;
+    const yaTienePlanes = await prisma.treatmentPlan.findFirst({ where: { tenantId: tenant.id }, select: { id: true } });
+    if (!yaTienePlanes) {
+      await sembrarPlanesTratamiento(tenant.id, branches[0].id, cfg.key, clientes, doctorBackfillId);
+    }
+    // Mismo backfill idempotente, para Consentimiento Informado (M17, Fase
+    // 2, 2026-09-21) — un tenant demo ya existente antes de este cambio
+    // nunca tuvo consentimientos sembrados.
+    const yaTieneConsentimientos = await prisma.informedConsent.findFirst({ where: { tenantId: tenant.id }, select: { id: true } });
+    if (!yaTieneConsentimientos) {
+      await sembrarConsentimientos(tenant.id, cfg.key, clientes, doctorBackfillId);
+    }
+  }
 
   await borrarDatosOperativos(tenant.id);
 
