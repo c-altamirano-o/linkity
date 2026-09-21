@@ -38,9 +38,12 @@ export async function crearConsentimientoAction(params: {
 
   // resolverActor solo selecciona tenant.id — el rubro (para elegir la
   // plantilla correcta) se consulta aparte, mismo criterio que
-  // clientes/page.tsx.
+  // clientes/page.tsx. businessType es String? en schema.prisma (puede ser
+  // null en un tenant sin rubro configurado) — "" nunca matchea ninguna
+  // plantilla, así que obtenerPlantilla regresa null igual que un rubro
+  // desconocido.
   const tenantInfo = await prisma.tenant.findUnique({ where: { id: tenant.id }, select: { businessType: true } });
-  const plantilla = tenantInfo ? obtenerPlantilla(tenantInfo.businessType, procedureType) : null;
+  const plantilla = tenantInfo ? obtenerPlantilla(tenantInfo.businessType ?? "", procedureType) : null;
   if (!plantilla) return { ok: false, error: "Tipo de procedimiento no válido" };
 
   const db = getTenantPrisma(tenant.id);
