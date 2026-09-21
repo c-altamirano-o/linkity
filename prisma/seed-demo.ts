@@ -1001,6 +1001,54 @@ async function sembrarConsentimientos(tenantId: string, rubro: string, clientes:
   }
 }
 
+// Recetas digitales demo (M17, Fase 2, 2026-09-21) — mismo criterio que
+// sembrarConsentimientos: se corre UNA SOLA VEZ desde crearNegocioDemo, con
+// backfill idempotente en refrescarNegocioDemo. A diferencia de
+// Consentimiento Informado, aquí la firma (FIRMA_DEMO_PNG, el mismo PNG
+// transparente ya corregido) es del DOCTOR que prescribe, no del paciente —
+// mismo criterio que crearRecetaAction/Prescription.userId.
+const MEDICAMENTOS_DEMO: Record<string, { medications: string; indications: string }[]> = {
+  consultorio_dental: [
+    { medications: "Amoxicilina 500mg, 1 cápsula cada 8 horas por 7 días", indications: "Tomar con alimentos. Completar el tratamiento aunque los síntomas mejoren antes." },
+    { medications: "Ibuprofeno 400mg, 1 tableta cada 8 horas por 3 días en caso de dolor", indications: "No exceder la dosis indicada. Evitar en caso de gastritis." },
+    { medications: "Enjuague de clorhexidina al 0.12%, 15ml dos veces al día por 5 días", indications: "No ingerir. Esperar 30 minutos antes de comer o beber." },
+  ],
+  consultorio_medico: [
+    { medications: "Paracetamol 500mg, 1 tableta cada 8 horas en caso de fiebre o dolor", indications: "No combinar con otros medicamentos que contengan paracetamol." },
+    { medications: "Loratadina 10mg, 1 tableta cada 24 horas por 7 días", indications: "Puede tomarse con o sin alimentos." },
+    { medications: "Omeprazol 20mg, 1 cápsula en ayunas por 14 días", indications: "Tomar 30 minutos antes del desayuno." },
+  ],
+  veterinaria: [
+    { medications: "Amoxicilina con ácido clavulánico 250mg, media tableta cada 12 horas por 7 días", indications: "Administrar con alimento para evitar malestar estomacal." },
+    { medications: "Meloxicam solución oral, 0.1ml/kg cada 24 horas por 3 días", indications: "No administrar en mascotas con problemas renales conocidos." },
+    { medications: "Champú medicado antimicótico, aplicar 2 veces por semana por 3 semanas", indications: "Dejar actuar 10 minutos antes de enjuagar." },
+  ],
+};
+
+async function sembrarRecetas(tenantId: string, rubro: string, clientes: { id: string }[], doctorUserId: string) {
+  const medicamentos = MEDICAMENTOS_DEMO[rubro];
+  if (!medicamentos) return;
+
+  for (const cliente of clientes) {
+    // ~30% de los pacientes tienen una receta — mismo criterio de "no todo
+    // perfecto" que el resto del seed.
+    if (Math.random() < 0.7) continue;
+
+    const receta = pick(medicamentos);
+
+    await prisma.prescription.create({
+      data: {
+        tenantId,
+        customerId: cliente.id,
+        userId: doctorUserId,
+        medications: receta.medications,
+        indications: receta.indications,
+        doctorSignature: FIRMA_DEMO_PNG,
+      },
+    });
+  }
+}
+
 // Semana operativa completa (compra a proveedor, caja + ventas por
 // sucursal, reparaciones si aplica, citas/notas si aplica, asistencia y
 // nómina de la semana, factura de la primera venta) — extraído de
@@ -1329,6 +1377,7 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
     await sembrarExpedienteYOdontograma(tenant.id, cfg.key, clientes, doctorUserId);
     await sembrarPlanesTratamiento(tenant.id, branchPrincipal.id, cfg.key, clientes, doctorUserId);
     await sembrarConsentimientos(tenant.id, cfg.key, clientes, doctorUserId);
+    await sembrarRecetas(tenant.id, cfg.key, clientes, doctorUserId);
   }
 
   // Compra inicial + la semana operativa completa (caja, ventas,
@@ -1456,6 +1505,13 @@ async function refrescarNegocioDemo(cfg: RubroConfig): Promise<boolean> {
     const yaTieneConsentimientos = await prisma.informedConsent.findFirst({ where: { tenantId: tenant.id }, select: { id: true } });
     if (!yaTieneConsentimientos) {
       await sembrarConsentimientos(tenant.id, cfg.key, clientes, doctorBackfillId);
+    }
+    // Mismo backfill idempotente, para Recetas digitales (M17, Fase 2,
+    // 2026-09-21) — un tenant demo ya existente antes de este cambio nunca
+    // tuvo recetas sembradas.
+    const yaTieneRecetas = await prisma.prescription.findFirst({ where: { tenantId: tenant.id }, select: { id: true } });
+    if (!yaTieneRecetas) {
+      await sembrarRecetas(tenant.id, cfg.key, clientes, doctorBackfillId);
     }
   }
 

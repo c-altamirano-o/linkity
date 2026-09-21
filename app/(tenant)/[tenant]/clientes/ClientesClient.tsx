@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Plus, Edit, ShoppingCart, Wrench, Phone, ChevronLeft, X, Users, Stethoscope,
-  ClipboardList, Trash2, Check, Ban, DollarSign, FileSignature, Eye,
+  ClipboardList, Trash2, Check, Ban, DollarSign, FileSignature, Eye, Pill,
 } from "lucide-react";
 import type { ClienteUI, EstadoReparacionCliente, EstadoVentaCliente } from "@/lib/clientes-data";
 import type { ExpedienteCliente } from "@/lib/expediente-data";
@@ -13,6 +13,7 @@ import { type CondicionDiente, DIENTES_SUPERIOR, DIENTES_INFERIOR } from "@/lib/
 import type { PlanTratamientoUI } from "@/lib/tratamiento-data";
 import type { ConsentimientoUI } from "@/lib/consentimiento-data";
 import { type PlantillaConsentimiento, NOTA_FIRMA_SIMULADA } from "@/lib/consentimiento-templates";
+import type { RecetaUI } from "@/lib/receta-data";
 import type { DoctorOption } from "@/lib/citas-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearClienteAction, editarClienteAction, type DatosCliente } from "@/app/actions/clientes-actions";
@@ -25,6 +26,7 @@ import {
   type NuevoItemPlan, type MetodoPagoPlanInput,
 } from "@/app/actions/tratamiento-actions";
 import { crearConsentimientoAction } from "@/app/actions/consentimiento-actions";
+import { crearRecetaAction } from "@/app/actions/receta-actions";
 import FirmaCanvas from "@/components/tenant/FirmaCanvas";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp, formatoTelefono } from "@/lib/paises";
 
@@ -53,6 +55,8 @@ interface ClientesClientProps {
   // clientes/page.tsx) para no repetir esa lógica en el cliente.
   consentimientos: Record<string, ConsentimientoUI[]>;
   plantillasConsentimiento: PlantillaConsentimiento[];
+  // Recetas digitales (M17, Fase 2, 2026-09-21) — mismo criterio.
+  recetas: Record<string, RecetaUI[]>;
 }
 
 const EXPEDIENTE_VACIO: ExpedienteCliente = { antecedentes: null, notas: [], dientes: [] };
@@ -277,7 +281,7 @@ const FORM_VACIO: DatosCliente = { name: "", phone: "", phoneCountryCode: PAIS_T
 
 export default function ClientesClient({
   clientes, labels, tenantSlug, reparacionesActiva, expedienteActiva, odontogramaActivo, expedientes,
-  planesTratamiento, doctores, branches, consentimientos, plantillasConsentimiento,
+  planesTratamiento, doctores, branches, consentimientos, plantillasConsentimiento, recetas,
 }: ClientesClientProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -326,6 +330,18 @@ export default function ClientesClient({
   const [consentGuardando, startConsentGuardar] = useTransition();
   const [consentVerModal, setConsentVerModal] = useState<ConsentimientoUI | null>(null);
 
+  // Recetas digitales (M17, Fase 2, 2026-09-21) — mismo patrón que
+  // Consentimiento Informado, pero aquí firma el DOCTOR (doctorUserId
+  // elegido de un selector, igual que Plan de Tratamiento), no el paciente.
+  const [recetaModalAbierto, setRecetaModalAbierto] = useState(false);
+  const [recetaDoctorUserId, setRecetaDoctorUserId] = useState("");
+  const [recetaMedications, setRecetaMedications] = useState("");
+  const [recetaIndications, setRecetaIndications] = useState("");
+  const [recetaFirma, setRecetaFirma] = useState<string | null>(null);
+  const [recetaError, setRecetaError] = useState<string | null>(null);
+  const [recetaGuardando, startRecetaGuardar] = useTransition();
+  const [recetaVerModal, setRecetaVerModal] = useState<RecetaUI | null>(null);
+
   // Negocio con el módulo de Reparaciones apagado (ej. una barbería): ni la
   // pestaña "Reparaciones" del historial ni ningún registro de tipo
   // "reparacion" que pudiera haber quedado de antes deben aparecer aquí.
@@ -349,6 +365,8 @@ export default function ClientesClient({
     (seleccionado && planesTratamiento[seleccionado.id]) || [];
   const consentimientosSeleccionado: ConsentimientoUI[] =
     (seleccionado && consentimientos[seleccionado.id]) || [];
+  const recetasSeleccionado: RecetaUI[] =
+    (seleccionado && recetas[seleccionado.id]) || [];
   const plantillaConsentSeleccionada: PlantillaConsentimiento | null =
     plantillasConsentimiento.find((p) => p.id === consentProcedureType) ?? null;
   // Fases del plan de tratamiento del paciente seleccionado, aplanadas, para
@@ -571,6 +589,49 @@ export default function ClientesClient({
         router.refresh();
       } else {
         setConsentError(res.error);
+      }
+    });
+  }
+
+  // Recetas digitales (M17, Fase 2, 2026-09-21).
+  function abrirModalReceta() {
+    setRecetaDoctorUserId(doctores[0]?.userId ?? "");
+    setRecetaMedications("");
+    setRecetaIndications("");
+    setRecetaFirma(null);
+    setRecetaError(null);
+    setRecetaModalAbierto(true);
+  }
+
+  function handleGuardarReceta() {
+    if (!seleccionado) return;
+    if (!recetaDoctorUserId) {
+      setRecetaError("Selecciona un doctor");
+      return;
+    }
+    if (!recetaMedications.trim()) {
+      setRecetaError("Especifica al menos un medicamento");
+      return;
+    }
+    if (!recetaFirma) {
+      setRecetaError("Falta capturar la firma del doctor");
+      return;
+    }
+    setRecetaError(null);
+    startRecetaGuardar(async () => {
+      const res = await crearRecetaAction({
+        tenantSlug,
+        customerId: seleccionado.id,
+        doctorUserId: recetaDoctorUserId,
+        medications: recetaMedications,
+        indications: recetaIndications,
+        firmaImagen: recetaFirma,
+      });
+      if (res.ok) {
+        setRecetaModalAbierto(false);
+        router.refresh();
+      } else {
+        setRecetaError(res.error);
       }
     });
   }
@@ -1310,6 +1371,45 @@ export default function ClientesClient({
                     )}
                   </div>
 
+                  {/* Recetas digitales — M17, Fase 2, 2026-09-21. Mismo
+                      patrón que Consentimiento Informado, pero la firma es
+                      del DOCTOR que prescribe (doctores, mismo selector que
+                      ya usa Plan de Tratamiento), no del paciente. */}
+                  <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest">RECETAS</p>
+                      <button
+                        onClick={abrirModalReceta}
+                        disabled={doctores.length === 0}
+                        className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg disabled:opacity-50"
+                      >
+                        <Pill className="w-3 h-3" /> Nueva receta
+                      </button>
+                    </div>
+                    {recetasSeleccionado.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground text-xs">Sin recetas todavía</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {recetasSeleccionado.map((r) => (
+                          <div key={r.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-muted/30">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-foreground truncate">{r.medications}</p>
+                              <p className="text-[10px] text-muted-foreground truncate">
+                                Dr(a). {r.doctor} · {new Date(r.creadoEn).toLocaleDateString("es-MX")}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setRecetaVerModal(r)}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted text-[10px] font-medium shrink-0"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Ver
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Notas de evolución */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
@@ -1717,6 +1817,127 @@ export default function ClientesClient({
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
                 onClick={() => setConsentVerModal(null)}
+                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {recetaModalAbierto && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <p className="text-sm font-semibold text-foreground">Nueva receta</p>
+              <button onClick={() => setRecetaModalAbierto(false)} className="p-1 rounded-md hover:bg-muted">
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Doctor(a) *</label>
+                <select
+                  value={recetaDoctorUserId}
+                  onChange={(e) => setRecetaDoctorUserId(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                >
+                  {doctores.map((d) => (
+                    <option key={d.userId} value={d.userId}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Medicamentos *</label>
+                <textarea
+                  value={recetaMedications}
+                  onChange={(e) => setRecetaMedications(e.target.value)}
+                  rows={4}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  placeholder={"Ej. Amoxicilina 500mg, 1 cápsula cada 8 horas por 7 días"}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Indicaciones (opcional)</label>
+                <textarea
+                  value={recetaIndications}
+                  onChange={(e) => setRecetaIndications(e.target.value)}
+                  rows={2}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  placeholder="Ej. Tomar con alimentos, evitar alcohol"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Firma del doctor(a) *</label>
+                <FirmaCanvas onChange={setRecetaFirma} className="mt-1" />
+              </div>
+
+              {recetaError && <p className="text-xs text-red-600">{recetaError}</p>}
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <button
+                onClick={() => setRecetaModalAbierto(false)}
+                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGuardarReceta}
+                disabled={recetaGuardando}
+                className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+              >
+                {recetaGuardando ? "Guardando…" : "Guardar y firmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {recetaVerModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <p className="text-sm font-semibold text-foreground">Receta</p>
+              <button onClick={() => setRecetaVerModal(null)} className="p-1 rounded-md hover:bg-muted">
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Dr(a). {recetaVerModal.doctor} · {new Date(recetaVerModal.creadoEn).toLocaleDateString("es-MX")}
+              </p>
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <p className="text-xs font-medium text-muted-foreground mb-1">Medicamentos</p>
+                <p className="text-xs text-foreground whitespace-pre-line">{recetaVerModal.medications}</p>
+              </div>
+              {recetaVerModal.indications && (
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Indicaciones</p>
+                  <p className="text-xs text-foreground whitespace-pre-line">{recetaVerModal.indications}</p>
+                </div>
+              )}
+              {recetaVerModal.firmaImagen && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Firma del doctor(a)</label>
+                  {/* Mismo h-40 + object-contain que la firma del paciente en
+                      "Ver consentimiento" — ver el comentario de ese bloque
+                      arriba (bug del placeholder de demo estirado). */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={recetaVerModal.firmaImagen}
+                    alt="Firma del doctor"
+                    className="mt-1 w-full h-40 object-contain rounded-lg border border-border bg-white"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <button
+                onClick={() => setRecetaVerModal(null)}
                 className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
               >
                 Cerrar
