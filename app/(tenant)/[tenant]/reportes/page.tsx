@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { getReportesData, getReportesClinicosData } from "@/lib/reportes-data";
 import { getTenantLabels } from "@/lib/labels-server";
 import { label } from "@/lib/labels";
@@ -54,9 +55,17 @@ export default async function ReportesPage({ params }: PageProps) {
   const reparacionesActiva = !reparacionesInactiva;
   const expedienteActiva = !expedienteInactivo;
 
+  // 2026-09-21, a petición de Carlos: un empleado de PIN solo ve las cifras
+  // de SU sucursal, no las del negocio completo — antes este reporte
+  // siempre agregaba TODO el tenant sin importar quién lo pidiera (ver el
+  // comentario largo en lib/reportes-data.ts). Un administrador no tiene
+  // sesión de personal, así que sigue viendo el negocio completo.
+  const sesionPersonal = await verificarSesionPersonalVigente();
+  const sucursalDeEmpleado = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal.branchId : null;
+
   const [reportes, reportesClinicos, labels] = await Promise.all([
-    getReportesData(tenant.id, reparacionesActiva),
-    getReportesClinicosData(tenant.id, expedienteActiva),
+    getReportesData(tenant.id, reparacionesActiva, sucursalDeEmpleado ?? undefined),
+    getReportesClinicosData(tenant.id, expedienteActiva, sucursalDeEmpleado ?? undefined),
     getTenantLabels(tenant.id, tenant.businessType),
   ]);
 

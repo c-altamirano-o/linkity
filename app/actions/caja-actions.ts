@@ -4,7 +4,7 @@ import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { CashSessionStatus, MovementType } from "@prisma/client";
 import { efectivoDeVenta } from "@/lib/caja-data";
-import { resolverActor, type ActorResult } from "@/lib/actor";
+import { resolverActor, puedeOperarSucursal, type ActorResult } from "@/lib/actor";
 
 /**
  * Server Actions del módulo Caja (M10). Mismo criterio que POS/Reparaciones:
@@ -51,6 +51,13 @@ export async function abrirCajaAction(params: {
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant, dbUser } = resuelto;
+
+  // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede abrir
+  // caja en SU sucursal (ver puedeOperarSucursal, lib/actor.ts) — antes
+  // esta acción confiaba en el branchId que mandara el cliente sin más.
+  if (!puedeOperarSucursal(resuelto, branchId)) {
+    return { ok: false, error: "No tienes acceso a esa sucursal" };
+  }
 
   const db = getTenantPrisma(tenant.id);
 
@@ -110,11 +117,16 @@ export async function registrarMovimientoAction(params: {
     // colgado de una sesión que ya pasó esta validación.
     const sesion = await db.cashSession.findUnique({
       where: { id: cashSessionId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, branchId: true },
     });
     if (!sesion) return { ok: false, error: "Sesión de caja no encontrada" };
     if (sesion.status !== CashSessionStatus.OPEN) {
       return { ok: false, error: "Esa sesión de caja ya está cerrada" };
+    }
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+    // registrar movimientos en la caja de SU sucursal.
+    if (!puedeOperarSucursal(resuelto, sesion.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
     }
 
     await prisma.cashMovement.create({
@@ -163,6 +175,11 @@ export async function cerrarCajaAction(params: {
     if (!sesion) return { ok: false, error: "Sesión de caja no encontrada" };
     if (sesion.status !== CashSessionStatus.OPEN) {
       return { ok: false, error: "Esa sesión de caja ya está cerrada" };
+    }
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+    // cerrar la caja de SU sucursal.
+    if (!puedeOperarSucursal(resuelto, sesion.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
     }
 
     // Recalculado aquí, no se confía en nada precalculado del lado del

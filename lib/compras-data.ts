@@ -66,15 +66,19 @@ export interface ComprasData {
   productos: ProductoOption[];
 }
 
-export async function getComprasData(tenantId: string): Promise<ComprasData> {
+export async function getComprasData(tenantId: string, branchIdFiltro?: string): Promise<ComprasData> {
   // Purchase, Supplier y Product tienen tenantId propio → getTenantPrisma
   // los inyecta solo. PurchaseItem no tiene tenantId propio (se llega a su
   // tenant vía Purchase), pero aquí solo se lee anidado desde una Purchase
   // ya escopada, así que no hace falta filtro manual adicional.
   const db = getTenantPrisma(tenantId);
 
+  // branchIdFiltro (2026-09-21, a petición de Carlos): mismo criterio que
+  // getCitasData/getReparacionesData — un empleado de PIN solo ve las
+  // compras de SU sucursal; proveedores y catálogo se quedan tenant-wide.
   const [comprasRaw, proveedoresRaw, productosRaw] = await Promise.all([
     db.purchase.findMany({
+      where: branchIdFiltro ? { branchId: branchIdFiltro } : undefined,
       orderBy: { createdAt: "desc" },
       include: {
         supplier: { select: { name: true, phone: true, email: true } },

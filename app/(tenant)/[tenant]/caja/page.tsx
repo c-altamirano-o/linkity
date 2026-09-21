@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { getCajaData } from "@/lib/caja-data";
 import CajaClient from "./CajaClient";
 
@@ -27,9 +28,15 @@ export default async function CajaPage({
 
   if (!tenant) notFound();
 
-  // La sucursal por default es la que viene en la URL (selector de
-  // sucursal), o si no la del usuario logueado, o si no la primera activa —
-  // mismo criterio que POS.
+  // 2026-09-21, a petición de Carlos: un empleado de PIN queda FIJO en su
+  // propia sucursal (Staff.branchId, vía SesionPersonal.branchId) — el
+  // servidor ignora por completo el parámetro ?sucursal= de la URL para
+  // él, así nunca puede ver/operar la caja de otra sucursal solo cambiando
+  // el link. Un administrador con cuenta real no tiene sesión de personal,
+  // así que sigue eligiendo sucursal libremente, igual que siempre.
+  const sesionPersonal = await verificarSesionPersonalVigente();
+  const sucursalDeEmpleado = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal.branchId : null;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -44,12 +51,17 @@ export default async function CajaPage({
     userBranchId = dbUser?.branchId ?? null;
   }
 
-  const branches = tenant.branches;
-  const branchActual =
-    branches.find((b) => b.id === sucursal)?.id ??
+  // Para un empleado de PIN, "branches" también se recorta a solo la suya —
+  // así el selector de sucursal del cliente ni siquiera ofrece las demás.
+  const branches = sucursalDeEmpleado
+    ? tenant.branches.filter((b) => b.id === sucursalDeEmpleado)
+    : tenant.branches;
+
+  const branchActual = sucursalDeEmpleado ??
+    (branches.find((b) => b.id === sucursal)?.id ??
     branches.find((b) => b.id === userBranchId)?.id ??
     branches[0]?.id ??
-    null;
+    null);
 
   if (!branchActual) {
     return (

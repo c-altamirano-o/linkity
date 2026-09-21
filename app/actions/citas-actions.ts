@@ -3,7 +3,7 @@
 import { getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { AppointmentStatus } from "@prisma/client";
-import { resolverActor } from "@/lib/actor";
+import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
 import { PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
 
 /**
@@ -50,6 +50,12 @@ export async function crearCitaAction(params: CrearCitaParams): Promise<CrearCit
   const resuelto = await resolverActor(tenantSlug, "citas");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
+
+  // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede agendar
+  // citas en SU sucursal.
+  if (!puedeOperarSucursal(resuelto, branchId)) {
+    return { ok: false, error: "No tienes acceso a esa sucursal" };
+  }
 
   const db = getTenantPrisma(tenant.id);
 
@@ -147,10 +153,15 @@ export async function editarCitaAction(params: EditarCitaParams): Promise<Accion
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const cita = await db.appointment.findUnique({ where: { id: citaId }, select: { id: true, status: true } });
+    const cita = await db.appointment.findUnique({ where: { id: citaId }, select: { id: true, status: true, branchId: true } });
     if (!cita) return { ok: false, error: "Cita no encontrada" };
     if (cita.status === AppointmentStatus.COMPLETED || cita.status === AppointmentStatus.CANCELLED || cita.status === AppointmentStatus.NO_SHOW) {
       return { ok: false, error: "No se puede modificar una cita ya cerrada" };
+    }
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede editar
+    // citas de SU sucursal, y tampoco puede reasignarlas a otra sucursal.
+    if (!puedeOperarSucursal(resuelto, cita.branchId) || !puedeOperarSucursal(resuelto, branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
     }
 
     const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true } });
@@ -210,8 +221,13 @@ export async function cambiarEstadoCitaAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const cita = await db.appointment.findUnique({ where: { id: citaId }, select: { id: true, status: true } });
+    const cita = await db.appointment.findUnique({ where: { id: citaId }, select: { id: true, status: true, branchId: true } });
     if (!cita) return { ok: false, error: "Cita no encontrada" };
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+    // cambiar el estatus de una cita de SU sucursal.
+    if (!puedeOperarSucursal(resuelto, cita.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
+    }
 
     const permitidos = TRANSICIONES_VALIDAS[cita.status] ?? [];
     if (!permitidos.includes(nuevoEstado)) {

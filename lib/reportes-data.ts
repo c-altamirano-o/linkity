@@ -103,35 +103,55 @@ const VACIO_CLINICOS: ReportesClinicosData = {
   citasPorDoctor: [],
 };
 
-export async function getReportesClinicosData(tenantId: string, expedienteActiva: boolean): Promise<ReportesClinicosData> {
+export async function getReportesClinicosData(tenantId: string, expedienteActiva: boolean, branchIdFiltro?: string): Promise<ReportesClinicosData> {
   if (!expedienteActiva) return VACIO_CLINICOS;
 
   const db = getTenantPrisma(tenantId);
   const mesActual = monthRange(0);
 
+  // branchIdFiltro (2026-09-21, a petición de Carlos): reportes/page.tsx lo
+  // manda cuando quien pide el reporte es un empleado de PIN, para que solo
+  // vea la producción/agenda de SU sucursal — un administrador no manda
+  // nada y sigue viendo el negocio completo, igual que siempre.
   const [ventasPorDoctorRaw, itemsPagadosRaw, itemsDecididosRaw, citasRaw] = await Promise.all([
     db.sale.groupBy({
       by: ["userId"],
-      where: { status: "COMPLETED", createdAt: { gte: mesActual.start, lt: mesActual.end } },
+      where: {
+        status: "COMPLETED",
+        createdAt: { gte: mesActual.start, lt: mesActual.end },
+        ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
+      },
       _sum: { total: true },
     }),
     // TreatmentPlanItem no tiene tenantId propio (ver el comentario largo en
     // schema.prisma y en tenantModels, lib/prisma.ts) — getTenantPrisma NO
     // lo inyecta automáticamente aquí, se filtra a mano vía
     // `treatmentPlan: { tenantId }`, mismo criterio que
-    // verificarItemDelTenant en tratamiento-actions.ts.
+    // verificarItemDelTenant en tratamiento-actions.ts. branchId SÍ vive en
+    // TreatmentPlan, así que el filtro de sucursal se cuelga del mismo join.
     db.treatmentPlanItem.findMany({
-      where: { status: "PAGADO", paidAt: { gte: mesActual.start, lt: mesActual.end }, treatmentPlan: { tenantId } },
+      where: {
+        status: "PAGADO",
+        paidAt: { gte: mesActual.start, lt: mesActual.end },
+        treatmentPlan: { tenantId, ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}) },
+      },
       select: { cost: true, treatmentPlan: { select: { userId: true } } },
     }),
     db.treatmentPlanItem.groupBy({
       by: ["status"],
-      where: { status: { in: ["ACEPTADO", "RECHAZADO", "PAGADO"] }, treatmentPlan: { tenantId } },
+      where: {
+        status: { in: ["ACEPTADO", "RECHAZADO", "PAGADO"] },
+        treatmentPlan: { tenantId, ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}) },
+      },
       _count: { _all: true },
     }),
     db.appointment.groupBy({
       by: ["userId", "status"],
-      where: { status: { in: ["COMPLETED", "NO_SHOW", "CANCELLED"] }, startsAt: { gte: mesActual.start, lt: mesActual.end } },
+      where: {
+        status: { in: ["COMPLETED", "NO_SHOW", "CANCELLED"] },
+        startsAt: { gte: mesActual.start, lt: mesActual.end },
+        ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
+      },
       _count: { _all: true },
     }),
   ]);
@@ -186,7 +206,9 @@ export async function getReportesClinicosData(tenantId: string, expedienteActiva
     if (g.status === "RECHAZADO") rechazados += g._count._all;
     else aceptados += g._count._all; // ACEPTADO o PAGADO
   }
-  const propuestosRaw = await db.treatmentPlanItem.count({ where: { status: "PROPUESTO", treatmentPlan: { tenantId } } });
+  const propuestosRaw = await db.treatmentPlanItem.count({
+    where: { status: "PROPUESTO", treatmentPlan: { tenantId, ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}) } },
+  });
   const decididos = aceptados + rechazados;
   const aceptacionPresupuestos: AceptacionPresupuestos = {
     aceptados,
@@ -224,7 +246,7 @@ export async function getReportesClinicosData(tenantId: string, expedienteActiva
   return { activo: true, produccionPorDoctor, aceptacionPresupuestos, citasPorDoctor };
 }
 
-export async function getReportesData(tenantId: string, reparacionesActiva: boolean): Promise<ReportesData> {
+export async function getReportesData(tenantId: string, reparacionesActiva: boolean, branchIdFiltro?: string): Promise<ReportesData> {
   // Product, Customer, Repair y Sale tienen tenantId propio → getTenantPrisma
   // lo inyecta solo en cada query de primer nivel de abajo.
   const db = getTenantPrisma(tenantId);
@@ -232,6 +254,17 @@ export async function getReportesData(tenantId: string, reparacionesActiva: bool
   const mesActual = monthRange(0);
   const mesAnterior = monthRange(1);
 
+  // branchIdFiltro (2026-09-21, a petición de Carlos: "que sirva desde un
+  // autoempleado hasta un corporativo con muchas sucursales") — antes este
+  // reporte siempre agregaba TODO el negocio sin importar quién lo pidiera,
+  // así que cualquier empleado con el módulo "Reportes" veía las ventas y
+  // reparaciones de sucursales ajenas a la suya. reportes/page.tsx lo manda
+  // cuando quien pide el reporte es un empleado de PIN; un administrador no
+  // manda nada y sigue viendo el negocio completo, igual que siempre.
+  // totalProductos/totalClientes se quedan tenant-wide a propósito: un
+  // producto del catálogo y un cliente no "pertenecen" a una sola sucursal
+  // en este modelo de datos (el stock sí, pero el conteo de catálogo/
+  // clientes no es información financiera sensible por sucursal).
   const [
     totalProductos,
     totalClientes,
@@ -247,20 +280,36 @@ export async function getReportesData(tenantId: string, reparacionesActiva: bool
     // Con el módulo inactivo (ej. barbería) estos 3 conteos/agrupación
     // deben quedar en cero/vacío — no solo por evitar carga a la BD, sino
     // porque reportes/page.tsx ya no renderiza las tarjetas que los usan.
-    reparacionesActiva ? db.repair.count() : Promise.resolve(0),
-    reparacionesActiva ? db.repair.count({ where: { status: { notIn: CLOSED_STATUSES } } }) : Promise.resolve(0),
-    reparacionesActiva ? db.repair.groupBy({ by: ["status"], _count: { _all: true } }) : Promise.resolve([]),
+    reparacionesActiva ? db.repair.count({ where: branchIdFiltro ? { branchId: branchIdFiltro } : undefined }) : Promise.resolve(0),
+    reparacionesActiva
+      ? db.repair.count({ where: { status: { notIn: CLOSED_STATUSES }, ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}) } })
+      : Promise.resolve(0),
+    reparacionesActiva
+      ? db.repair.groupBy({ by: ["status"], where: branchIdFiltro ? { branchId: branchIdFiltro } : undefined, _count: { _all: true } })
+      : Promise.resolve([]),
     db.sale.aggregate({
-      where: { status: "COMPLETED", createdAt: { gte: mesActual.start, lt: mesActual.end } },
+      where: {
+        status: "COMPLETED",
+        createdAt: { gte: mesActual.start, lt: mesActual.end },
+        ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
+      },
       _sum: { total: true },
     }),
     db.sale.aggregate({
-      where: { status: "COMPLETED", createdAt: { gte: mesAnterior.start, lt: mesAnterior.end } },
+      where: {
+        status: "COMPLETED",
+        createdAt: { gte: mesAnterior.start, lt: mesAnterior.end },
+        ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
+      },
       _sum: { total: true },
     }),
     db.sale.groupBy({
       by: ["paymentMethod"],
-      where: { status: "COMPLETED", createdAt: { gte: mesActual.start, lt: mesActual.end } },
+      where: {
+        status: "COMPLETED",
+        createdAt: { gte: mesActual.start, lt: mesActual.end },
+        ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
+      },
       _sum: { total: true },
     }),
   ]);

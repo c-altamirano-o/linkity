@@ -67,6 +67,7 @@ export async function iniciarSesionPersonalAction(params: {
     userId: staff.userId,
     staffName: staff.name,
     roleName: staff.role.name,
+    branchId: staff.branchId,
     loginSessionId: loginSession.id,
     loginAt: Date.now(),
   });

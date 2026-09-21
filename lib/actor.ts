@@ -45,8 +45,42 @@ import { modulosPermitidosParaRolPorNombre } from "@/lib/roles-server";
  */
 
 export type ActorResult =
-  | { ok: true; tenant: { id: string }; dbUser: { id: string; tenantId: string }; actor: "admin" | "staff"; roleName: string | null }
+  | {
+      ok: true;
+      tenant: { id: string };
+      dbUser: { id: string; tenantId: string };
+      actor: "admin" | "staff";
+      roleName: string | null;
+      // Sucursal a la que este actor está limitado — 2026-09-21, a
+      // petición de Carlos (ver el comentario largo en SesionPersonal,
+      // lib/staff-auth.ts). null = sin restricción (administrador con
+      // cuenta real: opera cualquier sucursal del negocio, igual que
+      // siempre); un string = un empleado de PIN, limitado exactamente a
+      // esa sucursal. Cada Server Action de un módulo con datos por
+      // sucursal (Caja, POS, Citas, Reparaciones, Inventario, Compras)
+      // debe validar el branchId que le mandan contra este campo con
+      // puedeOperarSucursal antes de escribir nada — resolverActor por sí
+      // solo NO lo hace, porque no todas las acciones reciben un branchId
+      // (ej. las que solo cambian un estatus).
+      branchId: string | null;
+    }
   | { ok: false; error: string };
+
+/**
+ * true si este actor puede leer/escribir datos de `branchId` — un admin
+ * (branchId null en su ActorResult) siempre puede, un empleado de PIN solo
+ * si es exactamente la sucursal que tiene asignada (ver el comentario largo
+ * junto a ActorResult.branchId arriba). Se usa en cada Server Action que
+ * recibe un branchId explícito del cliente (crear una venta, una cita, una
+ * reparación, una compra, abrir caja, ajustar stock) o que opera sobre un
+ * registro ya existente cuyo branchId se acaba de leer de la base de datos
+ * (ej. cerrar una sesión de caja, cambiar el estatus de una cita) — nunca
+ * hay que confiar en que el cliente mandó la sucursal "correcta" solo
+ * porque coincide con lo que ya tenía seleccionado en pantalla.
+ */
+export function puedeOperarSucursal(actor: { branchId: string | null }, branchId: string): boolean {
+  return actor.branchId === null || actor.branchId === branchId;
+}
 
 export async function resolverActor(tenantSlug: string, modulo: ModuloKey): Promise<ActorResult> {
   const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
@@ -68,17 +102,19 @@ export async function resolverActor(tenantSlug: string, modulo: ModuloKey): Prom
       dbUser: { id: sesion.userId, tenantId: tenant.id },
       actor: "staff",
       roleName: sesion.roleName,
+      branchId: sesion.branchId,
     };
   }
 
   // 2. Sin sesión de personal vigente para ESTE tenant — fallback a sesión
-  //    de administrador (Supabase Auth), sin restricción de módulo.
+  //    de administrador (Supabase Auth), sin restricción de módulo ni de
+  //    sucursal (branchId: null — ve/opera todas, igual que siempre).
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (user) {
     const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id }, select: { id: true, tenantId: true } });
     if (dbUser && dbUser.tenantId === tenant.id) {
-      return { ok: true, tenant, dbUser, actor: "admin", roleName: null };
+      return { ok: true, tenant, dbUser, actor: "admin", roleName: null, branchId: null };
     }
   }
 

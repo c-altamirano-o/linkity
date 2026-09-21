@@ -3,7 +3,7 @@
 import { getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { PurchaseStatus } from "@prisma/client";
-import { resolverActor, type ActorResult } from "@/lib/actor";
+import { resolverActor, puedeOperarSucursal, type ActorResult } from "@/lib/actor";
 
 /**
  * Server Actions del módulo Compras/Proveedores (M12). Mismo criterio que
@@ -69,6 +69,12 @@ export async function crearCompraAction(params: CrearCompraParams): Promise<Crea
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
+
+  // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+  // registrar compras para SU sucursal.
+  if (!puedeOperarSucursal(resuelto, branchId)) {
+    return { ok: false, error: "No tienes acceso a esa sucursal" };
+  }
 
   const db = getTenantPrisma(tenant.id);
 
@@ -175,6 +181,13 @@ export async function actualizarEstadoCompraAction(params: {
     if (!compra) return { ok: false, error: "Compra no encontrada" };
     if (compra.status !== PurchaseStatus.PENDING) {
       return { ok: false, error: "Esta compra ya no está pendiente" };
+    }
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+    // actualizar compras de SU sucursal — una compra sin sucursal asignada
+    // (dato viejo, ver el comentario del archivo) queda fuera del alcance
+    // de cualquier empleado de PIN, solo un administrador puede resolverla.
+    if (resuelto.branchId !== null && (!compra.branchId || compra.branchId !== resuelto.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
     }
 
     if (nuevoEstado === "RECEIVED") {

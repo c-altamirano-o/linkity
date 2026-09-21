@@ -3,7 +3,7 @@
 import { getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { RepairStatus, Priority, CashSessionStatus, MovementType } from "@prisma/client";
-import { resolverActor } from "@/lib/actor";
+import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
 import { PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
 
 /**
@@ -83,6 +83,12 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
   const resuelto = await resolverActor(tenantSlug, "reparaciones");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant, dbUser } = resuelto;
+
+  // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede recibir
+  // equipos en SU sucursal.
+  if (!puedeOperarSucursal(resuelto, branchId)) {
+    return { ok: false, error: "No tienes acceso a esa sucursal" };
+  }
 
   const db = getTenantPrisma(tenant.id);
 
@@ -212,10 +218,15 @@ export async function agregarPiezaReparacionAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true } });
+    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, branchId: true } });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
     if (repair.status === RepairStatus.DELIVERED || repair.status === RepairStatus.CANCELLED) {
       return { ok: false, error: "No se pueden modificar piezas de una reparación ya cerrada" };
+    }
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+    // modificar reparaciones de SU sucursal.
+    if (!puedeOperarSucursal(resuelto, repair.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
     }
 
     const producto = await db.product.findUnique({ where: { id: productId }, select: { id: true, price: true } });
@@ -256,13 +267,18 @@ export async function eliminarPiezaReparacionAction(params: {
     // repairId y que ese repair sea de este tenant antes de borrar nada.
     const item = await db.repairItem.findUnique({
       where: { id: itemId },
-      select: { id: true, repairId: true, repair: { select: { tenantId: true, status: true } } },
+      select: { id: true, repairId: true, repair: { select: { tenantId: true, status: true, branchId: true } } },
     });
     if (!item || item.repairId !== repairId || item.repair.tenantId !== tenant.id) {
       return { ok: false, error: "Pieza no encontrada" };
     }
     if (item.repair.status === RepairStatus.DELIVERED || item.repair.status === RepairStatus.CANCELLED) {
       return { ok: false, error: "No se pueden modificar piezas de una reparación ya cerrada" };
+    }
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+    // modificar reparaciones de SU sucursal.
+    if (!puedeOperarSucursal(resuelto, item.repair.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
     }
 
     await db.repairItem.delete({ where: { id: itemId } });
@@ -299,8 +315,13 @@ export async function actualizarCostoEstimadoAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true } });
+    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, branchId: true } });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+    // modificar reparaciones de SU sucursal.
+    if (!puedeOperarSucursal(resuelto, repair.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
+    }
 
     await db.$transaction(async (tx: any) => {
       await tx.repair.update({ where: { id: repairId }, data: { estimatedCost: costoEstimado } });
@@ -373,8 +394,13 @@ export async function avanzarEstadoAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true } });
+    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, branchId: true } });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+    // avanzar el estatus de reparaciones de SU sucursal.
+    if (!puedeOperarSucursal(resuelto, repair.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
+    }
 
     const permitidos = TRANSICIONES_VALIDAS[repair.status] ?? [];
     if (!permitidos.includes(nuevoEstado)) {
@@ -458,6 +484,11 @@ export async function cobrarYEntregarAction(params: {
     if (repair.status !== RepairStatus.SHOP_READY) {
       return { ok: false, error: "Esta reparación no está lista para cobro y entrega" };
     }
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+    // cobrar/entregar reparaciones de SU sucursal.
+    if (!puedeOperarSucursal(resuelto, repair.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
+    }
 
     let sinCajaAbierta = false;
 
@@ -527,8 +558,13 @@ export async function marcarWhatsappEnviadoAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true } });
+    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, branchId: true } });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+    // modificar reparaciones de SU sucursal.
+    if (!puedeOperarSucursal(resuelto, repair.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
+    }
 
     await db.repair.update({ where: { id: repairId }, data: { whatsappSent: true } });
 

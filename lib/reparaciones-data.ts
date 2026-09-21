@@ -96,12 +96,16 @@ function iniciales(nombre: string): string {
   return ini.toUpperCase() || "?";
 }
 
-export async function getReparacionesData(tenantId: string): Promise<ReparacionesData> {
+export async function getReparacionesData(tenantId: string, branchIdFiltro?: string): Promise<ReparacionesData> {
   // Repair y Customer tienen tenantId propio → getTenantPrisma lo inyecta solo.
   const db = getTenantPrisma(tenantId);
 
+  // branchIdFiltro (2026-09-21, a petición de Carlos): mismo criterio que
+  // getCitasData — un empleado de PIN solo ve las reparaciones de SU
+  // sucursal; clientes y catálogo de productos se quedan tenant-wide.
   const [repairsRaw, customersRaw, productsRaw] = await Promise.all([
     db.repair.findMany({
+      where: branchIdFiltro ? { branchId: branchIdFiltro } : undefined,
       include: {
         customer: { select: { id: true, name: true, phone: true } },
         user: { select: { name: true } },

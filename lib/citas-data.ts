@@ -69,7 +69,7 @@ function iniciales(nombre: string): string {
   return ini.toUpperCase() || "?";
 }
 
-export async function getCitasData(tenantId: string): Promise<CitasData> {
+export async function getCitasData(tenantId: string, branchIdFiltro?: string): Promise<CitasData> {
   // Appointment y Customer tienen tenantId propio → getTenantPrisma lo
   // inyecta solo. Staff también, pero se consulta con el prisma base
   // (import directo) porque aquí no se está filtrando información sensible
@@ -77,8 +77,16 @@ export async function getCitasData(tenantId: string): Promise<CitasData> {
   // reparaciones-data.ts usa para su selector de productos.
   const db = getTenantPrisma(tenantId);
 
+  // branchIdFiltro (2026-09-21, a petición de Carlos): cuando quien pide
+  // los datos es un empleado de PIN, citas/page.tsx manda aquí su propia
+  // sucursal para que solo vea SUS citas — un administrador (sin sesión de
+  // personal) no manda nada y sigue viendo todas, igual que siempre.
+  // Clientes y doctores se quedan tenant-wide a propósito: un cliente
+  // puede tener citas en más de una sucursal, y el selector de "quién
+  // atiende" ya se acota por sucursal en el propio formulario del cliente.
   const [appointmentsRaw, customersRaw, staffRaw] = await Promise.all([
     db.appointment.findMany({
+      where: branchIdFiltro ? { branchId: branchIdFiltro } : undefined,
       include: {
         customer: { select: { id: true, name: true, phone: true, phoneCountryCode: true } },
         user: { select: { id: true, name: true } },

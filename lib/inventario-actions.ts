@@ -2,7 +2,7 @@
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { resolverActor } from "@/lib/actor";
+import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
 
 /**
  * Server Action que persiste un ajuste de stock. Es intencionalmente
@@ -50,6 +50,12 @@ export async function ajustarStock(params: {
   const resuelto = await resolverActor(tenantSlug, "inventario");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
+
+  // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
+  // ajustar stock de SU sucursal.
+  if (!puedeOperarSucursal(resuelto, branchId)) {
+    return { ok: false, error: "No tienes acceso a esa sucursal" };
+  }
 
   const db = getTenantPrisma(tenant.id);
 

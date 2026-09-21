@@ -37,6 +37,19 @@ export interface SesionPersonal {
   userId: string; // el User "de atribución" oculto del empleado — ver Staff.userId en schema.prisma.
   staffName: string;
   roleName: string;
+  // Sucursal asignada al empleado (Staff.branchId) — 2026-09-21, a petición
+  // de Carlos ("debe servir desde un autoempleado hasta un corporativo con
+  // muchas sucursales"). Antes esta sesión no cargaba ningún dato de
+  // sucursal, así que un empleado con PIN podía ver/operar CUALQUIER
+  // sucursal del negocio con solo cambiar el selector o el parámetro de la
+  // URL — sin importar en cuál trabajaba de verdad. lib/actor.ts
+  // (resolverActor/puedeOperarSucursal) y cada page.tsx de un módulo con
+  // datos por sucursal (Caja, POS, Citas, Reparaciones, Inventario, Compras,
+  // Reportes) usan este campo para acotar lo que ve y puede escribir un
+  // empleado a la sucursal que de verdad tiene asignada — un administrador
+  // con cuenta real (Supabase Auth) nunca pasa por aquí, así que sigue
+  // viendo/operando todas las sucursales sin ningún cambio de comportamiento.
+  branchId: string;
   // Campos para el registro de asistencia por login (lib/asistencia.ts,
   // 2026-09-16): loginSessionId es la fila de StaffLoginSession que abrió
   // esta sesión (para poder cerrarla al hacer logout o al detectar cambio
