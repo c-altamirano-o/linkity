@@ -35,8 +35,26 @@ export const ROL_ADMINISTRADOR = "Administrador";
 // que usa TenantShell.tsx (item.href), con el código de Permission.module y
 // con el nombre que cada archivo de Server Actions le pasa a
 // resolverActor() en lib/actor.ts.
+//
+// "taller" (2026-09-21, a petición de Carlos, tras encontrar el hueco en el
+// demo de reparación de celulares) es la versión angosta de "reparaciones",
+// pensada para quien de verdad hace la reparación (técnico/mecánico/etc.):
+// puede diagnosticar, agregar piezas usadas y avanzar el estatus, pero NO
+// puede eliminar piezas, cambiar el costo, cobrar/entregar ni contactar al
+// cliente — eso se queda exclusivo de "reparaciones" (Encargado/Recepción),
+// justo para que un técnico no pueda quitar una pieza que sí reparó, cobrarle
+// completo al cliente por fuera y quedarse con la diferencia. Vive en su
+// propia ruta (/[tenant]/taller, ver ese page.tsx) en vez de ser un permiso
+// fino DENTRO de "reparaciones" porque el guard de ruta del layout
+// (app/(tenant)/[tenant]/layout.tsx) gatea acceso por el SEGMENTO de la URL,
+// no por acción — la separación real de "qué puede hacer" vive en cada
+// Server Action de reparaciones-actions.ts, que acepta "reparaciones" O
+// "taller" solo en las acciones puramente técnicas (agregar pieza, avanzar
+// estatus). No es un módulo que el negocio prenda/apague desde Configuración
+// (no aparece en lib/modules-catalog.ts a propósito) — es puramente un
+// permiso de rol, la contraparte angosta de "reparaciones".
 export const MODULOS = [
-  "dashboard", "pos", "reparaciones", "citas", "expediente-clinico", "clientes", "catalogo", "inventario",
+  "dashboard", "pos", "reparaciones", "taller", "citas", "expediente-clinico", "clientes", "catalogo", "inventario",
   "compras", "caja", "personal", "sucursales", "reportes", "facturacion",
   "soporte", "configuracion", "asistencia",
 ] as const;
@@ -61,8 +79,11 @@ export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
   Cajero: "Punto de Venta, Caja, Clientes y cobro/entrega de Reparaciones.",
   // "expediente-clinico" (2026-09-18) se agregó a Técnico —piensa "doctor/
   // dentista con PIN"— y NO a Cajero: son datos clínicos del paciente
-  // (NOM-004), no le corresponden a quien solo cobra.
-  Técnico: "Reparaciones, Citas, Clientes y Expediente Clínico.",
+  // (NOM-004), no le corresponden a quien solo cobra. 2026-09-21: "reparaciones"
+  // (control total: piezas, costo, cobro) cambió por "taller" (angosto: sin
+  // eliminar piezas, sin costo, sin cobro) — ver el comentario de "taller" en
+  // MODULOS de arriba.
+  Técnico: "Taller (su propia parte técnica de una reparación), Citas, Clientes y Expediente Clínico.",
 };
 
 // dashboard siempre incluido — es la pantalla de aterrizaje, no tiene
@@ -80,7 +101,7 @@ export const MATRIZ_ACCESO_BASE: Record<RolBase, ModuloKey[]> = {
     "compras", "caja", "sucursales", "reportes", "soporte",
   ],
   Cajero: ["dashboard", "pos", "caja", "clientes", "reparaciones", "citas"],
-  Técnico: ["dashboard", "reparaciones", "citas", "expediente-clinico", "clientes"],
+  Técnico: ["taller", "citas", "expediente-clinico", "clientes"],
 };
 
 export function esRolBase(valor: string): valor is RolBase {

@@ -28,6 +28,14 @@ const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloK
       { labelKey: "module.pos.name", href: "pos", icon: ShoppingCart },
       { labelKey: "module.appointments.name", href: "citas", icon: CalendarDays },
       { labelKey: "module.repair.name", href: "reparaciones", icon: Wrench },
+      // "taller" (2026-09-21) — la vista angosta de Reparaciones para el
+      // técnico (ver el comentario de "taller" en lib/roles.ts). Mismo
+      // labelKey que "reparaciones" a propósito: un rol nunca tiene los dos
+      // módulos a la vez en la práctica (el catálogo por rubro reparte uno u
+      // otro), así que desde la barra lateral se ve igual — "Reparaciones"
+      // (u "Órdenes de Servicio" para un taller automotriz) — apuntando a la
+      // página que le corresponde a cada quien.
+      { labelKey: "module.repair.name", href: "taller", icon: Wrench },
     ]
   },
   {

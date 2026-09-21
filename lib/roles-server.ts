@@ -11,6 +11,7 @@ import {
   type RolBase,
   type RolTenantUI,
 } from "@/lib/roles";
+import { rolesSugeridosRubro } from "@/lib/roles-rubro";
 
 /**
  * Motor server-only de roles personalizables (2026-09-17). Contraparte de
@@ -89,6 +90,56 @@ async function backfillPermisosBase(roleId: string, roleName: string): Promise<v
   await prisma.rolePermission.createMany({ data, skipDuplicates: true });
 }
 
+/**
+ * Crea (si no existen) los roles sugeridos del catálogo por rubro (lib/
+ * roles-rubro.ts) para este tenant, con su matriz de acceso ya cargada —
+ * 2026-09-21, a petición de Carlos ("puestos definidos, jerarquías y
+ * tareas específicas" por rubro, no el mismo molde para todos los
+ * negocios). Idempotente y no destructivo, mismo criterio que
+ * asegurarRolBase/backfillPermisosBase:
+ *   - Si el rol (por nombre exacto) ya existe para este tenant, NO se
+ *     toca — si el admin ya lo personalizó (le quitó/puso módulos, le
+ *     cambió la descripción), esa edición se respeta siempre.
+ *   - Los permisos solo se siembran la primera vez, cuando el rol se
+ *     acaba de crear y todavía tiene 0 filas en RolePermission — así
+ *     nunca se sobreescribe una personalización ya guardada.
+ * Se marcan isSystem:true (igual que Gerente/Cajero/Técnico) porque son
+ * el catálogo "de fábrica" de su rubro: el nombre no se puede editar
+ * (evita que un rol renombrado deje de coincidir con este catálogo), pero
+ * sus módulos sí, y a diferencia de los 3 roles base, si el negocio no
+ * los necesita puede vaciarles los módulos o simplemente no asignarle
+ * personal — no se pueden borrar por el mismo motivo que ningún rol base
+ * se puede borrar (ver eliminarRolAction en roles-tenant-actions.ts).
+ * Se llama desde listarRolesTenant (para que aparezcan la primera vez que
+ * el admin abre "Roles y permisos") y desde el alta de un negocio nuevo
+ * (app/(auth)/register/actions.ts), para que ya existan desde el día uno.
+ */
+export async function asegurarRolesRubro(tenantId: string, businessType: string | null | undefined): Promise<void> {
+  const sugeridos = rolesSugeridosRubro(businessType);
+  if (sugeridos.length === 0) return;
+
+  const mapaPermisos = await asegurarCatalogoPermisos();
+
+  for (const sugerido of sugeridos) {
+    const rol = await prisma.role.upsert({
+      where: { tenantId_name: { tenantId, name: sugerido.name } },
+      update: {},
+      create: { tenantId, name: sugerido.name, description: sugerido.description, isSystem: true },
+      select: { id: true, _count: { select: { permissions: true } } },
+    });
+
+    if (rol._count.permissions === 0) {
+      const data = sugerido.modulos
+        .map((m) => mapaPermisos.get(m))
+        .filter((id): id is string => Boolean(id))
+        .map((permissionId) => ({ roleId: rol.id, permissionId }));
+      if (data.length > 0) {
+        await prisma.rolePermission.createMany({ data, skipDuplicates: true });
+      }
+    }
+  }
+}
+
 /** Módulos permitidos para un Role por id — autorreparando roles base con 0 permisos (ver comentario del archivo). Siempre incluye "dashboard". */
 export async function modulosPermitidosParaRol(roleId: string): Promise<ModuloKey[]> {
   const role = await prisma.role.findUnique({
@@ -108,7 +159,14 @@ export async function modulosPermitidosParaRol(roleId: string): Promise<ModuloKe
   }
 
   const modulos = new Set(filas.map((p) => p.permission.module as ModuloKey));
-  modulos.add("dashboard");
+  // 2026-09-21, a petición de Carlos: única excepción a "todo rol siempre
+  // incluye Dashboard" — un rol de tipo "Taller" (el técnico reparador, ver
+  // el comentario de "taller" en lib/roles.ts) no debe ver cifras de venta
+  // generales del negocio que no le corresponden. Su sesión de PIN aterriza
+  // igual en /dashboard (EntradaClient.tsx no distingue rol al redirigir),
+  // pero el guard de ruta del layout la rebota de inmediato al primer módulo
+  // que sí tiene permitido — normalmente "taller" mismo.
+  if (!modulos.has("taller")) modulos.add("dashboard");
   return Array.from(modulos);
 }
 
@@ -122,10 +180,22 @@ export async function modulosPermitidosParaRolPorNombre(tenantId: string, roleNa
 
 /** Catálogo completo de roles asignables (base + personalizados) de un tenant, con sus módulos ya resueltos (con autorreparación incluida). "Administrador" se excluye a propósito — ver ROL_ADMINISTRADOR en lib/roles.ts: ese nivel de acceso nunca se ofrece a un empleado de PIN. */
 export async function listarRolesTenant(tenantId: string): Promise<RolTenantUI[]> {
-  // Asegura que los 3 roles base existan como fila desde el primer momento
-  // (aunque el tenant nunca haya asignado alguno), para que el admin los
-  // vea y pueda personalizarlos desde el día uno en "Roles y permisos".
-  await Promise.all(ROLES_BASE.map((nombre) => asegurarRolBase(tenantId, nombre)));
+  // 2026-09-21: si el rubro de este negocio tiene un catálogo propio (lib/
+  // roles-rubro.ts — la mayoría de los 19 rubros ya lo tienen), se asegura
+  // ESE catálogo en vez de los 3 roles genéricos: jerarquía y permisos
+  // reales para su giro, no el molde de un taller de celulares aplicado a
+  // una barbería o un consultorio dental (ver el comentario largo junto a
+  // asegurarRolesRubro). Solo cuando el rubro no tiene catálogo propio
+  // (businessType nulo o un rubro no contemplado) se cae al comportamiento
+  // anterior — los 3 roles base como punto de partida genérico.
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { businessType: true } });
+  const tieneCatalogoRubro = rolesSugeridosRubro(tenant?.businessType).length > 0;
+
+  if (tieneCatalogoRubro) {
+    await asegurarRolesRubro(tenantId, tenant?.businessType);
+  } else {
+    await Promise.all(ROLES_BASE.map((nombre) => asegurarRolBase(tenantId, nombre)));
+  }
 
   const roles = await prisma.role.findMany({
     where: { tenantId, name: { not: ROL_ADMINISTRADOR } },
@@ -149,7 +219,9 @@ export async function listarRolesTenant(tenantId: string): Promise<RolTenantUI[]
 export async function guardarPermisosDeRol(roleId: string, modulos: ModuloKey[]): Promise<void> {
   const mapaPermisos = await asegurarCatalogoPermisos();
   const conDashboard = new Set<ModuloKey>(modulos);
-  conDashboard.add("dashboard");
+  // 2026-09-21: misma excepción que modulosPermitidosParaRol (ver ese
+  // comentario) — un rol "Taller" no recibe Dashboard forzado.
+  if (!conDashboard.has("taller")) conDashboard.add("dashboard");
 
   await prisma.$transaction([
     prisma.rolePermission.deleteMany({ where: { roleId } }),

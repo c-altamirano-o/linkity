@@ -82,7 +82,15 @@ export function puedeOperarSucursal(actor: { branchId: string | null }, branchId
   return actor.branchId === null || actor.branchId === branchId;
 }
 
-export async function resolverActor(tenantSlug: string, modulo: ModuloKey): Promise<ActorResult> {
+// 2026-09-21, a petición de Carlos: algunas acciones (agregar pieza/avanzar
+// estatus de una reparación) deben poder correr tanto con "reparaciones"
+// (Encargado/Recepción, control total) como con "taller" (el técnico, acceso
+// angosto — ver el comentario de "taller" en lib/roles.ts). En vez de
+// duplicar cada Server Action con dos llamadas a resolverActor, este acepta
+// un ModuloKey solo o una lista — basta con que el rol tenga UNO de ellos.
+export async function resolverActor(tenantSlug: string, modulo: ModuloKey | ModuloKey[]): Promise<ActorResult> {
+  const modulosAceptados = Array.isArray(modulo) ? modulo : [modulo];
+
   const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
   if (!tenant) return { ok: false, error: "Negocio no encontrado" };
 
@@ -93,7 +101,7 @@ export async function resolverActor(tenantSlug: string, modulo: ModuloKey): Prom
   const sesion = await verificarSesionPersonalVigente();
   if (sesion && sesion.tenantId === tenant.id) {
     const modulosPermitidos = await modulosPermitidosParaRolPorNombre(tenant.id, sesion.roleName);
-    if (!modulosPermitidos.includes(modulo)) {
+    if (!modulosAceptados.some((m) => modulosPermitidos.includes(m))) {
       return { ok: false, error: "Tu rol no tiene acceso a este módulo" };
     }
     return {

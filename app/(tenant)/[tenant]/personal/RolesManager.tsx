@@ -116,7 +116,15 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     });
   };
 
-  const nombreModulo = (m: ModuloKey) => MODULE_CATALOG[m]?.name ?? m;
+  // "taller" (2026-09-21) a propósito NO vive en MODULE_CATALOG — ese
+  // catálogo es para módulos que el NEGOCIO prende/apaga desde Configuración
+  // (ver lib/modules-catalog.ts), y "taller" no es una capacidad de negocio
+  // aparte: es la versión angosta de "Reparaciones" para el técnico, un
+  // permiso de rol nada más (ver el comentario de "taller" en lib/roles.ts).
+  // Necesita su propio nombre aquí para que en este selector de casillas se
+  // distinga claramente de "Reparaciones" (control total).
+  const nombreModulo = (m: ModuloKey) =>
+    m === "taller" ? "Taller (solo trabajo técnico, sin costos ni cobro)" : MODULE_CATALOG[m]?.name ?? m;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40" onClick={onCerrar}>

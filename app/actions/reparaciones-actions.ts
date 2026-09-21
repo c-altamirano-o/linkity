@@ -78,8 +78,9 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
     .map((p) => ({ productId: p.productId, quantity: Math.floor(p.quantity) }));
 
   // resolverActor (lib/actor.ts) acepta tanto una cuenta real (Supabase
-  // Auth) como una sesión de PIN de personal (M11) — Técnico, Cajero y
-  // Gerente tienen "reparaciones" en su matriz de acceso (lib/roles.ts).
+  // Auth) como una sesión de PIN de personal (M11). A propósito SOLO
+  // "reparaciones" (nunca "taller", 2026-09-21 a petición de Carlos): recibir
+  // un equipo es tarea de Encargado/Recepción, no del técnico.
   const resuelto = await resolverActor(tenantSlug, "reparaciones");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant, dbUser } = resuelto;
@@ -211,7 +212,11 @@ export async function agregarPiezaReparacionAction(params: {
   const cantidad = Math.floor(quantity);
   if (!Number.isFinite(cantidad) || cantidad <= 0) return { ok: false, error: "Cantidad no válida" };
 
-  const resuelto = await resolverActor(tenantSlug, "reparaciones");
+  // 2026-09-21, a petición de Carlos: agregar una pieza usada es trabajo
+  // técnico legítimo — el técnico (módulo "taller") SÍ puede hacerlo, a
+  // diferencia de eliminarla o cambiar el costo (ver esas dos acciones, que
+  // se quedan exclusivas de "reparaciones").
+  const resuelto = await resolverActor(tenantSlug, ["reparaciones", "taller"]);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
 
@@ -254,6 +259,10 @@ export async function eliminarPiezaReparacionAction(params: {
 }): Promise<AccionPiezaResult> {
   const { tenantSlug, repairId, itemId } = params;
 
+  // 2026-09-21, a petición de Carlos: a propósito SOLO "reparaciones" (nunca
+  // "taller") — permitir que el técnico elimine una pieza abriría la puerta
+  // a quitar del sistema una pieza que sí se reparó, cobrarle al cliente el
+  // precio completo por fuera y quedarse con la diferencia.
   const resuelto = await resolverActor(tenantSlug, "reparaciones");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
@@ -307,6 +316,10 @@ export async function actualizarCostoEstimadoAction(params: {
 }): Promise<AccionPiezaResult> {
   const { tenantSlug, repairId, costoEstimado } = params;
   if (!Number.isFinite(costoEstimado) || costoEstimado < 0) return { ok: false, error: "Costo no válido" };
+
+  // 2026-09-21, a petición de Carlos: a propósito SOLO "reparaciones" (nunca
+  // "taller") — mismo criterio que eliminarPiezaReparacionAction, el técnico
+  // no debe poder tocar cuánto se le va a cobrar al cliente.
 
   const resuelto = await resolverActor(tenantSlug, "reparaciones");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
@@ -387,7 +400,13 @@ export async function avanzarEstadoAction(params: {
   // adivinara tenantSlug+repairId podía avanzar el estatus de una
   // reparación. Se cierra aquí de paso, con el mismo resolverActor que ya
   // usa el resto del archivo.
-  const resuelto = await resolverActor(tenantSlug, "reparaciones");
+  //
+  // 2026-09-21, a petición de Carlos: avanzar el estatus (recibido → en
+  // reparación → listo/devolución en taller → listo/devolución en tienda) es
+  // trabajo técnico, no cobro — el técnico (módulo "taller") también puede
+  // hacerlo. Cobrar y entregar (SHOP_READY -> DELIVERED) NO pasa por aquí,
+  // vive en cobrarYEntregarAction, que se queda exclusiva de "reparaciones".
+  const resuelto = await resolverActor(tenantSlug, ["reparaciones", "taller"]);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
 
@@ -469,6 +488,9 @@ export async function cobrarYEntregarAction(params: {
     return { ok: false, error: "El monto a cobrar no es válido" };
   }
 
+  // 2026-09-21, a petición de Carlos: a propósito SOLO "reparaciones" (nunca
+  // "taller") — cobrar dinero es justo lo que el técnico no debe poder
+  // hacer; eso queda para Encargado/Recepción.
   const resuelto = await resolverActor(tenantSlug, "reparaciones");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
@@ -550,7 +572,9 @@ export async function marcarWhatsappEnviadoAction(params: {
   const { tenantSlug, repairId } = params;
 
   // Mismo hallazgo que en avanzarEstadoAction — sin validación de sesión
-  // antes de este cambio.
+  // antes de este cambio. A propósito SOLO "reparaciones" (nunca "taller"):
+  // Carlos fue explícito en que ni siquiera es el técnico quien contacta al
+  // cliente, es el Encargado o la Recepcionista.
   const resuelto = await resolverActor(tenantSlug, "reparaciones");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
