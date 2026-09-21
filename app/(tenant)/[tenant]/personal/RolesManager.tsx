@@ -160,12 +160,12 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-foreground">
-                      {rol.name} {rol.isSystem && <span className="text-[9px] text-muted-foreground font-normal">(base)</span>}
+                      {rol.name} {rol.isSystem && <span className="text-[10.5px] text-muted-foreground font-normal">(base)</span>}
                     </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                    <p className="text-[11.5px] text-muted-foreground mt-0.5">
                       {rol.modulosPermitidos.map(nombreModulo).join(", ")}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">{rol.cantidadEmpleados} empleado(s) con este rol</p>
+                    <p className="text-[11.5px] text-muted-foreground">{rol.cantidadEmpleados} empleado(s) con este rol</p>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
                     <button onClick={() => abrirEditar(rol)} className="p-1.5 border border-border hover:bg-muted rounded-lg text-foreground">
@@ -189,10 +189,10 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
               {sugerenciasRoles.filter((s) => !roles.some((r) => r.name === s)).length > 0 && (
                 <div className="flex flex-wrap gap-1">
-                  <span className="text-[10px] text-muted-foreground mr-1">Sugeridos para tu rubro:</span>
+                  <span className="text-[11.5px] text-muted-foreground mr-1">Sugeridos para tu rubro:</span>
                   {sugerenciasRoles.filter((s) => !roles.some((r) => r.name === s)).map((s) => (
                     <button key={s} type="button" onClick={() => setNombreNuevo(s)}
-                      className="px-2 py-0.5 rounded-full bg-muted hover:bg-primary/10 hover:text-primary text-[10px] text-foreground">
+                      className="px-2 py-0.5 rounded-full bg-muted hover:bg-primary/10 hover:text-primary text-[11.5px] text-foreground">
                       {s}
                     </button>
                   ))}

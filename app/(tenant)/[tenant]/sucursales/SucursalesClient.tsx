@@ -119,13 +119,13 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[15px] font-semibold text-foreground">Sucursales</h1>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <p className="text-[12.5px] text-muted-foreground mt-0.5">
             {sucursales.length} {sucursales.length === 1 ? "sucursal registrada" : "sucursales registradas"}
           </p>
         </div>
         <button
           onClick={abrirNueva}
-          className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] font-medium px-3 py-2 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-[12.5px] font-medium px-3 py-2 rounded-lg transition-colors"
         >
           <Plus className="w-3.5 h-3.5" /> Nueva sucursal
         </button>
@@ -135,8 +135,8 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
       {sucursales.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-8 flex flex-col items-center justify-center text-center gap-2">
           <Building2 className="w-8 h-8 text-muted-foreground" />
-          <p className="text-[12px] font-medium text-foreground">Todavía no tienes sucursales registradas</p>
-          <p className="text-[11px] text-muted-foreground max-w-sm">
+          <p className="text-[13.5px] font-medium text-foreground">Todavía no tienes sucursales registradas</p>
+          <p className="text-[12.5px] text-muted-foreground max-w-sm">
             Agrega tu primera sucursal para empezar a llevar el control de ventas, caja e inventario por ubicación.
           </p>
         </div>
@@ -157,18 +157,18 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-[12px] font-semibold text-foreground">{suc.name}</p>
+                      <p className="text-[13.5px] font-semibold text-foreground">{suc.name}</p>
                       {suc.esPrincipal && (
-                        <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                        <span className="text-[10.5px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
                           Principal
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{suc.address || "Sin dirección registrada"}</p>
+                    <p className="text-[11.5px] text-muted-foreground mt-0.5">{suc.address || "Sin dirección registrada"}</p>
                   </div>
                 </div>
                 <span
-                  className={`text-[9px] font-medium px-2 py-0.5 rounded-full ${
+                  className={`text-[10.5px] font-medium px-2 py-0.5 rounded-full ${
                     suc.isActive ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground"
                   }`}
                 >
@@ -190,8 +190,8 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                   { icon: Package, label: "Stock total", value: String(suc.stockTotal), color: "text-amber-600" },
                 ].map((m) => (
                   <div key={m.label} className="bg-muted rounded-lg p-2">
-                    <p className="text-[9px] text-muted-foreground mb-1">{m.label}</p>
-                    <p className={`text-[13px] font-semibold ${m.color}`}>{m.value}</p>
+                    <p className="text-[10.5px] text-muted-foreground mb-1">{m.label}</p>
+                    <p className={`text-[14.5px] font-semibold ${m.color}`}>{m.value}</p>
                   </div>
                 ))}
               </div>
@@ -200,7 +200,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
               <div className="flex items-center justify-between px-4 py-2.5 border-t border-border">
                 <div className="flex items-center gap-1">
                   {suc.personalIniciales.length === 0 ? (
-                    <span className="text-[10px] text-muted-foreground">Sin personal activo</span>
+                    <span className="text-[11.5px] text-muted-foreground">Sin personal activo</span>
                   ) : (
                     <>
                       {suc.personalIniciales.map((ini, i) => {
@@ -208,14 +208,14 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                         return (
                           <div
                             key={i}
-                            className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold border-2 border-card ${c.bg} ${c.color}`}
+                            className={`w-5 h-5 rounded-full flex items-center justify-center text-[9.5px] font-semibold border-2 border-card ${c.bg} ${c.color}`}
                             style={{ marginLeft: i > 0 ? "-4px" : "0" }}
                           >
                             {ini}
                           </div>
                         );
                       })}
-                      <span className="text-[10px] text-muted-foreground ml-2">
+                      <span className="text-[11.5px] text-muted-foreground ml-2">
                         {suc.personalActivo} {suc.personalActivo === 1 ? "empleado" : "empleados"}
                       </span>
                     </>
@@ -223,7 +223,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                 </div>
                 <button
                   onClick={() => abrirEditar(suc)}
-                  className="flex items-center gap-1 text-[10px] text-primary font-medium hover:underline"
+                  className="flex items-center gap-1 text-[11.5px] text-primary font-medium hover:underline"
                 >
                   <Pencil className="w-3 h-3" /> Editar
                 </button>
@@ -238,15 +238,15 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
         <div className="bg-card border border-border rounded-xl p-4">
           <div className="flex items-center gap-2 mb-4">
             <ArrowRight className="w-4 h-4 text-primary" />
-            <h2 className="text-[12px] font-semibold text-foreground">Transferir inventario entre sucursales</h2>
+            <h2 className="text-[13.5px] font-semibold text-foreground">Transferir inventario entre sucursales</h2>
           </div>
           <div className="flex items-end gap-3 flex-wrap">
             <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
-              <label className="text-[10px] font-medium text-muted-foreground">ORIGEN</label>
+              <label className="text-[11.5px] font-medium text-muted-foreground">ORIGEN</label>
               <select
                 value={origenId}
                 onChange={(e) => setOrigenId(e.target.value)}
-                className="px-3 py-2 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:border-primary"
+                className="px-3 py-2 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary"
               >
                 <option value="">Selecciona…</option>
                 {sucursales.map((s) => (
@@ -256,11 +256,11 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
             </div>
             <ArrowRight className="w-4 h-4 text-muted-foreground mb-2.5 flex-shrink-0" />
             <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
-              <label className="text-[10px] font-medium text-muted-foreground">DESTINO</label>
+              <label className="text-[11.5px] font-medium text-muted-foreground">DESTINO</label>
               <select
                 value={destinoId}
                 onChange={(e) => setDestinoId(e.target.value)}
-                className="px-3 py-2 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:border-primary"
+                className="px-3 py-2 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary"
               >
                 <option value="">Selecciona…</option>
                 {sucursales.filter((s) => s.id !== origenId).map((s) => (
@@ -269,11 +269,11 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
               </select>
             </div>
             <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
-              <label className="text-[10px] font-medium text-muted-foreground">PRODUCTO</label>
+              <label className="text-[11.5px] font-medium text-muted-foreground">PRODUCTO</label>
               <select
                 value={productoId}
                 onChange={(e) => setProductoId(e.target.value)}
-                className="px-3 py-2 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:border-primary"
+                className="px-3 py-2 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary"
               >
                 <option value="">Selecciona…</option>
                 {productos.map((p) => (
@@ -282,28 +282,28 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-medium text-muted-foreground">CANT.</label>
+              <label className="text-[11.5px] font-medium text-muted-foreground">CANT.</label>
               <input
                 type="number"
                 min={1}
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
-                className="w-16 px-3 py-2 border border-border rounded-lg text-[11px] text-center bg-muted focus:outline-none focus:border-primary"
+                className="w-16 px-3 py-2 border border-border rounded-lg text-[12.5px] text-center bg-muted focus:outline-none focus:border-primary"
               />
             </div>
             <button
               onClick={transferir}
               disabled={!puedeTransferir || isPending}
-              className={`px-4 py-2 rounded-lg text-[11px] font-medium transition-colors mb-0.5 disabled:opacity-50 ${
+              className={`px-4 py-2 rounded-lg text-[12.5px] font-medium transition-colors mb-0.5 disabled:opacity-50 ${
                 okTransfer ? "bg-emerald-500 text-white" : "bg-primary hover:bg-primary/90 text-primary-foreground"
               }`}
             >
               {okTransfer ? "✓ Transferido" : isPending ? "Transfiriendo…" : "Transferir"}
             </button>
           </div>
-          {errorTransfer && <p className="text-[11px] text-red-600 mt-2">{errorTransfer}</p>}
+          {errorTransfer && <p className="text-[12.5px] text-red-600 mt-2">{errorTransfer}</p>}
           {productos.length === 0 && (
-            <p className="text-[11px] text-muted-foreground mt-2">
+            <p className="text-[12.5px] text-muted-foreground mt-2">
               No hay productos transferibles en el catálogo (excluyendo servicios).
             </p>
           )}
@@ -314,14 +314,14 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
       {sucursales.length > 0 && (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
-            <h2 className="text-[12px] font-semibold text-foreground">Comparativo de rendimiento — Hoy</h2>
+            <h2 className="text-[13.5px] font-semibold text-foreground">Comparativo de rendimiento — Hoy</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="bg-muted border-b border-border">
                   {["Sucursal", "Ventas hoy", "Rendimiento", "Reparaciones activas", "Personal activo"].map((h) => (
-                    <th key={h} className="text-left text-[10px] font-medium text-muted-foreground px-4 py-2.5 whitespace-nowrap">
+                    <th key={h} className="text-left text-[11.5px] font-medium text-muted-foreground px-4 py-2.5 whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -334,33 +334,33 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                     <tr key={suc.id} className="border-b border-border/60 last:border-0 hover:bg-muted/60 transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-medium text-foreground">{suc.name}</span>
+                          <span className="text-[12.5px] font-medium text-foreground">{suc.name}</span>
                           {suc.esPrincipal && (
-                            <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Principal</span>
+                            <span className="text-[10.5px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Principal</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-[11px] font-medium text-foreground whitespace-nowrap">{formatMXN(suc.ventasHoy)}</td>
+                      <td className="px-4 py-3 text-[12.5px] font-medium text-foreground whitespace-nowrap">{formatMXN(suc.ventasHoy)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
                             <div className={`h-full rounded-full ${BARRA_COLORES[i % BARRA_COLORES.length]}`} style={{ width: `${pct}%` }} />
                           </div>
-                          <span className="text-[10px] text-muted-foreground">{pct}%</span>
+                          <span className="text-[11.5px] text-muted-foreground">{pct}%</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-[11px] text-foreground/80">{suc.reparacionesActivas}</td>
+                      <td className="px-4 py-3 text-[12.5px] text-foreground/80">{suc.reparacionesActivas}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {suc.personalIniciales.map((ini, pi) => {
                             const c = colorPara(ini + suc.id);
                             return (
-                              <div key={pi} className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold ${c.bg} ${c.color}`}>
+                              <div key={pi} className={`w-5 h-5 rounded-full flex items-center justify-center text-[9.5px] font-semibold ${c.bg} ${c.color}`}>
                                 {ini}
                               </div>
                             );
                           })}
-                          <span className="text-[10px] text-muted-foreground ml-1">{suc.personalActivo}</span>
+                          <span className="text-[11.5px] text-muted-foreground ml-1">{suc.personalActivo}</span>
                         </div>
                       </td>
                     </tr>
@@ -383,7 +383,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <h3 className="text-[13px] font-semibold text-foreground">
+              <h3 className="text-[14.5px] font-semibold text-foreground">
                 {editando ? "Editar sucursal" : "Nueva sucursal"}
               </h3>
               <button onClick={() => setModalAbierto(false)} className="text-muted-foreground hover:text-foreground">
@@ -392,7 +392,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
             </div>
             <div className="p-4 flex flex-col gap-3">
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground">Nombre *</label>
+                <label className="text-[12.5px] font-medium text-muted-foreground">Nombre *</label>
                 <input
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -401,7 +401,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground">Dirección</label>
+                <label className="text-[12.5px] font-medium text-muted-foreground">Dirección</label>
                 <input
                   value={form.address ?? ""}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
@@ -409,7 +409,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground">Teléfono</label>
+                <label className="text-[12.5px] font-medium text-muted-foreground">Teléfono</label>
                 <input
                   value={form.phone ?? ""}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -417,7 +417,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                 />
               </div>
               {editando && (
-                <label className="flex items-center gap-2 text-[11px] text-foreground/80">
+                <label className="flex items-center gap-2 text-[12.5px] text-foreground/80">
                   <input
                     type="checkbox"
                     checked={form.isActive}
@@ -426,19 +426,19 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                   Sucursal activa
                 </label>
               )}
-              {errorModal && <p className="text-[11px] text-red-600">{errorModal}</p>}
+              {errorModal && <p className="text-[12.5px] text-red-600">{errorModal}</p>}
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
                 onClick={() => setModalAbierto(false)}
-                className="px-3 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground"
+                className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground"
               >
                 Cancelar
               </button>
               <button
                 onClick={guardarSucursal}
                 disabled={isPending || !form.name.trim()}
-                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12px] font-medium transition-colors"
+                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[13.5px] font-medium transition-colors"
               >
                 {isPending ? "Guardando…" : editando ? "Guardar cambios" : "Crear sucursal"}
               </button>

@@ -37,6 +37,14 @@ export interface CrearReparacionParams {
   modelo: string;
   falla: string;
   costoEstimado?: number | null;
+  // Fecha estimada de entrega — se captura al recibir el equipo (a petición
+  // de Carlos, 2026-09-21: "falta la fecha estimada de reparación, eso se
+  // debe capturar al momento de ingresar el equipo, y debe aparecer en el
+  // ticket"). El campo Repair.estimatedAt ya existía en el schema pero
+  // ninguna acción lo escribía todavía. Llega como fecha simple "YYYY-MM-DD"
+  // (input type="date" del formulario) — se guarda a medianoche, no importa
+  // la hora exacta para esta fecha estimada.
+  fechaEstimada?: string | null;
   prioridad: "LOW" | "NORMAL" | "HIGH" | "URGENT";
   // Piezas/refacciones que ya se saben necesarias desde la recepción (ej.
   // "se ve que necesita pantalla nueva"). Solo se manda productId+quantity
@@ -51,12 +59,19 @@ export type CrearReparacionResult =
   | { ok: false; error: string };
 
 export async function crearReparacionAction(params: CrearReparacionParams): Promise<CrearReparacionResult> {
-  const { tenantSlug, branchId, clienteId, clienteNuevo, marca, modelo, falla, costoEstimado, prioridad, piezas } = params;
+  const { tenantSlug, branchId, clienteId, clienteNuevo, marca, modelo, falla, costoEstimado, fechaEstimada, prioridad, piezas } = params;
 
   if (!branchId) return { ok: false, error: "Selecciona una sucursal" };
   if (!marca.trim() || !modelo.trim()) return { ok: false, error: "Marca y modelo son obligatorios" };
   if (!falla.trim()) return { ok: false, error: "Describe la falla reportada" };
   if (!clienteId && !clienteNuevo?.name.trim()) return { ok: false, error: "Selecciona o registra un cliente" };
+
+  let fechaEstimadaDate: Date | null = null;
+  if (fechaEstimada) {
+    const parsed = new Date(`${fechaEstimada}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return { ok: false, error: "Fecha estimada inválida" };
+    fechaEstimadaDate = parsed;
+  }
 
   const piezasLimpias = (piezas ?? [])
     .filter((p) => p.productId && Number.isFinite(p.quantity) && p.quantity > 0)
@@ -132,6 +147,7 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
           status: RepairStatus.RECEIVED,
           priority: PRIORIDAD_A_ENUM[prioridad] ?? Priority.NORMAL,
           estimatedCost: costoEstimado ?? null,
+          estimatedAt: fechaEstimadaDate,
         },
       });
       await tx.repairHistory.create({

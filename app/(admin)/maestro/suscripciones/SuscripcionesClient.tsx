@@ -96,7 +96,7 @@ export default function SuscripcionesClient({ data }: { data: SuscripcionesData 
               filtro === c.key ? "border-[#4F46E5]" : "border-slate-200"
             } ${c.noFilter ? "cursor-default" : "hover:border-slate-300"}`}
           >
-            <p className="text-[11px] text-slate-500 mb-1">{c.label}</p>
+            <p className="text-[12.5px] text-slate-500 mb-1">{c.label}</p>
             <p className={`text-2xl font-medium ${c.alert ? "text-red-600" : "text-slate-800"}`}>{c.value}</p>
           </button>
         ))}
@@ -106,31 +106,31 @@ export default function SuscripcionesClient({ data }: { data: SuscripcionesData 
         <button
           type="button"
           onClick={() => setFiltro("todos")}
-          className="text-[11px] text-[#4F46E5] hover:underline mb-2"
+          className="text-[12.5px] text-[#4F46E5] hover:underline mb-2"
         >
           Ver todos los negocios
         </button>
       )}
 
-      {error && <p className="text-[11px] text-red-600 mb-2">{error}</p>}
+      {error && <p className="text-[12.5px] text-red-600 mb-2">{error}</p>}
 
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Negocio</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Plan</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Precio</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Vence</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Estado</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Auto-renovación</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Acción</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Negocio</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Plan</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Precio</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Vence</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Estado</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Auto-renovación</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Acción</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-[12px] text-slate-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-[13.5px] text-slate-400">
                   No hay negocios en este filtro.
                 </td>
               </tr>
@@ -143,37 +143,37 @@ export default function SuscripcionesClient({ data }: { data: SuscripcionesData 
                 return (
                   <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-2.5">
-                      <p className="text-[12px] font-medium text-slate-800">{r.name}</p>
-                      <p className="text-[11px] text-slate-400">{[r.city, r.state].filter(Boolean).join(", ") || "Sin ubicación"}</p>
+                      <p className="text-[13.5px] font-medium text-slate-800">{r.name}</p>
+                      <p className="text-[12.5px] text-slate-400">{[r.city, r.state].filter(Boolean).join(", ") || "Sin ubicación"}</p>
                     </td>
-                    <td className="px-4 py-2.5 text-[12px] text-slate-600">
+                    <td className="px-4 py-2.5 text-[13.5px] text-slate-600">
                       {r.plan ?? "Sin plan"}
                       {r.billingCycle && <span className="text-slate-400"> · {CICLO_LABEL[r.billingCycle]}</span>}
                     </td>
-                    <td className="px-4 py-2.5 text-[12px] text-slate-600">
+                    <td className="px-4 py-2.5 text-[13.5px] text-slate-600">
                       {r.price !== null ? `${formatMXN(r.price)} / ${CICLO_LABEL[r.billingCycle ?? "MENSUAL"]}` : "—"}
                     </td>
                     <td className="px-4 py-2.5">
-                      <p className="text-[12px] text-slate-600">{formatFecha(r.endDate)}</p>
+                      <p className="text-[13.5px] text-slate-600">{formatFecha(r.endDate)}</p>
                       {urgCfg && (
-                        <span className={`inline-block mt-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${urgCfg.classes}`}>
+                        <span className={`inline-block mt-0.5 text-[11.5px] font-medium px-1.5 py-0.5 rounded-full ${urgCfg.classes}`}>
                           {urgCfg.label}
                         </span>
                       )}
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${estadoCfg?.classes ?? "bg-slate-100 text-slate-400"}`}>
+                      <span className={`text-[12.5px] font-medium px-2 py-0.5 rounded-full ${estadoCfg?.classes ?? "bg-slate-100 text-slate-400"}`}>
                         {estadoCfg?.label ?? "Sin suscripción"}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-[12px] text-slate-600">{r.autoRenew ? "Sí" : "No"}</td>
+                    <td className="px-4 py-2.5 text-[13.5px] text-slate-600">{r.autoRenew ? "Sí" : "No"}</td>
                     <td className="px-4 py-2.5">
                       {puedeSuspender ? (
                         <button
                           type="button"
                           disabled={isPending && gestionando === r.id}
                           onClick={() => alternar(r.id, "SUSPENDED")}
-                          className="text-[11px] text-red-600 border border-red-200 hover:border-red-300 disabled:opacity-50 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                          className="text-[12.5px] text-red-600 border border-red-200 hover:border-red-300 disabled:opacity-50 px-2 py-1 rounded transition-colors flex items-center gap-1"
                         >
                           <Settings className="w-3 h-3" />
                           {isPending && gestionando === r.id ? "Suspendiendo…" : "Suspender"}
@@ -183,13 +183,13 @@ export default function SuscripcionesClient({ data }: { data: SuscripcionesData 
                           type="button"
                           disabled={isPending && gestionando === r.id}
                           onClick={() => alternar(r.id, "ACTIVE")}
-                          className="text-[11px] text-emerald-600 border border-emerald-200 hover:border-emerald-300 disabled:opacity-50 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                          className="text-[12.5px] text-emerald-600 border border-emerald-200 hover:border-emerald-300 disabled:opacity-50 px-2 py-1 rounded transition-colors flex items-center gap-1"
                         >
                           <Settings className="w-3 h-3" />
                           {isPending && gestionando === r.id ? "Reactivando…" : "Reactivar"}
                         </button>
                       ) : (
-                        <span className="text-[11px] text-slate-300">Sin acciones</span>
+                        <span className="text-[12.5px] text-slate-300">Sin acciones</span>
                       )}
                     </td>
                   </tr>

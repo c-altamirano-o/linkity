@@ -223,10 +223,10 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
       {/* Lista */}
       <div className="w-full md:w-72 flex-col bg-card border-r border-border flex-shrink-0 hidden md:flex">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <span className="text-[13px] font-medium text-foreground">{moduloNombre}</span>
+          <span className="text-[14.5px] font-medium text-foreground">{moduloNombre}</span>
           <button
             onClick={abrirModalNueva}
-            className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] font-medium px-2.5 py-1.5 rounded-lg"
+            className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-[12.5px] font-medium px-2.5 py-1.5 rounded-lg"
           >
             <Plus className="w-3 h-3" /> Nueva
           </button>
@@ -240,7 +240,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Buscar por folio o proveedor..."
-              className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
         </div>
@@ -250,7 +250,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
             <button
               key={tab.label}
               onClick={() => setFiltro(tab.estado)}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-medium whitespace-nowrap transition-colors ${
+              className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium whitespace-nowrap transition-colors ${
                 filtro === tab.estado ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
               }`}
             >
@@ -274,18 +274,18 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
               }`}
             >
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-semibold text-foreground">{c.folio}</span>
-                <span className={`text-[9px] font-medium px-2 py-0.5 rounded-full ${ESTADO_BADGE[c.status]}`}>
+                <span className="text-[12.5px] font-semibold text-foreground">{c.folio}</span>
+                <span className={`text-[10.5px] font-medium px-2 py-0.5 rounded-full ${ESTADO_BADGE[c.status]}`}>
                   {ESTADO_TEXTO[c.status]}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1.5">
+              <div className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground mb-1.5">
                 <Building2 className="w-3 h-3 text-muted-foreground" />
                 {c.supplierName}
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground">{formatFecha(c.createdAt)}</span>
-                <span className="text-[12px] font-semibold text-foreground">{formatMXN(c.total)}</span>
+                <span className="text-[11.5px] text-muted-foreground">{formatFecha(c.createdAt)}</span>
+                <span className="text-[13.5px] font-semibold text-foreground">{formatMXN(c.total)}</span>
               </div>
             </div>
           ))}
@@ -312,9 +312,9 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                 <div>
                   <p className="text-[14px] font-semibold text-foreground">
                     {seleccionada.folio}
-                    <span className="text-[12px] font-normal text-muted-foreground ml-2">— Orden de compra</span>
+                    <span className="text-[13.5px] font-normal text-muted-foreground ml-2">— Orden de compra</span>
                   </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                  <p className="text-[12.5px] text-muted-foreground mt-0.5">
                     Creada el {formatFecha(seleccionada.createdAt)}
                     {seleccionada.receivedAt && ` · Recibida el ${formatFecha(seleccionada.receivedAt)}`}
                   </p>
@@ -322,7 +322,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                 <div className="flex gap-2">
                   <button
                     onClick={handleImprimir}
-                    className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-[11px] text-foreground hover:bg-muted"
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-[12.5px] text-foreground hover:bg-muted"
                   >
                     <Printer className="w-3 h-3" /> Imprimir
                   </button>
@@ -331,14 +331,14 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                       <button
                         onClick={() => handleActualizarEstado(seleccionada, "CANCELLED")}
                         disabled={pending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted disabled:opacity-50 rounded-lg text-[11px] font-medium text-muted-foreground"
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted disabled:opacity-50 rounded-lg text-[12.5px] font-medium text-muted-foreground"
                       >
                         <Ban className="w-3 h-3" /> Cancelar
                       </button>
                       <button
                         onClick={() => handleActualizarEstado(seleccionada, "RECEIVED")}
                         disabled={pending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-lg text-[11px] font-medium transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-lg text-[12.5px] font-medium transition-colors"
                       >
                         <Check className="w-3 h-3" /> Marcar recibida
                       </button>
@@ -355,8 +355,8 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                   { label: "Total", value: formatMXN(seleccionada.total), color: "text-primary" },
                 ].map((s) => (
                   <div key={s.label} className="bg-muted rounded-lg p-3">
-                    <p className="text-[9px] text-muted-foreground mb-1">{s.label}</p>
-                    <p className={`font-semibold ${s.small ? "text-[12px]" : "text-[15px]"} ${s.color || "text-foreground"}`}>
+                    <p className="text-[10.5px] text-muted-foreground mb-1">{s.label}</p>
+                    <p className={`font-semibold ${s.small ? "text-[13.5px]" : "text-[15px]"} ${s.color || "text-foreground"}`}>
                       {s.value}
                     </p>
                   </div>
@@ -368,18 +368,18 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
             <div className="flex-1 overflow-y-auto p-4">
 
               {/* Proveedor */}
-              <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-2">PROVEEDOR</p>
+              <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-2">PROVEEDOR</p>
               <div className="flex items-center gap-3 bg-card border border-border rounded-xl p-3 mb-4">
                 <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center text-[12px] font-semibold text-white flex-shrink-0 ${colorPorId(
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center text-[13.5px] font-semibold text-white flex-shrink-0 ${colorPorId(
                     seleccionada.supplierId
                   )}`}
                 >
                   {iniciales(seleccionada.supplierName)}
                 </div>
                 <div className="flex-1">
-                  <p className="text-[12px] font-medium text-foreground">{seleccionada.supplierName}</p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[13.5px] font-medium text-foreground">{seleccionada.supplierName}</p>
+                  <p className="text-[11.5px] text-muted-foreground">
                     {[seleccionada.supplierPhone, seleccionada.supplierEmail].filter(Boolean).join(" · ") ||
                       "Sin datos de contacto capturados"}
                   </p>
@@ -387,11 +387,11 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
               </div>
 
               {/* Productos */}
-              <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-2">PRODUCTOS COMPRADOS</p>
+              <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-2">PRODUCTOS COMPRADOS</p>
               <div className="bg-card border border-border rounded-xl overflow-hidden mb-4">
                 <div className="grid grid-cols-[1fr_60px_90px_90px] px-4 py-2 bg-muted border-b border-border">
                   {["Producto", "Cant.", "Costo unit.", "Subtotal"].map((h) => (
-                    <p key={h} className="text-[10px] font-medium text-muted-foreground">{h}</p>
+                    <p key={h} className="text-[11.5px] font-medium text-muted-foreground">{h}</p>
                   ))}
                 </div>
                 {seleccionada.items.map((item) => (
@@ -404,13 +404,13 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                         <Package className="w-3 h-3 text-muted-foreground" />
                       </div>
                       <div>
-                        <p className="text-[11px] font-medium text-foreground">{item.productName}</p>
-                        <p className="text-[9px] text-muted-foreground">{item.productSku ?? "—"}</p>
+                        <p className="text-[12.5px] font-medium text-foreground">{item.productName}</p>
+                        <p className="text-[10.5px] text-muted-foreground">{item.productSku ?? "—"}</p>
                       </div>
                     </div>
-                    <p className="text-[11px] text-muted-foreground text-center">{item.quantity}</p>
-                    <p className="text-[11px] text-muted-foreground">{formatMXN(item.cost)}</p>
-                    <p className="text-[11px] font-medium text-foreground">{formatMXN(item.subtotal)}</p>
+                    <p className="text-[12.5px] text-muted-foreground text-center">{item.quantity}</p>
+                    <p className="text-[12.5px] text-muted-foreground">{formatMXN(item.cost)}</p>
+                    <p className="text-[12.5px] font-medium text-foreground">{formatMXN(item.subtotal)}</p>
                   </div>
                 ))}
               </div>
@@ -419,16 +419,16 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
               <div className="bg-card border border-border rounded-xl p-4">
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-[11px] text-muted-foreground">Subtotal</span>
-                    <span className="text-[11px] text-foreground">{formatMXN(subtotalSeleccionada)}</span>
+                    <span className="text-[12.5px] text-muted-foreground">Subtotal</span>
+                    <span className="text-[12.5px] text-foreground">{formatMXN(subtotalSeleccionada)}</span>
                   </div>
                   <div className="h-px bg-border" />
                   <div className="flex justify-between items-baseline">
-                    <span className="text-[13px] font-semibold text-foreground">Total</span>
+                    <span className="text-[14.5px] font-semibold text-foreground">Total</span>
                     <span className="text-[16px] font-bold text-primary">{formatMXN(seleccionada.total)}</span>
                   </div>
                   {seleccionada.notes && (
-                    <p className="text-[10px] text-muted-foreground pt-1">Nota: {seleccionada.notes}</p>
+                    <p className="text-[11.5px] text-muted-foreground pt-1">Nota: {seleccionada.notes}</p>
                   )}
                 </div>
               </div>
@@ -456,7 +456,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
 
             <div className="p-4 space-y-4">
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
                 <select
                   value={nvBranchId}
                   onChange={(e) => setNvBranchId(e.target.value)}
@@ -471,11 +471,11 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
 
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PROVEEDOR</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PROVEEDOR</label>
                   <button
                     type="button"
                     onClick={() => setNvProveedorNuevo((v) => !v)}
-                    className="text-[10px] text-primary"
+                    className="text-[11.5px] text-primary"
                   >
                     {nvProveedorNuevo ? "Elegir existente" : "+ Nuevo proveedor"}
                   </button>
@@ -519,8 +519,8 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PRODUCTOS</label>
-                  <button type="button" onClick={handleAgregarRenglon} className="text-[10px] text-primary">
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PRODUCTOS</label>
+                  <button type="button" onClick={handleAgregarRenglon} className="text-[11.5px] text-primary">
                     + Agregar producto
                   </button>
                 </div>
@@ -530,7 +530,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                       <select
                         value={item.productId}
                         onChange={(e) => handleCambiarRenglon(idx, "productId", e.target.value)}
-                        className="flex-1 min-w-0 px-2 py-1.5 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:border-primary"
+                        className="flex-1 min-w-0 px-2 py-1.5 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary"
                       >
                         <option value="">Producto...</option>
                         {productos.map((p) => (
@@ -543,7 +543,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                         value={item.quantity}
                         onChange={(e) => handleCambiarRenglon(idx, "quantity", e.target.value)}
                         placeholder="Cant."
-                        className="w-14 px-2 py-1.5 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:border-primary"
+                        className="w-14 px-2 py-1.5 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary"
                       />
                       <input
                         type="number"
@@ -552,7 +552,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                         value={item.cost}
                         onChange={(e) => handleCambiarRenglon(idx, "cost", e.target.value)}
                         placeholder="Costo"
-                        className="w-20 px-2 py-1.5 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:border-primary"
+                        className="w-20 px-2 py-1.5 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary"
                       />
                       <button
                         type="button"
@@ -568,7 +568,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
               </div>
 
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">NOTAS (OPCIONAL)</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NOTAS (OPCIONAL)</label>
                 <textarea
                   value={nvNotas}
                   onChange={(e) => setNvNotas(e.target.value)}
@@ -578,11 +578,11 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
               </div>
 
               <div className="flex justify-between items-baseline bg-muted rounded-lg px-3 py-2">
-                <span className="text-[11px] text-muted-foreground">Total estimado</span>
+                <span className="text-[12.5px] text-muted-foreground">Total estimado</span>
                 <span className="text-[14px] font-bold text-primary">{formatMXN(totalNueva)}</span>
               </div>
 
-              {formError && <p className="text-[11px] text-red-600">{formError}</p>}
+              {formError && <p className="text-[12.5px] text-red-600">{formError}</p>}
             </div>
 
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">

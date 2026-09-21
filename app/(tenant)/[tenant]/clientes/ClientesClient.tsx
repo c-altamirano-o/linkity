@@ -908,7 +908,7 @@ export default function ClientesClient({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-foreground">{c.name}</p>
-                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
+                    <div className="flex items-center gap-1 text-[11.5px] text-muted-foreground mt-0.5">
                       <Phone className="w-2.5 h-2.5 flex-shrink-0" />
                       <span className="truncate">{formatoTelefono(c.phone, c.phoneCountryCode) ?? "Sin teléfono"}</span>
                       <span className="text-muted-foreground/50 flex-shrink-0">·</span>
@@ -1004,9 +1004,9 @@ export default function ClientesClient({
                   { label: "Cliente desde", value: formatFechaCorta(seleccionado.createdAt), sub: "" },
                 ].map((s) => (
                   <div key={s.label} className="rounded-lg p-2.5 sm:p-3 bg-muted/40">
-                    <p className="text-[9px] sm:text-[10px] text-muted-foreground mb-1">{s.label}</p>
+                    <p className="text-[10.5px] sm:text-[11.5px] text-muted-foreground mb-1">{s.label}</p>
                     <p className="text-base sm:text-[15px] font-semibold text-foreground">{s.value}</p>
-                    {s.sub && <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">{s.sub}</p>}
+                    {s.sub && <p className="text-[10.5px] sm:text-[11.5px] text-muted-foreground mt-0.5">{s.sub}</p>}
                   </div>
                 ))}
               </div>
@@ -1054,7 +1054,7 @@ export default function ClientesClient({
                     ))}
                   </div>
 
-                  <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL</p>
+                  <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL</p>
 
                   <div className="space-y-2">
                     {historialFiltrado.length === 0 ? (
@@ -1078,12 +1078,12 @@ export default function ClientesClient({
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-foreground truncate">{h.titulo}</p>
-                            <p className="text-[10px] text-muted-foreground">
+                            <p className="text-[11.5px] text-muted-foreground">
                               {h.folio} · {formatFechaLarga(h.fecha)}
                             </p>
                           </div>
                           <span
-                            className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${
+                            className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${
                               h.tipo === "reparacion"
                                 ? REPARACION_BADGE[h.estado as EstadoReparacionCliente]
                                 : VENTA_BADGE[h.estado as EstadoVentaCliente]
@@ -1106,8 +1106,8 @@ export default function ClientesClient({
                   {/* Antecedentes */}
                   <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest">ANTECEDENTES</p>
-                      {antecedentesGuardado && <span className="text-[10px] text-emerald-600">Guardado</span>}
+                      <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ANTECEDENTES</p>
+                      {antecedentesGuardado && <span className="text-[11.5px] text-emerald-600">Guardado</span>}
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
@@ -1195,7 +1195,7 @@ export default function ClientesClient({
                   {/* Odontograma — solo consultorio dental */}
                   {odontogramaActivo && (
                     <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
-                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">ODONTOGRAMA</p>
+                      <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">ODONTOGRAMA</p>
                       <div className="space-y-1.5 overflow-x-auto pb-1">
                         {[DIENTES_SUPERIOR, DIENTES_INFERIOR].map((fila, i) => (
                           <div key={i} className="flex gap-1 justify-center min-w-max">
@@ -1211,7 +1211,7 @@ export default function ClientesClient({
                                   className={`relative w-9 h-11 sm:w-10 sm:h-12 rounded-md border bg-card flex flex-col items-center justify-center gap-0.5 transition-colors ${dienteSeleccionado === numero ? "border-primary ring-2 ring-primary" : "border-border hover:border-foreground/40"}`}
                                 >
                                   <ToothIcon condicion={condicion} className="w-5 h-6 sm:w-6 sm:h-7" />
-                                  <span className="text-[8px] font-semibold text-muted-foreground leading-none">{numero}</span>
+                                  <span className="text-[9.5px] font-semibold text-muted-foreground leading-none">{numero}</span>
                                   {pendiente && (
                                     <span
                                       className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border border-card ${pendiente === "PROPUESTO" ? "bg-amber-500" : "bg-blue-600"}`}
@@ -1230,16 +1230,16 @@ export default function ClientesClient({
                         {CONDICIONES_DIENTE.map((c) => (
                           <div key={c} className="flex items-center gap-1">
                             <ToothIcon condicion={c} className="w-3.5 h-4" />
-                            <span className="text-[10px] text-muted-foreground">{label(labels, `tooth.condition.${c}`)}</span>
+                            <span className="text-[11.5px] text-muted-foreground">{label(labels, `tooth.condition.${c}`)}</span>
                           </div>
                         ))}
                         <div className="flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full bg-amber-500" />
-                          <span className="text-[10px] text-muted-foreground">Tratamiento propuesto</span>
+                          <span className="text-[11.5px] text-muted-foreground">Tratamiento propuesto</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full bg-blue-600" />
-                          <span className="text-[10px] text-muted-foreground">Tratamiento aceptado</span>
+                          <span className="text-[11.5px] text-muted-foreground">Tratamiento aceptado</span>
                         </div>
                       </div>
 
@@ -1258,7 +1258,7 @@ export default function ClientesClient({
                           <div className="flex flex-wrap gap-3 mb-3">
                             {CATEGORIAS_CONDICION.map((grupo) => (
                               <div key={grupo.etiqueta}>
-                                <p className="text-[9px] font-semibold text-muted-foreground tracking-wide uppercase mb-1">{grupo.etiqueta}</p>
+                                <p className="text-[10.5px] font-semibold text-muted-foreground tracking-wide uppercase mb-1">{grupo.etiqueta}</p>
                                 <div className="flex gap-1">
                                   {grupo.items.map((c) => (
                                     <button
@@ -1311,7 +1311,7 @@ export default function ClientesClient({
                       ligar una fase a un diente FDI (campo opcional). */}
                   <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest">PLAN DE TRATAMIENTO</p>
+                      <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PLAN DE TRATAMIENTO</p>
                       <button
                         onClick={abrirModalPlan}
                         className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg"
@@ -1331,7 +1331,7 @@ export default function ClientesClient({
                               <div className="flex items-start justify-between gap-3 mb-1">
                                 <div>
                                   <p className="text-xs font-medium text-foreground">{plan.titulo}</p>
-                                  <p className="text-[10px] text-muted-foreground">
+                                  <p className="text-[11.5px] text-muted-foreground">
                                     Dr(a). {plan.doctor} · {new Date(plan.creadoEn).toLocaleDateString("es-MX")}
                                   </p>
                                 </div>
@@ -1339,12 +1339,12 @@ export default function ClientesClient({
                                   <p className="text-xs font-semibold text-foreground">
                                     {total.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}
                                   </p>
-                                  <p className="text-[10px] text-muted-foreground">
+                                  <p className="text-[11.5px] text-muted-foreground">
                                     {pagado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} pagado
                                   </p>
                                 </div>
                               </div>
-                              {plan.notas && <p className="text-[11px] text-muted-foreground mb-2">{plan.notas}</p>}
+                              {plan.notas && <p className="text-[12.5px] text-muted-foreground mb-2">{plan.notas}</p>}
                               <div className="space-y-1.5 mt-2">
                                 {plan.items.map((it) => (
                                   <div key={it.id} className="flex items-center justify-between gap-2 text-xs py-1.5 px-2 rounded-md bg-muted/30">
@@ -1355,7 +1355,7 @@ export default function ClientesClient({
                                     <span className="text-muted-foreground whitespace-nowrap">
                                       {it.costo.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}
                                     </span>
-                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${ESTADO_ITEM_COLOR[it.estado]}`}>
+                                    <span className={`px-1.5 py-0.5 rounded text-[11.5px] font-medium whitespace-nowrap ${ESTADO_ITEM_COLOR[it.estado]}`}>
                                       {ESTADO_ITEM_TEXTO[it.estado]}
                                     </span>
                                     {it.estado === "PROPUESTO" && (
@@ -1382,7 +1382,7 @@ export default function ClientesClient({
                                       <button
                                         disabled={itemEnCurso === it.id}
                                         onClick={() => abrirCobro(it.id, it.descripcion, it.costo)}
-                                        className="flex items-center gap-1 px-2 py-1 rounded bg-primary hover:bg-primary/90 text-primary-foreground text-[10px] font-medium disabled:opacity-50 shrink-0"
+                                        className="flex items-center gap-1 px-2 py-1 rounded bg-primary hover:bg-primary/90 text-primary-foreground text-[11.5px] font-medium disabled:opacity-50 shrink-0"
                                       >
                                         <DollarSign className="w-3 h-3" /> Cobrar
                                       </button>
@@ -1403,7 +1403,7 @@ export default function ClientesClient({
                       que se muestra en el modal antes de firmar. */}
                   <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest">CONSENTIMIENTO INFORMADO</p>
+                      <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">CONSENTIMIENTO INFORMADO</p>
                       <button
                         onClick={abrirModalConsentimiento}
                         disabled={plantillasConsentimiento.length === 0}
@@ -1422,14 +1422,14 @@ export default function ClientesClient({
                             <div key={c.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-muted/30">
                               <div className="min-w-0">
                                 <p className="text-xs font-medium text-foreground truncate">{etiqueta}</p>
-                                <p className="text-[10px] text-muted-foreground truncate">
+                                <p className="text-[11.5px] text-muted-foreground truncate">
                                   Dr(a). {c.doctor} · {new Date(c.creadoEn).toLocaleDateString("es-MX")}
                                   {c.itemPlanDescripcion && ` · ${c.itemPlanDescripcion}`}
                                 </p>
                               </div>
                               <button
                                 onClick={() => setConsentVerModal(c)}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted text-[10px] font-medium shrink-0"
+                                className="flex items-center gap-1 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted text-[11.5px] font-medium shrink-0"
                               >
                                 <Eye className="w-3.5 h-3.5" /> Ver
                               </button>
@@ -1446,7 +1446,7 @@ export default function ClientesClient({
                       ya usa Plan de Tratamiento), no del paciente. */}
                   <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest">RECETAS</p>
+                      <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">RECETAS</p>
                       <button
                         onClick={abrirModalReceta}
                         disabled={doctores.length === 0}
@@ -1463,13 +1463,13 @@ export default function ClientesClient({
                           <div key={r.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-muted/30">
                             <div className="min-w-0">
                               <p className="text-xs font-medium text-foreground truncate">{r.medications}</p>
-                              <p className="text-[10px] text-muted-foreground truncate">
+                              <p className="text-[11.5px] text-muted-foreground truncate">
                                 Dr(a). {r.doctor} · {new Date(r.creadoEn).toLocaleDateString("es-MX")}
                               </p>
                             </div>
                             <button
                               onClick={() => setRecetaVerModal(r)}
-                              className="flex items-center gap-1 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted text-[10px] font-medium shrink-0"
+                              className="flex items-center gap-1 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted text-[11.5px] font-medium shrink-0"
                             >
                               <Eye className="w-3.5 h-3.5" /> Ver
                             </button>
@@ -1482,7 +1482,7 @@ export default function ClientesClient({
                   {/* Notas de evolución */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-[10px] font-semibold text-muted-foreground tracking-widest">NOTAS DE EVOLUCIÓN</p>
+                      <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NOTAS DE EVOLUCIÓN</p>
                       <button
                         onClick={abrirModalNota}
                         className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg"
@@ -1498,14 +1498,14 @@ export default function ClientesClient({
                           <div key={n.id} className="p-3 bg-card border border-border rounded-xl">
                             <div className="flex items-start justify-between gap-3 mb-1">
                               <p className="text-xs font-medium text-foreground">{n.motivo}</p>
-                              <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
+                              <span className="text-[11.5px] text-muted-foreground whitespace-nowrap flex-shrink-0">
                                 {formatFechaLarga(n.fecha)}
                               </span>
                             </div>
                             {n.diagnostico && <p className="text-xs text-muted-foreground"><span className="font-medium">Diagnóstico:</span> {n.diagnostico}</p>}
                             {n.tratamiento && <p className="text-xs text-muted-foreground"><span className="font-medium">Tratamiento:</span> {n.tratamiento}</p>}
                             {n.notas && <p className="text-xs text-muted-foreground mt-1">{n.notas}</p>}
-                            <p className="text-[10px] text-muted-foreground mt-1.5">Atendió: {n.doctor}</p>
+                            <p className="text-[11.5px] text-muted-foreground mt-1.5">Atendió: {n.doctor}</p>
                           </div>
                         ))
                       )}
@@ -1801,7 +1801,7 @@ export default function ClientesClient({
               {plantillaConsentSeleccionada && (
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <p className="text-xs text-foreground whitespace-pre-line">{plantillaConsentSeleccionada.cuerpo}</p>
-                  <p className="text-[10px] text-muted-foreground mt-2 italic">{NOTA_FIRMA_SIMULADA}</p>
+                  <p className="text-[11.5px] text-muted-foreground mt-2 italic">{NOTA_FIRMA_SIMULADA}</p>
                 </div>
               )}
 

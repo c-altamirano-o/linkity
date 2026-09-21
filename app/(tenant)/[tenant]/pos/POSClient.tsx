@@ -216,12 +216,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           <ShoppingCart className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-medium text-foreground">Venta actual</span>
           {carrito.length > 0 && (
-            <span className="bg-primary text-primary-foreground text-[9px] font-medium px-1.5 py-0.5 rounded-full">{totalItems}</span>
+            <span className="bg-primary text-primary-foreground text-[10.5px] font-medium px-1.5 py-0.5 rounded-full">{totalItems}</span>
           )}
         </div>
         <div className="flex items-center gap-3">
           {carrito.length > 0 && (
-            <button onClick={limpiarCarrito} className="text-[10px] text-red-500 hover:text-red-600">Limpiar</button>
+            <button onClick={limpiarCarrito} className="text-[11.5px] text-red-500 hover:text-red-600">Limpiar</button>
           )}
           <button onClick={() => setCarritoAbierto(false)} className="lg:hidden text-muted-foreground">
             <ChevronDown className="w-5 h-5" />
@@ -278,7 +278,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 </button>
               ))}
               {clientesFiltrados.length === 0 && (
-                <p className="px-3 py-2 text-[11px] text-muted-foreground/70">Sin resultados</p>
+                <p className="px-3 py-2 text-[12.5px] text-muted-foreground/70">Sin resultados</p>
               )}
             </div>
           </div>
@@ -291,7 +291,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           <div className="flex flex-col items-center justify-center h-full py-8 text-center">
             <ShoppingCart className="w-8 h-8 text-muted-foreground/30 mb-2" />
             <p className="text-xs text-muted-foreground/70">El carrito está vacío</p>
-            <p className="text-[11px] text-muted-foreground/50 mt-1">Selecciona productos del catálogo</p>
+            <p className="text-[12.5px] text-muted-foreground/50 mt-1">Selecciona productos del catálogo</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -299,7 +299,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               <div key={item.productId} className="flex items-center gap-2 py-2 border-b border-border/60 last:border-0">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground truncate">{item.nombre}</p>
-                  <p className="text-[10px] text-muted-foreground">{formatMXN(item.precio)} c/u</p>
+                  <p className="text-[11.5px] text-muted-foreground">{formatMXN(item.precio)} c/u</p>
                 </div>
                 <div className="flex items-center gap-1">
                   <button onClick={() => cambiarCantidad(item.productId, -1)}
@@ -326,14 +326,14 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         {errorVenta && (
           <div className="mb-3 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
             <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-red-600">{errorVenta}</p>
+            <p className="text-[12.5px] text-red-600">{errorVenta}</p>
           </div>
         )}
 
         {ultimaVenta && (
           <div className="mb-3 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
             <p className="text-xs font-medium text-emerald-700">✓ Venta {ultimaVenta.folio} registrada</p>
-            <p className="text-[11px] text-emerald-600">
+            <p className="text-[12.5px] text-emerald-600">
               {formatMXN(ultimaVenta.total)}{ultimaVenta.cambio > 0 ? ` · Cambio: ${formatMXN(ultimaVenta.cambio)}` : ""}
             </p>
           </div>
@@ -354,7 +354,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             <span className="text-sm font-semibold text-foreground">Total</span>
             <span className="text-base font-bold text-primary">{formatMXN(total)}</span>
           </div>
-          <p className="text-[10px] text-muted-foreground text-right">Los precios ya incluyen IVA</p>
+          <p className="text-[11.5px] text-muted-foreground text-right">Los precios ya incluyen IVA</p>
         </div>
 
         {/* Botones de método de pago — 2×2 */}
@@ -413,7 +413,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         {/* Panel Mixto */}
         {metodoPago === "mixto" && carrito.length > 0 && (
           <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-            <p className="text-[10px] font-semibold text-amber-700 mb-1">🔀 Desglose de pago</p>
+            <p className="text-[11.5px] font-semibold text-amber-700 mb-1">🔀 Desglose de pago</p>
 
             {[
               { label: "💵 Efectivo", value: mixtoEfectivo, setter: setMixtoEfectivo },
@@ -547,7 +547,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                   </div>
                   <p className="text-xs font-medium text-foreground leading-tight mb-1 line-clamp-2">{producto.name}</p>
                   <p className="text-sm font-bold text-primary">{formatMXN(producto.price)}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                  <p className="text-[11.5px] text-muted-foreground mt-0.5">
                     {producto.isService ? "Servicio" : agotado ? "Agotado" : `Stock: ${stock}`}
                   </p>
                 </button>

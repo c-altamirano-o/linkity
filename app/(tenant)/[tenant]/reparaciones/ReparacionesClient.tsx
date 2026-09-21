@@ -6,7 +6,7 @@ import {
   Search, Plus, Check, Clock, ExternalLink, Copy,
   Wrench, Package, Stethoscope, Store, ArrowRight,
   Phone, CheckCircle, AlertCircle, ChevronLeft, X,
-  Printer, Trash2, Pencil,
+  Printer, Trash2, Pencil, MessageCircle, CalendarDays,
 } from "lucide-react";
 import type {
   ReparacionesData, ReparacionUI, EstadoReparacion, PrioridadReparacion, ProductoParaReparacion,
@@ -17,7 +17,20 @@ import {
   agregarPiezaReparacionAction, eliminarPiezaReparacionAction, actualizarCostoEstimadoAction,
   type NuevoEstadoReparacion, type MetodoPagoReparacion,
 } from "@/app/actions/reparaciones-actions";
-import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
+import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp } from "@/lib/paises";
+
+// Agrupa el catálogo de "agregar pieza" por tipo — piezas/productos primero,
+// servicios (mano de obra: "quitar cuenta Google", "limpieza general", etc.)
+// después, en vez de una lista plana. A petición de Carlos, 2026-09-21: "en
+// las reparaciones se debe poder agregar tanto piezas como servicios" — el
+// mecanismo YA lo soportaba (RepairItem no distingue tipo de producto), lo
+// que faltaba era que se viera claro en el selector que un servicio también
+// se puede agregar aquí, no solo refacciones físicas.
+function agruparProductosParaSelector(productos: ProductoParaReparacion[]) {
+  const piezas = productos.filter((p) => p.type !== "SERVICE");
+  const servicios = productos.filter((p) => p.type === "SERVICE");
+  return { piezas, servicios };
+}
 
 interface BranchOption {
   id: string;
@@ -37,6 +50,10 @@ interface ReparacionesClientProps {
   // "simulador de rol" (rolDemo, puramente de UI) ahora que M11 sí tiene
   // sesiones y roles reales.
   roleName: string | null;
+  // Tenant.phone — a petición de Carlos, 2026-09-21, para que aparezca en el
+  // ticket ("el ticket debe venir el teléfono de soporte del taller o del
+  // negocio"). Se captura en Configuración → Teléfono de soporte.
+  telefonoNegocio: string | null;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -131,6 +148,33 @@ interface TicketData {
   falla: string;
   piezas: TicketPieza[];
   costoEstimado: number | null;
+  fechaEstimada: string | null; // ISO
+  telefonoSoporte: string | null;
+}
+
+// Texto plano para el mensaje de WhatsApp del ticket digital — mismo
+// contenido que el ticket impreso, en formato de mensaje. Se abre wa.me con
+// el texto precargado y el negocio lo manda con un clic, igual que el resto
+// de la app (ver whatsappHref en ClientesClient.tsx) — no hay envío
+// automático desde el servidor, ninguna integración de este proyecto lo
+// tiene todavía.
+function textoTicketWhatsapp(t: TicketData, negocio: string): string {
+  const lineas = [
+    `*${negocio}*`,
+    `Recibo de reparación · ${t.folio}`,
+    "",
+    `Equipo: ${t.marca} ${t.modelo}`,
+    `Falla reportada: ${t.falla}`,
+  ];
+  if (t.piezas.length > 0) {
+    lineas.push("", "Piezas y servicios:");
+    for (const p of t.piezas) lineas.push(`• ${p.productName} × ${p.quantity} — ${formatMXN(p.price * p.quantity)}`);
+  }
+  lineas.push("", `Costo estimado: ${t.costoEstimado != null ? formatMXN(t.costoEstimado) : "Por definir"}`);
+  if (t.fechaEstimada) lineas.push(`Fecha estimada de entrega: ${formatFecha(t.fechaEstimada)}`);
+  if (t.telefonoSoporte) lineas.push("", `Dudas o soporte: ${t.telefonoSoporte}`);
+  lineas.push("", "Este costo es un estimado y puede ajustarse tras el diagnóstico completo del equipo.");
+  return lineas.join("\n");
 }
 
 /**
@@ -189,6 +233,7 @@ function abrirTicketImprimible(t: TicketData, negocio: string) {
       <h1>${negocio}</h1>
       <p class="muted">Recibo de reparación · ${t.folio}</p>
       <p class="muted">${new Date().toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</p>
+      ${t.telefonoSoporte ? `<p class="muted">Soporte: ${t.telefonoSoporte}</p>` : ""}
       <hr />
       <p><strong>Cliente:</strong> ${t.cliente}${t.telefono ? ` · ${t.telefono}` : ""}</p>
       <p><strong>Equipo:</strong> ${t.marca} ${t.modelo}</p>
@@ -197,14 +242,15 @@ function abrirTicketImprimible(t: TicketData, negocio: string) {
         t.piezas.length > 0
           ? `<hr />
       <table>
-        <thead><tr><th>Pieza</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
+        <thead><tr><th>Pieza/Servicio</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
         <tbody>${filasPiezas}</tbody>
       </table>
-      <p class="muted" style="text-align:right">Subtotal piezas: ${formatMXN(subtotalPiezas)}</p>`
+      <p class="muted" style="text-align:right">Subtotal: ${formatMXN(subtotalPiezas)}</p>`
           : ""
       }
       <hr />
       <p class="total">Costo estimado: ${t.costoEstimado != null ? formatMXN(t.costoEstimado) : "Por definir"}</p>
+      ${t.fechaEstimada ? `<p class="muted" style="text-align:right">Fecha estimada de entrega: ${formatFecha(t.fechaEstimada)}</p>` : ""}
       <p class="aviso">Este costo es un estimado y puede ajustarse tras el diagnóstico completo del equipo. Cualquier cambio se te notificará antes de proceder con la reparación.</p>
       <div class="firma">Firma de conformidad</div>
     </body>
@@ -335,14 +381,14 @@ function VistaTienda({
           ].map((s) => (
             <div key={s.label} className="bg-muted rounded-lg py-2 text-center">
               <p className={`text-base font-semibold ${s.color}`}>{s.value}</p>
-              <p className="text-[9px] text-muted-foreground">{s.label}</p>
+              <p className="text-[10.5px] text-muted-foreground">{s.label}</p>
             </div>
           ))}
         </div>
         <div className="flex gap-1 px-3 py-2 border-b border-border">
           {["Pendientes", "Entregados hoy", "Todo"].map((tab) => (
             <button key={tab} onClick={() => setFiltro(tab)}
-              className={`px-2 py-1 rounded-full text-[10px] font-medium whitespace-nowrap transition-colors ${
+              className={`px-2 py-1 rounded-full text-[11.5px] font-medium whitespace-nowrap transition-colors ${
                 filtro === tab ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"
               }`}>
               {tab}
@@ -358,23 +404,23 @@ function VistaTienda({
                 seleccionada.id === rep.id ? "bg-primary/5 border-primary" : "bg-card border-border hover:border-foreground/30"
               } ${rep.estado === "SHOP_READY" ? "border-l-2 border-l-emerald-500" : rep.estado === "SHOP_RETURN" ? "border-l-2 border-l-amber-400" : ""}`}>
               <div className="flex items-center gap-2 mb-2">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${ESTADO_BADGE[rep.estado]}`}>
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11.5px] font-semibold flex-shrink-0 ${ESTADO_BADGE[rep.estado]}`}>
                   {rep.iniciales}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-foreground">{rep.cliente}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">{rep.modelo} · {rep.falla}</p>
+                  <p className="text-[11.5px] text-muted-foreground truncate">{rep.modelo} · {rep.falla}</p>
                 </div>
-                <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${ESTADO_BADGE[rep.estado]}`}>
+                <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${ESTADO_BADGE[rep.estado]}`}>
                   {rep.estado === "SHOP_READY" ? "Listo" : rep.estado === "SHOP_RETURN" ? "Devolución" : "Entregado"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <span className="text-[11.5px] text-muted-foreground flex items-center gap-1">
                   <Clock className="w-2.5 h-2.5" /> {rep.folio}
                 </span>
                 {rep.telefono && (
-                  <span className="text-[10px] text-primary flex items-center gap-1">
+                  <span className="text-[11.5px] text-primary flex items-center gap-1">
                     <Phone className="w-2.5 h-2.5" /> {rep.telefono}
                   </span>
                 )}
@@ -427,7 +473,7 @@ function VistaTienda({
                 <p className={`text-xs font-semibold ${isDev ? "text-amber-700" : "text-emerald-700"}`}>
                   {isDev ? "Equipo para devolver al cliente" : "Equipo listo para entregar"}
                 </p>
-                <p className={`text-[10px] mt-0.5 ${isDev ? "text-amber-600" : "text-emerald-600"}`}>
+                <p className={`text-[11.5px] mt-0.5 ${isDev ? "text-amber-600" : "text-emerald-600"}`}>
                   {seleccionada.modelo} ·{" "}
                   {isDev ? "No fue posible realizar la reparación" : `Reparación completada${seleccionada.costoFinal || seleccionada.costoEstimado ? ` · Costo: ${formatMXN(seleccionada.costoFinal ?? seleccionada.costoEstimado ?? 0)}` : ""}`}
                 </p>
@@ -438,7 +484,7 @@ function VistaTienda({
 
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
           <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">DATOS DE {activoLabel.toUpperCase()}</p>
+            <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">DATOS DE {activoLabel.toUpperCase()}</p>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: activoLabel, value: `${seleccionada.marca} ${seleccionada.modelo}` },
@@ -447,16 +493,16 @@ function VistaTienda({
                 { label: "Técnico", value: seleccionada.tecnico },
               ].map((f) => (
                 <div key={f.label} className="bg-muted rounded-lg p-2.5">
-                  <p className="text-[9px] text-muted-foreground mb-0.5">{f.label}</p>
+                  <p className="text-[10.5px] text-muted-foreground mb-0.5">{f.label}</p>
                   <p className={`text-xs font-medium ${f.color || "text-foreground"}`}>{f.value}</p>
                 </div>
               ))}
             </div>
             {seleccionada.piezas.length > 0 && (
               <div className="mt-2 pt-2 border-t border-border">
-                <p className="text-[9px] text-muted-foreground mb-1">Piezas asignadas</p>
+                <p className="text-[10.5px] text-muted-foreground mb-1">Piezas asignadas</p>
                 {seleccionada.piezas.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between text-[11px] text-muted-foreground py-0.5">
+                  <div key={p.id} className="flex items-center justify-between text-[12.5px] text-muted-foreground py-0.5">
                     <span className="truncate flex-1">{p.productName} × {p.quantity}</span>
                     <span>{formatMXN(p.price * p.quantity)}</span>
                   </div>
@@ -466,7 +512,7 @@ function VistaTienda({
           </div>
 
           <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL</p>
+            <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL</p>
             <div className="space-y-3">
               {seleccionada.historial.slice(0, 4).map((h, i) => {
                 const cfg = HISTORIAL_ICONOS[h.estado] || HISTORIAL_ICONOS.RECEIVED;
@@ -478,7 +524,7 @@ function VistaTienda({
                     </div>
                     <div>
                       <p className="text-xs text-foreground">{h.nota ?? label(labels, `repair.status.${h.estado}`)}</p>
-                      <p className="text-[10px] text-muted-foreground">{formatFechaHora(h.fecha)}</p>
+                      <p className="text-[11.5px] text-muted-foreground">{formatFechaHora(h.fecha)}</p>
                     </div>
                   </div>
                 );
@@ -494,7 +540,7 @@ function VistaTienda({
 /* ── VISTA ADMIN / TÉCNICO ── */
 function VistaAdmin({
   reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, pending, onNuevaClick,
-  productos, negocio, tenantSlug, router,
+  productos, negocio, telefonoNegocio, tenantSlug, router,
 }: {
   reparaciones: ReparacionUI[];
   labels: LabelDictionary;
@@ -505,6 +551,7 @@ function VistaAdmin({
   onNuevaClick: () => void;
   productos: ProductoParaReparacion[];
   negocio: string;
+  telefonoNegocio: string | null;
   tenantSlug: string;
   router: ReturnType<typeof useRouter>;
 }) {
@@ -631,7 +678,7 @@ function VistaAdmin({
         <div className="flex gap-1 px-3 py-2 border-b border-border overflow-x-auto">
           {Object.keys(filtrosMap).map((tab) => (
             <button key={tab} onClick={() => setFiltro(tab)}
-              className={`px-2 py-1 rounded-full text-[10px] font-medium whitespace-nowrap transition-colors ${
+              className={`px-2 py-1 rounded-full text-[11.5px] font-medium whitespace-nowrap transition-colors ${
                 filtro === tab ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"
               }`}>
               {tab}
@@ -648,20 +695,20 @@ function VistaAdmin({
                 seleccionada.id === rep.id ? "bg-primary/5 border-l-primary" : "hover:bg-muted border-l-transparent"
               }`}>
               <div className="flex items-center gap-2 mb-2">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${ESTADO_BADGE[rep.estado]}`}>
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11.5px] font-semibold flex-shrink-0 ${ESTADO_BADGE[rep.estado]}`}>
                   {rep.iniciales}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-foreground">{rep.folio}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">{rep.modelo} · {rep.falla}</p>
+                  <p className="text-[11.5px] text-muted-foreground truncate">{rep.modelo} · {rep.falla}</p>
                 </div>
-                <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${ESTADO_BADGE[rep.estado]}`}>
+                <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${ESTADO_BADGE[rep.estado]}`}>
                   {label(labels, `repair.status.${rep.estado}`)}
                 </span>
               </div>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] text-muted-foreground">{formatFecha(rep.fechaRecibido)}</span>
-                <span className={`text-[10px] font-medium ${PRIORIDAD_CONFIG[rep.prioridad].dot}`}>
+                <span className="text-[11.5px] text-muted-foreground">{formatFecha(rep.fechaRecibido)}</span>
+                <span className={`text-[11.5px] font-medium ${PRIORIDAD_CONFIG[rep.prioridad].dot}`}>
                   ● {PRIORIDAD_TEXTO[rep.prioridad]}
                 </span>
               </div>
@@ -706,13 +753,50 @@ function VistaAdmin({
                       falla: seleccionada.falla,
                       piezas: seleccionada.piezas,
                       costoEstimado: seleccionada.costoEstimado,
+                      fechaEstimada: seleccionada.fechaEstimada,
+                      telefonoSoporte: telefonoNegocio,
                     },
                     negocio
                   )
                 }
+                title="Ticket impreso"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors">
-                <Printer className="w-3 h-3" /> Ticket
+                <Printer className="w-3 h-3" /> Imprimir
               </button>
+              {/* Ticket digital — a petición de Carlos, 2026-09-21: "poner un
+                  botón que dé la opción para ticket impreso o digital, el
+                  digital se enviará por correo o whatsapp". Solo WhatsApp por
+                  ahora (mismo mecanismo de wa.me con texto precargado que ya
+                  usa Clientes) — correo necesitaría contratar un proveedor de
+                  envío (Resend, etc.), pendiente de que Carlos decida si lo
+                  quiere. */}
+              {seleccionada.telefono && (
+                <a
+                  href={`https://wa.me/${telefonoWhatsapp(seleccionada.telefono, null)}?text=${encodeURIComponent(
+                    textoTicketWhatsapp(
+                      {
+                        folio: seleccionada.folio,
+                        cliente: seleccionada.cliente,
+                        telefono: seleccionada.telefono,
+                        marca: seleccionada.marca,
+                        modelo: seleccionada.modelo,
+                        falla: seleccionada.falla,
+                        piezas: seleccionada.piezas,
+                        costoEstimado: seleccionada.costoEstimado,
+                        fechaEstimada: seleccionada.fechaEstimada,
+                        telefonoSoporte: telefonoNegocio,
+                      },
+                      negocio
+                    )
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => onWhatsapp(seleccionada.id)}
+                  title="Ticket digital por WhatsApp"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors">
+                  <MessageCircle className="w-3 h-3" /> WhatsApp
+                </a>
+              )}
               <AccionBtn estado={seleccionada.estado} pending={pending}
                 onAvanzar={(nuevo) => onAvanzar(seleccionada.id, nuevo)}
                 onCobrarClick={() => onCobrarClick(seleccionada.id, seleccionada.costoEstimado)} />
@@ -738,9 +822,9 @@ function VistaAdmin({
                         {isDone ? <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" /> : <Icon className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${isCurrent ? (devolucion ? "text-orange-500" : "text-primary") : "text-muted-foreground/50"}`} />}
                       </div>
                       <div className="flex flex-col items-center mt-1">
-                        <span className={`text-[8px] sm:text-[9px] whitespace-nowrap font-medium ${labelColor}`}>{step.label}</span>
+                        <span className={`text-[9.5px] sm:text-[10.5px] whitespace-nowrap font-medium ${labelColor}`}>{step.label}</span>
                         {(step.key === "taller" || step.key === "tienda") && isCurrent && (
-                          <span className={`text-[7px] sm:text-[8px] font-semibold ${devolucion ? "text-orange-500" : "text-emerald-500"}`}>
+                          <span className={`text-[8.5px] sm:text-[9.5px] font-semibold ${devolucion ? "text-orange-500" : "text-emerald-500"}`}>
                             {devolucion ? "Dev." : "Listo"}
                           </span>
                         )}
@@ -758,7 +842,7 @@ function VistaAdmin({
 
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
           <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">DETALLES DE {activoLabel.toUpperCase()}</p>
+            <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">DETALLES DE {activoLabel.toUpperCase()}</p>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: `Marca / Modelo`, value: `${seleccionada.marca} ${seleccionada.modelo}` },
@@ -768,25 +852,25 @@ function VistaAdmin({
                 { label: "Prioridad", value: PRIORIDAD_TEXTO[seleccionada.prioridad], badge: PRIORIDAD_CONFIG[seleccionada.prioridad].classes },
               ].map((f) => (
                 <div key={f.label} className="bg-muted rounded-lg p-2.5">
-                  <p className="text-[9px] text-muted-foreground mb-0.5">{f.label}</p>
+                  <p className="text-[10.5px] text-muted-foreground mb-0.5">{f.label}</p>
                   {f.badge
-                    ? <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${f.badge}`}>{f.value}</span>
+                    ? <span className={`text-[11.5px] font-medium px-2 py-0.5 rounded-full ${f.badge}`}>{f.value}</span>
                     : <p className="text-xs font-medium text-foreground">{f.value}</p>}
                 </div>
               ))}
 
               <div className="bg-muted rounded-lg p-2.5 col-span-2">
-                <p className="text-[9px] text-muted-foreground mb-0.5">Costo estimado</p>
+                <p className="text-[10.5px] text-muted-foreground mb-0.5">Costo estimado</p>
                 {editandoCosto ? (
                   <div className="flex items-center gap-1.5 mt-1">
                     <input type="number" autoFocus value={costoEditado} onChange={(e) => setCostoEditado(e.target.value)}
                       placeholder="$0"
                       className="w-24 px-2 py-1 border border-border rounded-md text-xs bg-card focus:outline-none focus:border-primary" />
                     <button disabled={piezaAccion} onClick={() => guardarCostoEditado(seleccionada.id)}
-                      className="px-2 py-1 bg-primary text-primary-foreground rounded-md text-[11px] disabled:opacity-50">
+                      className="px-2 py-1 bg-primary text-primary-foreground rounded-md text-[12.5px] disabled:opacity-50">
                       Guardar
                     </button>
-                    <button onClick={() => setEditandoCosto(false)} className="px-2 py-1 text-[11px] text-muted-foreground">
+                    <button onClick={() => setEditandoCosto(false)} className="px-2 py-1 text-[12.5px] text-muted-foreground">
                       Cancelar
                     </button>
                   </div>
@@ -807,10 +891,10 @@ function VistaAdmin({
           </div>
 
           <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">PIEZAS / REFACCIONES</p>
-            {piezaError && <p className="text-[10px] text-red-600 mb-2">{piezaError}</p>}
+            <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">PIEZAS Y SERVICIOS</p>
+            {piezaError && <p className="text-[11.5px] text-red-600 mb-2">{piezaError}</p>}
             {seleccionada.piezas.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground mb-2">Sin piezas asignadas todavía.</p>
+              <p className="text-[12.5px] text-muted-foreground mb-2">Sin piezas ni servicios asignados todavía.</p>
             ) : (
               <div className="mb-2 divide-y divide-border border border-border rounded-lg">
                 {seleccionada.piezas.map((p) => (
@@ -824,7 +908,7 @@ function VistaAdmin({
                   </div>
                 ))}
                 <div className="flex items-center justify-between px-2.5 py-1.5 text-xs font-medium">
-                  <span>Subtotal piezas</span>
+                  <span>Subtotal</span>
                   <span>{formatMXN(seleccionada.piezas.reduce((s, p) => s + p.price * p.quantity, 0))}</span>
                 </div>
               </div>
@@ -832,14 +916,32 @@ function VistaAdmin({
             {seleccionada.estado !== "DELIVERED" && seleccionada.estado !== "CANCELLED" && (
               <div className="flex gap-1.5">
                 <select value={piezaProductoId} onChange={(e) => setPiezaProductoId(e.target.value)}
-                  className="flex-1 min-w-0 px-2 py-1.5 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:border-primary">
-                  <option value="">Selecciona una pieza…</option>
-                  {productos.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
-                  ))}
+                  className="flex-1 min-w-0 px-2 py-1.5 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary">
+                  <option value="">Selecciona una pieza o servicio…</option>
+                  {(() => {
+                    const { piezas: piezasCat, servicios } = agruparProductosParaSelector(productos);
+                    return (
+                      <>
+                        {piezasCat.length > 0 && (
+                          <optgroup label="Piezas / productos">
+                            {piezasCat.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {servicios.length > 0 && (
+                          <optgroup label="Servicios">
+                            {servicios.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </>
+                    );
+                  })()}
                 </select>
                 <input type="number" min={1} value={piezaCantidad} onChange={(e) => setPiezaCantidad(e.target.value)}
-                  className="w-12 px-2 py-1.5 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:border-primary" />
+                  className="w-12 px-2 py-1.5 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary" />
                 <button disabled={!piezaProductoId || piezaAccion} onClick={() => agregarPieza(seleccionada.id)}
                   className="px-2.5 py-1.5 bg-muted hover:bg-accent disabled:opacity-40 rounded-lg text-primary">
                   <Plus className="w-3.5 h-3.5" />
@@ -849,7 +951,7 @@ function VistaAdmin({
           </div>
 
           <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL</p>
+            <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL</p>
             <div className="space-y-3">
               {seleccionada.historial.map((h, i) => {
                 const cfg = HISTORIAL_ICONOS[h.estado] || HISTORIAL_ICONOS.RECEIVED;
@@ -861,7 +963,7 @@ function VistaAdmin({
                     </div>
                     <div>
                       <p className="text-xs text-foreground">{h.nota ?? label(labels, `repair.status.${h.estado}`)}</p>
-                      <p className="text-[10px] text-muted-foreground">{formatFechaHora(h.fecha)}</p>
+                      <p className="text-[11.5px] text-muted-foreground">{formatFechaHora(h.fecha)}</p>
                     </div>
                   </div>
                 );
@@ -898,7 +1000,7 @@ function VistaAdmin({
                 <div className="flex items-center gap-2 bg-card rounded-lg px-3 py-2 border border-emerald-200">
                   <ExternalLink className="w-3 h-3 text-primary flex-shrink-0" />
                   <span className="text-xs text-primary flex-1 truncate">linkity.mx/rep/{seleccionada.publicToken}</span>
-                  <button onClick={copiarLink} className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 flex-shrink-0">
+                  <button onClick={copiarLink} className="text-[11.5px] text-muted-foreground hover:text-foreground flex items-center gap-1 flex-shrink-0">
                     <Copy className="w-3 h-3" /> {copiado ? "¡Copiado!" : "Copiar"}
                   </button>
                 </div>
@@ -916,7 +1018,7 @@ function VistaAdmin({
   );
 }
 
-export default function ReparacionesClient({ data, labels, branches, tenantSlug, roleName }: ReparacionesClientProps) {
+export default function ReparacionesClient({ data, labels, branches, tenantSlug, roleName, telefonoNegocio }: ReparacionesClientProps) {
   const { reparaciones, clientes, productos } = data;
   const router = useRouter();
   const negocio = nombreNegocio(tenantSlug);
@@ -940,6 +1042,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   const [nuevaModelo, setNuevaModelo] = useState("");
   const [nuevaFalla, setNuevaFalla] = useState("");
   const [nuevaCosto, setNuevaCosto] = useState("");
+  const [nuevaFechaEstimada, setNuevaFechaEstimada] = useState("");
   const [nuevaPrioridad, setNuevaPrioridad] = useState<PrioridadReparacion>("NORMAL");
   const [nuevaError, setNuevaError] = useState<string | null>(null);
   const [creando, startCrear] = useTransition();
@@ -1036,7 +1139,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   };
 
   const resetModalNueva = () => {
-    setNuevaMarca(""); setNuevaModelo(""); setNuevaFalla(""); setNuevaCosto("");
+    setNuevaMarca(""); setNuevaModelo(""); setNuevaFalla(""); setNuevaCosto(""); setNuevaFechaEstimada("");
     setNuevaClienteId(null); setNuevaClienteQuery(""); setModoClienteNuevo(false);
     setNuevaClienteNuevoNombre(""); setNuevaClienteNuevoTelefono(""); setNuevaClienteNuevoCodigoPais(PAIS_TELEFONO_DEFAULT);
     setNuevaPrioridad("NORMAL"); setNuevaError(null);
@@ -1072,6 +1175,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
         modelo: nuevaModelo,
         falla: nuevaFalla,
         costoEstimado: costoEstimadoTicket,
+        fechaEstimada: nuevaFechaEstimada || null,
         prioridad: nuevaPrioridad,
         piezas: nuevasPiezas.map((p) => ({ productId: p.productId, quantity: p.quantity })),
       });
@@ -1091,6 +1195,8 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
             falla: nuevaFalla,
             piezas: nuevasPiezas,
             costoEstimado: costoEstimadoTicket,
+            fechaEstimada: nuevaFechaEstimada ? `${nuevaFechaEstimada}T00:00:00` : null,
+            telefonoSoporte: telefonoNegocio,
           },
           negocio
         );
@@ -1106,7 +1212,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   return (
     <div className="flex flex-col h-full">
       {accionError && (
-        <div className="bg-red-50 border-b border-red-200 px-4 py-1.5 text-[11px] text-red-600">{accionError}</div>
+        <div className="bg-red-50 border-b border-red-200 px-4 py-1.5 text-[12.5px] text-red-600">{accionError}</div>
       )}
 
       <div className="flex-1 overflow-hidden">
@@ -1114,7 +1220,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
           <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={abrirModalCobro} pending={pendingAccion} />
         ) : (
           <VistaAdmin reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={abrirModalCobro} pending={pendingAccion} onNuevaClick={() => setModalNuevaAbierto(true)}
-            productos={productos} negocio={negocio} tenantSlug={tenantSlug} router={router} />
+            productos={productos} negocio={negocio} telefonoNegocio={telefonoNegocio} tenantSlug={tenantSlug} router={router} />
         )}
       </div>
 
@@ -1131,7 +1237,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
               {nuevaError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{nuevaError}</div>}
 
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">CLIENTE</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">CLIENTE</label>
                 {!modoClienteNuevo ? (
                   <>
                     <input type="text" value={nuevaClienteQuery}
@@ -1148,12 +1254,12 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                           </button>
                         ))}
                         {clientesFiltrados.length === 0 && (
-                          <p className="px-3 py-2 text-[11px] text-muted-foreground/70">Sin resultados</p>
+                          <p className="px-3 py-2 text-[12.5px] text-muted-foreground/70">Sin resultados</p>
                         )}
                       </div>
                     )}
                     <button type="button" onClick={() => { setModoClienteNuevo(true); setNuevaClienteId(null); setNuevaClienteQuery(""); }}
-                      className="text-[11px] text-primary mt-1">
+                      className="text-[12.5px] text-primary mt-1">
                       + Registrar cliente nuevo
                     </button>
                   </>
@@ -1173,7 +1279,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                         placeholder="Teléfono (opcional)"
                         className="flex-1 min-w-0 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                     </div>
-                    <button type="button" onClick={() => setModoClienteNuevo(false)} className="text-[11px] text-muted-foreground">
+                    <button type="button" onClick={() => setModoClienteNuevo(false)} className="text-[12.5px] text-muted-foreground">
                       Buscar cliente existente
                     </button>
                   </div>
@@ -1182,7 +1288,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
               {branches.length > 1 && (
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
                   <select value={nuevaBranchId} onChange={(e) => setNuevaBranchId(e.target.value)}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                     {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -1192,32 +1298,50 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MARCA</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MARCA</label>
                   <input type="text" value={nuevaMarca} onChange={(e) => setNuevaMarca(e.target.value)}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MODELO</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MODELO</label>
                   <input type="text" value={nuevaModelo} onChange={(e) => setNuevaModelo(e.target.value)}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
               </div>
 
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">FALLA REPORTADA</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">FALLA REPORTADA</label>
                 <textarea value={nuevaFalla} onChange={(e) => setNuevaFalla(e.target.value)} rows={2}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary resize-none" />
               </div>
 
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PIEZAS / REFACCIONES (OPCIONAL)</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PIEZAS Y SERVICIOS (OPCIONAL)</label>
                 <div className="flex gap-2 mt-1">
                   <select value={piezaNuevaId} onChange={(e) => setPiezaNuevaId(e.target.value)}
                     className="flex-1 min-w-0 px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary">
-                    <option value="">Selecciona una pieza…</option>
-                    {productos.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
-                    ))}
+                    <option value="">Selecciona una pieza o servicio…</option>
+                    {(() => {
+                      const { piezas: piezasCat, servicios } = agruparProductosParaSelector(productos);
+                      return (
+                        <>
+                          {piezasCat.length > 0 && (
+                            <optgroup label="Piezas / productos">
+                              {piezasCat.map((p) => (
+                                <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {servicios.length > 0 && (
+                            <optgroup label="Servicios">
+                              {servicios.map((p) => (
+                                <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </>
+                      );
+                    })()}
                   </select>
                   <input type="number" min={1} value={piezaNuevaCantidad} onChange={(e) => setPiezaNuevaCantidad(e.target.value)}
                     className="w-14 px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary" />
@@ -1229,7 +1353,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                 {nuevasPiezas.length > 0 && (
                   <div className="mt-2 border border-border rounded-lg divide-y divide-border">
                     {nuevasPiezas.map((p) => (
-                      <div key={p.productId} className="flex items-center justify-between px-2.5 py-1.5 text-[11px]">
+                      <div key={p.productId} className="flex items-center justify-between px-2.5 py-1.5 text-[12.5px]">
                         <span className="flex-1 truncate">{p.productName} × {p.quantity}</span>
                         <span className="text-muted-foreground mr-2">{formatMXN(p.price * p.quantity)}</span>
                         <button type="button" onClick={() => quitarPiezaNueva(p.productId)} className="text-muted-foreground hover:text-red-600">
@@ -1237,11 +1361,11 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                         </button>
                       </div>
                     ))}
-                    <div className="flex items-center justify-between px-2.5 py-1.5 text-[11px] font-medium">
+                    <div className="flex items-center justify-between px-2.5 py-1.5 text-[12.5px] font-medium">
                       <span>Subtotal piezas</span>
                       <div className="flex items-center gap-2">
                         <span>{formatMXN(subtotalPiezasNueva)}</span>
-                        <button type="button" onClick={() => setNuevaCosto(String(subtotalPiezasNueva))} className="text-[10px] text-primary">
+                        <button type="button" onClick={() => setNuevaCosto(String(subtotalPiezasNueva))} className="text-[11.5px] text-primary">
                           Usar como estimado
                         </button>
                       </div>
@@ -1252,13 +1376,13 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">COSTO ESTIMADO</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">COSTO ESTIMADO</label>
                   <input type="number" value={nuevaCosto} onChange={(e) => setNuevaCosto(e.target.value)} placeholder="$0"
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
-                  <p className="text-[10px] text-muted-foreground mt-1">El cliente verá este monto en su ticket y en el aviso de WhatsApp.</p>
+                  <p className="text-[11.5px] text-muted-foreground mt-1">El cliente verá este monto en su ticket y en el aviso de WhatsApp.</p>
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PRIORIDAD</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PRIORIDAD</label>
                   <select value={nuevaPrioridad} onChange={(e) => setNuevaPrioridad(e.target.value as PrioridadReparacion)}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                     <option value="LOW">Baja</option>
@@ -1267,6 +1391,13 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                     <option value="URGENT">Urgente</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">FECHA ESTIMADA DE ENTREGA (OPCIONAL)</label>
+                <input type="date" value={nuevaFechaEstimada} onChange={(e) => setNuevaFechaEstimada(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                <p className="text-[11.5px] text-muted-foreground mt-1">Aparece en el ticket del cliente. Se puede dejar en blanco si aún no se sabe.</p>
               </div>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
@@ -1298,17 +1429,17 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
               {cobroError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{cobroError}</div>}
 
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MONTO A COBRAR</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MONTO A COBRAR</label>
                 <input type="number" value={cobroMonto} onChange={(e) => setCobroMonto(e.target.value)} placeholder="$0" autoFocus
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
               </div>
 
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MÉTODO DE PAGO</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MÉTODO DE PAGO</label>
                 <div className="grid grid-cols-3 gap-2 mt-1">
                   {(["EFECTIVO", "TARJETA", "TRANSFERENCIA"] as MetodoPagoReparacion[]).map((m) => (
                     <button key={m} type="button" onClick={() => setCobroMetodo(m)}
-                      className={`py-2 rounded-lg text-[11px] font-medium capitalize transition-colors ${
+                      className={`py-2 rounded-lg text-[12.5px] font-medium capitalize transition-colors ${
                         cobroMetodo === m ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                       }`}>
                       {m === "EFECTIVO" ? "Efectivo" : m === "TARJETA" ? "Tarjeta" : "Transferencia"}

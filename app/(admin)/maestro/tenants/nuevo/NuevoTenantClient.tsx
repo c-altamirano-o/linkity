@@ -94,7 +94,7 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
       <div className="flex-1 overflow-y-auto p-5">
         {result && (
           <div
-            className={`mb-4 p-4 rounded-lg border text-[13px] ${
+            className={`mb-4 p-4 rounded-lg border text-[14.5px] ${
               result.success
                 ? "bg-emerald-50 border-emerald-200 text-emerald-800"
                 : "bg-red-50 border-red-200 text-red-800"
@@ -124,38 +124,38 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
               <div className="bg-white border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-4">
                   <Building2 className="w-4 h-4 text-[#4F46E5]" />
-                  <h2 className="text-[13px] font-medium text-slate-700">Datos del negocio</h2>
+                  <h2 className="text-[14.5px] font-medium text-slate-700">Datos del negocio</h2>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Nombre del negocio *</label>
+                    <label className="block text-[12.5px] font-medium text-slate-500 mb-1">Nombre del negocio *</label>
                     <input type="text" placeholder="Ej. Cell Express Delicias" required
                       value={form.businessName} onChange={setField("businessName")}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">RFC</label>
+                    <label className="block text-[12.5px] font-medium text-slate-500 mb-1">RFC</label>
                     <input type="text" placeholder="XAXX010101000"
                       value={form.rfc} onChange={setField("rfc")}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Telefono</label>
+                    <label className="block text-[12.5px] font-medium text-slate-500 mb-1">Telefono</label>
                     <input type="tel" placeholder="614 000 0000"
                       value={form.phone} onChange={setField("phone")}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Ciudad</label>
+                    <label className="block text-[12.5px] font-medium text-slate-500 mb-1">Ciudad</label>
                     <input type="text" placeholder="Cd. Delicias"
                       value={form.city} onChange={setField("city")}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Estado</label>
+                    <label className="block text-[12.5px] font-medium text-slate-500 mb-1">Estado</label>
                     <input type="text" placeholder="Chihuahua"
                       value={form.state} onChange={setField("state")}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                 </div>
               </div>
@@ -163,26 +163,26 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
               <div className="bg-white border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-4">
                   <User className="w-4 h-4 text-[#4F46E5]" />
-                  <h2 className="text-[13px] font-medium text-slate-700">Datos del dueno</h2>
+                  <h2 className="text-[14.5px] font-medium text-slate-700">Datos del dueno</h2>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Nombre completo *</label>
+                    <label className="block text-[12.5px] font-medium text-slate-500 mb-1">Nombre completo *</label>
                     <input type="text" placeholder="Juan Perez Garcia" required
                       value={form.ownerName} onChange={setField("ownerName")}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Correo electronico *</label>
+                    <label className="block text-[12.5px] font-medium text-slate-500 mb-1">Correo electronico *</label>
                     <input type="email" placeholder="juan@negocio.com" required
                       value={form.ownerEmail} onChange={setField("ownerEmail")}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Telefono</label>
+                    <label className="block text-[12.5px] font-medium text-slate-500 mb-1">Telefono</label>
                     <input type="tel" placeholder="614 000 0000"
                       value={form.ownerPhone} onChange={setField("ownerPhone")}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]" />
                   </div>
                 </div>
               </div>
@@ -190,8 +190,8 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
               <div className="bg-white border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-4">
                   <Package className="w-4 h-4 text-[#4F46E5]" />
-                  <h2 className="text-[13px] font-medium text-slate-700">Modulos activos</h2>
-                  <span className="ml-auto text-[11px] text-slate-400">{modulosActivos.length}/14 seleccionados</span>
+                  <h2 className="text-[14.5px] font-medium text-slate-700">Modulos activos</h2>
+                  <span className="ml-auto text-[12.5px] text-slate-400">{modulosActivos.length}/14 seleccionados</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {modulosDisponibles.map((m) => {
@@ -215,7 +215,7 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
                           {isActive && <Check className="w-2.5 h-2.5 text-white" />}
                         </div>
                         <div>
-                          <p className={`text-[11px] font-medium ${isActive ? "text-[#4F46E5]" : "text-slate-600"}`}>
+                          <p className={`text-[12.5px] font-medium ${isActive ? "text-[#4F46E5]" : "text-slate-600"}`}>
                             {m.name}
                             {m.isCore && <span className="text-slate-400 font-normal"> · núcleo</span>}
                           </p>
@@ -231,10 +231,10 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
               <div className="bg-white border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Layers className="w-4 h-4 text-[#4F46E5]" />
-                  <h2 className="text-[13px] font-medium text-slate-700">Esquema</h2>
+                  <h2 className="text-[14.5px] font-medium text-slate-700">Esquema</h2>
                 </div>
                 {esquemas.length === 0 ? (
-                  <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                  <p className="text-[12.5px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
                     Todavía no defines ningún esquema en /maestro/esquemas — este negocio se creará sin límite de
                     sucursales/personal hasta que le asignes uno.
                   </p>
@@ -242,7 +242,7 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
                   <select
                     value={esquemaId}
                     onChange={(e) => setEsquemaId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
                   >
                     <option value="">Sin esquema (sin límite)</option>
                     {esquemas.map((e) => (
@@ -255,13 +255,13 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
               </div>
 
               <div className="bg-white border border-slate-200 rounded-lg p-4">
-                <h2 className="text-[13px] font-medium text-slate-700 mb-3">Periodo de prueba</h2>
+                <h2 className="text-[14.5px] font-medium text-slate-700 mb-3">Periodo de prueba</h2>
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-500 mb-1">Dias de prueba</label>
+                  <label className="block text-[12.5px] font-medium text-slate-500 mb-1">Dias de prueba</label>
                   <select
                     value={trialDays}
                     onChange={(e) => setTrialDays(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]">
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]">
                     <option value={0}>Sin periodo de prueba</option>
                     <option value={7}>7 dias</option>
                     <option value={14}>14 dias</option>
@@ -271,19 +271,19 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
               </div>
 
               <div className="bg-[#4F46E5]/5 border border-[#4F46E5]/20 rounded-lg p-4">
-                <h2 className="text-[13px] font-medium text-[#4F46E5] mb-2">Resumen</h2>
+                <h2 className="text-[14.5px] font-medium text-[#4F46E5] mb-2">Resumen</h2>
                 <div className="space-y-1.5">
                   <div className="flex justify-between">
-                    <span className="text-[11px] text-slate-500">Esquema</span>
-                    <span className="text-[11px] font-medium text-slate-700">{esquemaSeleccionado?.name ?? "Sin límite"}</span>
+                    <span className="text-[12.5px] text-slate-500">Esquema</span>
+                    <span className="text-[12.5px] font-medium text-slate-700">{esquemaSeleccionado?.name ?? "Sin límite"}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[11px] text-slate-500">Modulos</span>
-                    <span className="text-[11px] font-medium text-slate-700">{modulosActivos.length}/14</span>
+                    <span className="text-[12.5px] text-slate-500">Modulos</span>
+                    <span className="text-[12.5px] font-medium text-slate-700">{modulosActivos.length}/14</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[11px] text-slate-500">Acceso</span>
-                    <span className="text-[11px] font-medium text-emerald-600">Inmediato</span>
+                    <span className="text-[12.5px] text-slate-500">Acceso</span>
+                    <span className="text-[12.5px] font-medium text-emerald-600">Inmediato</span>
                   </div>
                 </div>
               </div>
@@ -291,7 +291,7 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium py-2.5 rounded-lg text-[13px] transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+                className="w-full bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium py-2.5 rounded-lg text-[14.5px] transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
               >
                 {loading ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -299,7 +299,7 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
               </button>
 
               <Link href="/maestro/dashboard"
-                className="w-full block text-center text-[12px] text-slate-400 hover:text-slate-600 transition-colors py-1">
+                className="w-full block text-center text-[13.5px] text-slate-400 hover:text-slate-600 transition-colors py-1">
                 Cancelar
               </Link>
             </div>

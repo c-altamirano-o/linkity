@@ -45,6 +45,7 @@ export default async function ReparacionesPage({
       branches={tenant.branches}
       tenantSlug={tenantSlug}
       roleName={actorInfo.ok ? actorInfo.roleName : null}
+      telefonoNegocio={tenant.phone}
     />
   );
 }

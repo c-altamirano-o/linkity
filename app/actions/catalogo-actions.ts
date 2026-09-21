@@ -18,16 +18,27 @@ import { resolverActor, type ActorResult } from "@/lib/actor";
  *
  * Nota sobre Inventory (el stock por sucursal): un producto/refacción
  * recién creado (por cualquiera de las 3 formas de esta pantalla — alta
- * manual, catálogo de arranque, importación CSV/Excel) arranca con 1
- * unidad de existencia en cada sucursal activa del negocio, en vez de 0
- * (a petición de Carlos, 2026-09-16 — mostrar "Agotado" apenas se da de
- * alta un producto resultaba confuso). Editar un producto ya existente
- * sigue sin tocar Inventory. Los servicios (type SERVICE) no llevan
- * stock, así que no reciben fila de Inventory. El movimiento real de
- * stock de ahí en adelante sigue el mismo camino de siempre: recibir una
- * Compra lo incrementa (compras-actions.ts), venderlo lo descuenta
- * (pos-actions.ts), y Inventario permite ajustarlo a mano
- * (inventario-actions.ts).
+ * manual, catálogo de arranque, importación CSV/Excel) arranca con
+ * existencia en cada sucursal activa del negocio, en vez de 0 (a petición
+ * de Carlos, 2026-09-16 — mostrar "Agotado" apenas se da de alta un
+ * producto resultaba confuso). La cantidad inicial es 1 por default, pero
+ * en el alta manual el propio formulario deja capturarla (a petición de
+ * Carlos, 2026-09-21 — antes el default de 1 quedaba oculto y había que ir
+ * a Inventario después a corregirlo, "no veo lógica en crear un artículo y
+ * después ir a otra ventana a darle existencias"). El catálogo de arranque
+ * y la importación CSV/Excel siguen usando el default de 1 (no tienen un
+ * campo por fila para esto todavía). Editar un producto ya existente sigue
+ * sin tocar Inventory. Los servicios (type SERVICE) no llevan stock, así
+ * que no reciben fila de Inventory. El movimiento real de stock de ahí en
+ * adelante sigue el mismo camino de siempre: recibir una Compra lo
+ * incrementa (compras-actions.ts), venderlo lo descuenta (pos-actions.ts),
+ * y Inventario permite ajustarlo a mano (inventario-actions.ts).
+ *
+ * Nota sobre "existencia por sucursal": si el negocio tiene más de una
+ * sucursal activa, la existencia capturada se replica igual en TODAS
+ * (mismo criterio que ya existía) — no es un total repartido. Un negocio
+ * con 2 sucursales y existencia inicial "1" termina con 1 en cada una (2
+ * en total al sumarlas en Inventario), eso es esperado, no un bug.
  */
 
 type ResolverResult = ActorResult;
@@ -50,11 +61,12 @@ const STOCK_INICIAL_DEFAULT = 1;
 async function crearInventarioInicial(
   db: ReturnType<typeof getTenantPrisma>,
   productId: string,
-  branchIds: string[]
+  branchIds: string[],
+  stock: number = STOCK_INICIAL_DEFAULT
 ): Promise<void> {
   if (branchIds.length === 0) return;
   await db.inventory.createMany({
-    data: branchIds.map((branchId) => ({ productId, branchId, stock: STOCK_INICIAL_DEFAULT })),
+    data: branchIds.map((branchId) => ({ productId, branchId, stock })),
   });
 }
 
@@ -89,11 +101,14 @@ function validarDatosProducto(datos: DatosProducto): string | null {
 export type AccionProductoResult = { ok: true; id: string } | { ok: false; error: string };
 
 export async function crearProductoAction(
-  params: { tenantSlug: string } & DatosProducto
+  params: { tenantSlug: string; stockInicial?: number } & DatosProducto
 ): Promise<AccionProductoResult> {
-  const { tenantSlug, ...datos } = params;
+  const { tenantSlug, stockInicial, ...datos } = params;
   const errorValidacion = validarDatosProducto(datos);
   if (errorValidacion) return { ok: false, error: errorValidacion };
+  if (stockInicial != null && (!Number.isFinite(stockInicial) || stockInicial < 0)) {
+    return { ok: false, error: "La existencia inicial no puede ser negativa" };
+  }
 
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
@@ -122,7 +137,12 @@ export async function crearProductoAction(
 
     if (datos.type !== "SERVICE") {
       const sucursalesActivas = await db.branch.findMany({ where: { isActive: true }, select: { id: true } });
-      await crearInventarioInicial(db, nuevo.id, sucursalesActivas.map((b) => b.id));
+      await crearInventarioInicial(
+        db,
+        nuevo.id,
+        sucursalesActivas.map((b) => b.id),
+        stockInicial ?? STOCK_INICIAL_DEFAULT
+      );
     }
 
     revalidatePath(`/${tenantSlug}/catalogo`);

@@ -84,7 +84,7 @@ const CustomTooltipHora = ({ active, payload }: { active?: boolean; payload?: { 
     return (
       <div className="bg-card border border-border rounded-lg p-2 shadow-sm">
         <p className="text-xs font-medium text-foreground mb-0.5">{d.horaLabel}</p>
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-[11.5px] text-muted-foreground">
           {d.numVentas} {d.numVentas === 1 ? "venta" : "ventas"} · {formatMXN(d.totalVentas)}
         </p>
       </div>
@@ -204,20 +204,20 @@ export default function DashboardClient({
       <>
         <div className="grid grid-cols-[70px_1fr_80px_65px] sm:grid-cols-[80px_1fr_90px_75px] px-4 py-2 bg-muted/50 border-b border-border sticky top-0">
           {["Folio · Hora", "Artículos", "Método", "Total"].map((h, i) => (
-            <p key={h} className={`text-[10px] font-medium text-muted-foreground ${i === 3 ? "text-right" : ""}`}>{h}</p>
+            <p key={h} className={`text-[11.5px] font-medium text-muted-foreground ${i === 3 ? "text-right" : ""}`}>{h}</p>
           ))}
         </div>
         {data.ventasHoy.map((v) => (
           <div key={v.id} className="grid grid-cols-[70px_1fr_80px_65px] sm:grid-cols-[80px_1fr_90px_75px] px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-center">
             <div>
               <p className="text-xs font-semibold text-primary">{v.folio}</p>
-              <p className="text-[10px] text-muted-foreground">{v.hora}</p>
+              <p className="text-[11.5px] text-muted-foreground">{v.hora}</p>
             </div>
             <div>
               <p className="text-xs text-foreground truncate">{v.articulos}</p>
-              <p className="text-[10px] text-muted-foreground">{v.count} {v.count === 1 ? "artículo" : "artículos"}</p>
+              <p className="text-[11.5px] text-muted-foreground">{v.count} {v.count === 1 ? "artículo" : "artículos"}</p>
             </div>
-            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full w-fit ${metodoBadge[v.metodo]}`}>{v.metodo}</span>
+            <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full w-fit ${metodoBadge[v.metodo]}`}>{v.metodo}</span>
             <p className="text-xs font-semibold text-foreground text-right">{formatMXN(v.total)}</p>
           </div>
         ))}
@@ -231,7 +231,7 @@ export default function DashboardClient({
       <>
         <div className="grid grid-cols-[80px_1fr_90px_75px] px-4 py-2 bg-muted/50 border-b border-border sticky top-0">
           {["Folio", "Cliente · Equipo", "Estado", "Técnico"].map((h) => (
-            <p key={h} className="text-[10px] font-medium text-muted-foreground">{h}</p>
+            <p key={h} className="text-[11.5px] font-medium text-muted-foreground">{h}</p>
           ))}
         </div>
         {rows.map((r) => (
@@ -242,12 +242,12 @@ export default function DashboardClient({
             </div>
             <div>
               <p className="text-xs font-medium text-foreground">{r.cliente}</p>
-              <p className="text-[10px] text-muted-foreground">{r.equipo}</p>
+              <p className="text-[11.5px] text-muted-foreground">{r.equipo}</p>
             </div>
-            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full w-fit ${estadoConfig[r.status].classes}`}>
+            <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full w-fit ${estadoConfig[r.status].classes}`}>
               {estadoConfig[r.status].label}
             </span>
-            <p className="text-[10px] text-muted-foreground truncate">{r.tecnico}</p>
+            <p className="text-[11.5px] text-muted-foreground truncate">{r.tecnico}</p>
           </div>
         ))}
       </>
@@ -260,24 +260,24 @@ export default function DashboardClient({
       <>
         <div className="grid grid-cols-[80px_1fr_90px_70px] px-4 py-2 bg-muted/50 border-b border-border sticky top-0">
           {["Folio", "Cliente · Equipo", "Costo", "Espera"].map((h) => (
-            <p key={h} className="text-[10px] font-medium text-muted-foreground">{h}</p>
+            <p key={h} className="text-[11.5px] font-medium text-muted-foreground">{h}</p>
           ))}
         </div>
         {rows.map((e) => (
           <div key={e.id} className="grid grid-cols-[80px_1fr_90px_70px] px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-center">
             <div>
               <p className="text-xs font-semibold text-primary">{e.folio}</p>
-              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Listo</span>
+              <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Listo</span>
             </div>
             <div>
               <p className="text-xs font-medium text-foreground">{e.cliente}</p>
-              <p className="text-[10px] text-muted-foreground">{e.equipo} · {e.falla ?? "Sin detalle"}</p>
-              <p className="text-[10px] text-primary flex items-center gap-1 mt-0.5">
+              <p className="text-[11.5px] text-muted-foreground">{e.equipo} · {e.falla ?? "Sin detalle"}</p>
+              <p className="text-[11.5px] text-primary flex items-center gap-1 mt-0.5">
                 <Phone className="w-2.5 h-2.5" /> {e.telefono}
               </p>
             </div>
             <p className="text-xs font-semibold text-emerald-600">{e.costo != null ? formatMXN(e.costo) : "—"}</p>
-            <p className="text-[10px] text-muted-foreground">{e.espera}</p>
+            <p className="text-[11.5px] text-muted-foreground">{e.espera}</p>
           </div>
         ))}
       </>
@@ -290,25 +290,25 @@ export default function DashboardClient({
       <>
         <div className="grid grid-cols-[80px_1fr_1fr] px-4 py-2 bg-muted/50 border-b border-border sticky top-0">
           {["Folio", "Cliente · Equipo", "Razón · Espera"].map((h) => (
-            <p key={h} className="text-[10px] font-medium text-muted-foreground">{h}</p>
+            <p key={h} className="text-[11.5px] font-medium text-muted-foreground">{h}</p>
           ))}
         </div>
         {rows.map((e) => (
           <div key={e.id} className="grid grid-cols-[80px_1fr_1fr] px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-start">
             <div>
               <p className="text-xs font-semibold text-primary">{e.folio}</p>
-              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-red-50 text-red-600">Devolución</span>
+              <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-full bg-red-50 text-red-600">Devolución</span>
             </div>
             <div>
               <p className="text-xs font-medium text-foreground">{e.cliente}</p>
-              <p className="text-[10px] text-muted-foreground">{e.equipo}</p>
-              <p className="text-[10px] text-primary flex items-center gap-1 mt-0.5">
+              <p className="text-[11.5px] text-muted-foreground">{e.equipo}</p>
+              <p className="text-[11.5px] text-primary flex items-center gap-1 mt-0.5">
                 <Phone className="w-2.5 h-2.5" /> {e.telefono}
               </p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground">{e.razon ?? "Sin motivo especificado"}</p>
-              <p className="text-[10px] text-amber-500 mt-0.5">{e.espera}</p>
+              <p className="text-[11.5px] text-muted-foreground">{e.razon ?? "Sin motivo especificado"}</p>
+              <p className="text-[11.5px] text-amber-500 mt-0.5">{e.espera}</p>
             </div>
           </div>
         ))}
@@ -386,7 +386,7 @@ export default function DashboardClient({
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">{cfg.titulo}</p>
-                <p className="text-[10px] text-muted-foreground">{fechaHoy} · Actualizado al momento</p>
+                <p className="text-[11.5px] text-muted-foreground">{fechaHoy} · Actualizado al momento</p>
               </div>
             </div>
             <button onClick={() => setModalAbierto(null)}
@@ -397,7 +397,7 @@ export default function DashboardClient({
           <div className="grid grid-cols-3 gap-2 sm:gap-3 px-4 sm:px-5 py-3 border-b border-border flex-shrink-0">
             {cfg.stats.map((s) => (
               <div key={s.label} className="bg-muted/50 rounded-xl p-2 sm:p-3 text-center">
-                <p className="text-[9px] text-muted-foreground mb-1">{s.label}</p>
+                <p className="text-[10.5px] text-muted-foreground mb-1">{s.label}</p>
                 <p className={`text-sm sm:text-base font-bold ${s.color}`}>{s.value}</p>
               </div>
             ))}
@@ -435,7 +435,7 @@ export default function DashboardClient({
           <p className="text-xs text-muted-foreground mt-0.5 capitalize">{fechaHoy}</p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] text-muted-foreground">Total semana</p>
+          <p className="text-[11.5px] text-muted-foreground">Total semana</p>
           <p className="text-sm sm:text-base font-bold text-foreground">{formatMXN(data.totalSemana)}</p>
         </div>
       </div>
@@ -445,7 +445,7 @@ export default function DashboardClient({
         {metricas.map((m) => (
           <div key={m.label} className="bg-card border border-border rounded-xl p-3 hover:border-primary/30 transition-colors">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">{m.label}</p>
+              <p className="text-[11.5px] sm:text-xs text-muted-foreground leading-tight">{m.label}</p>
               <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg ${m.iconBg} flex items-center justify-center flex-shrink-0`}>
                 <m.icon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${m.iconColor}`} />
               </div>
@@ -456,10 +456,10 @@ export default function DashboardClient({
                 {m.positive
                   ? <ArrowUpRight className="w-3 h-3 text-emerald-500" />
                   : <ArrowDownRight className="w-3 h-3 text-red-500" />}
-                <p className={`text-[9px] sm:text-[10px] ${m.positive ? "text-emerald-500" : "text-red-500"}`}>{m.sub}</p>
+                <p className={`text-[10.5px] sm:text-[11.5px] ${m.positive ? "text-emerald-500" : "text-red-500"}`}>{m.sub}</p>
               </div>
               <button onClick={() => setModalAbierto(m.modal)}
-                className={`text-[9px] font-medium px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity ${m.btnColor}`}>
+                className={`text-[10.5px] font-medium px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity ${m.btnColor}`}>
                 Ver →
               </button>
             </div>
@@ -477,11 +477,11 @@ export default function DashboardClient({
               <p className="text-xs text-muted-foreground">Promedio diario: {formatMXN(data.promedioVentasSemana)}</p>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
-              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /><span className="text-[10px] sm:text-xs text-muted-foreground">Ventas</span></div>
+              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Ventas</span></div>
               {data.reparacionesActiva && (
                 <>
-                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#06B6D4]" /><span className="text-[10px] sm:text-xs text-muted-foreground">Rep.</span></div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-0 border-t-2 border-dashed border-emerald-500" /><span className="text-[10px] sm:text-xs text-muted-foreground">Total</span></div>
+                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#06B6D4]" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Rep.</span></div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-0 border-t-2 border-dashed border-emerald-500" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Total</span></div>
                 </>
               )}
             </div>
@@ -548,9 +548,9 @@ export default function DashboardClient({
                   <div key={cat.name} className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: cat.color }} />
-                      <span className="text-[10px] sm:text-xs text-muted-foreground truncate">{cat.name}</span>
+                      <span className="text-[11.5px] sm:text-xs text-muted-foreground truncate">{cat.name}</span>
                     </div>
-                    <span className="text-[10px] sm:text-xs font-medium text-foreground ml-1">{cat.value}%</span>
+                    <span className="text-[11.5px] sm:text-xs font-medium text-foreground ml-1">{cat.value}%</span>
                   </div>
                 ))}
               </div>
@@ -587,7 +587,7 @@ export default function DashboardClient({
             </button>
             {!esHoySeleccionado && (
               <button onClick={() => cambiarFechaVentas(hoyStr)} disabled={cargandoFecha}
-                className="text-[10px] font-medium px-2 py-1.5 rounded-lg text-primary bg-primary/10 hover:opacity-80 flex-shrink-0">
+                className="text-[11.5px] font-medium px-2 py-1.5 rounded-lg text-primary bg-primary/10 hover:opacity-80 flex-shrink-0">
                 Hoy
               </button>
             )}
@@ -602,7 +602,7 @@ export default function DashboardClient({
             { label: "Mayor flujo", value: ventasPorDia.horaPico ? ventasPorDia.horaPico.horaLabel : "—" },
           ].map((s) => (
             <div key={s.label} className="bg-muted/50 rounded-xl p-2 text-center">
-              <p className="text-[9px] text-muted-foreground mb-0.5">{s.label}</p>
+              <p className="text-[10.5px] text-muted-foreground mb-0.5">{s.label}</p>
               <p className="text-sm font-semibold text-foreground">{s.value}</p>
             </div>
           ))}
@@ -621,7 +621,7 @@ export default function DashboardClient({
             </BarChart>
           </ResponsiveContainer>
         )}
-        {cargandoFecha && <p className="text-[10px] text-muted-foreground text-center mt-2">Cargando…</p>}
+        {cargandoFecha && <p className="text-[11.5px] text-muted-foreground text-center mt-2">Cargando…</p>}
       </div>
 
       {/* ── Reparaciones + Alertas ─────────────────────────────────────────── */}
@@ -645,9 +645,9 @@ export default function DashboardClient({
                     <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${prioridadDot[r.prioridad]}`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{r.equipo}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{r.cliente}</p>
+                      <p className="text-[11.5px] text-muted-foreground truncate">{r.cliente}</p>
                     </div>
-                    <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${estadoConfig[r.status].classes}`}>
+                    <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${estadoConfig[r.status].classes}`}>
                       {estadoConfig[r.status].label}
                     </span>
                   </div>
@@ -715,7 +715,7 @@ export default function DashboardClient({
                 <div key={suc.id} className={`border-t-2 ${borderColors[i % borderColors.length]}`}>
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
                     <p className="text-xs font-semibold text-foreground">🏢 {suc.nombre}</p>
-                    <span className={`text-[9px] font-medium px-2 py-0.5 rounded-full ${suc.estado === "activa" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-600"}`}>
+                    <span className={`text-[10.5px] font-medium px-2 py-0.5 rounded-full ${suc.estado === "activa" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-600"}`}>
                       {suc.estado === "activa" ? "Activa" : "En prueba"}
                     </span>
                   </div>
@@ -733,20 +733,20 @@ export default function DashboardClient({
                       { label: "Ticket promedio", value: formatMXN(suc.ticketsVenta > 0 ? Math.round(suc.ventasDia / suc.ticketsVenta) : 0), color: "text-primary", sub: "Por venta" },
                     ].map((m) => (
                       <div key={m.label} className="px-3 py-2.5">
-                        <p className="text-[9px] text-muted-foreground mb-0.5">{m.label}</p>
+                        <p className="text-[10.5px] text-muted-foreground mb-0.5">{m.label}</p>
                         <p className={`text-sm font-semibold ${m.color}`}>{m.value}</p>
-                        <p className="text-[9px] text-muted-foreground mt-0.5">{m.sub}</p>
+                        <p className="text-[10.5px] text-muted-foreground mt-0.5">{m.sub}</p>
                       </div>
                     ))}
                   </div>
                   <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-t border-border">
                     <div className="flex gap-2">
-                      <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-purple-50 text-purple-700">{suc.ticketsVenta} ventas</span>
+                      <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-purple-50 text-purple-700">{suc.ticketsVenta} ventas</span>
                       {data.reparacionesActiva && (
-                        <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-orange-50 text-orange-700">{suc.ticketsRep} {t("entity.repair.plural").toLowerCase()}</span>
+                        <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-orange-50 text-orange-700">{suc.ticketsRep} {t("entity.repair.plural").toLowerCase()}</span>
                       )}
                     </div>
-                    <span className="text-[10px] text-muted-foreground">Total: <span className="font-semibold text-foreground">{formatMXN(suc.ventasDia)}</span></span>
+                    <span className="text-[11.5px] text-muted-foreground">Total: <span className="font-semibold text-foreground">{formatMXN(suc.ventasDia)}</span></span>
                   </div>
                 </div>
               );
@@ -792,11 +792,11 @@ export default function DashboardClient({
                     <div className={`w-4 h-4 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${
                       cat.visible ? "bg-primary border-primary" : "border-border"
                     }`}>
-                      {cat.visible && <span className="text-white text-[9px] font-bold">✓</span>}
+                      {cat.visible && <span className="text-white text-[10.5px] font-bold">✓</span>}
                     </div>
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: cat.color }} />
                     <span className="text-xs font-medium text-foreground flex-1">{cat.name}</span>
-                    <span className="text-[10px] text-muted-foreground w-8 text-right">{cat.value}%</span>
+                    <span className="text-[11.5px] text-muted-foreground w-8 text-right">{cat.value}%</span>
                     {cat.visible && (
                       <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                         {coloresDisponibles.slice(0, 6).map((color) => (

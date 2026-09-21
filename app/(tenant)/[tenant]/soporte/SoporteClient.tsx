@@ -86,11 +86,11 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-[16px] font-medium text-foreground">Soporte</h1>
-          <p className="text-[12px] text-muted-foreground">Escríbele al equipo de Linkity si algo no funciona o tienes una duda</p>
+          <p className="text-[13.5px] text-muted-foreground">Escríbele al equipo de Linkity si algo no funciona o tienes una duda</p>
         </div>
         <button
           onClick={abrirModal}
-          className="flex items-center gap-1.5 bg-primary text-primary-foreground text-[12px] font-medium px-3 py-2 rounded-lg hover:opacity-90 transition-opacity"
+          className="flex items-center gap-1.5 bg-primary text-primary-foreground text-[13.5px] font-medium px-3 py-2 rounded-lg hover:opacity-90 transition-opacity"
         >
           <Plus className="w-3.5 h-3.5" />
           Nuevo ticket
@@ -101,10 +101,10 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
         <div className="bg-card border border-border rounded-lg p-10 text-center">
           <LifeBuoy className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-[14px] font-medium text-foreground mb-1">Aún no has abierto ningún ticket</p>
-          <p className="text-[12px] text-muted-foreground mb-4">Si tienes una duda o algo no está funcionando, cuéntanos.</p>
+          <p className="text-[13.5px] text-muted-foreground mb-4">Si tienes una duda o algo no está funcionando, cuéntanos.</p>
           <button
             onClick={abrirModal}
-            className="text-[12px] font-medium text-primary hover:underline"
+            className="text-[13.5px] font-medium text-primary hover:underline"
           >
             Abrir tu primer ticket
           </button>
@@ -121,12 +121,12 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
                   t.id === seleccionado ? "bg-primary/5" : "hover:bg-muted/50"
                 }`}
               >
-                <p className="text-[12px] font-medium text-foreground truncate">{t.subject}</p>
+                <p className="text-[13.5px] font-medium text-foreground truncate">{t.subject}</p>
                 <div className="flex items-center gap-1.5 mt-1">
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${ESTADO_COLOR[t.status]}`}>
+                  <span className={`text-[11.5px] font-medium px-1.5 py-0.5 rounded-full ${ESTADO_COLOR[t.status]}`}>
                     {ESTADO_LABEL[t.status]}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">{formatFecha(t.updatedAt)}</span>
+                  <span className="text-[11.5px] text-muted-foreground">{formatFecha(t.updatedAt)}</span>
                 </div>
               </button>
             ))}
@@ -137,12 +137,12 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
             <div className="bg-card border border-border rounded-lg flex flex-col">
               <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                 <div>
-                  <p className="text-[13px] font-medium text-foreground">{ticketActivo.subject}</p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[14.5px] font-medium text-foreground">{ticketActivo.subject}</p>
+                  <p className="text-[12.5px] text-muted-foreground">
                     Abierto por {ticketActivo.abiertoPor} · Prioridad {PRIORIDAD_LABEL[ticketActivo.priority]}
                   </p>
                 </div>
-                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${ESTADO_COLOR[ticketActivo.status]}`}>
+                <span className={`text-[12.5px] font-medium px-2 py-0.5 rounded-full ${ESTADO_COLOR[ticketActivo.status]}`}>
                   {ESTADO_LABEL[ticketActivo.status]}
                 </span>
               </div>
@@ -153,8 +153,8 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
                     <div className={`max-w-[75%] rounded-lg px-3 py-2 ${
                       m.esAdmin ? "bg-muted text-foreground" : "bg-primary text-primary-foreground"
                     }`}>
-                      <p className="text-[12px] whitespace-pre-wrap">{m.body}</p>
-                      <p className={`text-[10px] mt-1 ${m.esAdmin ? "text-muted-foreground" : "text-primary-foreground/70"}`}>
+                      <p className="text-[13.5px] whitespace-pre-wrap">{m.body}</p>
+                      <p className={`text-[11.5px] mt-1 ${m.esAdmin ? "text-muted-foreground" : "text-primary-foreground/70"}`}>
                         {m.autor} · {formatFecha(m.createdAt)}
                       </p>
                     </div>
@@ -162,10 +162,10 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
                 ))}
               </div>
 
-              {error && <p className="text-[11px] text-red-600 px-4">{error}</p>}
+              {error && <p className="text-[12.5px] text-red-600 px-4">{error}</p>}
 
               {ticketActivo.status === "CLOSED" ? (
-                <p className="text-[11px] text-muted-foreground p-4 border-t border-border">
+                <p className="text-[12.5px] text-muted-foreground p-4 border-t border-border">
                   Este ticket está cerrado. Si necesitas algo más, abre uno nuevo.
                 </p>
               ) : (
@@ -175,7 +175,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
                     onChange={(e) => setRespuesta(e.target.value)}
                     placeholder="Escribe tu mensaje…"
                     rows={2}
-                    className="flex-1 text-[12px] border border-border rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
+                    className="flex-1 text-[13.5px] border border-border rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
                   />
                   <button
                     onClick={enviarRespuesta}
@@ -196,27 +196,27 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-lg w-full max-w-md">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <p className="text-[13px] font-medium text-foreground">Nuevo ticket de soporte</p>
+              <p className="text-[14.5px] font-medium text-foreground">Nuevo ticket de soporte</p>
               <button onClick={() => setModalAbierto(false)}>
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
             <div className="p-4 space-y-3">
               <div>
-                <label className="text-[11px] text-muted-foreground block mb-1">Asunto</label>
+                <label className="text-[12.5px] text-muted-foreground block mb-1">Asunto</label>
                 <input
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="Ej. No me deja registrar una venta"
-                  className="w-full text-[12px] border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
+                  className="w-full text-[13.5px] border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
                 />
               </div>
               <div>
-                <label className="text-[11px] text-muted-foreground block mb-1">Prioridad</label>
+                <label className="text-[12.5px] text-muted-foreground block mb-1">Prioridad</label>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as TicketPriority)}
-                  className="w-full text-[12px] border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
+                  className="w-full text-[13.5px] border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
                 >
                   <option value="LOW">Baja</option>
                   <option value="NORMAL">Normal</option>
@@ -225,28 +225,28 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
                 </select>
               </div>
               <div>
-                <label className="text-[11px] text-muted-foreground block mb-1">Mensaje</label>
+                <label className="text-[12.5px] text-muted-foreground block mb-1">Mensaje</label>
                 <textarea
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   rows={4}
                   placeholder="Cuéntanos qué pasó, con el mayor detalle posible…"
-                  className="w-full text-[12px] border border-border rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
+                  className="w-full text-[13.5px] border border-border rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
                 />
               </div>
-              {error && <p className="text-[11px] text-red-600">{error}</p>}
+              {error && <p className="text-[12.5px] text-red-600">{error}</p>}
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
                 onClick={() => setModalAbierto(false)}
-                className="text-[12px] text-muted-foreground px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
+                className="text-[13.5px] text-muted-foreground px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={crear}
                 disabled={isPending || !subject.trim() || !body.trim()}
-                className="text-[12px] font-medium bg-primary text-primary-foreground px-3 py-1.5 rounded-lg disabled:opacity-50 hover:opacity-90 transition-opacity"
+                className="text-[13.5px] font-medium bg-primary text-primary-foreground px-3 py-1.5 rounded-lg disabled:opacity-50 hover:opacity-90 transition-opacity"
               >
                 {isPending ? "Enviando…" : "Enviar ticket"}
               </button>

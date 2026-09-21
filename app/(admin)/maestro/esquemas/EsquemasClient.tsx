@@ -75,14 +75,14 @@ export default function EsquemasClient({ esquemas }: { esquemas: EsquemaUI[] }) 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-[11px] text-slate-400">
+        <p className="text-[12.5px] text-slate-400">
           {esquemas.length === 0
             ? "Todavía no defines ningún esquema — el registro público no puede asignar uno a negocios nuevos hasta que crees al menos uno."
             : `${esquemas.length} esquema${esquemas.length === 1 ? "" : "s"} definido${esquemas.length === 1 ? "" : "s"}`}
         </p>
         <button
           onClick={abrirModalNuevo}
-          className="flex items-center gap-1.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13.5px] font-medium px-3 py-1.5 rounded-lg transition-colors"
         >
           <Plus className="w-3.5 h-3.5" /> Nuevo esquema
         </button>
@@ -92,18 +92,18 @@ export default function EsquemasClient({ esquemas }: { esquemas: EsquemaUI[] }) 
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Esquema</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Máx. sucursales</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Máx. personal / sucursal</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Negocios</th>
-              <th className="text-left text-[11px] font-medium text-slate-500 px-4 py-2.5">Estado</th>
-              <th className="text-right text-[11px] font-medium text-slate-500 px-4 py-2.5">Acciones</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Esquema</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Máx. sucursales</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Máx. personal / sucursal</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Negocios</th>
+              <th className="text-left text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Estado</th>
+              <th className="text-right text-[12.5px] font-medium text-slate-500 px-4 py-2.5">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {esquemas.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-[12px] text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-[13.5px] text-slate-400">
                   Sin esquemas todavía — crea el primero.
                 </td>
               </tr>
@@ -112,20 +112,20 @@ export default function EsquemasClient({ esquemas }: { esquemas: EsquemaUI[] }) 
                 <tr key={e.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-[12px] font-medium text-slate-800">{e.name}</p>
+                      <p className="text-[13.5px] font-medium text-slate-800">{e.name}</p>
                       {e.isDefault && (
-                        <span className="flex items-center gap-0.5 text-[9px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
+                        <span className="flex items-center gap-0.5 text-[10.5px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
                           <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" /> Predeterminado
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-[12px] text-slate-600">{e.maxBranches}</td>
-                  <td className="px-4 py-2.5 text-[12px] text-slate-600">{e.maxStaffPerBranch}</td>
-                  <td className="px-4 py-2.5 text-[12px] text-slate-600">{e.tenantsCount}</td>
+                  <td className="px-4 py-2.5 text-[13.5px] text-slate-600">{e.maxBranches}</td>
+                  <td className="px-4 py-2.5 text-[13.5px] text-slate-600">{e.maxStaffPerBranch}</td>
+                  <td className="px-4 py-2.5 text-[13.5px] text-slate-600">{e.tenantsCount}</td>
                   <td className="px-4 py-2.5">
                     <span
-                      className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                      className={`text-[11.5px] font-medium px-2 py-0.5 rounded-full ${
                         e.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
                       }`}
                     >
@@ -174,7 +174,7 @@ export default function EsquemasClient({ esquemas }: { esquemas: EsquemaUI[] }) 
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-lg w-full max-w-sm">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-              <p className="text-[13px] font-medium text-slate-800">
+              <p className="text-[14.5px] font-medium text-slate-800">
                 {modoModal === "crear" ? "Nuevo esquema" : "Editar esquema"}
               </p>
               <button onClick={() => setModalAbierto(false)} className="p-1 rounded-md hover:bg-slate-100">
@@ -183,50 +183,50 @@ export default function EsquemasClient({ esquemas }: { esquemas: EsquemaUI[] }) 
             </div>
             <div className="p-5 space-y-3">
               <div>
-                <label className="text-[11px] font-medium text-slate-500">Nombre</label>
+                <label className="text-[12.5px] font-medium text-slate-500">Nombre</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="Ej. 1 Sucursal"
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-medium text-slate-500">Máx. sucursales</label>
+                  <label className="text-[12.5px] font-medium text-slate-500">Máx. sucursales</label>
                   <input
                     type="number"
                     min={1}
                     value={form.maxBranches}
                     onChange={(e) => setForm({ ...form, maxBranches: parseInt(e.target.value, 10) || 0 })}
-                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-medium text-slate-500">Máx. personal / sucursal</label>
+                  <label className="text-[12.5px] font-medium text-slate-500">Máx. personal / sucursal</label>
                   <input
                     type="number"
                     min={1}
                     value={form.maxStaffPerBranch}
                     onChange={(e) => setForm({ ...form, maxStaffPerBranch: parseInt(e.target.value, 10) || 0 })}
-                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
                   />
                 </div>
               </div>
-              {formError && <p className="text-[11px] text-red-600">{formError}</p>}
+              {formError && <p className="text-[12.5px] text-red-600">{formError}</p>}
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-200">
               <button
                 onClick={() => setModalAbierto(false)}
-                className="px-4 py-2 text-[12px] rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+                className="px-4 py-2 text-[13.5px] rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleGuardar}
                 disabled={isPending}
-                className="px-4 py-2 text-[12px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50"
+                className="px-4 py-2 text-[13.5px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50"
               >
                 {isPending ? "Guardando…" : "Guardar"}
               </button>

@@ -52,6 +52,38 @@ export async function updateBusinessType(tenantSlug: string, businessType: strin
 // administrador dueño de la cuenta (nunca un empleado con PIN —
 // "configuracion" no aparece en ninguna matriz de acceso de rol, ver
 // lib/roles.ts) debería poder tocarlo.
+// Teléfono de soporte del negocio (Tenant.phone, ya existía en el schema
+// pero no tenía ninguna pantalla propia para capturarlo — solo lo podía
+// tocar el panel maestro/superadmin). A petición de Carlos, 2026-09-21:
+// "en el ticket debe venir el teléfono de soporte del taller o del
+// negocio. No vi un campo para capturar eso al dar de alta el negocio."
+// Mismo criterio de validación que updateWeekStartDay: solo el
+// administrador dueño de la cuenta (resolverActor con "configuracion",
+// que ningún rol con PIN de empleado tiene en su matriz de acceso).
+export async function updateSupportPhone(tenantSlug: string, phone: string) {
+  const limpio = phone.trim();
+  if (limpio && !/^[0-9+()\-\s]{7,20}$/.test(limpio)) {
+    return { success: false, error: "Ese teléfono no parece válido" };
+  }
+
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
+  try {
+    await prisma.tenant.update({
+      where: { id: resuelto.tenant.id },
+      data: { phone: limpio || null },
+    });
+
+    // Se usa en los tickets imprimibles/digitales de Reparaciones y Ventas.
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al actualizar el teléfono de soporte:", error);
+    return { success: false, error: "No se pudo actualizar el teléfono" };
+  }
+}
+
 export async function updateWeekStartDay(tenantSlug: string, weekStartDay: number) {
   if (!Number.isInteger(weekStartDay) || weekStartDay < 0 || weekStartDay > 6) {
     return { success: false, error: "Día inválido" };

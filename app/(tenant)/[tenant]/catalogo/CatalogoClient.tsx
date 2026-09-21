@@ -39,10 +39,15 @@ interface FormProducto {
   categoryId: string;
   emoji: string;
   isActive: boolean;
+  // Solo se usa al CREAR (no al editar — editar nunca ha tocado Inventory,
+  // ver nota en catalogo-actions.ts). "1" por default para que coincida
+  // con lo que ya se guardaba antes en automático, pero ahora visible y
+  // editable aquí mismo en vez de una segunda visita a Inventario.
+  stock: string;
 }
 
 const FORM_VACIO: FormProducto = {
-  name: "", sku: "", price: "", cost: "", type: "PRODUCT", categoryId: "", emoji: "", isActive: true,
+  name: "", sku: "", price: "", cost: "", type: "PRODUCT", categoryId: "", emoji: "", isActive: true, stock: "1",
 };
 
 const TIPO_LABELS: Record<TipoCatalogo, string> = {
@@ -101,10 +106,10 @@ const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
 const stockBadge = (isService: boolean, stock: number) => {
-  if (isService) return <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600">Servicio</span>;
-  if (stock === 0) return <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-red-50 text-red-600">Agotado</span>;
-  if (stock > 0 && stock <= 2) return <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600">Stock: {stock}</span>;
-  return <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-600">Stock: {stock}</span>;
+  if (isService) return <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600">Servicio</span>;
+  if (stock === 0) return <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-red-50 text-red-600">Agotado</span>;
+  if (stock > 0 && stock <= 2) return <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600">Stock: {stock}</span>;
+  return <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-600">Stock: {stock}</span>;
 };
 
 const rankBadgeClass = (i: number) => {
@@ -364,6 +369,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       categoryId: p.categoryId ?? "",
       emoji: p.emoji ?? "",
       isActive: true,
+      stock: "1", // no se usa al editar, ver comentario en FormProducto
     });
     // Si ya trae un ícono de la galería, o si no tiene nada todavía,
     // arranca en modo galería; solo entra directo a modo texto si ya
@@ -401,7 +407,11 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
 
       const res = editando
         ? await editarProductoAction({ tenantSlug, productId: editando.id, isActive: form.isActive, ...datos })
-        : await crearProductoAction({ tenantSlug, ...datos });
+        : await crearProductoAction({
+            tenantSlug,
+            ...datos,
+            stockInicial: form.type !== "SERVICE" && form.stock.trim() !== "" ? Number(form.stock) : undefined,
+          });
 
       if (!res.ok) {
         setErrorModal(res.error);
@@ -475,10 +485,10 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
           <button
             onClick={() => { setModalImportar(true); setErrorImportar(null); setResultadoImportar(null); }}
             title="Importar catálogo desde CSV o Excel"
-            className="flex items-center gap-1 bg-muted text-muted-foreground text-[10px] font-medium px-2 py-1.5 rounded-lg hover:bg-muted/70">
+            className="flex items-center gap-1 bg-muted text-muted-foreground text-[11.5px] font-medium px-2 py-1.5 rounded-lg hover:bg-muted/70">
             <Upload className="w-2.5 h-2.5" /> Importar
           </button>
-          <button onClick={abrirNuevo} className="flex items-center gap-1 bg-primary text-primary-foreground text-[10px] font-medium px-2 py-1.5 rounded-lg">
+          <button onClick={abrirNuevo} className="flex items-center gap-1 bg-primary text-primary-foreground text-[11.5px] font-medium px-2 py-1.5 rounded-lg">
             <Plus className="w-2.5 h-2.5" /> Nuevo
           </button>
           <button onClick={() => setSidebarMovil(false)}
@@ -503,7 +513,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 <span className={`text-xs font-semibold ${tipoActivo === tipo && tabActivo === "catalogo" ? cfg.color : "text-muted-foreground"}`}>
                   {cfg.label}
                 </span>
-                <span className="ml-auto text-[9px] text-muted-foreground">{conteo(tipo)}</span>
+                <span className="ml-auto text-[10.5px] text-muted-foreground">{conteo(tipo)}</span>
               </div>
               {tipoActivo === tipo && tabActivo === "catalogo" && cats.map((cat) => (
                 <div key={cat.id}
@@ -512,11 +522,11 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                     categoriaActiva === cat.id ? `${cfg.bg} ${cfg.color} font-medium` : "text-muted-foreground hover:bg-muted"
                   }`}>
                   <span>{cat.name}</span>
-                  <span className="text-[9px] text-muted-foreground">{conteoCat(tipo, cat.id)}</span>
+                  <span className="text-[10.5px] text-muted-foreground">{conteoCat(tipo, cat.id)}</span>
                 </div>
               ))}
               {cats.length === 0 && tipoActivo === tipo && tabActivo === "catalogo" && (
-                <p className="pl-6 pr-2 py-1.5 text-[10px] text-muted-foreground/70">Sin categorías aún</p>
+                <p className="pl-6 pr-2 py-1.5 text-[11.5px] text-muted-foreground/70">Sin categorías aún</p>
               )}
             </div>
           );
@@ -567,7 +577,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 }`}>
                 <Icono className="w-3 h-3" />
                 {cfg.label}
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                <span className={`text-[10.5px] px-1.5 py-0.5 rounded-full ${
                   tabActivo === "catalogo" && tipoActivo === tipo
                     ? "bg-primary/10 text-primary"
                     : "bg-muted text-muted-foreground"
@@ -594,7 +604,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
           <div className="md:hidden flex gap-1.5 px-3 py-2 border-b border-border overflow-x-auto bg-card flex-shrink-0">
             {categoriasPorTipo[tipoActivo].map((cat) => (
               <button key={cat.id} onClick={() => setCategoriaActiva(cat.id)}
-                className={`px-3 py-1 rounded-full text-[10px] font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
+                className={`px-3 py-1 rounded-full text-[11.5px] font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
                   categoriaActiva === cat.id
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:bg-muted/70"
@@ -648,10 +658,10 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   </button>
                 </div>
                 {errorArranque && (
-                  <p className="text-[11px] text-red-600 mt-2 max-w-xs">{errorArranque}</p>
+                  <p className="text-[12.5px] text-red-600 mt-2 max-w-xs">{errorArranque}</p>
                 )}
                 {businessType && (
-                  <p className="text-[10px] text-muted-foreground/70 mt-2 max-w-xs">
+                  <p className="text-[11.5px] text-muted-foreground/70 mt-2 max-w-xs">
                     Te agregamos algunos productos y servicios típicos de tu giro para que puedas empezar de inmediato — puedes editarlos o borrarlos cuando quieras.
                   </p>
                 )}
@@ -665,13 +675,13 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                     </div>
                     <div className="p-2.5 sm:p-3">
                       <p className="text-xs font-medium text-foreground leading-tight mb-1 line-clamp-2">{p.name}</p>
-                      <p className="text-[9px] text-muted-foreground mb-2 truncate">{p.sku ?? "Sin SKU"}</p>
+                      <p className="text-[10.5px] text-muted-foreground mb-2 truncate">{p.sku ?? "Sin SKU"}</p>
                       <div className="flex items-center justify-between flex-wrap gap-1">
                         <span className="text-xs font-bold text-primary">{formatMXN(p.price)}</span>
                         {stockBadge(p.isService, p.stock)}
                       </div>
                       {!p.isService && p.cost > 0 && (
-                        <p className="text-[9px] text-muted-foreground mt-1">Costo: {formatMXN(p.cost)}</p>
+                        <p className="text-[10.5px] text-muted-foreground mt-1">Costo: {formatMXN(p.cost)}</p>
                       )}
                     </div>
                   </div>
@@ -681,7 +691,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 )}
                 <button onClick={abrirNuevo} className="flex flex-col items-center justify-center border border-dashed border-border rounded-xl hover:border-primary/40 hover:bg-muted transition-all min-h-[130px] sm:min-h-[140px]">
                   <Plus className="w-6 h-6 text-muted-foreground/50 mb-1" />
-                  <span className="text-[10px] text-muted-foreground/50">Agregar</span>
+                  <span className="text-[11.5px] text-muted-foreground/50">Agregar</span>
                 </button>
               </div>
             )}
@@ -713,7 +723,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 <div className="flex gap-1 overflow-x-auto">
                   {periodos.map((p) => (
                     <button key={p} onClick={() => setPeriodo(p)}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
+                      className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
                         periodo === p ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
                       }`}>
                       {p}
@@ -773,12 +783,12 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                     <div className="divide-y divide-border">
                       {topVentas.map((item, i) => (
                         <div key={i} className="flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors">
-                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${rankBadgeClass(i)}`}>
+                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[11.5px] font-bold flex-shrink-0 ${rankBadgeClass(i)}`}>
                             {i + 1}
                           </span>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-foreground truncate">{item.nombre}</p>
-                            <p className="text-[10px] text-muted-foreground">{item.categoria} · {item.unidades} unidades</p>
+                            <p className="text-[11.5px] text-muted-foreground">{item.categoria} · {item.unidades} unidades</p>
                           </div>
                           <span className="text-xs font-semibold text-primary flex-shrink-0">{formatMXN(item.total)}</span>
                         </div>
@@ -810,7 +820,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <h3 className="text-[13px] font-semibold text-foreground">
+              <h3 className="text-[14.5px] font-semibold text-foreground">
                 {editando ? "Editar producto" : "Nuevo producto"}
               </h3>
               <button onClick={() => setModalAbierto(false)} className="text-muted-foreground hover:text-foreground">
@@ -819,7 +829,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             </div>
             <div className="p-4 flex flex-col gap-3">
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground">Tipo</label>
+                <label className="text-[12.5px] font-medium text-muted-foreground">Tipo</label>
                 <select
                   value={form.type}
                   onChange={(e) => setForm({ ...form, type: e.target.value as TipoProductoInput, categoryId: "" })}
@@ -831,7 +841,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 </select>
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground">Nombre *</label>
+                <label className="text-[12.5px] font-medium text-muted-foreground">Nombre *</label>
                 <input
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -840,7 +850,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground">SKU</label>
+                <label className="text-[12.5px] font-medium text-muted-foreground">SKU</label>
                 <input
                   value={form.sku}
                   onChange={(e) => setForm({ ...form, sku: e.target.value })}
@@ -849,7 +859,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                  <label className="text-[12.5px] font-medium text-muted-foreground flex items-center gap-1.5">
                     Ícono
                     <span className="w-5 h-5 rounded-md bg-muted border border-border flex items-center justify-center text-muted-foreground">
                       <ProductoIcono value={form.emoji || null} className="w-3 h-3" />
@@ -858,7 +868,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   <button
                     type="button"
                     onClick={alternarModoIcono}
-                    className="text-[10px] text-primary font-medium hover:underline"
+                    className="text-[11.5px] text-primary font-medium hover:underline"
                   >
                     {modoIcono === "icono" ? "Escribir mi propio emoji" : "Elegir de la galería"}
                   </button>
@@ -869,7 +879,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                       type="button"
                       title="Sin ícono (usa el genérico del tipo)"
                       onClick={() => setForm({ ...form, emoji: "" })}
-                      className={`w-7 h-7 flex items-center justify-center rounded-md text-[9px] font-medium transition-colors ${
+                      className={`w-7 h-7 flex items-center justify-center rounded-md text-[10.5px] font-medium transition-colors ${
                         form.emoji === ""
                           ? "bg-primary text-primary-foreground"
                           : "bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary"
@@ -908,7 +918,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-medium text-muted-foreground">Precio de venta *</label>
+                  <label className="text-[12.5px] font-medium text-muted-foreground">Precio de venta *</label>
                   <input
                     type="number" min={0} step="0.01"
                     value={form.price}
@@ -917,7 +927,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-medium text-muted-foreground">Costo</label>
+                  <label className="text-[12.5px] font-medium text-muted-foreground">Costo</label>
                   <input
                     type="number" min={0} step="0.01"
                     value={form.cost}
@@ -926,13 +936,26 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   />
                 </div>
               </div>
+              {!editando && form.type !== "SERVICE" && (
+                <div>
+                  <label className="text-[12.5px] font-medium text-muted-foreground">
+                    Existencia inicial{branches.length > 1 ? ` (en cada una de las ${branches.length} sucursales activas)` : ""}
+                  </label>
+                  <input
+                    type="number" min={0} step="1"
+                    value={form.stock}
+                    onChange={(e) => setForm({ ...form, stock: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                  />
+                </div>
+              )}
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-medium text-muted-foreground">Categoría</label>
+                  <label className="text-[12.5px] font-medium text-muted-foreground">Categoría</label>
                   <button
                     type="button"
                     onClick={() => setNuevaCategoria((v) => !v)}
-                    className="text-[10px] text-primary font-medium hover:underline"
+                    className="text-[11.5px] text-primary font-medium hover:underline"
                   >
                     {nuevaCategoria ? "Elegir existente" : "+ Nueva categoría"}
                   </button>
@@ -958,7 +981,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 )}
               </div>
               {editando && (
-                <label className="flex items-center gap-2 text-[11px] text-foreground/80">
+                <label className="flex items-center gap-2 text-[12.5px] text-foreground/80">
                   <input
                     type="checkbox"
                     checked={form.isActive}
@@ -967,19 +990,19 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   Producto activo (visible para venderse)
                 </label>
               )}
-              {errorModal && <p className="text-[11px] text-red-600">{errorModal}</p>}
+              {errorModal && <p className="text-[12.5px] text-red-600">{errorModal}</p>}
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
                 onClick={() => setModalAbierto(false)}
-                className="px-3 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground"
+                className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground"
               >
                 Cancelar
               </button>
               <button
                 onClick={guardarProducto}
                 disabled={isPending || !form.name.trim() || !form.price}
-                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12px] font-medium transition-colors"
+                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[13.5px] font-medium transition-colors"
               >
                 {isPending ? "Guardando…" : editando ? "Guardar cambios" : "Crear producto"}
               </button>
@@ -999,7 +1022,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <h3 className="text-[13px] font-semibold text-foreground">Importar catálogo</h3>
+              <h3 className="text-[14.5px] font-semibold text-foreground">Importar catálogo</h3>
               <button onClick={() => setModalImportar(false)} className="text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
@@ -1026,7 +1049,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 <span className="text-xs font-medium text-foreground">
                   {importando ? "Importando…" : "Haz clic para elegir tu archivo"}
                 </span>
-                <span className="text-[10px] text-muted-foreground">Formatos aceptados: .csv, .xlsx</span>
+                <span className="text-[11.5px] text-muted-foreground">Formatos aceptados: .csv, .xlsx</span>
                 <input
                   type="file"
                   accept=".csv,.xlsx"
@@ -1039,7 +1062,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
               {errorImportar && (
                 <div className="flex items-start gap-1.5 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
                   <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-red-700">{errorImportar}</p>
+                  <p className="text-[12.5px] text-red-700">{errorImportar}</p>
                 </div>
               )}
 
@@ -1047,7 +1070,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 <div className="flex flex-col gap-2">
                   <div className="flex items-start gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-emerald-700">
+                    <p className="text-[12.5px] text-emerald-700">
                       {resultadoImportar.creados === 0
                         ? "No se importó ningún producto."
                         : `Se importaron ${resultadoImportar.creados} producto${resultadoImportar.creados === 1 ? "" : "s"} correctamente.`}
@@ -1055,10 +1078,10 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   </div>
                   {resultadoImportar.omitidos.length > 0 && (
                     <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg max-h-32 overflow-y-auto">
-                      <p className="text-[11px] font-medium text-amber-700 mb-1">
+                      <p className="text-[12.5px] font-medium text-amber-700 mb-1">
                         {resultadoImportar.omitidos.length} fila{resultadoImportar.omitidos.length === 1 ? "" : "s"} omitida{resultadoImportar.omitidos.length === 1 ? "" : "s"}:
                       </p>
-                      <ul className="text-[10px] text-amber-700 space-y-0.5">
+                      <ul className="text-[11.5px] text-amber-700 space-y-0.5">
                         {resultadoImportar.omitidos.map((o, i) => (
                           <li key={i}>Fila {o.fila}: {o.motivo}</li>
                         ))}
@@ -1071,7 +1094,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
                 onClick={() => setModalImportar(false)}
-                className="px-3 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground"
+                className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground"
               >
                 {resultadoImportar ? "Cerrar" : "Cancelar"}
               </button>

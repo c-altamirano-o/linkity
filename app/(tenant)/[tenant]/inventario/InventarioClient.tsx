@@ -263,14 +263,14 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
               <SlidersHorizontal className="w-3 h-3" />
               <span className="hidden sm:inline">Filtros</span>
               {filtrosActivos > 0 && (
-                <span className="w-4 h-4 flex items-center justify-center bg-primary text-primary-foreground rounded-full text-[9px] font-semibold">
+                <span className="w-4 h-4 flex items-center justify-center bg-primary text-primary-foreground rounded-full text-[10.5px] font-semibold">
                   {filtrosActivos}
                 </span>
               )}
             </button>
             {mostrarFiltros && (
               <div className="absolute right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-lg z-30 p-3 w-56">
-                <label className="block text-[10px] font-medium text-muted-foreground mb-1">Categoría</label>
+                <label className="block text-[11.5px] font-medium text-muted-foreground mb-1">Categoría</label>
                 <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)}
                   className="w-full px-2.5 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary">
                   <option value={TODAS_CATEGORIAS}>Todas las categorías</option>
@@ -278,7 +278,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                 </select>
                 {filtrosActivos > 0 && (
                   <button onClick={() => setCategoriaFiltro(TODAS_CATEGORIAS)}
-                    className="mt-2 text-[10px] text-primary font-medium hover:underline">
+                    className="mt-2 text-[11.5px] text-primary font-medium hover:underline">
                     Limpiar filtro
                   </button>
                 )}
@@ -303,7 +303,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                     <span className="text-base">{opt.icon}</span>
                     <div>
                       <p className="text-xs font-medium text-foreground">{opt.label}</p>
-                      <p className="text-[10px] text-muted-foreground">{opt.desc}</p>
+                      <p className="text-[11.5px] text-muted-foreground">{opt.desc}</p>
                     </div>
                   </button>
                 ))}
@@ -322,12 +322,12 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
           { label: "Agotados", value: agotados, sub: "Sin stock", color: "text-red-600", subColor: "text-red-400", icon: XCircle },
         ].map((m) => (
           <div key={m.label} className="bg-muted rounded-lg p-2.5 sm:p-3">
-            <p className="text-[9px] sm:text-[10px] text-muted-foreground mb-1">{m.label}</p>
+            <p className="text-[10.5px] sm:text-[11.5px] text-muted-foreground mb-1">{m.label}</p>
             <div className="flex items-center gap-1.5">
               {m.icon && <m.icon className={`w-4 h-4 ${m.color}`} />}
               <p className={`text-base sm:text-[18px] font-semibold ${m.color}`}>{m.value}</p>
             </div>
-            <p className={`text-[9px] sm:text-[10px] mt-0.5 ${m.subColor}`}>{m.sub}</p>
+            <p className={`text-[10.5px] sm:text-[11.5px] mt-0.5 ${m.subColor}`}>{m.sub}</p>
           </div>
         ))}
       </div>
@@ -336,7 +336,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
       <div className="flex gap-2 px-3 sm:px-5 py-2 bg-card border-b border-border overflow-x-auto">
         {filtrosTabs.map((tab) => (
           <button key={tab} onClick={() => setFiltro(tab)}
-            className={`px-3 py-1 rounded-full text-[10px] font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
+            className={`px-3 py-1 rounded-full text-[11.5px] font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
               filtro === tab ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
             }`}>
             {tab}
@@ -357,7 +357,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
             <thead className="sticky top-0 bg-card border-b border-border z-10">
               <tr>
                 {["Producto", "Categoría", "Stock actual", "Stock mínimo", "Precio venta", "Costo", "Acción"].map((h) => (
-                  <th key={h} className="text-left text-[10px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5 whitespace-nowrap">
+                  <th key={h} className="text-left text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5 whitespace-nowrap">
                     {h}
                   </th>
                 ))}
@@ -377,12 +377,12 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-foreground truncate max-w-[140px]">{p.name}</p>
-                          <p className="text-[9px] text-muted-foreground">{p.sku ?? "Sin SKU"}</p>
+                          <p className="text-[10.5px] text-muted-foreground">{p.sku ?? "Sin SKU"}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-3 sm:px-4 py-2.5">
-                      <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                         {p.categoryName}
                       </span>
                     </td>
@@ -405,7 +405,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                     <td className="px-3 sm:px-4 py-2.5 text-xs text-muted-foreground">{formatMXN(p.cost)}</td>
                     <td className="px-3 sm:px-4 py-2.5">
                       <button onClick={() => abrirModal(p)}
-                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
+                        className={`text-[11.5px] px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
                           status === "out"
                             ? "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
                             : status === "low"
@@ -475,7 +475,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                 placeholder="0"
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
             </div>
-            {ajusteError && <p className="text-[11px] text-red-600 mb-3">{ajusteError}</p>}
+            {ajusteError && <p className="text-[12.5px] text-red-600 mb-3">{ajusteError}</p>}
             {!ajusteError && <div className="mb-3" />}
 
             <div className="flex gap-2">

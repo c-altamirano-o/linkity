@@ -365,11 +365,11 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
         ].map((m) => (
           <div key={m.label} className="bg-card border border-border rounded-xl p-3">
             <div className="flex items-center justify-between mb-1">
-              <p className="text-[10px] text-muted-foreground">{m.label}</p>
+              <p className="text-[11.5px] text-muted-foreground">{m.label}</p>
               <m.icon className={`w-3.5 h-3.5 ${m.color}`} />
             </div>
             <p className={`text-lg font-semibold ${m.color}`}>{m.value}</p>
-            <p className="text-[10px] text-muted-foreground">{m.sub}</p>
+            <p className="text-[11.5px] text-muted-foreground">{m.sub}</p>
           </div>
         ))}
       </div>
@@ -391,7 +391,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
             <div className="flex gap-2">
               {branches.length > 1 && (
                 <select value={filtroSucursal} onChange={(e) => setFiltroSucursal(e.target.value)}
-                  className="flex-1 text-[11px] border border-border rounded-lg px-2 py-1 bg-card text-foreground">
+                  className="flex-1 text-[12.5px] border border-border rounded-lg px-2 py-1 bg-card text-foreground">
                   <option value="todas">Todas las sucursales</option>
                   {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
@@ -399,7 +399,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               <div className="flex gap-1">
                 {(["activos", "todos"] as const).map((f) => (
                   <button key={f} onClick={() => setFiltroActivo(f)}
-                    className={`px-2 py-1 rounded-full text-[10px] font-medium capitalize transition-colors ${
+                    className={`px-2 py-1 rounded-full text-[11.5px] font-medium capitalize transition-colors ${
                       filtroActivo === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                     }`}>
                     {f === "activos" ? "Activos" : "Todos"}
@@ -428,16 +428,16 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   seleccionado?.id === e.id ? "bg-primary/5 border-l-primary" : "hover:bg-muted border-l-transparent"
                 }`}>
                 <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11.5px] font-semibold flex-shrink-0 ${
                     e.isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
                   }`}>
                     {iniciales(e.name)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-foreground truncate">{e.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{e.position || e.roleName || "Sin puesto"} · {e.branchName}</p>
+                    <p className="text-[11.5px] text-muted-foreground truncate">{e.position || e.roleName || "Sin puesto"} · {e.branchName}</p>
                   </div>
-                  {!e.isActive && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground flex-shrink-0">Inactivo</span>}
+                  {!e.isActive && <span className="text-[10.5px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground flex-shrink-0">Inactivo</span>}
                 </div>
               </div>
             ))}
@@ -502,7 +502,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   </div>
                 </div>
                 {seleccionado.asistenciaHoy?.checkIn && (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[12.5px] text-muted-foreground">
                     Hoy: entrada {formatHora(seleccionado.asistenciaHoy.checkIn)}
                     {seleccionado.asistenciaHoy.checkOut ? ` · salida ${formatHora(seleccionado.asistenciaHoy.checkOut)}` : " · sin salida registrada"}
                   </p>
@@ -511,7 +511,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-card border border-border rounded-xl p-4">
-                  <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">DATOS DEL EMPLEADO</p>
+                  <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">DATOS DEL EMPLEADO</p>
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       { label: "Teléfono", value: seleccionado.phone ? `${seleccionado.phoneCountryCode} ${seleccionado.phone}` : "Sin registrar" },
@@ -536,12 +536,12 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                       { label: "Ingreso", value: formatFecha(seleccionado.hiredAt) },
                     ].map((f) => (
                       <div key={f.label} className="bg-muted rounded-lg p-2.5">
-                        <p className="text-[9px] text-muted-foreground mb-0.5">{f.label}</p>
+                        <p className="text-[10.5px] text-muted-foreground mb-0.5">{f.label}</p>
                         <p className={`text-xs font-medium ${f.color || "text-foreground"}`}>{f.value}</p>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-2 flex items-center gap-1.5 text-[11px]">
+                  <div className="mt-2 flex items-center gap-1.5 text-[12.5px]">
                     <Shield className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                     <span className="text-foreground">
                       Rol: {seleccionado.roleName ?? "Sin rol asignado"}
@@ -551,12 +551,12 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                     </span>
                   </div>
                   {seleccionado.roleDescripcion && (
-                    <p className="mt-1 text-[10px] text-muted-foreground">{seleccionado.roleDescripcion}</p>
+                    <p className="mt-1 text-[11.5px] text-muted-foreground">{seleccionado.roleDescripcion}</p>
                   )}
                 </div>
 
                 <div className="bg-card border border-border rounded-xl p-4">
-                  <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">ASISTENCIA RECIENTE</p>
+                  <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">ASISTENCIA RECIENTE</p>
                   {seleccionado.horasSemana === 0 && !seleccionado.asistenciaHoy ? (
                     <p className="text-xs text-muted-foreground">Sin registros de asistencia todavía.</p>
                   ) : (
@@ -567,7 +567,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 </div>
 
                 <div className="sm:col-span-2 bg-card border border-border rounded-xl p-4">
-                  <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL DE PAGOS</p>
+                  <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL DE PAGOS</p>
                   {seleccionado.pagos.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Sin pagos generados todavía.</p>
                   ) : (
@@ -576,19 +576,19 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                         <div key={p.id} className="flex items-center justify-between gap-2 bg-muted rounded-lg px-3 py-2 flex-wrap">
                           <div>
                             <p className="text-xs text-foreground">{formatFecha(p.periodoInicio)} — {formatFecha(p.periodoFin)}</p>
-                            <p className="text-[10px] text-muted-foreground">Base {formatMXN(p.montoBase)} + comisión {formatMXN(p.montoComision)}</p>
+                            <p className="text-[11.5px] text-muted-foreground">Base {formatMXN(p.montoBase)} + comisión {formatMXN(p.montoComision)}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-semibold text-foreground">{formatMXN(p.total)}</span>
-                            <span className={`text-[9px] font-medium px-2 py-0.5 rounded-full ${ESTADO_PAGO_BADGE[p.estado]}`}>{ESTADO_PAGO_TEXTO[p.estado]}</span>
+                            <span className={`text-[10.5px] font-medium px-2 py-0.5 rounded-full ${ESTADO_PAGO_BADGE[p.estado]}`}>{ESTADO_PAGO_TEXTO[p.estado]}</span>
                             {p.estado === "PENDING" && (
                               <div className="flex gap-1">
                                 <button disabled={pending} onClick={() => handleActualizarPago(p.id, "PAID")}
-                                  className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded text-[10px] font-medium">
+                                  className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded text-[11.5px] font-medium">
                                   Pagar
                                 </button>
                                 <button disabled={pending} onClick={() => handleActualizarPago(p.id, "CANCELLED")}
-                                  className="px-2 py-1 border border-border hover:bg-card disabled:opacity-50 text-muted-foreground rounded text-[10px] font-medium">
+                                  className="px-2 py-1 border border-border hover:bg-card disabled:opacity-50 text-muted-foreground rounded text-[11.5px] font-medium">
                                   Cancelar
                                 </button>
                               </div>
@@ -618,12 +618,12 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">NOMBRE</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NOMBRE</label>
                   <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PUESTO</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PUESTO</label>
                   <input type="text" list="puestos-sugeridos-datalist" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                   <datalist id="puestos-sugeridos-datalist">
@@ -634,7 +634,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PAÍS</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PAÍS</label>
                   <select value={form.phoneCountryCode}
                     onChange={(e) => {
                       // Al cambiar de país se recorta el teléfono ya
@@ -648,7 +648,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">
                     TELÉFONO ({paisPorCodigo(form.phoneCountryCode).digits} DÍGITOS)
                   </label>
                   <input type="text" inputMode="numeric" value={form.phone}
@@ -659,7 +659,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               {branches.length > 1 && (
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
                   <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                     {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -669,8 +669,8 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">ROL — DETERMINA SU ACCESO AL SISTEMA</label>
-                  <button type="button" onClick={() => setModalRoles(true)} className="text-[10px] text-primary hover:underline">Roles y permisos</button>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ROL — DETERMINA SU ACCESO AL SISTEMA</label>
+                  <button type="button" onClick={() => setModalRoles(true)} className="text-[11.5px] text-primary hover:underline">Roles y permisos</button>
                 </div>
                 <select value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
@@ -678,31 +678,31 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
                 {form.roleId && (
-                  <p className="text-[10px] text-muted-foreground mt-1">{roles.find((r) => r.id === form.roleId)?.description}</p>
+                  <p className="text-[11.5px] text-muted-foreground mt-1">{roles.find((r) => r.id === form.roleId)?.description}</p>
                 )}
               </div>
 
               {modalEmpleado.modo === "crear" ? (
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">PIN DE INICIO (4 DÍGITOS)</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PIN DE INICIO (4 DÍGITOS)</label>
                   <input type="text" inputMode="numeric" maxLength={4} value={form.pin}
                     onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 4) })}
                     placeholder="0000"
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary tracking-[0.3em]" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Con este PIN el empleado entra en {branches.length ? `/${tenantSlug}/entrada` : "la pantalla de entrada"} — nunca con tu contraseña de administrador.</p>
+                  <p className="text-[11.5px] text-muted-foreground mt-1">Con este PIN el empleado entra en {branches.length ? `/${tenantSlug}/entrada` : "la pantalla de entrada"} — nunca con tu contraseña de administrador.</p>
                 </div>
               ) : (
-                <p className="text-[10px] text-muted-foreground">Para cambiar el PIN de este empleado, usa el botón &quot;Restablecer PIN&quot; en su ficha.</p>
+                <p className="text-[11.5px] text-muted-foreground">Para cambiar el PIN de este empleado, usa el botón &quot;Restablecer PIN&quot; en su ficha.</p>
               )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">ESQUEMA DE PAGO</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ESQUEMA DE PAGO</label>
                   <select value={form.paymentScheme} onChange={(e) => setForm({ ...form, paymentScheme: e.target.value as EsquemaPago })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                     {(["FIJO", "COMISION", "MIXTO", "DESTAJO"] as EsquemaPago[]).map((s) => <option key={s} value={s}>{ESQUEMA_TEXTO[s]}</option>)}
                   </select>
-                  <div className={`mt-1.5 rounded-lg border px-2.5 py-2 text-[10px] leading-relaxed ${
+                  <div className={`mt-1.5 rounded-lg border px-2.5 py-2 text-[11.5px] leading-relaxed ${
                     form.paymentScheme === "DESTAJO" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-primary/5 border-primary/20 text-foreground"
                   }`}>
                     {form.paymentScheme === "FIJO" && "Se le paga lo mismo sin importar cuánto venda o repare."}
@@ -720,7 +720,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   </div>
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MÉTODO DE PAGO</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MÉTODO DE PAGO</label>
                   <select value={form.staffPaymentMethod} onChange={(e) => setForm({ ...form, staffPaymentMethod: e.target.value as MetodoPago })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                     {(["EFECTIVO", "TRANSFERENCIA", "CHEQUE", "TARJETA_NOMINA", "OTRO"] as MetodoPago[]).map((m) => <option key={m} value={m}>{METODO_PAGO_TEXTO[m]}</option>)}
@@ -730,7 +730,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               {form.staffPaymentMethod === "TRANSFERENCIA" && (
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">CLABE (18 DÍGITOS)</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">CLABE (18 DÍGITOS)</label>
                   <input type="text" inputMode="numeric" maxLength={18} value={form.clabe}
                     onChange={(e) => setForm({ ...form, clabe: e.target.value.replace(/\D/g, "").slice(0, 18) })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
@@ -739,7 +739,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SUELDO BASE</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">SUELDO BASE</label>
                   <div className="relative mt-1">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                     <input type="number" value={form.baseSalary} onChange={(e) => setForm({ ...form, baseSalary: e.target.value })} placeholder="0"
@@ -747,7 +747,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   </div>
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">FRECUENCIA DEL SUELDO</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">FRECUENCIA DEL SUELDO</label>
                   <select value={form.paymentFrequency} onChange={(e) => setForm({ ...form, paymentFrequency: e.target.value as Frecuencia })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                     {(["SEMANAL", "CATORCENAL", "QUINCENAL", "MENSUAL"] as Frecuencia[]).map((f) => <option key={f} value={f}>{FRECUENCIA_TEXTO[f]}</option>)}
@@ -759,7 +759,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 <div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MONTO FIJO EN PESOS POR UNIDAD</label>
+                      <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MONTO FIJO EN PESOS POR UNIDAD</label>
                       <div className="relative mt-1">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                         <input type="number" value={form.pieceRate} onChange={(e) => setForm({ ...form, pieceRate: e.target.value })} placeholder="0"
@@ -767,7 +767,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">POR CADA</label>
+                      <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">POR CADA</label>
                       <select value={form.commissionBase} onChange={(e) => setForm({ ...form, commissionBase: e.target.value as BaseComision })}
                         className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                         <option value="VENTAS">Venta</option>
@@ -775,7 +775,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                       </select>
                     </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">
+                  <p className="text-[11.5px] text-muted-foreground mt-1">
                     Ejemplo: entrega 1 {form.commissionBase === "VENTAS" ? "venta" : "reparación"}, sin importar en cuánto se cobró — tu empleado recibe exactamente {formatMXN(parseFloat(form.pieceRate || "0") || 0)}.
                   </p>
                 </div>
@@ -785,7 +785,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 <div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN</label>
+                      <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN</label>
                       <div className="relative mt-1">
                         <input type="number" value={form.commissionRate} onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
                           className="w-full pl-3 pr-7 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
@@ -793,14 +793,14 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">COMISIÓN SOBRE</label>
+                      <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">COMISIÓN SOBRE</label>
                       <select value={form.commissionBase} onChange={(e) => setForm({ ...form, commissionBase: e.target.value as BaseComision })}
                         className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                         {(["VENTAS", "REPARACIONES", "UTILIDAD"] as BaseComision[]).map((c) => <option key={c} value={c}>{COMISION_BASE_TEXTO[c]}</option>)}
                       </select>
                     </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">
+                  <p className="text-[11.5px] text-muted-foreground mt-1">
                     Ejemplo: en {form.commissionBase === "UTILIDAD" ? "una utilidad" : form.commissionBase === "REPARACIONES" ? "una reparación" : "una venta"} de {formatMXN(250)}, tu empleado recibe {formatMXN(250 * ((parseFloat(form.commissionRate || "0") || 0) / 100))} ({parseFloat(form.commissionRate || "0") || 0}%).
                   </p>
                 </div>
@@ -808,26 +808,26 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               {form.paymentScheme !== "FIJO" && (
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">FRECUENCIA DE LA COMISIÓN</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">FRECUENCIA DE LA COMISIÓN</label>
                   <select value={form.commissionFrequency} onChange={(e) => setForm({ ...form, commissionFrequency: e.target.value as Frecuencia })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                     {(["SEMANAL", "CATORCENAL", "QUINCENAL", "MENSUAL"] as Frecuencia[]).map((f) => <option key={f} value={f}>{FRECUENCIA_TEXTO[f]}</option>)}
                   </select>
-                  <p className="text-[10px] text-muted-foreground mt-1">Puede ser distinta a la del sueldo — ej. sueldo semanal + comisión mensual.</p>
+                  <p className="text-[11.5px] text-muted-foreground mt-1">Puede ser distinta a la del sueldo — ej. sueldo semanal + comisión mensual.</p>
                 </div>
               )}
 
               <div className="border-t border-border pt-3">
-                <label className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground tracking-widest">
+                <label className="flex items-center gap-2 text-[11.5px] font-semibold text-muted-foreground tracking-widest">
                   <input type="checkbox" checked={form.teamCommissionBase !== ""}
                     onChange={(e) => setForm({ ...form, teamCommissionBase: e.target.checked ? "VENTAS" : "", teamCommissionRate: e.target.checked ? form.teamCommissionRate : "0" })} />
                   ¿LIDERA UN EQUIPO? (COMISIÓN EXTRA)
                 </label>
-                <p className="text-[10px] text-muted-foreground mt-1">Ej. Jefe de Barberos: cobra su comisión individual de arriba más esta comisión extra, calculada sobre la producción de toda su sucursal.</p>
+                <p className="text-[11.5px] text-muted-foreground mt-1">Ej. Jefe de Barberos: cobra su comisión individual de arriba más esta comisión extra, calculada sobre la producción de toda su sucursal.</p>
                 {form.teamCommissionBase !== "" && (
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <div>
-                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN DE EQUIPO</label>
+                      <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN DE EQUIPO</label>
                       <div className="relative mt-1">
                         <input type="number" value={form.teamCommissionRate} onChange={(e) => setForm({ ...form, teamCommissionRate: e.target.value })}
                           className="w-full pl-3 pr-7 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
@@ -835,7 +835,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">SOBRE (SUCURSAL)</label>
+                      <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">SOBRE (SUCURSAL)</label>
                       <select value={form.teamCommissionBase} onChange={(e) => setForm({ ...form, teamCommissionBase: e.target.value as BaseComision })}
                         className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                         {(["VENTAS", "REPARACIONES", "UTILIDAD"] as BaseComision[]).map((c) => <option key={c} value={c}>{COMISION_BASE_TEXTO[c]}</option>)}
@@ -869,12 +869,12 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
             <div className="p-4 space-y-3">
               {pinError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{pinError}</div>}
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">NUEVO PIN (4 DÍGITOS)</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NUEVO PIN (4 DÍGITOS)</label>
                 <input type="text" inputMode="numeric" maxLength={4} value={nuevoPin} autoFocus
                   onChange={(e) => setNuevoPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                   placeholder="0000"
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary tracking-[0.3em]" />
-                <p className="text-[10px] text-muted-foreground mt-1">El PIN anterior deja de funcionar de inmediato.</p>
+                <p className="text-[11.5px] text-muted-foreground mt-1">El PIN anterior deja de funcionar de inmediato.</p>
               </div>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
@@ -901,36 +901,36 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">DESDE</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">DESDE</label>
                   <input type="date" value={pagoInicio} onChange={(e) => handleCambiarPeriodoPago("inicio", e.target.value)}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">HASTA</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">HASTA</label>
                   <input type="date" value={pagoFin} onChange={(e) => handleCambiarPeriodoPago("fin", e.target.value)}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
               </div>
 
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">MONTO BASE</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MONTO BASE</label>
                 <input type="number" value={pagoBase} onChange={(e) => setPagoBase(e.target.value)}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
               </div>
 
               {seleccionadoParaPago.esquemaPago !== "FIJO" && (
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">
                     MONTO DE COMISIÓN {cargandoSugerencia && "(calculando sugerencia...)"}
                   </label>
                   <input type="number" value={pagoComision} onChange={(e) => setPagoComision(e.target.value)}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
-                  {pagoAdvertencia && <p className="text-[10px] text-amber-600 mt-1">{pagoAdvertencia}</p>}
+                  {pagoAdvertencia && <p className="text-[11.5px] text-amber-600 mt-1">{pagoAdvertencia}</p>}
                 </div>
               )}
 
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">NOTAS (OPCIONAL)</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NOTAS (OPCIONAL)</label>
                 <input type="text" value={pagoNotas} onChange={(e) => setPagoNotas(e.target.value)}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
               </div>

@@ -191,7 +191,7 @@ export default function LandingPage() {
                 className={`rounded-xl p-6 border ${p.destacado ? "border-primary bg-card shadow-lg shadow-primary/10 relative" : "border-border bg-card"}`}
               >
                 {p.destacado && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[11px] font-semibold px-3 py-1 rounded-full">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[12.5px] font-semibold px-3 py-1 rounded-full">
                     MÁS POPULAR
                   </span>
                 )}

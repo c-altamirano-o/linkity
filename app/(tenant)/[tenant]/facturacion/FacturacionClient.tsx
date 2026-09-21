@@ -164,10 +164,10 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
       {/* Lista */}
       <div className="w-full md:w-72 flex-col bg-card border-r border-border flex-shrink-0 hidden md:flex">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <span className="text-[13px] font-medium text-foreground">{moduloNombre}</span>
+          <span className="text-[14.5px] font-medium text-foreground">{moduloNombre}</span>
           <button
             onClick={abrirModalNueva}
-            className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] font-medium px-2.5 py-1.5 rounded-lg"
+            className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-[12.5px] font-medium px-2.5 py-1.5 rounded-lg"
           >
             <FileText className="w-3 h-3" /> Nueva
           </button>
@@ -182,7 +182,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
           ].map((m) => (
             <div key={m.label} className="bg-muted rounded-lg p-2 text-center">
               <p className={`text-[16px] font-semibold ${m.color}`}>{m.value}</p>
-              <p className="text-[9px] text-muted-foreground">{m.label}</p>
+              <p className="text-[10.5px] text-muted-foreground">{m.label}</p>
             </div>
           ))}
         </div>
@@ -195,7 +195,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Folio, cliente o RFC..."
-              className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[11px] bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
         </div>
@@ -205,7 +205,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
             <button
               key={tab.label}
               onClick={() => setFiltro(tab.estado)}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-medium whitespace-nowrap transition-colors ${
+              className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium whitespace-nowrap transition-colors ${
                 filtro === tab.estado ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
               }`}
             >
@@ -232,16 +232,16 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold text-foreground">{f.folio}</span>
-                  <span className={`flex items-center gap-1 text-[9px] font-medium px-2 py-0.5 rounded-full ${cfg.classes}`}>
+                  <span className="text-[12.5px] font-semibold text-foreground">{f.folio}</span>
+                  <span className={`flex items-center gap-1 text-[10.5px] font-medium px-2 py-0.5 rounded-full ${cfg.classes}`}>
                     <Icono className="w-2.5 h-2.5" />
                     {cfg.label}
                   </span>
                 </div>
-                <p className="text-[11px] text-muted-foreground mb-0.5">{f.customerName}</p>
+                <p className="text-[12.5px] text-muted-foreground mb-0.5">{f.customerName}</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">{formatFecha(f.createdAt)}</span>
-                  <span className="text-[12px] font-semibold text-foreground">{formatMXN(f.total)}</span>
+                  <span className="text-[11.5px] text-muted-foreground">{formatFecha(f.createdAt)}</span>
+                  <span className="text-[13.5px] font-semibold text-foreground">{formatMXN(f.total)}</span>
                 </div>
               </div>
             );
@@ -271,12 +271,12 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                 <div>
                   <div className="flex items-center gap-3 mb-1">
                     <p className="text-[14px] font-semibold text-foreground">{seleccionada.folio}</p>
-                    <span className={`flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${ESTADO_CONFIG[seleccionada.status].classes}`}>
+                    <span className={`flex items-center gap-1 text-[11.5px] font-medium px-2 py-0.5 rounded-full ${ESTADO_CONFIG[seleccionada.status].classes}`}>
                       {(() => { const Icono = ESTADO_CONFIG[seleccionada.status].icon; return <Icono className="w-3 h-3" />; })()}
                       {ESTADO_CONFIG[seleccionada.status].label}
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[12.5px] text-muted-foreground">
                     {formatFecha(seleccionada.createdAt)}
                     {seleccionada.saleFolio && ` · Venta ${seleccionada.saleFolio}`} · Ingreso
                   </p>
@@ -287,21 +287,21 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                       <button
                         disabled
                         title="El timbrado de este módulo es simulado — no hay un PAC real conectado, así que no existe un XML/PDF real que descargar todavía."
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-[11px] text-muted-foreground opacity-50 cursor-not-allowed"
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-[12.5px] text-muted-foreground opacity-50 cursor-not-allowed"
                       >
                         <Download className="w-3 h-3" /> XML
                       </button>
                       <button
                         disabled
                         title="El timbrado de este módulo es simulado — no hay un PAC real conectado, así que no existe un XML/PDF real que descargar todavía."
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-[11px] text-muted-foreground opacity-50 cursor-not-allowed"
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-[12.5px] text-muted-foreground opacity-50 cursor-not-allowed"
                       >
                         <Download className="w-3 h-3" /> PDF
                       </button>
                       <button
                         onClick={() => handleCancelar(seleccionada)}
                         disabled={pending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 border border-red-200 rounded-lg text-[11px] transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 border border-red-200 rounded-lg text-[12.5px] transition-colors"
                       >
                         <XCircle className="w-3 h-3" /> Cancelar
                       </button>
@@ -312,14 +312,14 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                       <button
                         onClick={() => handleCancelar(seleccionada)}
                         disabled={pending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted disabled:opacity-50 rounded-lg text-[11px] font-medium text-muted-foreground"
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted disabled:opacity-50 rounded-lg text-[12.5px] font-medium text-muted-foreground"
                       >
                         <XCircle className="w-3 h-3" /> Cancelar
                       </button>
                       <button
                         onClick={() => handleTimbrar(seleccionada)}
                         disabled={pending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[11px] font-medium transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12.5px] font-medium transition-colors"
                       >
                         <FileText className="w-3 h-3" /> Timbrar ahora
                       </button>
@@ -337,7 +337,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                   { label: "Tipo", value: "Ingreso" },
                 ].map((s) => (
                   <div key={s.label} className="bg-muted rounded-lg p-3">
-                    <p className="text-[9px] text-muted-foreground mb-1">{s.label}</p>
+                    <p className="text-[10.5px] text-muted-foreground mb-1">{s.label}</p>
                     <p className={`text-[14px] font-semibold ${s.color || "text-foreground"}`}>{s.value}</p>
                   </div>
                 ))}
@@ -348,7 +348,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
 
               {/* Datos del receptor */}
               <div className="bg-card border border-border rounded-xl p-4">
-                <p className="text-[10px] font-semibold text-muted-foreground tracking-widest mb-3">DATOS DEL RECEPTOR</p>
+                <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">DATOS DEL RECEPTOR</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[
                     { label: "Nombre / Razón social", value: seleccionada.customerName },
@@ -357,8 +357,8 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                     { label: "Método de pago", value: "PUE - Pago en una sola exhibición" },
                   ].map((field) => (
                     <div key={field.label} className="bg-muted rounded-lg p-2.5">
-                      <p className="text-[9px] text-muted-foreground mb-0.5">{field.label}</p>
-                      <p className="text-[11px] font-medium text-foreground">{field.value}</p>
+                      <p className="text-[10.5px] text-muted-foreground mb-0.5">{field.label}</p>
+                      <p className="text-[12.5px] font-medium text-foreground">{field.value}</p>
                     </div>
                   ))}
                 </div>
@@ -369,13 +369,13 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle className="w-4 h-4 text-emerald-600" />
-                    <p className="text-[11px] font-semibold text-emerald-700">Factura timbrada</p>
+                    <p className="text-[12.5px] font-semibold text-emerald-700">Factura timbrada</p>
                   </div>
                   <div className="bg-card rounded-lg p-2.5 border border-emerald-200 mb-2">
-                    <p className="text-[9px] text-muted-foreground mb-0.5">UUID (Folio Fiscal)</p>
-                    <p className="text-[10px] font-mono text-foreground break-all">{seleccionada.uuid}</p>
+                    <p className="text-[10.5px] text-muted-foreground mb-0.5">UUID (Folio Fiscal)</p>
+                    <p className="text-[11.5px] font-mono text-foreground break-all">{seleccionada.uuid}</p>
                   </div>
-                  <p className="text-[10px] text-emerald-700 flex items-start gap-1">
+                  <p className="text-[11.5px] text-emerald-700 flex items-start gap-1">
                     <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
                     Timbrado simulado — este módulo todavía no está conectado a un PAC/SAT real.
                   </p>
@@ -386,9 +386,9 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <AlertCircle className="w-4 h-4 text-amber-600" />
-                    <p className="text-[11px] font-semibold text-amber-700">Factura pendiente de timbrar</p>
+                    <p className="text-[12.5px] font-semibold text-amber-700">Factura pendiente de timbrar</p>
                   </div>
-                  <p className="text-[11px] text-amber-600">
+                  <p className="text-[12.5px] text-amber-600">
                     Esta factura aún no ha sido timbrada. Haz clic en &quot;Timbrar ahora&quot; para procesarla.
                   </p>
                 </div>
@@ -398,21 +398,21 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                 <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <XCircle className="w-4 h-4 text-red-500" />
-                    <p className="text-[11px] font-semibold text-red-600">Factura cancelada</p>
+                    <p className="text-[12.5px] font-semibold text-red-600">Factura cancelada</p>
                   </div>
-                  <p className="text-[11px] text-red-500">Esta factura fue cancelada y ya no tiene validez fiscal.</p>
+                  <p className="text-[12.5px] text-red-500">Esta factura fue cancelada y ya no tiene validez fiscal.</p>
                 </div>
               )}
 
               {/* Resumen mes */}
               <div className="bg-gradient-to-r from-[#0F172A] to-[#1E293B] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
                 <div className="text-white">
-                  <p className="text-[10px] text-white/50 mb-1">Total facturado — {nombreMesActual()}</p>
+                  <p className="text-[11.5px] text-white/50 mb-1">Total facturado — {nombreMesActual()}</p>
                   <p className="text-[22px] font-bold">{formatMXN(totalMes)}</p>
-                  <p className="text-[10px] text-white/40 mt-1">{mesActual.length} facturas timbradas</p>
+                  <p className="text-[11.5px] text-white/40 mt-1">{mesActual.length} facturas timbradas</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] text-white/50 mb-1">IVA trasladado</p>
+                  <p className="text-[11.5px] text-white/50 mb-1">IVA trasladado</p>
                   <p className="text-[16px] font-semibold text-cyan-400">{formatMXN(ivaMes)}</p>
                 </div>
               </div>
@@ -446,7 +446,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
               ) : (
                 <>
                   <div>
-                    <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">VENTA A FACTURAR</label>
+                    <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">VENTA A FACTURAR</label>
                     <select
                       value={nvSaleId}
                       onChange={(e) => handleCambiarVenta(e.target.value)}
@@ -462,9 +462,9 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
 
                   <div>
                     <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-semibold text-muted-foreground tracking-widest">RECEPTOR DEL CFDI</label>
+                      <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">RECEPTOR DEL CFDI</label>
                       {ventaSeleccionadaNueva?.customerId && (
-                        <button type="button" onClick={() => setNvClienteNuevo((v) => !v)} className="text-[10px] text-primary">
+                        <button type="button" onClick={() => setNvClienteNuevo((v) => !v)} className="text-[11.5px] text-primary">
                           {nvClienteNuevo ? "Usar cliente de la venta" : "Facturar a otro receptor"}
                         </button>
                       )}
@@ -506,7 +506,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                     )}
                   </div>
 
-                  {formError && <p className="text-[11px] text-red-600">{formError}</p>}
+                  {formError && <p className="text-[12.5px] text-red-600">{formError}</p>}
                 </>
               )}
             </div>

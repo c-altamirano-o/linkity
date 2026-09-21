@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateThemePreset, updateBusinessType, updateWeekStartDay } from "@/app/actions/tenant";
+import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { THEME_PRESETS, TENANT_THEME_ROOT_ID, type ThemePresetId } from "@/lib/theme-presets";
 import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
-  LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock,
+  LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock, Phone,
 } from "lucide-react";
 
 const TIPOS_LOGO_PERMITIDOS = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
@@ -62,6 +62,7 @@ interface ConfiguracionClientProps {
   recomendadosOff: string[];
   logoInicial: string | null;
   weekStartDayInicial: number;
+  supportPhoneInicial: string | null;
 }
 
 export default function ConfiguracionClient({
@@ -72,6 +73,7 @@ export default function ConfiguracionClient({
   recomendadosOff,
   logoInicial,
   weekStartDayInicial,
+  supportPhoneInicial,
 }: ConfiguracionClientProps) {
   const router = useRouter();
 
@@ -138,6 +140,26 @@ export default function ConfiguracionClient({
       if (result.success) {
         router.refresh();
         setTimeout(() => setWeekStartDayMensaje(""), 3000);
+      }
+    });
+  };
+
+  // ── Teléfono de soporte ────────────────────────────────────
+  // 2026-09-21, a petición de Carlos: aparece en los tickets de Reparaciones
+  // y Ventas (impresos y digitales) para que el cliente sepa a qué número
+  // llamar. Guarda Tenant.phone, que ya existía en el schema pero no tenía
+  // pantalla propia — antes solo el panel maestro/superadmin podía tocarlo.
+  const [supportPhone, setSupportPhone] = useState(supportPhoneInicial ?? "");
+  const [supportPhonePending, startSupportPhoneTransition] = useTransition();
+  const [supportPhoneMensaje, setSupportPhoneMensaje] = useState("");
+
+  const guardarSupportPhone = () => {
+    startSupportPhoneTransition(async () => {
+      const result = await updateSupportPhone(tenantSlug, supportPhone);
+      setSupportPhoneMensaje(result.success ? "Teléfono actualizado correctamente." : (result.error ?? "Error al actualizar."));
+      if (result.success) {
+        router.refresh();
+        setTimeout(() => setSupportPhoneMensaje(""), 3000);
       }
     });
   };
@@ -447,6 +469,44 @@ export default function ConfiguracionClient({
               {weekStartDayPending ? "Aplicando..." : "Guardar cambios"}
             </button>
             {weekStartDayMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{weekStartDayMensaje}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Teléfono de soporte ────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <Phone className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold text-foreground">Teléfono de soporte</h2>
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-muted-foreground mb-5">
+            Aparece en los tickets de reparación y venta (impresos y digitales) para que tus clientes
+            sepan a qué número comunicarse.
+          </p>
+
+          <div className="max-w-sm">
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Teléfono</label>
+            <input
+              type="tel"
+              value={supportPhone}
+              onChange={(e) => setSupportPhone(e.target.value)}
+              placeholder="Ej. 55 1234 5678"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+          </div>
+
+          <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
+            <button
+              onClick={guardarSupportPhone}
+              disabled={supportPhonePending}
+              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              {supportPhonePending && <Loader2 className="w-4 h-4 animate-spin" />}
+              {supportPhonePending ? "Aplicando..." : "Guardar cambios"}
+            </button>
+            {supportPhoneMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{supportPhoneMensaje}</span>}
           </div>
         </div>
       </div>

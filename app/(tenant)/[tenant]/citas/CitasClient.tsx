@@ -226,7 +226,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, usarClienteNuevo: !form.usarClienteNuevo })}
-                  className="text-[11px] text-primary font-medium"
+                  className="text-[12.5px] text-primary font-medium"
                 >
                   {form.usarClienteNuevo ? "Elegir cliente existente" : "+ Cliente nuevo"}
                 </button>
@@ -300,7 +300,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
               ))}
             </select>
             {data.doctores.length === 0 && (
-              <p className="text-[11px] text-amber-600 mt-1">
+              <p className="text-[12.5px] text-amber-600 mt-1">
                 Todavía no hay personal disponible para asignar. Agrégalo desde Personal.
               </p>
             )}
@@ -470,17 +470,17 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-foreground truncate">{c.cliente}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">{c.motivo} · {c.doctor}</p>
+                  <p className="text-[12.5px] text-muted-foreground truncate">{c.motivo} · {c.doctor}</p>
                 </div>
               </div>
 
               {c.telefono && (
-                <div className="hidden md:flex items-center gap-1 text-[11px] text-muted-foreground">
+                <div className="hidden md:flex items-center gap-1 text-[12.5px] text-muted-foreground">
                   <Phone className="w-3 h-3" /> {formatoTelefono(c.telefono, c.telefonoPais)}
                 </div>
               )}
 
-              <span className={`text-[10px] font-medium px-2 py-1 rounded-full whitespace-nowrap ${ESTADO_BADGE[c.estado]}`}>
+              <span className={`text-[11.5px] font-medium px-2 py-1 rounded-full whitespace-nowrap ${ESTADO_BADGE[c.estado]}`}>
                 {label(labels, `appointment.status.${c.estado}`)}
               </span>
 

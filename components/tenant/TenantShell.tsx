@@ -221,7 +221,7 @@ export default function TenantShell({
                 </button>
               </div>
               <div className="mt-2 pt-2 border-t border-sidebar-border flex items-center justify-between">
-                <p className="text-[10px] text-sidebar-foreground/50">by Linkity Soluciones</p>
+                <p className="text-[11.5px] text-sidebar-foreground/50">by Linkity Soluciones</p>
                 <Image src="/images/favicon.svg" alt="Linkity" width={12} height={12} className="opacity-40" />
               </div>
             </>
@@ -233,7 +233,7 @@ export default function TenantShell({
             <div key={group.section} className="mb-2">
               {collapsed
                 ? <div className="my-2 border-t border-sidebar-border" />
-                : <p className="px-2 pt-2 pb-1 text-[10px] font-semibold tracking-widest text-sidebar-foreground/50">{group.section}</p>
+                : <p className="px-2 pt-2 pb-1 text-[11.5px] font-semibold tracking-widest text-sidebar-foreground/50">{group.section}</p>
               }
               {group.items.map((item) => {
                 const active = isActive(item.href);
@@ -268,7 +268,7 @@ export default function TenantShell({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-sidebar-foreground truncate">{userName}</p>
-                <p className="text-[10px] text-sidebar-foreground/60">{userRole || "Administrador"}</p>
+                <p className="text-[11.5px] text-sidebar-foreground/60">{userRole || "Administrador"}</p>
               </div>
             </div>
           )}

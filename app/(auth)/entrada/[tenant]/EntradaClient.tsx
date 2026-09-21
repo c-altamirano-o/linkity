@@ -96,7 +96,7 @@ export default function EntradaClient({
                     </div>
                     <div className="text-center">
                       <p className="text-sm font-medium text-foreground leading-tight">{emp.name}</p>
-                      {emp.position && <p className="text-[11px] text-muted-foreground">{emp.position}</p>}
+                      {emp.position && <p className="text-[12.5px] text-muted-foreground">{emp.position}</p>}
                     </div>
                   </button>
                 ))}

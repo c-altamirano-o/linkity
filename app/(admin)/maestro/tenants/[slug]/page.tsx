@@ -20,13 +20,13 @@ export default async function TenantDetailPage({
       {/* Topbar */}
       <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
         <div>
-          <Link href="/maestro/tenants" className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 mb-0.5">
+          <Link href="/maestro/tenants" className="flex items-center gap-1 text-[12.5px] text-slate-400 hover:text-slate-600 mb-0.5">
             <ArrowLeft className="w-3 h-3" />
             Negocios
           </Link>
           <h1 className="text-[15px] font-medium text-slate-800">{tenant.name}</h1>
         </div>
-        <div className="w-7 h-7 rounded-full bg-[#4F46E5] flex items-center justify-center text-white text-[11px] font-medium">
+        <div className="w-7 h-7 rounded-full bg-[#4F46E5] flex items-center justify-center text-white text-[12.5px] font-medium">
           A
         </div>
       </div>

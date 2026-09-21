@@ -87,10 +87,10 @@ export default async function MaestroLayout({
         <div className="bg-white border border-slate-200 rounded-lg p-8 max-w-sm text-center">
           <ShieldAlert className="w-8 h-8 text-red-500 mx-auto mb-3" />
           <p className="text-[14px] font-medium text-slate-800 mb-1">Acceso no autorizado</p>
-          <p className="text-[12px] text-slate-500 mb-4">
+          <p className="text-[13.5px] text-slate-500 mb-4">
             Tu cuenta ({user.email}) no tiene permisos de administrador de Panel Maestro.
           </p>
-          <Link href="/login" className="text-[12px] text-[#4F46E5] font-medium hover:underline">
+          <Link href="/login" className="text-[13.5px] text-[#4F46E5] font-medium hover:underline">
             Volver al inicio de sesión
           </Link>
         </div>
@@ -121,8 +121,8 @@ export default async function MaestroLayout({
             <LinkIcon className="w-3.5 h-3.5 text-white" />
           </div>
           <div>
-            <p className="text-white text-[13px] font-medium leading-none">Linkity</p>
-            <p className="text-[#4F46E5] text-[9px] font-semibold tracking-widest mt-0.5">PANEL MAESTRO</p>
+            <p className="text-white text-[14.5px] font-medium leading-none">Linkity</p>
+            <p className="text-[#4F46E5] text-[10.5px] font-semibold tracking-widest mt-0.5">PANEL MAESTRO</p>
           </div>
         </div>
 
@@ -130,19 +130,19 @@ export default async function MaestroLayout({
         <nav className="flex-1 overflow-y-auto py-2">
           {navItems.map((group) => (
             <div key={group.section}>
-              <p className="px-3.5 pt-3 pb-1 text-[9px] font-semibold tracking-widest text-white/30">
+              <p className="px-3.5 pt-3 pb-1 text-[10.5px] font-semibold tracking-widest text-white/30">
                 {group.section}
               </p>
               {group.items.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex items-center gap-2 mx-1.5 px-2.5 py-1.5 rounded-md text-white/50 hover:text-white hover:bg-white/5 transition-colors text-[12px] group"
+                  className="flex items-center gap-2 mx-1.5 px-2.5 py-1.5 rounded-md text-white/50 hover:text-white hover:bg-white/5 transition-colors text-[13.5px] group"
                 >
                   <item.icon className="w-3.5 h-3.5 text-white/30 group-hover:text-[#4F46E5] transition-colors" />
                   <span className="flex-1">{item.label}</span>
                   {item.badge && (
-                    <span className={`text-white text-[9px] px-1.5 py-0.5 rounded-full font-medium
+                    <span className={`text-white text-[10.5px] px-1.5 py-0.5 rounded-full font-medium
                       ${item.badgeColor === "red" ? "bg-red-500" : 
                         item.badgeColor === "green" ? "bg-emerald-500" : "bg-[#4F46E5]"}`}>
                       {item.badge}
@@ -156,7 +156,7 @@ export default async function MaestroLayout({
 
         {/* Footer */}
         <div className="border-t border-white/8 p-2">
-          <button className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-md text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors text-[11px]">
+          <button className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-md text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors text-[12.5px]">
             <LogOut className="w-3.5 h-3.5" />
             <span>Cerrar sesión</span>
           </button>

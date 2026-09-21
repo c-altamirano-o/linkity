@@ -84,7 +84,7 @@ export default function FirmaCanvas({
         className="w-full h-[160px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white touch-none cursor-crosshair"
       />
       <div className="flex items-center justify-between mt-1.5">
-        <p className="text-[11px] text-slate-400">
+        <p className="text-[12.5px] text-slate-400">
           {vacio ? "Firma aquí con el mouse o el dedo" : "Firma capturada"}
         </p>
         <button

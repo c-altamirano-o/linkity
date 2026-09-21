@@ -95,13 +95,13 @@ export default function TenantDetailClient({
 
   return (
     <div className="space-y-4">
-      {error && <p className="text-[11px] text-red-600">{error}</p>}
+      {error && <p className="text-[12.5px] text-red-600">{error}</p>}
 
       <div className="grid grid-cols-2 gap-4">
         {/* Info del negocio */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <p className="text-[13px] font-medium text-slate-700 mb-3">Información</p>
-          <dl className="space-y-2 text-[12px]">
+          <p className="text-[14.5px] font-medium text-slate-700 mb-3">Información</p>
+          <dl className="space-y-2 text-[13.5px]">
             <div className="flex justify-between gap-3">
               <dt className="text-slate-400">Giro</dt>
               <dd className="text-slate-700 text-right">{tenant.businessType ?? "Sin especificar"}</dd>
@@ -134,12 +134,12 @@ export default function TenantDetailClient({
         {/* Suscripción */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[13px] font-medium text-slate-700">Suscripción</p>
-            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${estadoCfg?.classes ?? "bg-slate-100 text-slate-400"}`}>
+            <p className="text-[14.5px] font-medium text-slate-700">Suscripción</p>
+            <span className={`text-[12.5px] font-medium px-2 py-0.5 rounded-full ${estadoCfg?.classes ?? "bg-slate-100 text-slate-400"}`}>
               {estadoCfg?.label ?? "Sin suscripción"}
             </span>
           </div>
-          <dl className="space-y-2 text-[12px] mb-3">
+          <dl className="space-y-2 text-[13.5px] mb-3">
             <div className="flex justify-between gap-3">
               <dt className="text-slate-400">Plan</dt>
               <dd className="text-slate-700 text-right">{tenant.plan ?? "Sin plan"}</dd>
@@ -164,7 +164,7 @@ export default function TenantDetailClient({
               type="button"
               disabled={isPending && suscripcionEnCurso}
               onClick={() => alternarSuscripcion("SUSPENDED")}
-              className="text-[11px] text-red-600 border border-red-200 hover:border-red-300 disabled:opacity-50 px-2.5 py-1 rounded transition-colors flex items-center gap-1"
+              className="text-[12.5px] text-red-600 border border-red-200 hover:border-red-300 disabled:opacity-50 px-2.5 py-1 rounded transition-colors flex items-center gap-1"
             >
               <Settings className="w-3 h-3" />
               {isPending && suscripcionEnCurso ? "Suspendiendo…" : "Suspender"}
@@ -174,7 +174,7 @@ export default function TenantDetailClient({
               type="button"
               disabled={isPending && suscripcionEnCurso}
               onClick={() => alternarSuscripcion("ACTIVE")}
-              className="text-[11px] text-emerald-600 border border-emerald-200 hover:border-emerald-300 disabled:opacity-50 px-2.5 py-1 rounded transition-colors flex items-center gap-1"
+              className="text-[12.5px] text-emerald-600 border border-emerald-200 hover:border-emerald-300 disabled:opacity-50 px-2.5 py-1 rounded transition-colors flex items-center gap-1"
             >
               <Settings className="w-3 h-3" />
               {isPending && suscripcionEnCurso ? "Reactivando…" : "Reactivar"}
@@ -185,14 +185,14 @@ export default function TenantDetailClient({
 
       {/* Módulos */}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
-        <p className="text-[13px] font-medium text-slate-700 mb-1">Módulos</p>
-        <p className="text-[11px] text-slate-400 mb-3">Qué partes del sistema puede usar este negocio. Los núcleo (M1-M4) siempre están activos.</p>
+        <p className="text-[14.5px] font-medium text-slate-700 mb-1">Módulos</p>
+        <p className="text-[12.5px] text-slate-400 mb-3">Qué partes del sistema puede usar este negocio. Los núcleo (M1-M4) siempre están activos.</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
           {tenant.modulos.map((m) => {
             const enCurso = isPending && moduloEnCurso === m.code;
             return (
               <div key={m.code} className="flex items-center justify-between py-1">
-                <span className="text-[12px] text-slate-600">
+                <span className="text-[13.5px] text-slate-600">
                   {m.name}
                   {m.isCore && <span className="text-slate-300"> · núcleo</span>}
                 </span>
@@ -220,21 +220,21 @@ export default function TenantDetailClient({
 
       {/* Esquema (límite de sucursales/personal) */}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
-        <p className="text-[13px] font-medium text-slate-700 mb-1 flex items-center gap-1.5">
+        <p className="text-[14.5px] font-medium text-slate-700 mb-1 flex items-center gap-1.5">
           <Layers className="w-3.5 h-3.5 text-slate-400" />
           Esquema
         </p>
-        <p className="text-[11px] text-slate-400 mb-3">
+        <p className="text-[12.5px] text-slate-400 mb-3">
           Cuántas sucursales y cuánto personal por sucursal puede tener este negocio. El cobro real lo gestiona
           Hotmart — esto solo controla capacidad dentro de la plataforma.
         </p>
         <div className="flex items-end gap-2 mb-2">
           <div className="flex-1">
-            <label className="text-[11px] font-medium text-slate-500">Esquema asignado</label>
+            <label className="text-[12.5px] font-medium text-slate-500">Esquema asignado</label>
             <select
               value={esquemaSeleccionado}
               onChange={(e) => setEsquemaSeleccionado(e.target.value)}
-              className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[12px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+              className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[13.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
             >
               <option value="">Sin esquema (sin límite)</option>
               {esquemas.map((e) => (
@@ -248,12 +248,12 @@ export default function TenantDetailClient({
             type="button"
             disabled={esquemaEnCurso || esquemaSeleccionado === (tenant.esquemaId ?? "")}
             onClick={guardarEsquema}
-            className="px-3 py-2 text-[12px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50 flex-shrink-0"
+            className="px-3 py-2 text-[13.5px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50 flex-shrink-0"
           >
             {esquemaEnCurso ? "Guardando…" : "Guardar"}
           </button>
         </div>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[12.5px] text-slate-500">
           Uso actual: {tenant.branchesActivas} sucursal(es) activa(s)
           {tenant.esquemaMaxBranches !== null ? ` de ${tenant.esquemaMaxBranches} permitida(s)` : ""}.
         </p>
@@ -262,25 +262,25 @@ export default function TenantDetailClient({
       <div className="grid grid-cols-2 gap-4">
         {/* Sucursales */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <p className="text-[13px] font-medium text-slate-700 mb-3 flex items-center gap-1.5">
+          <p className="text-[14.5px] font-medium text-slate-700 mb-3 flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5 text-slate-400" />
             Sucursales ({tenant.branches.length})
           </p>
           {tenant.branches.length === 0 ? (
-            <p className="text-[12px] text-slate-400">Sin sucursales registradas.</p>
+            <p className="text-[13.5px] text-slate-400">Sin sucursales registradas.</p>
           ) : (
             <div className="space-y-2">
               {tenant.branches.map((b) => (
-                <div key={b.id} className="flex items-center justify-between text-[12px]">
+                <div key={b.id} className="flex items-center justify-between text-[13.5px]">
                   <div>
                     <p className="text-slate-700">{b.name}</p>
-                    {b.address && <p className="text-[11px] text-slate-400">{b.address}</p>}
+                    {b.address && <p className="text-[12.5px] text-slate-400">{b.address}</p>}
                   </div>
                   <div className="text-right">
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[12.5px] text-slate-500">
                       {b.staffCount}{tenant.esquemaMaxStaffPerBranch !== null ? `/${tenant.esquemaMaxStaffPerBranch}` : ""} personal
                     </p>
-                    {!b.isActive && <span className="text-[10px] text-slate-400">Inactiva</span>}
+                    {!b.isActive && <span className="text-[11.5px] text-slate-400">Inactiva</span>}
                   </div>
                 </div>
               ))}
@@ -290,21 +290,21 @@ export default function TenantDetailClient({
 
         {/* Usuarios */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <p className="text-[13px] font-medium text-slate-700 mb-3 flex items-center gap-1.5">
+          <p className="text-[14.5px] font-medium text-slate-700 mb-3 flex items-center gap-1.5">
             <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
             Usuarios ({tenant.users.length})
           </p>
           {tenant.users.length === 0 ? (
-            <p className="text-[12px] text-slate-400">Sin usuarios registrados.</p>
+            <p className="text-[13.5px] text-slate-400">Sin usuarios registrados.</p>
           ) : (
             <div className="space-y-2">
               {tenant.users.map((u) => (
-                <div key={u.id} className="flex items-center justify-between text-[12px]">
+                <div key={u.id} className="flex items-center justify-between text-[13.5px]">
                   <div>
                     <p className="text-slate-700">{u.name}</p>
-                    <p className="text-[11px] text-slate-400">{u.email}{u.roleName ? ` · ${u.roleName}` : ""}</p>
+                    <p className="text-[12.5px] text-slate-400">{u.email}{u.roleName ? ` · ${u.roleName}` : ""}</p>
                   </div>
-                  {!u.isActive && <span className="text-[10px] text-slate-400">Inactivo</span>}
+                  {!u.isActive && <span className="text-[11.5px] text-slate-400">Inactivo</span>}
                 </div>
               ))}
             </div>

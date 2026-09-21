@@ -206,7 +206,7 @@ export default function BienvenidaClient({
                 Ir a Catálogo <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
-            {errorArranque && <p className="text-[10px] text-red-600 max-w-[220px] text-right">{errorArranque}</p>}
+            {errorArranque && <p className="text-[11.5px] text-red-600 max-w-[220px] text-right">{errorArranque}</p>}
           </div>
         </PasoShell>
 
@@ -236,30 +236,30 @@ export default function BienvenidaClient({
                 <div className="flex items-center gap-1.5 text-emerald-700 text-xs font-medium mb-2">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Cuenta creada — comparte estos datos con tu empleado
                 </div>
-                <div className="bg-card border border-border rounded-lg p-2.5 text-[11px] font-mono text-foreground space-y-0.5">
+                <div className="bg-card border border-border rounded-lg p-2.5 text-[12.5px] font-mono text-foreground space-y-0.5">
                   <p>Usuario: {resultadoInvitar.email}</p>
                   <p>Contraseña temporal: {resultadoInvitar.tempPassword}</p>
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1.5">
+                <p className="text-[11.5px] text-muted-foreground mt-1.5">
                   Se le pedirá cambiarla la primera vez que inicie sesión.
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                   <button
                     onClick={copiarCredenciales}
-                    className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                    className="flex items-center gap-1 text-[12.5px] font-medium text-primary hover:underline"
                   >
                     {copiado ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                     {copiado ? "Copiado" : "Copiar"}
                   </button>
                   <button
                     onClick={() => { setResultadoInvitar(null); setFormEquipoAbierto(false); }}
-                    className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                    className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
                   >
                     Cerrar
                   </button>
                   <button
                     onClick={() => setResultadoInvitar(null)}
-                    className="text-[11px] font-medium text-muted-foreground hover:text-foreground ml-auto"
+                    className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground ml-auto"
                   >
                     Invitar a alguien más
                   </button>
@@ -286,24 +286,24 @@ export default function BienvenidaClient({
                   placeholder="Puesto (opcional)"
                   className="px-2.5 py-1.5 border border-border rounded-lg text-xs bg-card focus:outline-none focus:border-primary"
                 />
-                {errorInvitar && <p className="text-[11px] text-red-600">{errorInvitar}</p>}
+                {errorInvitar && <p className="text-[12.5px] text-red-600">{errorInvitar}</p>}
                 <div className="flex items-center gap-2 justify-end">
                   <button
                     onClick={() => setFormEquipoAbierto(false)}
-                    className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                    className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={invitarEmpleado}
                     disabled={invitando || !nombreEmpleado.trim() || !correoEmpleado.trim()}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[11px] font-medium transition-colors"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12.5px] font-medium transition-colors"
                   >
                     {invitando && <Loader2 className="w-3 h-3 animate-spin" />}
                     {invitando ? "Creando…" : "Crear cuenta"}
                   </button>
                 </div>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11.5px] text-muted-foreground">
                   Le generamos una contraseña temporal automáticamente — no necesitas pedírsela ni definirla tú.
                   El sueldo y esquema de comisión se configuran después en Personal.
                 </p>
@@ -409,9 +409,9 @@ function PasoShell({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-medium text-muted-foreground/70">Paso {numero}</span>
-          {done && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-medium">Listo</span>}
-          {mostrarComoOmitido && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-medium">Saltado</span>}
+          <span className="text-[11.5px] font-medium text-muted-foreground/70">Paso {numero}</span>
+          {done && <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-medium">Listo</span>}
+          {mostrarComoOmitido && <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-medium">Saltado</span>}
         </div>
         <p className="text-sm font-semibold text-foreground">{titulo}</p>
         <p className="text-xs text-muted-foreground">{descripcion}</p>
@@ -420,11 +420,11 @@ function PasoShell({
         {!done && children}
         {!done && (
           mostrarComoOmitido ? (
-            <button onClick={onDeshacerOmitir} className="text-[10px] text-muted-foreground hover:text-foreground">
+            <button onClick={onDeshacerOmitir} className="text-[11.5px] text-muted-foreground hover:text-foreground">
               Deshacer
             </button>
           ) : (
-            <button onClick={onOmitir} className="text-[10px] text-muted-foreground/70 hover:text-muted-foreground">
+            <button onClick={onOmitir} className="text-[11.5px] text-muted-foreground/70 hover:text-muted-foreground">
               Saltar por ahora
             </button>
           )

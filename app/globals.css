@@ -126,5 +126,16 @@
   }
   html {
     @apply font-sans;
+    /* A petición de Carlos, 2026-09-21: "las tipografías se ven muy
+       pequeñas y dificultan un poco la lectura" en PC. La interfaz usa
+       muchísimas clases de Tailwind del tamaño estándar (text-xs, text-sm,
+       etc., que son relativas en rem) además de tamaños fijos en px para
+       las etiquetas más chicas (ver ese segundo ajuste en cada componente,
+       hecho aparte porque un tamaño fijo en px no crece con esto). Subir el
+       tamaño base del html escala TODO lo que usa la escala normal de
+       Tailwind (texto Y espaciados, que también son rem) de forma
+       proporcional, sin tener que tocar cada archivo uno por uno — 112%
+       equivale a ~17.9px en vez de los 16px de fábrica del navegador. */
+    font-size: 112%;
   }
 }

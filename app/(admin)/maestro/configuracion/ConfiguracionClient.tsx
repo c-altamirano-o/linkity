@@ -56,11 +56,11 @@ export default function ConfiguracionClient({
   return (
     <div className="max-w-lg space-y-4">
       <div className="bg-white border border-slate-200 rounded-lg p-4">
-        <p className="text-[13px] font-medium text-slate-700 mb-3 flex items-center gap-1.5">
+        <p className="text-[14.5px] font-medium text-slate-700 mb-3 flex items-center gap-1.5">
           <Shield className="w-3.5 h-3.5 text-slate-400" />
           Tu cuenta
         </p>
-        <dl className="space-y-2 text-[12px]">
+        <dl className="space-y-2 text-[13.5px]">
           <div className="flex justify-between gap-3">
             <dt className="text-slate-400">Nombre</dt>
             <dd className="text-slate-700">{admin.name}</dd>
@@ -77,15 +77,15 @@ export default function ConfiguracionClient({
       </div>
 
       <div className="bg-white border border-slate-200 rounded-lg p-4">
-        <p className="text-[13px] font-medium text-slate-700 mb-1">Cambiar contraseña</p>
-        <p className="text-[11px] text-slate-400 mb-3">Se aplica de inmediato — la vas a necesitar la próxima vez que inicies sesión.</p>
+        <p className="text-[14.5px] font-medium text-slate-700 mb-1">Cambiar contraseña</p>
+        <p className="text-[12.5px] text-slate-400 mb-3">Se aplica de inmediato — la vas a necesitar la próxima vez que inicies sesión.</p>
 
-        {error && <p className="text-[11px] text-red-600 mb-3">{error}</p>}
-        {exito && <p className="text-[11px] text-emerald-600 mb-3">Contraseña actualizada correctamente.</p>}
+        {error && <p className="text-[12.5px] text-red-600 mb-3">{error}</p>}
+        {exito && <p className="text-[12.5px] text-emerald-600 mb-3">Contraseña actualizada correctamente.</p>}
 
         <form onSubmit={handleSubmit} className="space-y-3 max-w-xs">
           <div>
-            <label className="text-[11px] font-medium text-slate-500 mb-1 block">Nueva contraseña</label>
+            <label className="text-[12.5px] font-medium text-slate-500 mb-1 block">Nueva contraseña</label>
             <div className="relative">
               <input
                 type={verPassword ? "text" : "password"}
@@ -94,7 +94,7 @@ export default function ConfiguracionClient({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Mínimo 8 caracteres"
-                className="w-full px-3 py-2 pl-9 pr-9 border border-slate-200 rounded-lg text-[12px] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                className="w-full px-3 py-2 pl-9 pr-9 border border-slate-200 rounded-lg text-[13.5px] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
               />
               <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <button
@@ -108,7 +108,7 @@ export default function ConfiguracionClient({
           </div>
 
           <div>
-            <label className="text-[11px] font-medium text-slate-500 mb-1 block">Confirmar contraseña</label>
+            <label className="text-[12.5px] font-medium text-slate-500 mb-1 block">Confirmar contraseña</label>
             <div className="relative">
               <input
                 type={verPassword ? "text" : "password"}
@@ -117,7 +117,7 @@ export default function ConfiguracionClient({
                 value={confirmar}
                 onChange={(e) => setConfirmar(e.target.value)}
                 placeholder="Repite la contraseña"
-                className="w-full px-3 py-2 pl-9 border border-slate-200 rounded-lg text-[12px] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                className="w-full px-3 py-2 pl-9 border border-slate-200 rounded-lg text-[13.5px] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
               />
               <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             </div>
@@ -126,7 +126,7 @@ export default function ConfiguracionClient({
           <button
             type="submit"
             disabled={loading}
-            className="bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12px] font-medium px-3.5 py-2 rounded-lg transition-colors disabled:opacity-60"
+            className="bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13.5px] font-medium px-3.5 py-2 rounded-lg transition-colors disabled:opacity-60"
           >
             {loading ? "Guardando…" : "Guardar contraseña"}
           </button>
