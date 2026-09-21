@@ -606,13 +606,23 @@ const RUBROS_DEMO: RubroConfig[] = [
     { puesto: "Jefe de Barberos", nombre: "Raúl Domínguez" }, { puesto: "Barbero", nombre: "Iván Casillas" }, { puesto: "Recepcionista", nombre: "Paola Reyes" }, { puesto: "Estilista", nombre: "Kevin Salas" },
   ] },
   { key: "consultorio_dental", tenantName: "Demo Consultorio Dental", slug: "demo-consultorio-dental", emailLocal: "consultoriodental", segundaSucursal: false, proveedorNombre: "Depósito Dental del Bajío", catalogo: CATALOGOS.consultorio_dental, staff: [
-    { puesto: "Dentista", nombre: "Fernanda Ibarra" }, { puesto: "Asistente dental", nombre: "Brenda Colín" }, { puesto: "Recepcionista", nombre: "Itzel Moreno" }, { puesto: "Higienista", nombre: "Sergio Nava" },
+    // Dos dentistas a propósito (2026-09-21, pedido por Carlos) — con un
+    // solo doctor, "Producción por doctor"/"Citas por doctor" en Reportes
+    // clínicos no tenían nada que repartir entre varios; un consultorio
+    // pensado para un administrador con personal a su cargo (o un
+    // inversionista) necesita ver más de un doctor en esos reportes.
+    { puesto: "Dentista", nombre: "Fernanda Ibarra" }, { puesto: "Dentista", nombre: "Santiago Bravo" },
+    { puesto: "Asistente dental", nombre: "Brenda Colín" }, { puesto: "Recepcionista", nombre: "Itzel Moreno" }, { puesto: "Higienista", nombre: "Sergio Nava" },
   ] },
   { key: "consultorio_medico", tenantName: "Demo Consultorio Médico", slug: "demo-consultorio-medico", emailLocal: "consultoriomedico", segundaSucursal: false, proveedorNombre: "Insumos Médicos Hidalgo", catalogo: CATALOGOS.consultorio_medico, staff: [
-    { puesto: "Médico", nombre: "Alberto Cabrera" }, { puesto: "Enfermero(a)", nombre: "Lucía Padilla" }, { puesto: "Recepcionista", nombre: "Diego Salinas" }, { puesto: "Asistente médico", nombre: "Marisol Pineda" },
+    // Dos médicos — mismo motivo que consultorio_dental arriba.
+    { puesto: "Médico", nombre: "Alberto Cabrera" }, { puesto: "Médico", nombre: "Paulina Cervantes" },
+    { puesto: "Enfermero(a)", nombre: "Lucía Padilla" }, { puesto: "Recepcionista", nombre: "Diego Salinas" }, { puesto: "Asistente médico", nombre: "Marisol Pineda" },
   ] },
   { key: "veterinaria", tenantName: "Demo Veterinaria", slug: "demo-veterinaria", emailLocal: "veterinaria", segundaSucursal: false, proveedorNombre: "Alimentos y Fármacos Veterinarios SA", catalogo: CATALOGOS.veterinaria, staff: [
-    { puesto: "Veterinario", nombre: "Renata Solís" }, { puesto: "Asistente veterinario", nombre: "Omar Beltrán" }, { puesto: "Recepcionista", nombre: "Ximena Cordero" }, { puesto: "Groomer", nombre: "Tania Reséndiz" },
+    // Dos veterinarios — mismo motivo que consultorio_dental arriba.
+    { puesto: "Veterinario", nombre: "Renata Solís" }, { puesto: "Veterinario", nombre: "Emilio Guzmán" },
+    { puesto: "Asistente veterinario", nombre: "Omar Beltrán" }, { puesto: "Recepcionista", nombre: "Ximena Cordero" }, { puesto: "Groomer", nombre: "Tania Reséndiz" },
   ] },
   { key: "estetica", tenantName: "Demo Estética", slug: "demo-estetica", emailLocal: "estetica", segundaSucursal: false, proveedorNombre: "Distribuidora de Belleza Total", catalogo: CATALOGOS.estetica, staff: [
     { puesto: "Encargado de sucursal", nombre: "Luis Fregoso" }, { puesto: "Esteticista", nombre: "Grecia Montoya" }, { puesto: "Recepcionista", nombre: "Nadia Ríos" },
@@ -1056,7 +1066,17 @@ async function sembrarRecetas(tenantId: string, rubro: string, clientes: { id: s
 // generarle una semana NUEVA a un negocio demo que ya existe, sin repetir
 // la lógica ni tocar su catálogo, clientes o personal.
 async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
-  const { tenant, branchPrincipal, branchSecundaria, branches, ownerUser, productos, clientes, empleados, tieneReparaciones, cfg, supplierId } = ctx;
+  const { tenant, branchPrincipal, branchSecundaria, branches, ownerUser, productos, clientes, empleados, tieneReparaciones, cfg, supplierId, doctores } = ctx;
+
+  // Atribución de ventas/reparaciones al personal, no siempre al dueño
+  // (2026-09-21, pedido por Carlos tras ver "Producción por doctor" en
+  // Reportes clínicos con el 100% en "Dueño Demo"): un demo pensado para un
+  // administrador con personal a su cargo (o un inversionista) necesita que
+  // la producción se vea repartida entre quienes de verdad atienden —
+  // mismo pool y mismo criterio de fallback que poolDoctores en
+  // sembrarCitasYNotas, así el dueño queda como quien administra (abre/
+  // cierra caja) y el personal como quien vende/reparara/atiende.
+  const poolAtencion = doctores.length > 0 ? doctores : [{ userId: ownerUser.id, name: "Dueño Demo" }];
 
   const conStock = productos.filter((p) => p.type !== ProductType.SERVICE);
   const itemsCompra = conStock.slice(0, 3);
@@ -1091,6 +1111,10 @@ async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
 
     for (const branch of branches) {
       const apertura = randInt(500, 1500);
+      // CashSession SÍ se queda en ownerUser.id a propósito (a diferencia de
+      // Sale/Repair arriba) — abrir/cerrar caja es una función administrativa,
+      // coherente con el criterio de "el dueño administra, el personal
+      // atiende" que pidió Carlos.
       const sesion = await prisma.cashSession.create({
         data: { tenantId: tenant.id, branchId: branch.id, userId: ownerUser.id, openingCash: apertura, status: CashSessionStatus.OPEN, openedAt: new Date(`${fechaStr}T09:00:00-06:00`) },
       });
@@ -1116,7 +1140,7 @@ async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
         const folio = `V-${String(folioVentaN++).padStart(4, "0")}`;
         const venta = await prisma.sale.create({
           data: {
-            tenantId: tenant.id, branchId: branch.id, customerId: cliente?.id ?? null, userId: ownerUser.id,
+            tenantId: tenant.id, branchId: branch.id, customerId: cliente?.id ?? null, userId: pick(poolAtencion).userId,
             folio, subtotal, tax: impuesto, discount: 0, total, paymentMethod: metodo, status: SaleStatus.COMPLETED,
             createdAt: new Date(`${fechaStr}T${horaAleatoria()}:00-06:00`),
           },
@@ -1180,7 +1204,7 @@ async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
         const folio = `REP-${String(folioRepN++).padStart(4, "0")}`;
         const repair = await prisma.repair.create({
           data: {
-            tenantId: tenant.id, branchId: branchRep.id, customerId: cliente.id, userId: ownerUser.id,
+            tenantId: tenant.id, branchId: branchRep.id, customerId: cliente.id, userId: pick(poolAtencion).userId,
             folio, deviceBrand: dispositivo.brand, deviceModel: dispositivo.model, issueDesc: falla,
             status, priority: pick([Priority.LOW, Priority.NORMAL, Priority.NORMAL, Priority.HIGH]),
             estimatedCost: estimado, finalCost: entregado ? estimado : null,
