@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getReportesData } from "@/lib/reportes-data";
+import { getReportesData, getReportesClinicosData } from "@/lib/reportes-data";
 import { getTenantLabels } from "@/lib/labels-server";
 import { label } from "@/lib/labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, ShoppingBag, Wrench, Users, TrendingUp, TrendingDown } from "lucide-react";
+import { BarChart3, ShoppingBag, Wrench, Users, TrendingUp, TrendingDown, Stethoscope, CalendarCheck } from "lucide-react";
 
 interface PageProps {
   params: Promise<{ tenant: string }>;
@@ -39,14 +39,24 @@ export default async function ReportesPage({ params }: PageProps) {
   // schema.prisma) — no tiene columna `id` propia, así que el select no
   // puede pedirla (esto tumbó el build: "Object literal may only specify
   // known properties, and 'id' does not exist in type 'TenantModuleSelect'").
-  const reparacionesInactiva = await prisma.tenantModule.findFirst({
-    where: { tenantId: tenant.id, isActive: false, module: { code: "reparaciones" } },
-    select: { tenantId: true },
-  });
+  // Mismo query "módulo apagado" que arriba, para expediente-clinico (M17,
+  // Fase 2, Tarea #42, 2026-09-21) — igual que en clientes/page.tsx.
+  const [reparacionesInactiva, expedienteInactivo] = await Promise.all([
+    prisma.tenantModule.findFirst({
+      where: { tenantId: tenant.id, isActive: false, module: { code: "reparaciones" } },
+      select: { tenantId: true },
+    }),
+    prisma.tenantModule.findFirst({
+      where: { tenantId: tenant.id, isActive: false, module: { code: "expediente-clinico" } },
+      select: { tenantId: true },
+    }),
+  ]);
   const reparacionesActiva = !reparacionesInactiva;
+  const expedienteActiva = !expedienteInactivo;
 
-  const [reportes, labels] = await Promise.all([
+  const [reportes, reportesClinicos, labels] = await Promise.all([
     getReportesData(tenant.id, reparacionesActiva),
+    getReportesClinicosData(tenant.id, expedienteActiva),
     getTenantLabels(tenant.id, tenant.businessType),
   ]);
 
@@ -161,6 +171,100 @@ export default async function ReportesPage({ params }: PageProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Reportes clínicos — M17, Fase 2, Tarea #42, 2026-09-21. Solo para
+          rubros con expediente-clinico activo (dental/médico/veterinaria).
+          Ver el comentario largo en getReportesClinicosData
+          (lib/reportes-data.ts) sobre el alcance real de "citas por doctor"
+          como proxy de ocupación de agenda. */}
+      {reportesClinicos.activo && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Reportes clínicos</h2>
+            <p className="text-sm text-muted-foreground">Producción, presupuestos y agenda del mes en curso.</p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Stethoscope className="h-4 w-4 text-muted-foreground" /> Producción por doctor este mes
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {reportesClinicos.produccionPorDoctor.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Todavía no hay ventas ni fases de tratamiento pagadas este mes.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {reportesClinicos.produccionPorDoctor.map((p) => (
+                      <div key={p.doctorUserId} className="flex items-center justify-between text-sm">
+                        <div>
+                          <p className="font-medium">{p.doctor}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatMXN(p.ventas)} en ventas · {formatMXN(p.tratamientos)} en tratamientos
+                          </p>
+                        </div>
+                        <span className="font-semibold">{formatMXN(p.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Tasa de aceptación de presupuestos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {reportesClinicos.aceptacionPresupuestos.tasaAceptacionPct === null ? (
+                  <p className="text-sm text-muted-foreground">
+                    Todavía no hay fases de plan de tratamiento aceptadas o rechazadas para calcular una tasa.
+                    {reportesClinicos.aceptacionPresupuestos.propuestos > 0 &&
+                      ` (${reportesClinicos.aceptacionPresupuestos.propuestos} propuesta(s) pendiente(s) de decisión)`}
+                  </p>
+                ) : (
+                  <>
+                    <div className="text-3xl font-bold mb-1">{reportesClinicos.aceptacionPresupuestos.tasaAceptacionPct}%</div>
+                    <p className="text-xs text-muted-foreground">
+                      {reportesClinicos.aceptacionPresupuestos.aceptados} aceptada(s) · {reportesClinicos.aceptacionPresupuestos.rechazados} rechazada(s)
+                      {reportesClinicos.aceptacionPresupuestos.propuestos > 0 &&
+                        ` · ${reportesClinicos.aceptacionPresupuestos.propuestos} pendiente(s) de decisión`}
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarCheck className="h-4 w-4 text-muted-foreground" /> Citas por doctor este mes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {reportesClinicos.citasPorDoctor.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Todavía no hay citas completadas, canceladas o con inasistencia este mes.</p>
+              ) : (
+                <div className="space-y-2">
+                  {reportesClinicos.citasPorDoctor.map((c) => (
+                    <div key={c.doctorUserId} className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{c.doctor}</span>
+                      <span className="text-muted-foreground">
+                        {c.completadas} completada(s) · {c.noShow} inasistencia(s) · {c.canceladas} cancelada(s)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground mt-3">
+                Proxy de ocupación de agenda a partir de citas realizadas — un % de ocupación real requeriría definir horario/capacidad por doctor, que Linkity todavía no modela.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
