@@ -119,42 +119,61 @@ const CONDICIONES_DIENTE: CondicionDiente[] = [
   "EXTRACCION_INDICADA", "IMPLANTE", "FRACTURADO", "SELLANTE",
 ];
 
-// Silueta genérica de diente (corona + dos raíces) para el ícono del
-// odontograma — no es una referencia anatómica exacta, es un dibujo
-// reconocible a simple vista. Reemplaza el diseño anterior (una casilla
-// lisa con solo el número) a pedido de Carlos (2026-09-18): "lo noto un
-// poco genérico... he visto programas donde muestran... en su defecto, un
-// vector o imagen del diente específico. No solo una casilla con un
-// número". No mostramos radiografía real (eso implicaría subir/almacenar
-// una imagen por diente, fuera de alcance de Fase 1) — en su lugar, la
+// Silueta anatómica de diente (corona flareada + dos raíces + línea
+// cervical sutil) para el ícono del odontograma — no es una radiografía
+// real (eso implicaría subir/almacenar una imagen por diente, fuera de
+// alcance de Fase 1), es un dibujo pulido pero plano, pensado para
+// reconocerse de un vistazo entre 32 dientes en pantalla. Reemplaza el
+// diseño anterior (una casilla lisa con solo el número) a pedido de Carlos
+// (2026-09-18), y luego el primer rediseño (cápsula genérica) se refinó de
+// nuevo (2026-09-21) con proporciones más parecidas a un diente real. La
 // condición se codifica con la FORMA del ícono (implante = tornillo, no
 // diente) y con relleno/marcas superpuestas (mancha=caries, parche=
 // obturado, grieta=fracturado, línea de canal=endodoncia, puntos=sellante,
 // X=extracción indicada, contorno punteado sin relleno=ausente).
 const DIENTE_PATH =
-  "M12 1.5c-3.6 0-6.2 2.3-6.2 5.8 0 1.9.7 3.2 1.3 4.8.6 1.6 1.1 3.5 1.1 6.2 0 1.2.5 2.2 1.4 2.2.8 0 1.3-.7 1.6-1.9.3-1.3.6-2.8.8-2.8s.5 1.5.8 2.8c.3 1.2.8 1.9 1.6 1.9.9 0 1.4-1 1.4-2.2 0-2.7.5-4.6 1.1-6.2.6-1.6 1.3-2.9 1.3-4.8 0-3.5-2.6-5.8-6.2-5.8z";
+  "M12,2 C8.7,2 6,3.6 5.3,6.8 C4.9,8.6 5.4,10.1 6.2,11.7 C6.8,12.9 7.1,13.9 7.2,15.3 C7.3,18 6.9,20.8 6.3,23.7 C6,25.1 6.1,26.8 7.4,27.4 C8.5,27.9 9.2,26.6 9.6,24.9 C9.9,23.6 10.2,22.2 12,22.2 C13.8,22.2 14.1,23.6 14.4,24.9 C14.8,26.6 15.5,27.9 16.6,27.4 C17.9,26.8 18,25.1 17.7,23.7 C17.1,20.8 16.7,18 16.8,15.3 C16.9,13.9 17.2,12.9 17.8,11.7 C18.6,10.1 19.1,8.6 18.7,6.8 C18,3.6 15.3,2 12,2 Z";
+// Línea cervical (unión corona/raíz) — solo un detalle sutil de acabado,
+// se dibuja encima del relleno en todas las condiciones excepto ausente/implante.
+const DIENTE_CUELLO = "M7.3,14.2 Q12,16.6 16.7,14.2";
 
+// Los estados NEUTROS (diente sano, contorno base, contorno de "ausente")
+// usan tokens de tema — se ven bien en los 5 temas de color de Linkity. Los
+// colores de CONDICIÓN CLÍNICA se dejan fijos a propósito: mismo criterio
+// que ya documenta lib/theme-presets.ts para los colores de estatus
+// (rojo/ámbar/verde) — "caries es rojo" debe significar lo mismo sin
+// importar el tema activo del negocio.
 const DIENTE_RELLENO: Record<CondicionDiente, string> = {
-  SANO: "#ffffff", CARIES: "#fef2f2", OBTURADO: "#eff6ff", CORONA: "#f59e0b",
+  SANO: "var(--card)", CARIES: "#fef2f2", OBTURADO: "#eff6ff", CORONA: "#f59e0b",
   ENDODONCIA: "#faf5ff", AUSENTE: "transparent", EXTRACCION_INDICADA: "#fee2e2",
   IMPLANTE: "transparent", FRACTURADO: "#fff7ed", SELLANTE: "#ecfdf5",
 };
 const DIENTE_BORDE: Record<CondicionDiente, string> = {
-  SANO: "#d4d4d8", CARIES: "#b91c1c", OBTURADO: "#1d4ed8", CORONA: "#b45309",
-  ENDODONCIA: "#7e22ce", AUSENTE: "#a1a1aa", EXTRACCION_INDICADA: "#b91c1c",
+  SANO: "var(--border)", CARIES: "#b91c1c", OBTURADO: "#1d4ed8", CORONA: "#b45309",
+  ENDODONCIA: "#7e22ce", AUSENTE: "var(--muted-foreground)", EXTRACCION_INDICADA: "#b91c1c",
   IMPLANTE: "#0891b2", FRACTURADO: "#c2410c", SELLANTE: "#047857",
 };
+
+// Categorías para la barra de selección de condición del panel de edición
+// (reemplaza el <select> plano) — agrupadas como las pensaría un dentista:
+// estado general primero, luego patologías, restauraciones y endodoncia.
+const CATEGORIAS_CONDICION: { etiqueta: string; items: CondicionDiente[] }[] = [
+  { etiqueta: "General", items: ["SANO", "AUSENTE"] },
+  { etiqueta: "Patologías", items: ["CARIES", "FRACTURADO", "EXTRACCION_INDICADA"] },
+  { etiqueta: "Restauraciones", items: ["OBTURADO", "CORONA", "SELLANTE", "IMPLANTE"] },
+  { etiqueta: "Endodoncia", items: ["ENDODONCIA"] },
+];
 
 function ToothIcon({ condicion, className }: { condicion: CondicionDiente; className?: string }) {
   if (condicion === "IMPLANTE") {
     // No es un diente natural — se dibuja como un tornillo para que se
     // distinga de un vistazo del resto de las condiciones.
     return (
-      <svg viewBox="0 0 24 28" className={className}>
-        <path d="M8 2h8l-1 5H9L8 2z" fill="#0891b2" />
-        <rect x="10.3" y="7" width="3.4" height="16" fill="#0891b2" />
-        {[9, 11.5, 14, 16.5, 19].map((y) => (
-          <line key={y} x1="8.8" y1={y} x2="15.2" y2={y} stroke="#a5f3fc" strokeWidth="1" />
+      <svg viewBox="0 0 24 32" className={className}>
+        <path d="M8 3h8l-1 5.5H9L8 3z" fill="#0891b2" />
+        <rect x="10.2" y="8.5" width="3.6" height="18" fill="#0891b2" />
+        {[10.5, 13, 15.5, 18, 20.5, 23].map((y) => (
+          <line key={y} x1="8.6" y1={y} x2="15.4" y2={y} stroke="#a5f3fc" strokeWidth="1" />
         ))}
       </svg>
     );
@@ -162,37 +181,38 @@ function ToothIcon({ condicion, className }: { condicion: CondicionDiente; class
 
   if (condicion === "AUSENTE") {
     return (
-      <svg viewBox="0 0 24 28" className={className} fill="none">
-        <path d={DIENTE_PATH} stroke="#a1a1aa" strokeWidth="1.2" strokeDasharray="2.2 2" />
+      <svg viewBox="0 0 24 32" className={className} fill="none">
+        <path d={DIENTE_PATH} stroke={DIENTE_BORDE.AUSENTE} strokeWidth="1.2" strokeDasharray="2.2 2" />
       </svg>
     );
   }
 
   return (
-    <svg viewBox="0 0 24 28" className={className} fill="none">
+    <svg viewBox="0 0 24 32" className={className} fill="none">
       <path d={DIENTE_PATH} fill={DIENTE_RELLENO[condicion]} stroke={DIENTE_BORDE[condicion]} strokeWidth="1.3" />
-      {condicion === "CARIES" && <circle cx="10.5" cy="9.5" r="1.8" fill="#7f1d1d" />}
-      {condicion === "OBTURADO" && <circle cx="10.5" cy="9.5" r="1.8" fill="#93c5fd" stroke="#1d4ed8" strokeWidth="0.6" />}
+      <path d={DIENTE_CUELLO} stroke="var(--border)" strokeWidth="0.8" fill="none" opacity={0.6} />
+      {condicion === "CARIES" && <circle cx="10.3" cy="9.5" r="2" fill="#7f1d1d" />}
+      {condicion === "OBTURADO" && <circle cx="10.3" cy="9.5" r="2" fill="#93c5fd" stroke="#1d4ed8" strokeWidth="0.6" />}
       {condicion === "SELLANTE" && (
         <>
-          <circle cx="8.3" cy="7.5" r="0.9" fill="#10b981" />
-          <circle cx="12" cy="6.7" r="0.9" fill="#10b981" />
-          <circle cx="15.7" cy="7.5" r="0.9" fill="#10b981" />
+          <circle cx="8" cy="7.8" r="1" fill="#10b981" />
+          <circle cx="12" cy="6.9" r="1" fill="#10b981" />
+          <circle cx="16" cy="7.8" r="1" fill="#10b981" />
         </>
       )}
       {condicion === "ENDODONCIA" && (
         <>
-          <line x1="9.3" y1="13" x2="8.6" y2="20" stroke="#a855f7" strokeWidth="1" />
-          <line x1="14.7" y1="13" x2="15.4" y2="20" stroke="#a855f7" strokeWidth="1" />
+          <line x1="9.3" y1="15" x2="8.4" y2="23" stroke="#a855f7" strokeWidth="1.1" />
+          <line x1="14.7" y1="15" x2="15.6" y2="23" stroke="#a855f7" strokeWidth="1.1" />
         </>
       )}
       {condicion === "FRACTURADO" && (
-        <path d="M13 3l-2.5 4 2 1.5-2.5 4" stroke="#c2410c" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M13.5 3.5l-3 4.5 2.2 1.7-2.8 4.5" stroke="#c2410c" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
       )}
       {condicion === "EXTRACCION_INDICADA" && (
         <>
-          <line x1="6.5" y1="6" x2="17.5" y2="21" stroke="#dc2626" strokeWidth="1.6" strokeLinecap="round" />
-          <line x1="17.5" y1="6" x2="6.5" y2="21" stroke="#dc2626" strokeWidth="1.6" strokeLinecap="round" />
+          <line x1="6.5" y1="6" x2="17.5" y2="24" stroke="#dc2626" strokeWidth="1.8" strokeLinecap="round" />
+          <line x1="17.5" y1="6" x2="6.5" y2="24" stroke="#dc2626" strokeWidth="1.8" strokeLinecap="round" />
         </>
       )}
     </svg>
@@ -377,6 +397,24 @@ export default function ClientesClient({
       etiqueta: it.diente != null ? `${it.descripcion} · Diente ${it.diente}` : it.descripcion,
     }))
   );
+
+  // Indicador ligero de "tratamiento pendiente" sobre el odontograma — NO es
+  // una fusión del Plan de Tratamiento dentro del odontograma (ese diseño se
+  // descartó a propósito, ver comentario junto al JSX del odontograma), solo
+  // un punto de color por diente para que el doctor note de un vistazo que
+  // ese diente tiene una fase propuesta o aceptada (no pagada) sin tener que
+  // leer las dos secciones a la vez. PROPUESTO pesa más que ACEPTADO porque
+  // es lo que todavía necesita una decisión del paciente.
+  const pendientePorDiente: Record<number, "PROPUESTO" | "ACEPTADO"> = {};
+  for (const plan of planesSeleccionado) {
+    for (const it of plan.items) {
+      if (it.diente == null) continue;
+      if (it.estado === "PROPUESTO") pendientePorDiente[it.diente] = "PROPUESTO";
+      else if (it.estado === "ACEPTADO" && pendientePorDiente[it.diente] !== "PROPUESTO") {
+        pendientePorDiente[it.diente] = "ACEPTADO";
+      }
+    }
+  }
 
   // Al cambiar de cliente (o de antecedentes ya guardados desde el server
   // tras un router.refresh()), el formulario de antecedentes se re-sincroniza
@@ -1164,15 +1202,21 @@ export default function ClientesClient({
                             {fila.map((numero) => {
                               const diente = expedienteSeleccionado.dientes.find((d) => d.numero === numero);
                               const condicion = diente?.condicion ?? "SANO";
+                              const pendiente = pendientePorDiente[numero];
                               return (
                                 <button
                                   key={numero}
                                   onClick={() => abrirDiente(numero)}
-                                  title={`Diente ${numero} — ${label(labels, `tooth.condition.${condicion}`)}`}
-                                  className={`w-9 h-11 sm:w-10 sm:h-12 rounded-md border bg-card flex flex-col items-center justify-center gap-0.5 transition-colors ${dienteSeleccionado === numero ? "border-primary ring-2 ring-primary" : "border-border hover:border-foreground/40"}`}
+                                  title={`Diente ${numero} — ${label(labels, `tooth.condition.${condicion}`)}${pendiente ? ` · Tratamiento ${pendiente === "PROPUESTO" ? "propuesto" : "aceptado"}` : ""}`}
+                                  className={`relative w-9 h-11 sm:w-10 sm:h-12 rounded-md border bg-card flex flex-col items-center justify-center gap-0.5 transition-colors ${dienteSeleccionado === numero ? "border-primary ring-2 ring-primary" : "border-border hover:border-foreground/40"}`}
                                 >
                                   <ToothIcon condicion={condicion} className="w-5 h-6 sm:w-6 sm:h-7" />
                                   <span className="text-[8px] font-semibold text-muted-foreground leading-none">{numero}</span>
+                                  {pendiente && (
+                                    <span
+                                      className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border border-card ${pendiente === "PROPUESTO" ? "bg-amber-500" : "bg-blue-600"}`}
+                                    />
+                                  )}
                                 </button>
                               );
                             })}
@@ -1189,24 +1233,49 @@ export default function ClientesClient({
                             <span className="text-[10px] text-muted-foreground">{label(labels, `tooth.condition.${c}`)}</span>
                           </div>
                         ))}
+                        <div className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-amber-500" />
+                          <span className="text-[10px] text-muted-foreground">Tratamiento propuesto</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-blue-600" />
+                          <span className="text-[10px] text-muted-foreground">Tratamiento aceptado</span>
+                        </div>
                       </div>
 
                       {dienteSeleccionado != null && (
                         <div className="mt-4 p-3 rounded-lg bg-muted/40 border border-border">
-                          <p className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                          <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5">
                             <ToothIcon condicion={dienteCondicion} className="w-4 h-5" />
-                            Diente {dienteSeleccionado}
+                            Diente {dienteSeleccionado} — {label(labels, `tooth.condition.${dienteCondicion}`)}
                           </p>
+                          {/* Barra de condición agrupada por categoría — reemplaza el
+                              <select> plano anterior. Deliberadamente NO se fusiona
+                              con Plan de Tratamiento (sección aparte, más abajo):
+                              cada diente solo muestra un punto de color (ver leyenda)
+                              cuando tiene una fase pendiente, para no forzar al doctor
+                              a saltar entre dos flujos ya validados por separado. */}
+                          <div className="flex flex-wrap gap-3 mb-3">
+                            {CATEGORIAS_CONDICION.map((grupo) => (
+                              <div key={grupo.etiqueta}>
+                                <p className="text-[9px] font-semibold text-muted-foreground tracking-wide uppercase mb-1">{grupo.etiqueta}</p>
+                                <div className="flex gap-1">
+                                  {grupo.items.map((c) => (
+                                    <button
+                                      key={c}
+                                      type="button"
+                                      onClick={() => setDienteCondicion(c)}
+                                      title={label(labels, `tooth.condition.${c}`)}
+                                      className={`w-9 h-10 rounded-md border bg-card flex items-center justify-center transition-colors ${dienteCondicion === c ? "border-primary ring-2 ring-primary" : "border-border hover:border-foreground/40"}`}
+                                    >
+                                      <ToothIcon condicion={c} className="w-5 h-6" />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                           <div className="flex flex-col sm:flex-row gap-2">
-                            <select
-                              value={dienteCondicion}
-                              onChange={(e) => setDienteCondicion(e.target.value as CondicionDiente)}
-                              className="px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                            >
-                              {CONDICIONES_DIENTE.map((c) => (
-                                <option key={c} value={c}>{label(labels, `tooth.condition.${c}`)}</option>
-                              ))}
-                            </select>
                             <input
                               type="text"
                               value={dienteNotas}
