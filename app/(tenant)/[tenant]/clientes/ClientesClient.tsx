@@ -193,13 +193,23 @@ function familiaDiente(numero: number): FamiliaDiente {
 // que ya documenta lib/theme-presets.ts para los colores de estatus
 // (rojo/ámbar/verde) — "caries es rojo" debe significar lo mismo sin
 // importar el tema activo del negocio.
+// SANO usaba antes "var(--card)" de relleno — el MISMO color que el fondo
+// del botón que lo contiene (bg-card), así que un diente sano se veía como
+// un simple contorno hueco casi invisible, y a este tamaño de ícono
+// cualquier matiz de la silueta (raíz, separación de raíces) se perdía por
+// completo. "var(--muted)" es un tono apenas distinto de --card (mismo
+// truco que usa el resto de la UI para "tarjeta sobre fondo") — con eso el
+// diente se ve como una forma sólida con volumen, como en el software de
+// referencia, en vez de una línea hueca. El contorno de SANO también pasó
+// de --border (casi blanco) a --muted-foreground (gris medio) para que el
+// trazo se note de un vistazo, y el trazo principal se engrosó (1.3→1.6).
 const DIENTE_RELLENO: Record<CondicionDiente, string> = {
-  SANO: "var(--card)", CARIES: "#fef2f2", OBTURADO: "#eff6ff", CORONA: "#f59e0b",
+  SANO: "var(--muted)", CARIES: "#fef2f2", OBTURADO: "#eff6ff", CORONA: "#f59e0b",
   ENDODONCIA: "#faf5ff", AUSENTE: "transparent", EXTRACCION_INDICADA: "#fee2e2",
   IMPLANTE: "transparent", FRACTURADO: "#fff7ed", SELLANTE: "#ecfdf5",
 };
 const DIENTE_BORDE: Record<CondicionDiente, string> = {
-  SANO: "var(--border)", CARIES: "#b91c1c", OBTURADO: "#1d4ed8", CORONA: "#b45309",
+  SANO: "var(--muted-foreground)", CARIES: "#b91c1c", OBTURADO: "#1d4ed8", CORONA: "#b45309",
   ENDODONCIA: "#7e22ce", AUSENTE: "var(--muted-foreground)", EXTRACCION_INDICADA: "#b91c1c",
   IMPLANTE: "#0891b2", FRACTURADO: "#c2410c", SELLANTE: "#047857",
 };
@@ -251,7 +261,7 @@ function ToothIcon({ condicion, numero, espejo = false, className }: { condicion
     return (
       <svg viewBox="0 0 24 32" className={className} fill="none">
         <g transform={transformEspejo}>
-          <path d={DIENTE_FORMA[familia]} stroke={DIENTE_BORDE.AUSENTE} strokeWidth="1.2" strokeDasharray="2.2 2" />
+          <path d={DIENTE_FORMA[familia]} stroke={DIENTE_BORDE.AUSENTE} strokeWidth="1.5" strokeDasharray="2.2 2" />
         </g>
       </svg>
     );
@@ -260,8 +270,8 @@ function ToothIcon({ condicion, numero, espejo = false, className }: { condicion
   return (
     <svg viewBox="0 0 24 32" className={className} fill="none">
       <g transform={transformEspejo}>
-        <path d={DIENTE_FORMA[familia]} fill={DIENTE_RELLENO[condicion]} stroke={DIENTE_BORDE[condicion]} strokeWidth="1.3" />
-        <path d={DIENTE_CUELLO[familia]} stroke="var(--border)" strokeWidth="0.8" fill="none" opacity={0.6} />
+        <path d={DIENTE_FORMA[familia]} fill={DIENTE_RELLENO[condicion]} stroke={DIENTE_BORDE[condicion]} strokeWidth="1.6" />
+        <path d={DIENTE_CUELLO[familia]} stroke="var(--muted-foreground)" strokeWidth="0.8" fill="none" opacity={0.45} />
         {condicion === "CARIES" && <circle cx="10.3" cy="9.5" r="2" fill="#7f1d1d" />}
         {condicion === "OBTURADO" && <circle cx="10.3" cy="9.5" r="2" fill="#93c5fd" stroke="#1d4ed8" strokeWidth="0.6" />}
         {condicion === "SELLANTE" && (
