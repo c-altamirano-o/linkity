@@ -949,11 +949,16 @@ const PROCEDIMIENTOS_CONSENT_DEMO: Record<string, ProcedimientoConsentDemo[]> = 
 const NOTA_FIRMA_SIMULADA_DEMO =
   "Nota: esta firma se capturó de forma digital dentro del sistema, como respaldo de que el procedimiento fue explicado y aceptado por el paciente (o su representante). No es una firma electrónica avanzada (e.firma) ni sustituye, para efectos legales o notariales, una firma autógrafa en papel.";
 
-// PNG 1x1 transparente en base64 — placeholder honesto de "aquí hay una
-// firma capturada" para datos de demo, no se pretende que sea un trazo
-// real (ver FirmaCanvas.tsx para la captura real en la app).
+// PNG 1x1 REALMENTE transparente en base64 (alpha=0, verificado con
+// Pillow) — placeholder honesto de "aquí hay una firma capturada" para
+// datos de demo, no se pretende que sea un trazo real (ver FirmaCanvas.tsx
+// para la captura real en la app). OJO: la cadena base64 típica que
+// circula como "1x1 transparent PNG" en internet en realidad decodifica a
+// un pixel NEGRO OPACO, no transparente — con eso el <img> se veía como un
+// cuadro negro enorme en vez de un placeholder discreto (bug reportado por
+// Carlos, 2026-09-21). Esta sí es transparente de verdad.
 const FIRMA_DEMO_PNG =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==";
 
 async function sembrarConsentimientos(tenantId: string, rubro: string, clientes: { id: string }[], doctorUserId: string) {
   const procedimientos = PROCEDIMIENTOS_CONSENT_DEMO[rubro];
@@ -1507,12 +1512,24 @@ function guardarResumenCredenciales() {
 // de los datos" al inicio del archivo para el porqué de este modo.
 const REFRESCAR = process.argv.includes("--refrescar");
 
+// --solo=slug1,slug2 (opcional, 2026-09-21 — pedido de Carlos para no
+// esperar el refresco completo de los 20 rubros mientras prueba un cambio
+// puntual en uno solo). Filtra RUBROS_DEMO a solo esos slugs; sin este
+// flag se comporta como siempre (los 20). Ejemplo:
+//   npx tsx prisma/seed-demo.ts --refrescar --solo=demo-consultorio-dental
+const argSolo = process.argv.find((a) => a.startsWith("--solo="));
+const SOLO_SLUGS = argSolo
+  ? new Set(argSolo.slice("--solo=".length).split(",").map((s) => s.trim()).filter(Boolean))
+  : null;
+
 async function main() {
   console.log(REFRESCAR ? "🔄 Refrescando la semana operativa de los negocios demo existentes..." : "🌱 Sembrando 20 negocios demo (uno por rubro)...");
+  if (SOLO_SLUGS) console.log(`   (filtrado a: ${[...SOLO_SLUGS].join(", ")})`);
   const mapaPermisos = await asegurarCatalogoPermisos();
 
   for (let i = 0; i < RUBROS_DEMO.length; i++) {
     const cfg = RUBROS_DEMO[i];
+    if (SOLO_SLUGS && !SOLO_SLUGS.has(cfg.slug)) continue;
     try {
       const existente = await prisma.tenant.findUnique({ where: { slug: cfg.slug } });
       if (existente) {

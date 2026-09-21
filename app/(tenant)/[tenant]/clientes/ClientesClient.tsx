@@ -1698,11 +1698,18 @@ export default function ClientesClient({
                     Firmado por {consentVerModal.firmadoPor}
                     {consentVerModal.firmadoEn && ` · ${new Date(consentVerModal.firmadoEn).toLocaleString("es-MX")}`}
                   </label>
+                  {/* h-40 + object-contain fijos (2026-09-21, bug reportado
+                      por Carlos): una firma real de FirmaCanvas.tsx ya viene
+                      del tamaño correcto, pero un placeholder de 1x1 (dato
+                      de demo) estirado a w-full con alto automático se veía
+                      como un cuadro gigante — con alto fijo y
+                      object-contain se ve bien sin importar el tamaño real
+                      de la imagen. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={consentVerModal.firmaImagen}
                     alt="Firma del paciente"
-                    className="mt-1 w-full rounded-lg border border-border bg-white"
+                    className="mt-1 w-full h-40 object-contain rounded-lg border border-border bg-white"
                   />
                 </div>
               )}
