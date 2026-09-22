@@ -12,6 +12,7 @@ import { getTenantLabels } from "@/lib/labels-server";
 import type { LabelDictionary } from "@/lib/labels";
 import { calcularEstadoCiclo } from "@/lib/ciclo-suscripcion";
 import CuentaBloqueada from "@/components/tenant/CuentaBloqueada";
+import { getNotificaciones, contarNotificacionesNoLeidas } from "@/lib/notificaciones";
 
 export const metadata: Metadata = {
   title: "Linkity",
@@ -124,16 +125,29 @@ export default async function TenantLayout({
   // este cambio pierde un módulo de golpe (nunca tuvo una fila así).
   let labels: LabelDictionary = {};
   let modulosInactivos: string[] = [];
+  // Panel de notificaciones en tiempo real (2026-09-22, a petición de
+  // Carlos — ver el comentario largo en lib/notificaciones.ts): la
+  // campanita de TenantShell.tsx necesita un estado inicial (lo que ya
+  // pasó antes de que este panel se abriera) además de la suscripción en
+  // vivo que arma el propio cliente — sin esto, alguien que entra al panel
+  // después de que ya se abrió/cerró una caja no vería ese aviso nunca,
+  // solo los que ocurran mientras la pestaña sigue abierta.
+  let notificacionesIniciales: Awaited<ReturnType<typeof getNotificaciones>> = [];
+  let notificacionesNoLeidas = 0;
   if (dbTenant) {
-    const [labelsResueltos, inactivos] = await Promise.all([
+    const [labelsResueltos, inactivos, notifs, noLeidas] = await Promise.all([
       getTenantLabels(dbTenant.id, dbTenant.businessType),
       prisma.tenantModule.findMany({
         where: { tenantId: dbTenant.id, isActive: false },
         select: { module: { select: { code: true } } },
       }),
+      getNotificaciones(dbTenant.id),
+      contarNotificacionesNoLeidas(dbTenant.id),
     ]);
     labels = labelsResueltos;
     modulosInactivos = inactivos.map((tm) => tm.module.code);
+    notificacionesIniciales = notifs;
+    notificacionesNoLeidas = noLeidas;
   }
 
   // Prioridad: personal (PIN) primero, administrador como fallback — ver el
@@ -218,6 +232,7 @@ export default async function TenantLayout({
     <div id={TENANT_THEME_ROOT_ID} style={activePreset as React.CSSProperties} className="contents">
       <TenantShell
         tenant={tenant}
+        tenantId={dbTenant?.id ?? null}
         userName={userName}
         userRole={userRole}
         modo={modo}
@@ -225,6 +240,8 @@ export default async function TenantLayout({
         labels={labels}
         modulosInactivos={modulosInactivos}
         logoUrl={dbTenant?.logo ?? null}
+        notificacionesIniciales={notificacionesIniciales}
+        notificacionesNoLeidasIniciales={notificacionesNoLeidas}
       >
         {children}
       </TenantShell>

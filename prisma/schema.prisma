@@ -88,6 +88,7 @@ model Tenant {
   treatmentPlans    TreatmentPlan[]
   informedConsents  InformedConsent[]
   prescriptions     Prescription[]
+  notificaciones    Notificacion[]
 }
 
 // Textos de UI personalizables por tenant (nombre del módulo, de la entidad,
@@ -151,6 +152,7 @@ model Branch {
   staffLoginSessions StaffLoginSession[]
   appointments Appointment[]
   treatmentPlans TreatmentPlan[]
+  notificaciones Notificacion[]
 }
 
 // ============================================
@@ -738,6 +740,40 @@ enum CashSessionStatus {
 enum MovementType {
   INCOME
   EXPENSE
+}
+
+// 2026-09-22, a petición de Carlos: panel de administrador "en tiempo real"
+// — un dueño (1 sucursal o varias) debe poder enterarse de eventos
+// importantes del negocio sin tener que ir a revisar cada módulo. Fase 1
+// (esta): apertura/cierre de caja. Deliberadamente genérico (tipo +
+// mensaje ya armado en texto, en vez de una tabla por tipo de evento) para
+// poder agregar más tipos de aviso después (ej. "no reportaron apertura a
+// tiempo", cuando exista horario configurable por sucursal — fase 2, aún
+// sin construir) sin tener que rediseñar el modelo. Se guarda AQUÍ
+// (persistido) además de mandarse por Supabase Realtime (ver
+// lib/notificaciones.ts) para que quien no esté viendo la pantalla en el
+// momento exacto lo vea después en la campanita — el realtime es solo el
+// "y avísame ahora mismo si estoy viendo el panel", no la única copia.
+model Notificacion {
+  id        String           @id @default(cuid())
+  tenantId  String
+  // Opcional: un aviso podría no estar atado a una sucursal en particular
+  // en el futuro (ej. algo a nivel negocio completo).
+  branchId  String?
+  tipo      NotificacionTipo
+  mensaje   String
+  leida     Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  branch Branch? @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId, createdAt])
+}
+
+enum NotificacionTipo {
+  CAJA_ABIERTA
+  CAJA_CERRADA
 }
 
 // ============================================

@@ -81,6 +81,11 @@ export const getTenantPrisma = (tenantId: string) => {
     // de este array) — siempre se lee/escribe a través de su TreatmentPlan
     // padre, que sí está en esta lista.
     "TreatmentPlan", "InformedConsent", "Prescription",
+    // Notificacion (2026-09-22, panel de administrador en tiempo real, a
+    // petición de Carlos) — mismo criterio que arriba: se agrega desde el
+    // primer commit de este modelo, no después de un susto de aislamiento
+    // multi-tenant como pasó con Appointment.
+    "Notificacion",
   ];
 
   return prisma.$extends({

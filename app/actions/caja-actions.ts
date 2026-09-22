@@ -2,9 +2,10 @@
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { CashSessionStatus, MovementType } from "@prisma/client";
+import { CashSessionStatus, MovementType, NotificacionTipo } from "@prisma/client";
 import { efectivoDeVenta } from "@/lib/caja-data";
 import { resolverActor, puedeOperarSucursal, type ActorResult } from "@/lib/actor";
+import { crearNotificacionCaja } from "@/lib/notificaciones";
 
 /**
  * Server Actions del módulo Caja (M10). Mismo criterio que POS/Reparaciones:
@@ -71,7 +72,7 @@ export async function abrirCajaAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true } });
+    const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true, name: true } });
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
 
     const yaAbierta = await db.cashSession.findFirst({
@@ -89,6 +90,22 @@ export async function abrirCajaAction(params: {
         notes: notas?.trim() || null,
       },
     });
+
+    // 2026-09-22, a petición de Carlos ("panel de administrador en tiempo
+    // real"): no debe tumbar la apertura si esto falla por lo que sea — la
+    // caja ya quedó abierta (arriba), notificar es secundario a eso.
+    try {
+      const quienAbrio = await prisma.user.findUnique({ where: { id: dbUser.id }, select: { name: true } });
+      await crearNotificacionCaja({
+        tenantId: tenant.id,
+        branchId,
+        branchName: branch.name,
+        tipo: NotificacionTipo.CAJA_ABIERTA,
+        mensaje: `${branch.name} abrió caja — ${quienAbrio?.name ?? "alguien"} · fondo $${montoApertura.toLocaleString("es-MX")}`,
+      });
+    } catch (err) {
+      console.error("No se pudo crear la notificación de apertura de caja:", err);
+    }
 
     revalidatePath(`/${tenantSlug}/caja`);
     return { ok: true };
@@ -179,7 +196,7 @@ export async function cerrarCajaAction(params: {
   try {
     const sesion = await db.cashSession.findUnique({
       where: { id: cashSessionId },
-      select: { id: true, status: true, branchId: true, openingCash: true, openedAt: true },
+      select: { id: true, status: true, branchId: true, openingCash: true, openedAt: true, branch: { select: { name: true } } },
     });
     if (!sesion) return { ok: false, error: "Sesión de caja no encontrada" };
     if (sesion.status !== CashSessionStatus.OPEN) {
@@ -224,6 +241,22 @@ export async function cerrarCajaAction(params: {
         notes: notas?.trim() || undefined,
       },
     });
+
+    // Mismo criterio que en abrirCajaAction: un fallo aquí no debe tumbar
+    // el cierre, que ya quedó guardado arriba.
+    try {
+      const quienCerro = await prisma.user.findUnique({ where: { id: dbUser.id }, select: { name: true } });
+      const signo = difference === 0 ? "" : difference > 0 ? "+" : "";
+      await crearNotificacionCaja({
+        tenantId: tenant.id,
+        branchId: sesion.branchId,
+        branchName: sesion.branch.name,
+        tipo: NotificacionTipo.CAJA_CERRADA,
+        mensaje: `${sesion.branch.name} cerró caja — ${quienCerro?.name ?? "alguien"} · diferencia ${signo}$${difference.toLocaleString("es-MX")}`,
+      });
+    } catch (err) {
+      console.error("No se pudo crear la notificación de cierre de caja:", err);
+    }
 
     revalidatePath(`/${tenantSlug}/caja`);
     return { ok: true };

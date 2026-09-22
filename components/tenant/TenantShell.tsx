@@ -8,11 +8,14 @@ import { createClient } from "@/lib/supabase/client";
 import type { ModuloKey } from "@/lib/roles";
 import { label, DEFAULT_LABELS, type LabelDictionary } from "@/lib/labels";
 import { cerrarSesionPersonalAction } from "@/app/actions/acceso-personal-actions";
+import { marcarNotificacionesLeidasAction } from "@/app/actions/notificaciones-actions";
+import type { NotificacionUI } from "@/lib/notificaciones";
 import {
   LayoutDashboard, ShoppingCart, Wrench, Users, Package,
   Warehouse, DollarSign, UserCog, BarChart3, FileText,
   GitBranch, BookOpen, LogOut, Bell, ChevronDown, Settings,
-  Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck, CalendarDays
+  Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck, CalendarDays,
+  Unlock, Lock,
 } from "lucide-react";
 
 // Estructura fija (secciones, orden, ícono) — el NOMBRE de cada ítem ya no
@@ -84,6 +87,7 @@ const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloK
 export default function TenantShell({
   children,
   tenant,
+  tenantId = null,
   userName = "Usuario",
   userRole = "",
   modo = "admin",
@@ -91,9 +95,17 @@ export default function TenantShell({
   labels = DEFAULT_LABELS,
   modulosInactivos = [],
   logoUrl = null,
+  notificacionesIniciales = [],
+  notificacionesNoLeidasIniciales = 0,
 }: {
   children: React.ReactNode;
   tenant: string;
+  // 2026-09-22, panel de notificaciones en tiempo real (a petición de
+  // Carlos) — id real del tenant (no el slug) para armar el nombre del
+  // canal de Supabase Realtime, ver el useEffect de suscripción más abajo.
+  // null solo en el caso raro de un slug que no resolvió a ningún tenant
+  // (ver TenantLayout) — ahí simplemente no se suscribe a nada.
+  tenantId?: string | null;
   userName?: string;
   userRole?: string;
   // "admin" = cuenta real (Supabase Auth, dueño/gerente) — ve todo el menú,
@@ -126,23 +138,39 @@ export default function TenantShell({
   // en pantallas grandes (a la izquierda, junto a la campana/usuario) —
   // null mientras el negocio no haya subido uno (app/actions/logo-actions.ts).
   logoUrl?: string | null;
+  // Estado inicial de la campanita (lo que ya pasó antes de que este panel
+  // se abriera) — ver el comentario largo junto a estos mismos parámetros
+  // en TenantLayout.
+  notificacionesIniciales?: NotificacionUI[];
+  notificacionesNoLeidasIniciales?: number;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
 
-  // Menú de usuario y notificaciones del encabezado (2026-09-21, a petición
-  // de Carlos: "tanto el nombre del usuario como las opciones solo estan
-  // simuladas... y al hacer click no hace nada, tambien muestra una flecha
-  // para abrir un menu y no abre nada") — antes ninguno de los dos tenía
-  // onClick. La campana a propósito NO abre un sistema de notificaciones
-  // real (no existe todavía ningún generador de notificaciones en el
-  // proyecto) — solo dice honestamente que no hay nada nuevo, en vez de
-  // seguir mostrando un punto rojo que no corresponde a nada real.
+  // Menú de usuario y notificaciones del encabezado. La campana (2026-09-21,
+  // a petición de Carlos: "tanto el nombre del usuario como las opciones
+  // solo estan simuladas... y al hacer click no hace nada") empezó siendo
+  // deliberadamente honesta: decía "no hay nada nuevo" en vez de simular un
+  // punto rojo sin nada real detrás, porque no existía ningún generador de
+  // notificaciones todavía. 2026-09-22: ya existe (lib/notificaciones.ts,
+  // Fase 1 — apertura/cierre de caja), así que ahora sí es real: estado
+  // inicial por props (lo que ya pasó antes de abrir el panel) + suscripción
+  // en vivo a Supabase Realtime Broadcast para lo que pase MIENTRAS el panel
+  // está abierto (ver el useEffect de abajo).
   const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
   const [menuNotifAbierto, setMenuNotifAbierto] = useState(false);
   const menuUsuarioRef = useRef<HTMLDivElement>(null);
   const menuNotifRef = useRef<HTMLDivElement>(null);
+
+  const [notificaciones, setNotificaciones] = useState<NotificacionUI[]>(notificacionesIniciales);
+  const [notifNoLeidas, setNotifNoLeidas] = useState(notificacionesNoLeidasIniciales);
+  // Pop-ups efímeros (2026-09-22, a petición explícita de Carlos: "que
+  // aparezca una alerta o pop up en la pantalla") — independientes de la
+  // campanita: se ven aunque no la tengas abierta, y se autodesaparecen
+  // solos. La campanita es la copia persistente; esto es solo el "aviso
+  // ahora mismo".
+  const [toasts, setToasts] = useState<{ id: string; mensaje: string; tipo: "CAJA_ABIERTA" | "CAJA_CERRADA" }[]>([]);
 
   useEffect(() => {
     const handleClickFuera = (e: MouseEvent) => {
@@ -152,6 +180,54 @@ export default function TenantShell({
     document.addEventListener("mousedown", handleClickFuera);
     return () => document.removeEventListener("mousedown", handleClickFuera);
   }, []);
+
+  // Suscripción en vivo (2026-09-22): un canal PÚBLICO por tenant (ver el
+  // comentario largo de seguridad en lib/notificaciones.ts, crearNotificacionCaja)
+  // — cualquier pestaña con este panel abierto, de cualquier persona logueada
+  // en este negocio, recibe el aviso apenas se manda, sin recargar ni
+  // preguntar al servidor. Si no hay tenantId (caso raro, ver arriba) no se
+  // suscribe a nada.
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const supabase = createClient();
+    const canal = supabase.channel(`notificaciones:${tenantId}`);
+
+    const recibir = (tipo: "CAJA_ABIERTA" | "CAJA_CERRADA") => (msg: {
+      payload: { id: string; mensaje: string; branchName: string | null; fecha: string };
+    }) => {
+      const { id, mensaje, branchName, fecha } = msg.payload;
+      setNotificaciones((prev) => [{ id, tipo, mensaje, branchName, leida: false, fecha }, ...prev].slice(0, 30));
+      setNotifNoLeidas((n) => n + 1);
+
+      const toastId = `${id}-${Date.now()}`;
+      setToasts((prev) => [...prev, { id: toastId, mensaje, tipo }]);
+      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), 7000);
+    };
+
+    canal
+      .on("broadcast", { event: "caja_abierta" }, recibir("CAJA_ABIERTA"))
+      .on("broadcast", { event: "caja_cerrada" }, recibir("CAJA_CERRADA"))
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
+  }, [tenantId]);
+
+  // Abrir la campanita cuenta como "ya las vi" (mismo criterio que Gmail o
+  // Slack) — no hace falta marcar una por una para esta primera versión.
+  const handleToggleNotif = () => {
+    setMenuNotifAbierto((abierto) => {
+      const siguiente = !abierto;
+      if (siguiente && notifNoLeidas > 0) {
+        setNotifNoLeidas(0);
+        setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
+        marcarNotificacionesLeidasAction(tenant).catch(() => {});
+      }
+      return siguiente;
+    });
+  };
 
   const businessName = decodeURIComponent(tenant)
     .replace(/-/g, " ")
@@ -228,6 +304,32 @@ export default function TenantShell({
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
+
+      {/* Pop-ups de notificación (2026-09-22) — fixed, por encima de todo,
+          independiente del layout de sidebar/contenido de abajo. */}
+      {toasts.length > 0 && (
+        <div className="fixed top-4 right-4 z-[60] flex flex-col gap-2 w-72 max-w-[calc(100vw-2rem)]">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className="bg-card border border-border rounded-xl shadow-lg px-3 py-2.5 flex items-start gap-2 animate-in fade-in slide-in-from-top-2"
+            >
+              <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                t.tipo === "CAJA_ABIERTA" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-600"
+              }`}>
+                {t.tipo === "CAJA_ABIERTA" ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+              </div>
+              <p className="text-[12.5px] text-foreground leading-snug">{t.mensaje}</p>
+              <button
+                onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+                className="ml-auto text-muted-foreground hover:text-foreground flex-shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {mobileOpen && (
         <div
@@ -408,13 +510,38 @@ export default function TenantShell({
 
           <div className="flex items-center gap-2">
             <div className="relative" ref={menuNotifRef}>
-              <button onClick={() => setMenuNotifAbierto((v) => !v)} className="relative p-2 rounded-lg hover:bg-muted transition-colors">
+              <button onClick={handleToggleNotif} className="relative p-2 rounded-lg hover:bg-muted transition-colors">
                 <Bell className="w-4 h-4 text-muted-foreground" />
+                {notifNoLeidas > 0 && (
+                  <span className="absolute top-1 right-1 min-w-[15px] h-[15px] px-[3px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                    {notifNoLeidas > 9 ? "9+" : notifNoLeidas}
+                  </span>
+                )}
               </button>
               {menuNotifAbierto && (
-                <div className="absolute right-0 top-full mt-1.5 w-64 bg-card border border-border rounded-xl shadow-lg z-30 overflow-hidden">
+                <div className="absolute right-0 top-full mt-1.5 w-72 bg-card border border-border rounded-xl shadow-lg z-30 overflow-hidden">
                   <p className="px-3 py-2 text-xs font-semibold text-foreground border-b border-border">Notificaciones</p>
-                  <p className="px-3 py-4 text-xs text-muted-foreground text-center">No tienes notificaciones nuevas por ahora.</p>
+                  {notificaciones.length === 0 ? (
+                    <p className="px-3 py-4 text-xs text-muted-foreground text-center">No tienes notificaciones nuevas por ahora.</p>
+                  ) : (
+                    <div className="max-h-80 overflow-y-auto divide-y divide-border">
+                      {notificaciones.map((n) => (
+                        <div key={n.id} className="px-3 py-2.5 flex items-start gap-2 hover:bg-muted/60">
+                          <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            n.tipo === "CAJA_ABIERTA" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-600"
+                          }`}>
+                            {n.tipo === "CAJA_ABIERTA" ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[11.5px] text-foreground leading-snug">{n.mensaje}</p>
+                            <p className="text-[10.5px] text-muted-foreground mt-0.5">
+                              {new Date(n.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
