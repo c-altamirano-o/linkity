@@ -22,7 +22,7 @@ import { PaymentMethod, MixedPaymentMethod, CashSessionStatus, MovementType } fr
  * colgar un ingreso. Documentado también en caja-actions.ts.
  */
 
-export type TipoMovimientoCaja = "apertura" | "venta" | "ingreso" | "egreso";
+export type TipoMovimientoCaja = "apertura" | "venta" | "ingreso" | "egreso" | "cierre";
 
 export interface MovimientoCaja {
   id: string;
@@ -97,7 +97,13 @@ export async function getCajaData(tenantId: string, branchId: string): Promise<C
     db.cashSession.findMany({
       where: { branchId, openedAt: { gte: desde } },
       orderBy: { openedAt: "asc" },
-      include: { movements: { orderBy: { createdAt: "asc" } } },
+      include: {
+        movements: { orderBy: { createdAt: "asc" } },
+        // 2026-09-22, cambio de turno: closedBy es opcional (sesiones
+        // cerradas antes de este cambio no lo tienen) — de ahí el `?.` al
+        // leerlo abajo.
+        closedBy: { select: { name: true } },
+      },
     }),
     db.sale.findMany({
       where: { branchId, createdAt: { gte: desde } },
@@ -139,6 +145,26 @@ export async function getCajaData(tenantId: string, branchId: string): Promise<C
         monto: esIngreso ? Number(mov.amount) : -Number(mov.amount),
       });
     });
+
+    // 2026-09-22, a petición de Carlos ("cambio de turno"): antes el cierre
+    // de una sesión no dejaba NINGÚN rastro en el historial de movimientos
+    // — solo se veía la apertura siguiente, sin poder saber quién cerró,
+    // cuándo, ni con qué diferencia. `monto` aquí es la diferencia
+    // (contado − esperado), no el efectivo contado, para poder ver de un
+    // vistazo si ese cierre cuadró o no (mismo criterio de color que ya
+    // usa el modal de cerrar caja en CajaClient.tsx).
+    if (sesion.status === CashSessionStatus.CLOSED && sesion.closedAt) {
+      const cerrador = sesion.closedBy?.name ?? "—";
+      movimientos.push({
+        id: `cierre-${sesion.id}`,
+        folio: `CIE-${String(i + 1).padStart(4, "0")}`,
+        fecha: sesion.closedAt.toISOString(),
+        concepto: `Cierre de caja — cerró: ${cerrador}`,
+        metodo: "Efectivo",
+        tipo: "cierre",
+        monto: sesion.difference !== null ? Number(sesion.difference) : 0,
+      });
+    }
   });
 
   for (const venta of ventasRaw) {

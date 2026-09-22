@@ -20,6 +20,15 @@ import { resolverActor, puedeOperarSucursal, type ActorResult } from "@/lib/acto
  * esperado de caja, el siguiente paso sería agregar ese paso al flujo de
  * Reparaciones (probablemente registrando un CashMovement de tipo INCOME al
  * marcarla como cobrada).
+ *
+ * Cambio de turno (2026-09-22, a petición de Carlos): no existe un flujo
+ * dedicado de "turno" — un cambio de turno es simplemente que alguien
+ * cierre la caja (cerrarCajaAction) y la siguiente persona la vuelva a
+ * abrir (abrirCajaAction) más tarde ese mismo día; ya funcionaba porque
+ * abrirCajaAction solo exige que NO haya otra sesión OPEN en la sucursal,
+ * sin límite de cuántas sesiones puede haber por día. Lo que sí faltaba
+ * era quedarse con registro de quién cerró cada sesión (antes solo se
+ * guardaba quién la abrió) — ver closedByUserId más abajo.
  */
 
 type ResolverResult = ActorResult;
@@ -163,7 +172,7 @@ export async function cerrarCajaAction(params: {
 
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
-  const { tenant } = resuelto;
+  const { tenant, dbUser } = resuelto;
 
   const db = getTenantPrisma(tenant.id);
 
@@ -211,6 +220,7 @@ export async function cerrarCajaAction(params: {
         difference,
         status: CashSessionStatus.CLOSED,
         closedAt: new Date(),
+        closedByUserId: dbUser.id,
         notes: notas?.trim() || undefined,
       },
     });

@@ -198,7 +198,12 @@ model User {
   role         UserRole?
   sales        Sale[]
   repairs      Repair[]
-  cashSessions CashSession[]
+  // Named relations (2026-09-22, cambio de turno en Caja): CashSession
+  // tiene dos FKs distintas a User (quién abrió y quién cerró la sesión),
+  // así que Prisma exige nombrar cada lado para no confundirlas — mismo
+  // motivo por el que abajo existe cashSessionsCerradas.
+  cashSessions         CashSession[] @relation("CashSessionAbiertaPor")
+  cashSessionsCerradas CashSession[] @relation("CashSessionCerradaPor")
   // Vínculo opcional con su registro de personal (M11) — permite atribuirle
   // a un empleado específico las ventas/reparaciones que hizo, para poder
   // calcular su comisión individual. No todo Staff tiene cuenta de acceso.
@@ -685,10 +690,19 @@ enum Priority {
 // ============================================
 
 model CashSession {
-  id           String            @id @default(cuid())
-  tenantId     String
-  branchId     String
-  userId       String
+  id             String            @id @default(cuid())
+  tenantId       String
+  branchId       String
+  userId         String
+  // 2026-09-22, a petición de Carlos ("cambio de turno" — dos empleados
+  // que se turnan la misma caja en el día, ej. Sofía 9am-2pm y Martha
+  // 2pm-9pm): antes solo se guardaba quién ABRIÓ la sesión, nunca quién la
+  // CERRÓ — cualquiera con acceso a "caja" en esa sucursal podía cerrar una
+  // sesión que abrió otra persona (correcto: es justo lo que permite el
+  // cambio de turno) pero no quedaba registro de quién fue. Opcional
+  // porque las sesiones ya cerradas antes de este cambio no tienen este
+  // dato.
+  closedByUserId String?
   openingCash  Decimal           @db.Decimal(10, 2)
   closingCash  Decimal?          @db.Decimal(10, 2)
   expectedCash Decimal?          @db.Decimal(10, 2)
@@ -700,7 +714,8 @@ model CashSession {
 
   tenant    Tenant         @relation(fields: [tenantId], references: [id])
   branch    Branch         @relation(fields: [branchId], references: [id])
-  user      User           @relation(fields: [userId], references: [id])
+  user      User           @relation("CashSessionAbiertaPor", fields: [userId], references: [id])
+  closedBy  User?          @relation("CashSessionCerradaPor", fields: [closedByUserId], references: [id])
   movements CashMovement[]
 }
 

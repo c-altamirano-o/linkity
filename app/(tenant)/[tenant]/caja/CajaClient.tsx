@@ -26,6 +26,9 @@ const tipoBadge: Record<string, string> = {
   egreso: "bg-red-50 text-red-600",
   apertura: "bg-blue-50 text-blue-700",
   ingreso: "bg-cyan-50 text-cyan-700",
+  // 2026-09-22, cambio de turno: renglón de cierre en el historial (ver
+  // lib/caja-data.ts) — gris neutro, no es ni ingreso ni egreso en sí.
+  cierre: "bg-slate-100 text-slate-600",
 };
 
 const tipoLabel: Record<string, string> = {
@@ -33,6 +36,7 @@ const tipoLabel: Record<string, string> = {
   egreso: "Egreso",
   apertura: "Apertura",
   ingreso: "Ingreso",
+  cierre: "Cierre",
 };
 
 // Los métodos de pago son indicadores de estatus, no de marca — se quedan
@@ -213,8 +217,12 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
     return true;
   });
 
-  const ingresos = movsFiltrados.filter((m) => m.monto > 0 && m.tipo !== "apertura").reduce((s, m) => s + m.monto, 0);
-  const egresos = Math.abs(movsFiltrados.filter((m) => m.monto < 0).reduce((s, m) => s + m.monto, 0));
+  // "cierre" (2026-09-22, cambio de turno) se excluye de ambos: su monto es
+  // la DIFERENCIA del corte (contado − esperado), no un ingreso o egreso
+  // real de caja — ya está reflejado en las ventas/movimientos que sí lo
+  // componen, incluirlo aquí lo contaría dos veces.
+  const ingresos = movsFiltrados.filter((m) => m.monto > 0 && m.tipo !== "apertura" && m.tipo !== "cierre").reduce((s, m) => s + m.monto, 0);
+  const egresos = Math.abs(movsFiltrados.filter((m) => m.monto < 0 && m.tipo !== "cierre").reduce((s, m) => s + m.monto, 0));
   const ticketsVenta = movsFiltrados.filter((m) => m.tipo === "venta").length;
   const ticketProm =
     ticketsVenta > 0
@@ -781,7 +789,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                   }}
                   className="w-full flex items-center justify-center gap-2 py-2.5 bg-foreground/90 hover:bg-foreground text-background text-xs font-medium rounded-lg transition-colors"
                 >
-                  <Lock className="w-3.5 h-3.5" /> Cerrar caja del día
+                  <Lock className="w-3.5 h-3.5" /> Cerrar caja
                 </button>
               </div>
             </>
@@ -948,7 +956,25 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                       <span className={`text-[10.5px] font-medium px-2 py-0.5 rounded-full ${tipoBadge[mov.tipo]}`}>{tipoLabel[mov.tipo]}</span>
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 text-right">
-                      <span className={`text-xs font-semibold ${mov.monto > 0 ? "text-emerald-600" : "text-red-500"}`}>
+                      {/* "cierre" (2026-09-22): monto es la diferencia del
+                          corte, no un ingreso/egreso — un $0 ahí es la caja
+                          cuadrando perfecto, no debería verse en rojo como
+                          si fuera un egreso, así que aquí sí cuenta como
+                          "bien" (mismo criterio que el modal de cerrar
+                          caja: 0 = verde, sobrante = cyan, faltante = rojo). */}
+                      <span
+                        className={`text-xs font-semibold ${
+                          mov.tipo === "cierre"
+                            ? mov.monto === 0
+                              ? "text-emerald-600"
+                              : mov.monto > 0
+                              ? "text-cyan-600"
+                              : "text-red-500"
+                            : mov.monto > 0
+                            ? "text-emerald-600"
+                            : "text-red-500"
+                        }`}
+                      >
                         {mov.monto > 0 ? "+" : ""}
                         {formatMXN(mov.monto)}
                       </span>
@@ -1078,7 +1104,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
       {mostrarCerrarModal && sesionActual && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
           <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl">
-            <h2 className="text-sm font-semibold text-foreground mb-1">Cerrar caja del día</h2>
+            <h2 className="text-sm font-semibold text-foreground mb-1">Cerrar caja</h2>
             <p className="text-[12.5px] text-muted-foreground mb-4">
               Efectivo esperado: <span className="font-semibold text-foreground">{formatMXN(sesionActual.efectivoEsperado)}</span>
             </p>
