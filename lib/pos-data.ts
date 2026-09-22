@@ -2,6 +2,7 @@ import "server-only";
 
 import { getTenantPrisma } from "@/lib/prisma";
 import type { Branch } from "@prisma/client";
+import { CashSessionStatus } from "@prisma/client";
 
 /**
  * Capa de datos reales del módulo POS (M8). Sigue la misma convención que
@@ -45,6 +46,15 @@ export interface PosData {
   categorias: CategoriaPOS[];
   productos: ProductoPOS[];
   clientes: ClientePOS[];
+  // 2026-09-22, a petición de Carlos: reportó que pudo vender en POS sin
+  // tener la caja abierta en esa sucursal — crearVentaAction nunca lo
+  // validaba, así que esas ventas en efectivo quedaban fuera del cuadre de
+  // cualquier cierre de caja (cerrarCajaAction solo suma las ventas con
+  // createdAt >= sesion.openedAt de la sesión que se está cerrando). Se
+  // trae aquí, por sucursal, para que el cliente pueda deshabilitar "Cobrar"
+  // de una vez sin depender de un viaje aparte al servidor — la validación
+  // real (la que de verdad importa) vive en crearVentaAction.
+  cajaAbiertaPorSucursal: Record<string, boolean>;
 }
 
 const TYPE_FALLBACK_EMOJI: Record<TipoPOS, string> = {
@@ -63,7 +73,7 @@ export async function getPosData(
 
   const activeBranchIds = branches.filter((b) => b.isActive).map((b) => b.id);
 
-  const [categoriesRaw, productsRaw, customersRaw] = await Promise.all([
+  const [categoriesRaw, productsRaw, customersRaw, sesionesAbiertas] = await Promise.all([
     db.category.findMany({ orderBy: { name: "asc" } }),
     db.product.findMany({
       where: { isActive: true },
@@ -74,6 +84,10 @@ export async function getPosData(
       orderBy: { name: "asc" },
     }),
     db.customer.findMany({ orderBy: { name: "asc" } }),
+    db.cashSession.findMany({
+      where: { branchId: { in: activeBranchIds }, status: CashSessionStatus.OPEN },
+      select: { branchId: true },
+    }),
   ]);
 
   const categorias: CategoriaPOS[] = categoriesRaw.map((c) => ({
@@ -109,5 +123,9 @@ export async function getPosData(
     phone: c.phone,
   }));
 
-  return { categorias, productos, clientes };
+  const cajaAbiertaPorSucursal: Record<string, boolean> = {};
+  for (const id of activeBranchIds) cajaAbiertaPorSucursal[id] = false;
+  for (const s of sesionesAbiertas) cajaAbiertaPorSucursal[s.branchId] = true;
+
+  return { categorias, productos, clientes, cajaAbiertaPorSucursal };
 }

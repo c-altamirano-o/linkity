@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Search, ShoppingCart, Barcode, Plus, Minus, X, Check,
   User, ChevronDown, Building2, AlertTriangle, Printer,
@@ -40,7 +41,7 @@ const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
 export default function POSClient({ data, labels, branches, branchInicial, tenantSlug }: POSClientProps) {
-  const { categorias, productos, clientes } = data;
+  const { categorias, productos, clientes, cajaAbiertaPorSucursal } = data;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -69,6 +70,13 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
 
   const stockDe = (p: ProductoPOS) =>
     p.isService ? Infinity : (branchId ? p.stockPorSucursal[branchId] ?? 0 : 0);
+
+  // 2026-09-22, a petición de Carlos: no se puede cobrar si la sucursal
+  // seleccionada no tiene una caja abierta (ver el comentario largo en
+  // crearVentaAction, pos-actions.ts — esa es la validación que de verdad
+  // importa; esto solo evita que el cajero llene todo el carrito para
+  // enterarse hasta el final).
+  const cajaAbierta = branchId ? cajaAbiertaPorSucursal[branchId] ?? false : false;
 
   /* ── Categorías (con "Todos" y "Sin categoría" sintéticas) ── */
   const hayNoCategorizados = productos.some((p) => p.categoryId === null);
@@ -117,6 +125,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
 
   const puedeCobar =
     !!branchId &&
+    cajaAbierta &&
     carrito.length > 0 &&
     !isPending &&
     (metodoPago === "tarjeta" ||
@@ -248,6 +257,8 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   // va") — null cuando ya se puede cobrar.
   const razonNoPuedeCobrar: string | null = !branchId
     ? "Selecciona una sucursal para continuar"
+    : !cajaAbierta
+    ? "La caja de esta sucursal está cerrada"
     : carrito.length === 0
     ? "Agrega al menos un producto o servicio al carrito"
     : metodoPago === "efectivo" && montoNum < total
@@ -561,7 +572,17 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           )}
         </button>
         {razonNoPuedeCobrar && !isPending && (
-          <p className="text-[11.5px] text-amber-600 text-center mt-1.5">{razonNoPuedeCobrar}</p>
+          <p className="text-[11.5px] text-amber-600 text-center mt-1.5">
+            {razonNoPuedeCobrar}
+            {branchId && !cajaAbierta && (
+              <>
+                {" — "}
+                <Link href={`/${tenantSlug}/caja`} className="underline font-medium">
+                  ábrela en Caja
+                </Link>
+              </>
+            )}
+          </p>
         )}
       </div>
     </>

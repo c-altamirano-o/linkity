@@ -2,7 +2,7 @@
 
 import { getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { PaymentMethod, MixedPaymentMethod, SaleStatus } from "@prisma/client";
+import { PaymentMethod, MixedPaymentMethod, SaleStatus, CashSessionStatus } from "@prisma/client";
 import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
 
 /**
@@ -16,6 +16,14 @@ import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
  * integración natural (registrar el ingreso en la sesión de caja abierta)
  * se deja para cuando se migre el módulo de Caja, igual que ajustarStock
  * en Inventario tampoco deja bitácora todavía.
+ *
+ * 2026-09-22, a petición de Carlos: SÍ exige que haya una CashSession OPEN
+ * en la sucursal para poder vender (cualquier método de pago, no solo
+ * efectivo) — reportó que pudo cobrar sin tener la caja abierta. Antes de
+ * este cambio nada lo impedía, y esas ventas quedaban fuera del cuadre:
+ * cerrarCajaAction solo suma las ventas con createdAt >= openedAt de la
+ * sesión que se está cerrando, así que una venta hecha sin sesión abierta
+ * nunca entraba al cálculo de efectivo esperado de ningún cierre.
  *
  * Nota de concurrencia: el folio secuencial (V-1001, V-1002, ...) y el
  * descuento de stock siguen el mismo patrón "revisar y luego actuar" que
@@ -85,6 +93,14 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
   try {
     const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true, code: true } });
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
+
+    const cajaAbierta = await db.cashSession.findFirst({
+      where: { branchId, status: CashSessionStatus.OPEN },
+      select: { id: true },
+    });
+    if (!cajaAbierta) {
+      return { ok: false, error: "La caja de esta sucursal está cerrada. Ábrela antes de cobrar (módulo Caja)." };
+    }
 
     if (customerId) {
       const customer = await db.customer.findUnique({ where: { id: customerId }, select: { id: true } });
