@@ -4,6 +4,7 @@ import { getVentasPorDia, hoyMx, type VentasPorDiaData } from "@/lib/dashboard-d
 import { resolverActor } from "@/lib/actor";
 import { getTenantPrisma, prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 
 /**
  * Server Action del selector de fecha del Dashboard ("Ventas por día y
@@ -97,7 +98,13 @@ export async function guardarConfigCategoriasDashboardAction(
   try {
     await prisma.tenant.update({
       where: { id: resuelto.tenant.id },
-      data: { dashboardCategoriasConfig: config },
+      // Prisma tipa el input de un campo Json? contra InputJsonValue, y TS no
+      // reconoce por estructura que un array de nuestra interfaz
+      // (CategoriaDashboardConfigInput[]) cae dentro de ese tipo (falla
+      // comparándolo contra InputJsonObject, no contra InputJsonArray) —
+      // el cast es solo para el checker; en tiempo de ejecución sigue siendo
+      // el mismo array, ya validado arriba campo por campo.
+      data: { dashboardCategoriasConfig: config as unknown as Prisma.InputJsonValue },
     });
     revalidatePath(`/${tenantSlug}/dashboard`);
     return { ok: true };
