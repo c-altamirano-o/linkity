@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Settings, Building2, Users as UsersIcon, Layers } from "lucide-react";
+import { Settings, Building2, Users as UsersIcon, Layers, AlertTriangle, Trash2 } from "lucide-react";
 import type { TenantDetail } from "@/lib/tenants-data";
 import type { EsquemaOption } from "@/lib/esquemas-data";
+import { ETAPA_LABEL } from "@/lib/ciclo-suscripcion";
 import { alternarSuscripcionAction } from "../../dashboard/actions";
-import { alternarModuloTenantAction, asignarEsquemaAction } from "../actions";
+import { alternarModuloTenantAction, asignarEsquemaAction, renovarSuscripcionAction, eliminarTenantAction } from "../actions";
 
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
@@ -28,6 +29,17 @@ const ESTADO_CONFIG: Record<string, { label: string; classes: string }> = {
   CANCELLED: { label: "Cancelado", classes: "bg-slate-200 text-slate-400" },
 };
 
+// Ciclo de vida de suscripción vencida (2026-09-22, ver lib/ciclo-suscripcion.ts)
+const ETAPA_CLASSES: Record<string, string> = {
+  activa: "bg-emerald-500/10 text-emerald-600",
+  en_gracia: "bg-amber-500/10 text-amber-600",
+  bloqueada: "bg-red-500/10 text-red-600",
+  lista_para_eliminar: "bg-red-600 text-white",
+  suspendida_manual: "bg-slate-200 text-slate-500",
+  cancelada: "bg-slate-200 text-slate-400",
+  sin_suscripcion: "bg-slate-100 text-slate-400",
+};
+
 export default function TenantDetailClient({
   tenant,
   esquemas,
@@ -42,6 +54,10 @@ export default function TenantDetailClient({
   const [suscripcionEnCurso, setSuscripcionEnCurso] = useState(false);
   const [esquemaSeleccionado, setEsquemaSeleccionado] = useState(tenant.esquemaId ?? "");
   const [esquemaEnCurso, setEsquemaEnCurso] = useState(false);
+  const [nuevaFechaFin, setNuevaFechaFin] = useState("");
+  const [renovacionEnCurso, setRenovacionEnCurso] = useState(false);
+  const [confirmarNombreEliminar, setConfirmarNombreEliminar] = useState("");
+  const [eliminacionEnCurso, setEliminacionEnCurso] = useState(false);
 
   const estadoCfg = tenant.status ? ESTADO_CONFIG[tenant.status] : null;
   const puedeSuspender = tenant.status === "ACTIVE";
@@ -72,6 +88,36 @@ export default function TenantDetailClient({
         return;
       }
       router.refresh();
+    });
+  }
+
+  function renovarSuscripcion() {
+    if (!nuevaFechaFin) return;
+    setError(null);
+    setRenovacionEnCurso(true);
+    startTransition(async () => {
+      const res = await renovarSuscripcionAction({ tenantId: tenant.id, slug: tenant.slug, nuevaFechaFin });
+      setRenovacionEnCurso(false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setNuevaFechaFin("");
+      router.refresh();
+    });
+  }
+
+  function eliminarNegocio() {
+    setError(null);
+    setEliminacionEnCurso(true);
+    startTransition(async () => {
+      const res = await eliminarTenantAction({ tenantId: tenant.id, slug: tenant.slug, confirmarNombre: confirmarNombreEliminar });
+      // eliminarTenantAction redirige a /maestro/tenants cuando sale bien
+      // (ver el comentario en la acción) — si esta línea corre, fue error.
+      setEliminacionEnCurso(false);
+      if (!res.ok) {
+        setError(res.error);
+      }
     });
   }
 
@@ -139,6 +185,12 @@ export default function TenantDetailClient({
               {estadoCfg?.label ?? "Sin suscripción"}
             </span>
           </div>
+          {(tenant.etapaCiclo === "en_gracia" || tenant.etapaCiclo === "bloqueada" || tenant.etapaCiclo === "lista_para_eliminar") && (
+            <div className={`text-[12px] font-medium px-2.5 py-1.5 rounded-lg mb-3 flex items-center gap-1.5 ${ETAPA_CLASSES[tenant.etapaCiclo]}`}>
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              {ETAPA_LABEL[tenant.etapaCiclo]} · vencida hace {tenant.diasVencida} día{tenant.diasVencida === 1 ? "" : "s"}
+            </div>
+          )}
           <dl className="space-y-2 text-[13.5px] mb-3">
             <div className="flex justify-between gap-3">
               <dt className="text-slate-400">Plan</dt>
@@ -180,6 +232,29 @@ export default function TenantDetailClient({
               {isPending && suscripcionEnCurso ? "Reactivando…" : "Reactivar"}
             </button>
           ) : null}
+
+          {/* Renovar (2026-09-22): mueve el vencimiento a una fecha nueva,
+              reactiva la cuenta si estaba bloqueada/suspendida/cancelada, y
+              reinicia los 4 avisos del ciclo — ver renovarSuscripcionAction. */}
+          <div className="mt-3 pt-3 border-t border-slate-100 flex items-end gap-2">
+            <div className="flex-1">
+              <label className="text-[12px] font-medium text-slate-500">Renovar hasta</label>
+              <input
+                type="date"
+                value={nuevaFechaFin}
+                onChange={(e) => setNuevaFechaFin(e.target.value)}
+                className="mt-1 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={!nuevaFechaFin || renovacionEnCurso}
+              onClick={renovarSuscripcion}
+              className="px-3 py-1.5 text-[12.5px] rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium disabled:opacity-50 flex-shrink-0"
+            >
+              {renovacionEnCurso ? "Renovando…" : "Renovar"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -309,6 +384,44 @@ export default function TenantDetailClient({
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Zona de peligro (2026-09-22, a petición de Carlos): borrado
+          definitivo del negocio y TODOS sus datos — ver eliminarTenantAction.
+          A propósito no se bloquea a "lista_para_eliminar": Carlos dijo
+          explícitamente que la decisión final es suya, esto solo se la
+          recomienda cuando lleva 90+ días bloqueada sin responder. */}
+      <div className="bg-white border border-red-200 rounded-lg p-4">
+        <p className="text-[14.5px] font-medium text-red-700 mb-1 flex items-center gap-1.5">
+          <Trash2 className="w-3.5 h-3.5" />
+          Zona de peligro
+        </p>
+        <p className="text-[12.5px] text-slate-500 mb-3">
+          Borra este negocio y TODOS sus datos (ventas, reparaciones, clientes, personal, catálogo — todo) de forma
+          permanente. No se puede deshacer.
+          {tenant.etapaCiclo !== "lista_para_eliminar" && " Este negocio todavía no llegó a los 90 días de bloqueo sin respuesta."}
+        </p>
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <label className="text-[12px] font-medium text-slate-500">
+              Escribe &ldquo;{tenant.name}&rdquo; para confirmar
+            </label>
+            <input
+              type="text"
+              value={confirmarNombreEliminar}
+              onChange={(e) => setConfirmarNombreEliminar(e.target.value)}
+              className="mt-1 w-full px-2.5 py-1.5 border border-red-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400"
+            />
+          </div>
+          <button
+            type="button"
+            disabled={confirmarNombreEliminar.trim() !== tenant.name || eliminacionEnCurso}
+            onClick={eliminarNegocio}
+            className="px-3 py-1.5 text-[12.5px] rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium disabled:opacity-40 flex-shrink-0"
+          >
+            {eliminacionEnCurso ? "Borrando…" : "Borrar definitivamente"}
+          </button>
         </div>
       </div>
     </div>

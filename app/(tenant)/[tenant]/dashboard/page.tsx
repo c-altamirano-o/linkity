@@ -6,10 +6,19 @@ import DashboardClient from "./DashboardClient";
 
 export default async function DashboardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tenant: string }>;
+  // "Vista por sucursal" (2026-09-22, a petición de Carlos: "en el
+  // dashboard de administrador debe contener una vista global y una por
+  // tienda") — mismo patrón que ya usa caja/page.tsx (?sucursal=<id>):
+  // ausente = vista global (comportamiento de siempre); presente = todo el
+  // Dashboard (tarjetas, gráficas, tablas, alertas) se acota a esa sola
+  // sucursal, reutilizando el mismo layout — ver DashboardClient.tsx.
+  searchParams: Promise<{ sucursal?: string }>;
 }) {
   const { tenant: tenantSlug } = await params;
+  const { sucursal } = await searchParams;
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
@@ -42,18 +51,34 @@ export default async function DashboardPage({
   });
   const reparacionesActiva = !reparacionesInactiva;
 
+  // Se valida que el ?sucursal= de la URL sea de verdad una sucursal activa
+  // de ESTE tenant (nunca se confía en el id tal cual) — un valor que no
+  // coincida con ninguna simplemente cae de vuelta a la vista global, en
+  // vez de mostrar un error.
+  const branchIdFiltro = tenant.branches.find((b) => b.id === sucursal)?.id;
+
   const [data, labels, ventasPorDiaInicial] = await Promise.all([
-    getDashboardData(tenant.id, tenant.branches, tenant.weekStartDay, reparacionesActiva),
+    getDashboardData(tenant.id, tenant.branches, tenant.weekStartDay, reparacionesActiva, branchIdFiltro),
     getTenantLabels(tenant.id, tenant.businessType),
-    getVentasPorDia(tenant.id, hoyMx()),
+    getVentasPorDia(tenant.id, hoyMx(), branchIdFiltro),
   ]);
 
   return (
     <DashboardClient
+      // 2026-09-22: se remonta el componente completo al cambiar de
+      // sucursal (o volver a la vista global) — sin esto, el useState de
+      // varios pedazos del Dashboard (config. de categorías, selector de
+      // fecha de "ventas por día", etc.) se quedaría con los valores de la
+      // sucursal anterior tras la navegación, porque Next.js reutiliza la
+      // misma instancia del client component cuando solo cambia el
+      // searchParam de la misma ruta.
+      key={branchIdFiltro ?? "global"}
       data={data}
       labels={labels}
       tenantSlug={tenantSlug}
       ventasPorDiaInicial={ventasPorDiaInicial}
+      branches={tenant.branches}
+      sucursalActualId={branchIdFiltro ?? null}
     />
   );
 }

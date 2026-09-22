@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/reseed-demo",
       "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/cron/revisar-suscripciones",
+      "schedule": "0 10 * * *"
     }
   ]
 }

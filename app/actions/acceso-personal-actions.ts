@@ -24,8 +24,9 @@ export async function iniciarSesionPersonalAction(params: {
   tenantSlug: string;
   staffId: string;
   pin: string;
+  branchId: string;
 }): Promise<AccionAccesoPersonalResult> {
-  const { tenantSlug, staffId, pin } = params;
+  const { tenantSlug, staffId, pin, branchId } = params;
 
   if (!/^\d{4}$/.test(pin)) return { ok: false, error: "El PIN debe ser de 4 dígitos" };
 
@@ -41,7 +42,13 @@ export async function iniciarSesionPersonalAction(params: {
     },
   });
 
-  if (!staff || staff.tenantId !== tenant.id || !staff.isActive) {
+  // 2026-09-21, a petición de Carlos: /entrada/[tenant]/[branch] ya filtra
+  // la lista que se muestra a la sucursal correcta, pero esta validación es
+  // la que de verdad importa — sin ella, alguien que arme la petición a
+  // mano (o un link de entrada viejo, cacheado) podría iniciar sesión como
+  // un empleado de OTRA sucursal. Mismo mensaje genérico que el resto de
+  // los checks de este bloque, para no revelar en cuál sucursal sí está.
+  if (!staff || staff.tenantId !== tenant.id || !staff.isActive || staff.branchId !== branchId) {
     return { ok: false, error: "Empleado no encontrado" };
   }
   if (!staff.pinHash || !staff.userId || !staff.role) {

@@ -90,5 +90,26 @@ export async function verificarSesionPersonalVigente(): Promise<SesionPersonal |
     return null;
   }
 
+  // 2026-09-21, a petición de Carlos: si el administrador desactiva a un
+  // empleado mientras ese empleado ya tenía la sesión de PIN abierta (a
+  // media jornada), esa sesión no debe seguir viva hasta que cambie el día
+  // — se corta en la SIGUIENTE acción que intente, aquí mismo. Antes de
+  // este cambio, "Desactivar" en Personal solo bloqueaba abrir una sesión
+  // NUEVA (ver iniciarSesionPersonalAction en acceso-personal-actions.ts);
+  // una sesión ya abierta seguía funcionando sin límite hasta medianoche.
+  const staff = await prisma.staff.findUnique({
+    where: { id: sesion.staffId },
+    select: { isActive: true },
+  });
+
+  if (!staff || !staff.isActive) {
+    await prisma.staffLoginSession.updateMany({
+      where: { id: sesion.loginSessionId, checkOut: null },
+      data: { checkOut: new Date(), closedBy: "STAFF_INACTIVO" },
+    });
+    await cerrarSesionPersonal();
+    return null;
+  }
+
   return sesion;
 }

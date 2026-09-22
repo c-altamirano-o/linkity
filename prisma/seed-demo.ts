@@ -377,6 +377,21 @@ interface RubroConfig {
   // true = usar CLIENTES_POOL_MASCULINO en vez del pool general (ver su
   // comentario). Por ahora solo "barberia".
   clientelaMasculina?: boolean;
+  // Sucursales reales con código (2026-09-22, a petición de Carlos: "ver
+  // la estructura completa de lo que acabamos de crear" — folio por
+  // sucursal + Dashboard vista global/por sucursal). Cuando está presente,
+  // REEMPLAZA por completo el mecanismo binario de segundaSucursal (que se
+  // ignora en ese caso): se crea UNA Branch por cada entrada de este
+  // arreglo, cada una con su `code` (mismo campo Branch.code que ya usa la
+  // app real — ver el comentario largo junto a `code` en schema.prisma),
+  // así el folio de ventas/reparaciones de este negocio demo sale con el
+  // mismo esquema V-{código}-1001 / REP-{código}-0001 que vería un
+  // administrador real con varias sucursales. Solo se usa en
+  // reparacion_celulares por ahora — los otros 19 rubros demo siguen con
+  // el esquema viejo de 1-2 sucursales genéricas sin código, sin cambio de
+  // comportamiento (ver los comentarios en crearNegocioDemo/
+  // sembrarSemanaOperativa sobre cómo se preserva esto).
+  sucursales?: { name: string; code: string; address: string }[];
 }
 
 const CATALOGOS: Record<string, ItemArranque[]> = {
@@ -639,9 +654,43 @@ const RUBROS_DEMO: RubroConfig[] = [
   { key: "comercio_retail", tenantName: "Demo Tienda de Conveniencia", slug: "demo-comercio-retail", emailLocal: "comercioretail", segundaSucursal: true, proveedorNombre: "Distribuidora Mayorista del Centro", catalogo: CATALOGOS.comercio_retail, staff: [
     { puesto: "Encargado de tienda", nombre: "Mauricio Lerma" }, { puesto: "Cajero", nombre: "Yolanda Cisneros" }, { puesto: "Vendedor", nombre: "Alan Zapién" }, { puesto: "Almacenista", nombre: "Efraín Solano" },
   ] },
-  { key: "reparacion_celulares", tenantName: "Demo Taller de Celulares", slug: "demo-reparacion-celulares", emailLocal: "reparacioncelulares", segundaSucursal: false, proveedorNombre: "Refaccionaria de Celulares Express", catalogo: CATALOGOS.reparacion_celulares, reparaciones: REPARACIONES.reparacion_celulares, staff: [
-    { puesto: "Técnico reparador", nombre: "Kevin Loera" }, { puesto: "Recepcionista", nombre: "Andrea Zamora" }, { puesto: "Encargado de sucursal", nombre: "Fabián Orozco" },
-  ] },
+  { key: "reparacion_celulares", tenantName: "Demo Taller de Celulares", slug: "demo-reparacion-celulares", emailLocal: "reparacioncelulares", segundaSucursal: false, proveedorNombre: "Refaccionaria de Celulares Express", catalogo: CATALOGOS.reparacion_celulares, reparaciones: REPARACIONES.reparacion_celulares,
+    // 5 sucursales con código (2026-09-22, ver el comentario largo en
+    // `sucursales` de RubroConfig) — nombres 100% FICTICIOS, inventados
+    // solo para este demo (2026-09-22, corregido a petición de Carlos: la
+    // primera versión usaba los nombres reales de las sucursales de su
+    // negocio anterior — Primera/Celumania/Meoqui/Rosales/Cell Express, ver
+    // dr-cell-webapp — y no quiere problemas de derechos con el dueño
+    // anterior de ese negocio). Suficiente para navegar el Dashboard en
+    // vista global y por sucursal, y ver folios V-{código}-1001 /
+    // REP-{código}-0001 distintos por tienda.
+    sucursales: [
+      { name: "Sucursal Centro", code: "CEN", address: "Av. Central 210" },
+      { name: "Sucursal Plaza Mayor", code: "PLM", address: "Plaza Mayor, Local 8" },
+      { name: "Sucursal Las Torres", code: "TOR", address: "Calle Las Torres 145" },
+      { name: "Sucursal Del Valle", code: "VAL", address: "Av. del Valle 88" },
+      { name: "Sucursal Oriente", code: "ORI", address: "Blvd. Oriente 560" },
+    ],
+    // Orden a propósito (no alfabético): crearNegocioDemo asigna personal
+    // a sucursal por índice (branches[i % branches.length], ver el
+    // comentario largo ahí) — este orden intercalado hace que Centro
+    // (índices 0, 5, 10) quede con 3 personas y las otras 4 sucursales
+    // (índices 1-4 y 6-9) con 2 cada una, en vez de vaciar el arreglo
+    // sucursal por sucursal.
+    staff: [
+      { puesto: "Encargado de sucursal", nombre: "Fabián Orozco" },   // Centro (1/3)
+      { puesto: "Técnico reparador", nombre: "Jorge Villarreal" },     // Plaza Mayor (1/2)
+      { puesto: "Técnico reparador", nombre: "Luis Ontiveros" },       // Las Torres (1/2)
+      { puesto: "Técnico reparador", nombre: "Ramón Escobedo" },       // Del Valle (1/2)
+      { puesto: "Técnico reparador", nombre: "Abel Quintana" },        // Oriente (1/2)
+      { puesto: "Técnico reparador", nombre: "Kevin Loera" },          // Centro (2/3)
+      { puesto: "Recepcionista", nombre: "Diana Ochoa" },              // Plaza Mayor (2/2)
+      { puesto: "Encargado de sucursal", nombre: "Patricia Rentería" },// Las Torres (2/2)
+      { puesto: "Recepcionista", nombre: "Gabriela Núñez" },           // Del Valle (2/2)
+      { puesto: "Encargado de sucursal", nombre: "Mónica Terrazas" },  // Oriente (2/2)
+      { puesto: "Recepcionista", nombre: "Andrea Zamora" },            // Centro (3/3)
+    ],
+  },
   { key: "taller_autos", tenantName: "Demo Taller Mecánico", slug: "demo-taller-autos", emailLocal: "tallerautos", segundaSucursal: true, proveedorNombre: "Refaccionaria Automotriz del Norte", catalogo: CATALOGOS.taller_autos, reparaciones: REPARACIONES.taller_autos, staff: [
     { puesto: "Jefe de taller", nombre: "Rubén Casares" }, { puesto: "Mecánico", nombre: "Joel Gaytán" }, { puesto: "Recepción", nombre: "Silvia Anaya" }, { puesto: "Asesor de servicio", nombre: "Gerardo Mata" },
   ] },
@@ -713,7 +762,13 @@ interface ContextoNegocio {
   tenant: { id: string };
   branchPrincipal: { id: string };
   branchSecundaria: { id: string } | null;
-  branches: { id: string }[];
+  // `code` (2026-09-22) — usado por sembrarSemanaOperativa para armar el
+  // folio de ventas/reparaciones con el mismo esquema V-{code}-1001 /
+  // REP-{code}-0001 de la app real cuando la sucursal tiene código
+  // asignado (ver `sucursales` en RubroConfig); `undefined`/`null` en
+  // cualquier tenant demo que siga con el esquema viejo de 1-2 sucursales
+  // genéricas sin código, así que ese camino no cambia de comportamiento.
+  branches: { id: string; code?: string | null }[];
   ownerUser: { id: string };
   productos: { id: string; type: ProductType; price: number; cost: number | null }[];
   clientes: { id: string }[];
@@ -1098,6 +1153,15 @@ async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
 
   let folioVentaN = 1;
   let folioRepN = 1;
+  // Folio por sucursal con código (2026-09-22, ver el comentario largo en
+  // `branches` de ContextoNegocio) — mismo esquema y punto de arranque que
+  // usan en vivo pos-actions.ts/reparaciones-actions.ts (V-{code}-1001,
+  // REP-{code}-0001), una secuencia PROPIA por sucursal vía este Map
+  // (branchId -> siguiente número). Las sucursales SIN código (los otros
+  // 19 rubros demo, y cualquier sucursal futura sin code asignado) siguen
+  // usando folioVentaN/folioRepN de arriba, sin cambio de comportamiento.
+  const folioVentaPorSucursal = new Map<string, number>();
+  const folioRepPorSucursal = new Map<string, number>();
   let primeraVenta: { id: string; customerId: string | null; total: number } | null = null;
 
   for (let d = 0; d < SEMANA.length; d++) {
@@ -1137,7 +1201,14 @@ async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
         const impuesto = Math.round(subtotal * 16) / 100;
         const total = Math.round((subtotal + impuesto) * 100) / 100;
         const metodo = metodoPagoVenta();
-        const folio = `V-${String(folioVentaN++).padStart(4, "0")}`;
+        let folio: string;
+        if (branch.code) {
+          const siguiente = folioVentaPorSucursal.get(branch.id) ?? 1001;
+          folio = `V-${branch.code}-${siguiente}`;
+          folioVentaPorSucursal.set(branch.id, siguiente + 1);
+        } else {
+          folio = `V-${String(folioVentaN++).padStart(4, "0")}`;
+        }
         const venta = await prisma.sale.create({
           data: {
             tenantId: tenant.id, branchId: branch.id, customerId: cliente?.id ?? null, userId: pick(poolAtencion).userId,
@@ -1182,12 +1253,23 @@ async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
     }
 
     if (tieneReparaciones && cfg.reparaciones) {
-      const nuevas = randInt(1, 3);
+      // Con más de 2 sucursales (reparacion_celulares) se escala el
+      // volumen del día para que cada sucursal tenga equipos que mostrar
+      // en una semana — con solo 1-3 total repartidas al azar entre 5
+      // tiendas, la mayoría se hubiera quedado en cero casi todos los
+      // días. Para 1-2 sucursales (los demás rubros con reparaciones) el
+      // rango se queda exactamente igual que antes (randInt(1,3)), sin
+      // cambio de comportamiento.
+      const nuevas = branches.length > 2 ? randInt(2, 2 + branches.length) : randInt(1, 3);
       for (let r = 0; r < nuevas; r++) {
         const dispositivo = pick(cfg.reparaciones.dispositivos);
         const falla = pick(cfg.reparaciones.fallas);
         const cliente = pick(clientes);
-        const branchRep = branchSecundaria && Math.random() < 0.5 ? branchSecundaria : branchPrincipal;
+        // Generalizado a `pick(branches)` (2026-09-22) — para 1 sucursal
+        // siempre da branchPrincipal (igual que antes); para 2 sucursales
+        // es 50/50 (idéntico al `Math.random() < 0.5` de antes, ver
+        // `pick`). Con 5 sucursales reparte 1/5 a cada una.
+        const branchRep = pick(branches);
         const diasTranscurridos = 6 - d;
         let status: RepairStatus;
         if (diasTranscurridos >= 4) status = pick([RepairStatus.DELIVERED, RepairStatus.DELIVERED, RepairStatus.DELIVERED, RepairStatus.CANCELLED]);
@@ -1201,7 +1283,14 @@ async function sembrarSemanaOperativa(ctx: ContextoNegocio) {
         const estimado = (parte?.price ?? 0) + (servicio?.price ?? 0) || randInt(200, 900);
         const entregado = status === RepairStatus.DELIVERED;
 
-        const folio = `REP-${String(folioRepN++).padStart(4, "0")}`;
+        let folio: string;
+        if (branchRep.code) {
+          const siguiente = folioRepPorSucursal.get(branchRep.id) ?? 1;
+          folio = `REP-${branchRep.code}-${String(siguiente).padStart(4, "0")}`;
+          folioRepPorSucursal.set(branchRep.id, siguiente + 1);
+        } else {
+          folio = `REP-${String(folioRepN++).padStart(4, "0")}`;
+        }
         const repair = await prisma.repair.create({
           data: {
             tenantId: tenant.id, branchId: branchRep.id, customerId: cliente.id, userId: pick(poolAtencion).userId,
@@ -1273,12 +1362,31 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
     data: { name: cfg.tenantName, slug: cfg.slug, businessType: cfg.key, email: ownerEmail, phone: telefonoAleatorio(), city: "Ciudad de México", state: "CDMX", isActive: true },
   });
 
-  const branchPrincipal = await prisma.branch.create({ data: { tenantId: tenant.id, name: "Sucursal Principal", address: "Av. Principal 100", phone: telefonoAleatorio(), isActive: true } });
-  let branchSecundaria: { id: string } | null = null;
-  if (cfg.segundaSucursal) {
-    branchSecundaria = await prisma.branch.create({ data: { tenantId: tenant.id, name: "Sucursal Norte", address: "Blvd. Norte 250", phone: telefonoAleatorio(), isActive: true } });
+  // Sucursales reales con código (2026-09-22, ver el comentario largo en
+  // `sucursales` de RubroConfig) — cuando cfg.sucursales está presente
+  // (por ahora solo reparacion_celulares) se crea UNA Branch por cada
+  // entrada, cada una con su `code`, y se IGNORA cfg.segundaSucursal por
+  // completo; si no está presente, se preserva EXACTO el esquema viejo de
+  // 1-2 sucursales genéricas sin código (los otros 19 rubros demo pasan
+  // por esta rama, sin cambio de comportamiento).
+  let branchPrincipal: { id: string; code?: string | null };
+  let branchSecundaria: { id: string; code?: string | null } | null = null;
+  let branches: { id: string; code?: string | null }[];
+  if (cfg.sucursales && cfg.sucursales.length > 0) {
+    branches = [];
+    for (const suc of cfg.sucursales) {
+      const b = await prisma.branch.create({ data: { tenantId: tenant.id, name: suc.name, code: suc.code, address: suc.address, phone: telefonoAleatorio(), isActive: true } });
+      branches.push(b);
+    }
+    branchPrincipal = branches[0];
+    branchSecundaria = branches[1] ?? null;
+  } else {
+    branchPrincipal = await prisma.branch.create({ data: { tenantId: tenant.id, name: "Sucursal Principal", address: "Av. Principal 100", phone: telefonoAleatorio(), isActive: true } });
+    if (cfg.segundaSucursal) {
+      branchSecundaria = await prisma.branch.create({ data: { tenantId: tenant.id, name: "Sucursal Norte", address: "Blvd. Norte 250", phone: telefonoAleatorio(), isActive: true } });
+    }
+    branches = branchSecundaria ? [branchPrincipal, branchSecundaria] : [branchPrincipal];
   }
-  const branches = branchSecundaria ? [branchPrincipal, branchSecundaria] : [branchPrincipal];
 
   const ownerUser = await prisma.user.create({ data: { tenantId: tenant.id, branchId: branchPrincipal.id, email: ownerEmail, name: "Dueño Demo", supabaseId, isActive: true } });
   const rolAdmin = await prisma.role.create({ data: { tenantId: tenant.id, name: "Administrador", description: "Acceso completo", isSystem: true } });
@@ -1312,11 +1420,17 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
   }
 
   const conStock = productos.filter((p) => p.type !== ProductType.SERVICE);
+  // Generalizado a loop sobre `branches` (2026-09-22) — antes solo cubría
+  // branchPrincipal/branchSecundaria (máximo 2). La sucursal 0 (principal)
+  // se queda con el stock completo, cada sucursal adicional con la mitad —
+  // mismo criterio de antes, ahora extendido a cualquier cantidad de
+  // sucursales (para 1 o 2 sucursales el resultado es idéntico al de
+  // antes, los otros 19 rubros demo no cambian).
   for (const p of conStock) {
     const stockBase = randInt(3, 25);
-    await prisma.inventory.create({ data: { productId: p.id, branchId: branchPrincipal.id, stock: stockBase, minStock: Math.max(2, Math.round(stockBase * 0.25)) } });
-    if (branchSecundaria) {
-      await prisma.inventory.create({ data: { productId: p.id, branchId: branchSecundaria.id, stock: Math.max(0, Math.round(stockBase * 0.5)), minStock: Math.max(2, Math.round(stockBase * 0.25)) } });
+    for (let bi = 0; bi < branches.length; bi++) {
+      const stock = bi === 0 ? stockBase : Math.max(0, Math.round(stockBase * 0.5));
+      await prisma.inventory.create({ data: { productId: p.id, branchId: branches[bi].id, stock, minStock: Math.max(2, Math.round(stockBase * 0.25)) } });
     }
   }
   if (conStock.length > 0) {
@@ -1334,10 +1448,33 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
     clientes.push(cliente);
   }
 
+  // Roles reutilizados por puesto (2026-09-22) — Role tiene
+  // @@unique([tenantId, name]) en el schema, y reparacion_celulares es el
+  // primer rubro demo con el MISMO puesto repetido varias veces a propósito
+  // ("Técnico reparador" x4, uno por sucursal — ver el comentario del
+  // arreglo `staff` de ese rubro arriba). Sin este caché, el segundo
+  // `prisma.role.create()` con el mismo nombre tronaba con un error de
+  // restricción única y dejaba la corrida a medias (branches/productos/
+  // clientes ya creados, pero cero personal después del primer duplicado,
+  // cero ventas/reparaciones porque sembrarSemanaOperativa ni se alcanzaba a
+  // llamar) — exactamente lo que le pasó a Carlos al recrear el demo de
+  // celulares. Incidentalmente también le habría pasado tarde o temprano a
+  // consultorio_dental/consultorio_medico/veterinaria si se recrean desde
+  // cero (tienen 2 doctores con el mismo puesto), aunque hoy ya existen con
+  // datos de antes de que ese segundo doctor se agregara al arreglo.
+  const rolesPorPuesto = new Map<string, { id: string }>();
+  async function obtenerRolPorPuesto(puesto: string): Promise<{ id: string }> {
+    const existente = rolesPorPuesto.get(puesto);
+    if (existente) return existente;
+    const nuevoRol = await prisma.role.create({ data: { tenantId: tenant.id, name: puesto, description: null, isSystem: false } });
+    rolesPorPuesto.set(puesto, nuevoRol);
+    return nuevoRol;
+  }
+
   const empleados: EmpleadoCreado[] = [];
   for (let i = 0; i < cfg.staff.length; i++) {
     const s = cfg.staff[i];
-    const rol = await prisma.role.create({ data: { tenantId: tenant.id, name: s.puesto, description: null, isSystem: false } });
+    const rol = await obtenerRolPorPuesto(s.puesto);
     const modulos = inferirModulosPorPuesto(s.puesto, tieneReparaciones, tieneCitas, tieneExpediente);
     const conDashboard = new Set([...modulos, "dashboard"]);
     await prisma.rolePermission.createMany({
@@ -1345,7 +1482,13 @@ async function crearNegocioDemo(cfg: RubroConfig, indice: number, mapaPermisos: 
       skipDuplicates: true,
     });
 
-    const branchAsignada = branchSecundaria && i % 2 === 1 ? branchSecundaria : branchPrincipal;
+    // Generalizado a `branches[i % branches.length]` (2026-09-22) — para 1
+    // sucursal siempre da branches[0] (igual que antes); para 2 sucursales
+    // alterna 0,1,0,1... exactamente igual que el `i % 2 === 1` de antes.
+    // Con más de 2 (reparacion_celulares, 5 sucursales) reparte el
+    // personal en round-robin entre todas — ver el orden intercalado del
+    // arreglo `staff` de ese rubro en RUBROS_DEMO.
+    const branchAsignada = branches[i % branches.length];
     const email = `staff-demo-${i}@${cfg.slug}.personal.linkity.internal`;
     const supabaseIdFalso = `staff-placeholder-demo-${cfg.slug}-${i}`;
     const usuarioOculto = await prisma.user.create({ data: { tenantId: tenant.id, branchId: branchAsignada.id, email, name: s.nombre, supabaseId: supabaseIdFalso, isActive: true } });
@@ -1471,7 +1614,10 @@ async function refrescarNegocioDemo(cfg: RubroConfig): Promise<boolean> {
   if (!tenant) return false;
 
   const [branches, ownerUser, productosRaw, clientes, staffRows, tenantModulesInactivos, proveedor] = await Promise.all([
-    prisma.branch.findMany({ where: { tenantId: tenant.id }, orderBy: { createdAt: "asc" }, select: { id: true } }),
+    // `code` (2026-09-22) — necesario para que sembrarSemanaOperativa arme
+    // el folio V-{code}-.../REP-{code}-... de sucursales con código
+    // asignado (ver el comentario largo en `branches` de ContextoNegocio).
+    prisma.branch.findMany({ where: { tenantId: tenant.id }, orderBy: { createdAt: "asc" }, select: { id: true, code: true } }),
     prisma.user.findFirst({ where: { tenantId: tenant.id, email: `demo_${cfg.emailLocal}@linkitysoluciones.com` }, select: { id: true } }),
     prisma.product.findMany({ where: { tenantId: tenant.id, isActive: true }, select: { id: true, type: true, price: true, cost: true } }),
     prisma.customer.findMany({ where: { tenantId: tenant.id }, select: { id: true } }),

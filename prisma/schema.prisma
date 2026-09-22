@@ -43,6 +43,17 @@ model Tenant {
   // su propia idea de "semana".
   weekStartDay Int @default(1)
 
+  // 2026-09-22, a petición de Carlos (ejemplo "Fix Expres"): si una
+  // devolución (equipo diagnosticado y NO reparado) sí se cobra o no —
+  // "en algunas partes si lo hacen. Asi que eso debe ser configurable desde
+  // la pantalla del administrador". Explícitamente UNA sola regla para
+  // TODO el negocio, no por sucursal (Carlos, al elegir entre las dos
+  // opciones que se le presentaron). Default false = comportamiento de
+  // siempre (devolución sin cargo) para cualquier tenant que ya existía
+  // antes de este campo. Ver cobrarYEntregarAction/avanzarEstadoAction en
+  // reparaciones-actions.ts para dónde se lee.
+  cobrarEnDevolucion Boolean @default(false)
+
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -110,6 +121,21 @@ model Branch {
   name      String
   address   String?
   phone     String?
+  // Sigla/código de sucursal (2026-09-22, a petición de Carlos, ejemplo
+  // "Fix Expres": "una sigla distintiva o numero extra que identifique la
+  // sucursal", asignada A MANO por el administrador al crear/editar la
+  // sucursal — nunca autogenerada — porque el propio Carlos la define según
+  // su propio criterio (ciudad, número de tienda, etc: "Tú la defines a
+  // mano por sucursal"). Se usa para armar el folio de reparaciones (y de
+  // ventas) de esa sucursal (ej. REP-MTY1-0001) para que un negocio con
+  // varias sucursales pueda saber de un vistazo "la fuente del ingreso, ya
+  // sea equipo o venta" sin tener que abrir el registro — ver el comentario
+  // largo junto a la generación de folio en reparaciones-actions.ts y
+  // pos-actions.ts. Opcional: una sucursal sin código asignado sigue
+  // generando folios con el esquema viejo (sin prefijo) — "si es solo una
+  // tienda no aplica" (Carlos), así ningún negocio existente con una sola
+  // sucursal se ve obligado a definir uno.
+  code      String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -204,6 +230,17 @@ model Role {
   isSystem    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
+  // 2026-09-22, a petición de Carlos (ejemplo "Fix Expres"): distingue al
+  // "Jefe de técnicos" (ve TODAS las reparaciones asignadas en /taller, sin
+  // poder editar nada) de un "Técnico reparador" normal (solo ve las que
+  // tiene asignadas A ÉL — ver TallerClient.tsx). Default false = el
+  // comportamiento de siempre (solo lo propio) para cualquier rol que ya
+  // existía antes de este campo. Deliberadamente un booleano aparte, no un
+  // módulo/permiso más: ambos puestos comparten exactamente el mismo módulo
+  // ("taller") y la misma ruta — la única diferencia es CUÁNTO ve dentro de
+  // esa misma pantalla de solo lectura, no A QUÉ pantalla puede entrar.
+  verTodoTaller Boolean @default(false)
+
   userRoles   UserRole[]
   permissions RolePermission[]
   // Empleados de PIN (M11) que tienen este rol asignado — separado de
@@ -289,6 +326,30 @@ model Subscription {
   // necesitar.
   billingCycle BillingCycle    @default(MENSUAL)
   autoRenew    Boolean         @default(false)
+
+  // Ciclo de vida tras vencer sin renovar (2026-09-22, a petición de
+  // Carlos, con plazos comparados contra prácticas de mercado: Google Play
+  // da 7 días de gracia + hasta 60 de "espera" antes de cancelar; Shopify
+  // conserva los datos de una tienda desactivada 2 años). Carlos definió
+  // 4 avisos, todos contados en días desde `endDate`:
+  //   día 0  → "tu suscripción venció, tienes 7 días de gracia" (acceso OK)
+  //   día 7  → fin de gracia: ACCESO BLOQUEADO desde aquí (ver
+  //            lib/ciclo-suscripcion.ts, calculado en vivo, no es un status
+  //            aparte) + aviso de bloqueo/renovación
+  //   día 30 → recordatorio de renovación (sigue bloqueada)
+  //   día 90 → aviso de que su información se eliminará + Panel Maestro
+  //            (Suscripciones) lo marca "lista para revisar" — Carlos
+  //            decide a mano si la borra (nunca automático, ver
+  //            eliminarTenantAction en maestro/tenants/actions.ts)
+  // Cada campo guarda CUÁNDO se mandó ese aviso (null = todavía no se
+  // manda) para que el cron de app/api/cron/revisar-suscripciones no lo
+  // reenvíe cada día — los 4 se limpian al renovar (ver
+  // renovarSuscripcionAction), así un negocio que vuelve a pagar arranca
+  // el ciclo desde cero la próxima vez que venza.
+  expiredNoticeSentAt   DateTime?
+  blockNoticeSentAt     DateTime?
+  renewalReminderSentAt DateTime?
+  deletionNoticeSentAt  DateTime?
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 }
@@ -552,6 +613,21 @@ model Repair {
   whatsappSent  Boolean      @default(false)
   notes         String?
 
+  // Técnico ASIGNADO para trabajar esta reparación (2026-09-21, a petición
+  // de Carlos: "cuando se ingresa un equipo al terminar debe pasar esa
+  // información al recien creado modulo de taller, donde le asignarán un
+  // tecnico, eso no lo hacen desde tienda" — la asignación ocurre en
+  // recepción/tienda, nunca desde el propio taller). Deliberadamente
+  // distinto de `userId` (quien REGISTRÓ la reparación — encargado de
+  // sucursal o recepcionista, ver el comentario de Repair.userId) y de
+  // `tecnico` en ReparacionUI (que hoy en realidad muestra el nombre de
+  // `user`, no un técnico real — ver reparaciones-data.ts). Null = todavía
+  // sin asignar (el técnico no la ve en /taller hasta que se le asigna).
+  // Opcional (`?`) por compatibilidad con toda reparación creada antes de
+  // este cambio.
+  assignedToStaffId String?
+  assignedTo        Staff?  @relation("ReparacionesAsignadas", fields: [assignedToStaffId], references: [id])
+
   tenant   Tenant          @relation(fields: [tenantId], references: [id])
   branch   Branch          @relation(fields: [branchId], references: [id])
   customer Customer        @relation(fields: [customerId], references: [id])
@@ -740,6 +816,9 @@ model Staff {
   attendances Attendance[]
   payments   StaffPayment[]
   loginSessions StaffLoginSession[]
+  // Reparaciones que se le asignaron para trabajar en Taller — ver el
+  // comentario largo de Repair.assignedToStaffId.
+  reparacionesAsignadas Repair[] @relation("ReparacionesAsignadas")
 }
 
 enum PaymentScheme {
@@ -839,6 +918,11 @@ model StaffLoginSession {
 enum StaffLoginCloseReason {
   MANUAL
   DATE_ROLLOVER
+  // 2026-09-21, a petición de Carlos: cierre forzado cuando
+  // verificarSesionPersonalVigente() (lib/asistencia.ts) detecta, en
+  // cualquier request, que el Staff dueño de la sesión ya no está activo
+  // (lo desactivaron desde Personal mientras tenía la sesión abierta).
+  STAFF_INACTIVO
 }
 
 // Pagos de nómina efectivamente generados/dispersados a cada miembro del personal.

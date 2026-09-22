@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone } from "@/app/actions/tenant";
+import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { THEME_PRESETS, TENANT_THEME_ROOT_ID, type ThemePresetId } from "@/lib/theme-presets";
 import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
-  LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock, Phone,
+  LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock, Phone, Undo2,
 } from "lucide-react";
 
 const TIPOS_LOGO_PERMITIDOS = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
@@ -63,6 +63,7 @@ interface ConfiguracionClientProps {
   logoInicial: string | null;
   weekStartDayInicial: number;
   supportPhoneInicial: string | null;
+  cobrarEnDevolucionInicial: boolean;
 }
 
 export default function ConfiguracionClient({
@@ -74,6 +75,7 @@ export default function ConfiguracionClient({
   logoInicial,
   weekStartDayInicial,
   supportPhoneInicial,
+  cobrarEnDevolucionInicial,
 }: ConfiguracionClientProps) {
   const router = useRouter();
 
@@ -161,6 +163,34 @@ export default function ConfiguracionClient({
         router.refresh();
         setTimeout(() => setSupportPhoneMensaje(""), 3000);
       }
+    });
+  };
+
+  // ── Cobro en devoluciones ──────────────────────────────────
+  // 2026-09-22, a petición de Carlos, ejemplo "Fix Expres": "eso debe ser
+  // configurable desde la pantalla del administrador" — una sola regla
+  // para TODO el negocio ("una sola regla para todo el negocio", respuesta
+  // explícita de Carlos), no por sucursal. Guarda Tenant.cobrarEnDevolucion,
+  // usado en avanzarEstadoAction/cobrarYEntregarAction (reparaciones-
+  // actions.ts) para exigir o no un cobro al entregar un equipo marcado
+  // como devolución (no se pudo reparar).
+  const [cobrarEnDevolucion, setCobrarEnDevolucion] = useState(cobrarEnDevolucionInicial);
+  const [cobrarEnDevolucionPending, startCobrarEnDevolucionTransition] = useTransition();
+  const [cobrarEnDevolucionMensaje, setCobrarEnDevolucionMensaje] = useState("");
+
+  const alternarCobrarEnDevolucion = (valor: boolean) => {
+    setCobrarEnDevolucion(valor); // optimista
+    setCobrarEnDevolucionMensaje("");
+    startCobrarEnDevolucionTransition(async () => {
+      const result = await updateCobrarEnDevolucion(tenantSlug, valor);
+      if (!result.success) {
+        setCobrarEnDevolucion(!valor); // revierte si el servidor lo rechazó
+        setCobrarEnDevolucionMensaje(result.error ?? "Error al actualizar.");
+        return;
+      }
+      router.refresh();
+      setCobrarEnDevolucionMensaje("Configuración actualizada correctamente.");
+      setTimeout(() => setCobrarEnDevolucionMensaje(""), 3000);
     });
   };
 
@@ -508,6 +538,46 @@ export default function ConfiguracionClient({
             </button>
             {supportPhoneMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{supportPhoneMensaje}</span>}
           </div>
+        </div>
+      </div>
+
+      {/* ── Cobro en devoluciones ──────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <Undo2 className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold text-foreground">Cobro en devoluciones</h2>
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-muted-foreground mb-5">
+            Cuando un equipo no se pudo reparar y se marca como devolución, decide si tu negocio cobra algo al
+            cliente (por ejemplo, por el diagnóstico o el intento de reparación) antes de entregárselo. Esta
+            regla aplica a TODAS tus sucursales por igual.
+          </p>
+
+          <label className="flex items-start gap-3 max-w-md cursor-pointer">
+            <input
+              type="checkbox"
+              checked={cobrarEnDevolucion}
+              disabled={cobrarEnDevolucionPending}
+              onChange={(e) => alternarCobrarEnDevolucion(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-primary disabled:opacity-50"
+            />
+            <span className="text-sm text-foreground">
+              Cobrar al entregar una devolución
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                {cobrarEnDevolucion
+                  ? "Activado — entregar una devolución exige pasar por \"Cobrar y entregar\" en tienda."
+                  : "Desactivado — una devolución se entrega directo, sin cargo."}
+              </span>
+            </span>
+          </label>
+
+          {cobrarEnDevolucionMensaje && (
+            <p className={`text-sm font-medium mt-4 animate-in fade-in ${cobrarEnDevolucionMensaje.startsWith("Error") || cobrarEnDevolucionMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
+              {cobrarEnDevolucionMensaje}
+            </p>
+          )}
         </div>
       </div>
 

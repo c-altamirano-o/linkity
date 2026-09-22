@@ -26,6 +26,14 @@ import { CashSessionStatus, MovementType, RepairStatus } from "@prisma/client";
 export interface SucursalUI {
   id: string;
   name: string;
+  // Sigla/código de sucursal (Branch.code, 2026-09-22, a petición de
+  // Carlos: "tú la defines a mano por sucursal") — el admin la asigna aquí
+  // manualmente; alimenta el folio de reparaciones (REP-{code}-0001, ver
+  // crearReparacionAction) para "rastrear la fuente del ingreso" en una
+  // gestión centralizada multi-sucursal. null = sin código asignado (la
+  // sucursal sigue usando la secuencia global de folios, compatible con un
+  // negocio de una sola sucursal).
+  code: string | null;
   address: string | null;
   phone: string | null;
   isActive: boolean;
@@ -139,6 +147,7 @@ export async function getSucursalesData(tenantId: string): Promise<SucursalesDat
     return {
       id: b.id,
       name: b.name,
+      code: b.code,
       address: b.address,
       phone: b.phone,
       isActive: b.isActive,

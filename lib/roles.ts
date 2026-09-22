@@ -37,24 +37,40 @@ export const ROL_ADMINISTRADOR = "Administrador";
 // resolverActor() en lib/actor.ts.
 //
 // "taller" (2026-09-21, a petición de Carlos, tras encontrar el hueco en el
-// demo de reparación de celulares) es la versión angosta de "reparaciones",
-// pensada para quien de verdad hace la reparación (técnico/mecánico/etc.):
-// puede diagnosticar, agregar piezas usadas y avanzar el estatus, pero NO
-// puede eliminar piezas, cambiar el costo, cobrar/entregar ni contactar al
-// cliente — eso se queda exclusivo de "reparaciones" (Encargado/Recepción),
-// justo para que un técnico no pueda quitar una pieza que sí reparó, cobrarle
-// completo al cliente por fuera y quedarse con la diferencia. Vive en su
-// propia ruta (/[tenant]/taller, ver ese page.tsx) en vez de ser un permiso
-// fino DENTRO de "reparaciones" porque el guard de ruta del layout
+// demo de reparación de celulares; RECORTADO aún más el 2026-09-22, a otra
+// corrección explícita de Carlos con el ejemplo hipotético "Fix Expres") es
+// la vista de solo lectura del técnico reparador: ve el folio que tiene
+// asignado (cliente, sucursal, falla, pieza cotizada, fecha prometida) SIN
+// datos de contacto (para evitar fraude/rivalidad entre técnicos, ver el
+// comentario de TallerClient.tsx), y puede mandar una alerta a
+// Aduana/Recepción/Tienda si necesita información o una cotización — pero
+// YA NO puede agregar piezas, cambiar el costo NI avanzar el estatus (antes
+// sí podía; Carlos fue tajante: "solo la encargada de recepción puede
+// cambiar el estastus de un equipo"). Esas tres cosas, más asignar el
+// técnico, son ahora exclusivas de "aduana" (ver abajo). Vive en su propia
+// ruta (/[tenant]/taller, ver ese page.tsx) en vez de ser un permiso fino
+// DENTRO de "reparaciones" porque el guard de ruta del layout
 // (app/(tenant)/[tenant]/layout.tsx) gatea acceso por el SEGMENTO de la URL,
-// no por acción — la separación real de "qué puede hacer" vive en cada
-// Server Action de reparaciones-actions.ts, que acepta "reparaciones" O
-// "taller" solo en las acciones puramente técnicas (agregar pieza, avanzar
-// estatus). No es un módulo que el negocio prenda/apague desde Configuración
-// (no aparece en lib/modules-catalog.ts a propósito) — es puramente un
-// permiso de rol, la contraparte angosta de "reparaciones".
+// no por acción. No es un módulo que el negocio prenda/apague desde
+// Configuración (no aparece en lib/modules-catalog.ts a propósito) — es
+// puramente un permiso de rol.
+//
+// "aduana" (2026-09-22, a petición de Carlos, mismo ejemplo "Fix Expres")
+// es el puesto de "Recepción/Aduana" del taller CENTRAL: asigna el técnico
+// a cada equipo, cambia su estatus (recibido → en reparación → en espera de
+// refacción → listo/devolución en taller...) y ajusta el costo/piezas
+// cotizadas — todo lo que Carlos fue explícito en que "eso no lo hacen
+// desde tienda". Deliberadamente DISTINTO de "reparaciones" (que ahora
+// solo alcanza para recibir el equipo con folio, cobrar/entregar cuando ya
+// está listo en tienda, y avisar por WhatsApp — nunca tocar costo, piezas,
+// estatus ni técnico) y de "taller" (el técnico, solo lectura + alerta) —
+// las tres son la respuesta a que antes "reparaciones" tenía control total
+// y cualquier encargado de sucursal podía hacer lo que en un negocio real
+// con taller centralizado le corresponde solo a recepción. No aparece en
+// lib/modules-catalog.ts por el mismo motivo que "taller": es un permiso de
+// rol, no una capacidad de negocio que se prenda/apague.
 export const MODULOS = [
-  "dashboard", "pos", "reparaciones", "taller", "citas", "expediente-clinico", "clientes", "catalogo", "inventario",
+  "dashboard", "pos", "reparaciones", "taller", "aduana", "citas", "expediente-clinico", "clientes", "catalogo", "inventario",
   "compras", "caja", "personal", "sucursales", "reportes", "facturacion",
   "soporte", "configuracion", "asistencia",
 ] as const;
@@ -83,7 +99,14 @@ export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
   // (control total: piezas, costo, cobro) cambió por "taller" (angosto: sin
   // eliminar piezas, sin costo, sin cobro) — ver el comentario de "taller" en
   // MODULOS de arriba.
-  Técnico: "Taller (su propia parte técnica de una reparación), Citas, Clientes y Expediente Clínico.",
+  // 2026-09-22: "Taller" para el rol base es ahora de solo lectura + alerta
+  // (ver el comentario de "taller" arriba) — quien asigna técnico, cambia
+  // estatus y costo es "Recepción/Aduana" (permiso "aduana"), que no forma
+  // parte de los 3 roles base genéricos (Gerente ya cubre ese control desde
+  // "reparaciones" en un negocio de una sola sucursal sin taller separado;
+  // el catálogo POR RUBRO en lib/roles-rubro.ts es quien sí ofrece un
+  // puesto de Recepción/Aduana dedicado para los rubros de taller).
+  Técnico: "Taller (solo ve sus reparaciones asignadas y puede alertar), Citas, Clientes y Expediente Clínico.",
 };
 
 // dashboard siempre incluido — es la pantalla de aterrizaje, no tiene
@@ -119,5 +142,9 @@ export interface RolTenantUI {
   description: string | null;
   isSystem: boolean;
   modulosPermitidos: ModuloKey[];
+  // Ver el comentario largo junto a Role.verTodoTaller (schema.prisma) —
+  // solo tiene efecto real cuando modulosPermitidos incluye "taller"; para
+  // cualquier otro rol es un valor inerte.
+  verTodoTaller: boolean;
   cantidadEmpleados: number;
 }

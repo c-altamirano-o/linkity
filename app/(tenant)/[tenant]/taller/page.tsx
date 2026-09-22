@@ -3,23 +3,29 @@ import { prisma } from "@/lib/prisma";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { getReparacionesData } from "@/lib/reparaciones-data";
 import { getTenantLabels } from "@/lib/labels-server";
+import { verTodoTallerParaRolPorNombre } from "@/lib/roles-server";
 import TallerClient from "./TallerClient";
 
 /**
- * "Taller" (2026-09-21, a petición de Carlos) — la vista del técnico
- * reparador: sus reparaciones pendientes, agregar piezas usadas y avanzar el
- * estatus. A propósito una página APARTE de /reparaciones (no la misma
- * página con un roleName distinto, como ya se hacía para Cajero) porque el
- * guard de ruta del layout (app/(tenant)/[tenant]/layout.tsx) gatea acceso
- * por el SEGMENTO de la URL contra los módulos permitidos del rol — un rol
- * con "taller" (no "reparaciones") solo puede entrar aquí. Ver el
- * comentario largo de "taller" en lib/roles.ts para el porqué completo.
+ * "Taller" (2026-09-21, a petición de Carlos; corregido 2026-09-22) — la
+ * vista de SOLO LECTURA del técnico reparador: sus reparaciones asignadas,
+ * datos restringidos (sin contacto del cliente) y una alerta a Aduana/
+ * Recepción/Tienda cuando necesita info o cotización. A propósito una
+ * página APARTE de /reparaciones (no la misma página con un roleName
+ * distinto, como ya se hacía para Cajero) porque el guard de ruta del
+ * layout (app/(tenant)/[tenant]/layout.tsx) gatea acceso por el SEGMENTO de
+ * la URL contra los módulos permitidos del rol — un rol con "taller" (no
+ * "reparaciones" ni "aduana") solo puede entrar aquí. Ver el comentario
+ * largo de "taller" en lib/roles.ts para el porqué completo.
  *
- * Reusa getReparacionesData tal cual (ya viene con el filtro por sucursal
- * de 2026-09-21) — el recorte real de qué puede HACER el técnico con esos
- * datos (nada de eliminar pieza, costo, cobro ni contacto al cliente) vive
- * en TallerClient (qué botones se ofrecen) y, lo que de verdad importa, en
- * cada Server Action de reparaciones-actions.ts (qué acepta el servidor).
+ * 2026-09-22: a diferencia de /reparaciones y /pos/citas/caja, aquí NO se
+ * filtra por sucursal del empleado — el taller es CENTRAL (una sola
+ * ubicación que recibe equipos de varias sucursales/tiendas, según el
+ * modelo de Carlos), así que un técnico o el "Jefe de técnicos" debe poder
+ * ver reparaciones recibidas en cualquier sucursal. El recorte real de qué
+ * folios ve cada quien (solo los propios vs. todos) ya NO se hace por
+ * sucursal sino por tecnicoAsignadoId (miStaffId) o por verTodoTaller —
+ * ambos resueltos aquí y aplicados en TallerClient.
  */
 export default async function TallerPage({
   params,
@@ -36,12 +42,21 @@ export default async function TallerPage({
   if (!tenant) notFound();
 
   const sesionPersonal = await verificarSesionPersonalVigente();
-  const sucursalDeEmpleado = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal.branchId : null;
+  const sesionValidaDeEsteTenant = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal : null;
 
-  const [data, labels] = await Promise.all([
-    getReparacionesData(tenant.id, sucursalDeEmpleado ?? undefined),
+  const [data, labels, verTodoTaller] = await Promise.all([
+    getReparacionesData(tenant.id, undefined),
     getTenantLabels(tenant.id, tenant.businessType),
+    verTodoTallerParaRolPorNombre(tenant.id, sesionValidaDeEsteTenant?.roleName),
   ]);
 
-  return <TallerClient data={data} labels={labels} tenantSlug={tenantSlug} />;
+  return (
+    <TallerClient
+      data={data}
+      labels={labels}
+      tenantSlug={tenantSlug}
+      miStaffId={sesionValidaDeEsteTenant?.staffId ?? null}
+      verTodoTaller={verTodoTaller}
+    />
+  );
 }

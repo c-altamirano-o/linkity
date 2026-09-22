@@ -11,6 +11,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import type { CatalogoData, TipoCatalogo, ProductoCatalogo } from "@/lib/catalogo-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { ProductoIcono, ICON_PREFIX, ICONOS } from "@/lib/catalogo-iconos";
+import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
 import {
   crearProductoAction, editarProductoAction, crearCategoriaAction,
   cargarCatalogoArranqueAction, importarProductosAction,
@@ -813,7 +814,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       {modalAbierto && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => setModalAbierto(false)}
+          onClick={() => { if (confirmarSalirSinGuardar()) setModalAbierto(false); }}
         >
           <div
             className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"

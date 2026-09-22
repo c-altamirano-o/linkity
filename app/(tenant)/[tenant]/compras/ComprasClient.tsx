@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, Plus, Printer, Check, Building2, Package, X, Ban } from "lucide-react";
 import type { ComprasData, CompraUI, EstadoCompra } from "@/lib/compras-data";
 import { label, type LabelDictionary } from "@/lib/labels";
+import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
 import {
   crearCompraAction,
   actualizarEstadoCompraAction,
@@ -441,7 +442,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
       {modalNueva && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => setModalNueva(false)}
+          onClick={() => { if (confirmarSalirSinGuardar()) setModalNueva(false); }}
         >
           <div
             className="bg-card border border-border rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"

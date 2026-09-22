@@ -16,6 +16,7 @@ import {
   obtenerSugerenciaComisionAction, restablecerPinAction, type DatosEmpleado,
 } from "@/app/actions/personal-actions";
 import RolesManager from "./RolesManager";
+import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
 
 interface BranchOption {
   id: string;
@@ -33,6 +34,11 @@ interface PersonalClientProps {
   // en permisos.
   roles: RolTenantUI[];
   puestosSugeridos: string[];
+  // Códigos de módulo desactivados para este negocio (2026-09-22, ver el
+  // comentario largo en RolesManager.tsx) — se le pasa tal cual a
+  // RolesManager para que el selector de casillas al crear/editar un rol
+  // solo ofrezca lo que este negocio realmente usa.
+  modulosInactivos?: string[];
 }
 
 const ESQUEMA_TEXTO: Record<EsquemaPago, string> = {
@@ -108,7 +114,7 @@ function formDeEmpleado(e: EmpleadoUI): FormEmpleado {
   };
 }
 
-export default function PersonalClient({ data, labels, branches, tenantSlug, roles, puestosSugeridos }: PersonalClientProps) {
+export default function PersonalClient({ data, labels, branches, tenantSlug, roles, puestosSugeridos, modulosInactivos = [] }: PersonalClientProps) {
   const router = useRouter();
   const { empleados } = data;
   const [modalRoles, setModalRoles] = useState(false);
@@ -607,15 +613,27 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
       {/* Modal empleado */}
       {modalEmpleado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setModalEmpleado(null)}>
-          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={() => { if (confirmarSalirSinGuardar()) setModalEmpleado(null); }}>
+          {/* flex flex-col + max-h (en vez de overflow-y-auto en este mismo
+              div) para que el encabezado y, sobre todo, el pie con el botón
+              "Guardar" NUNCA se salgan de la vista al hacer scroll — antes,
+              en un formulario largo (muchos campos condicionales: destajo,
+              comisión de equipo, CLABE...), el pie completo scrolleaba junto
+              con el contenido. Esto es la causa real de "editar empleado y
+              dar click en guardar no hace nada" (Carlos, 2026-09-21): si la
+              validación fallaba (ej. rol no seleccionado, CLABE incompleta),
+              el aviso de error aparecía arriba del todo — fuera de la vista
+              si el usuario ya había hecho scroll hasta el botón — así que
+              para él, visualmente, "no pasaba nada". Ahora el aviso vive en
+              el pie (ver más abajo), siempre junto al botón que se acaba de
+              presionar. */}
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
               <span className="text-sm font-medium text-foreground">{modalEmpleado.modo === "crear" ? "Nuevo empleado" : "Editar empleado"}</span>
               <button onClick={() => setModalEmpleado(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
             </div>
-            <div className="p-4 space-y-3">
-              {formError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{formError}</div>}
-
+            <div className="p-4 space-y-3 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NOMBRE</label>
@@ -845,12 +863,21 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 )}
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
-              <button onClick={() => setModalEmpleado(null)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
-              <button disabled={guardando} onClick={handleGuardarEmpleado}
-                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
-                {guardando ? "Guardando..." : "Guardar"}
-              </button>
+            {/* Aviso de error en el PIE (fuera del área con scroll) — a
+                propósito, para que sea imposible perderlo de vista sin
+                importar qué tan abajo esté el usuario en el formulario (ver
+                el comentario largo arriba). */}
+            <div className="flex-shrink-0 border-t border-border">
+              {formError && (
+                <div className="mx-4 mt-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{formError}</div>
+              )}
+              <div className="flex justify-end gap-2 px-4 py-3">
+                <button onClick={() => setModalEmpleado(null)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+                <button disabled={guardando} onClick={handleGuardarEmpleado}
+                  className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
+                  {guardando ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -858,7 +885,8 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
       {/* Modal restablecer PIN */}
       {empleadoParaPin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setModalPinStaffId(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={() => { if (confirmarSalirSinGuardar()) setModalPinStaffId(null); }}>
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-medium text-foreground">
@@ -890,7 +918,8 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
       {/* Modal generar pago */}
       {seleccionadoParaPago && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setModalPagoStaffId(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={() => { if (confirmarSalirSinGuardar()) setModalPagoStaffId(null); }}>
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-medium text-foreground">Generar pago — {seleccionadoParaPago.name}</span>
@@ -958,6 +987,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
           tenantSlug={tenantSlug}
           rolesIniciales={roles}
           sugerenciasRoles={puestosSugeridos}
+          modulosInactivos={modulosInactivos}
           onCerrar={() => setModalRoles(false)}
           onCambio={() => router.refresh()}
         />

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import type { ModuloKey } from "@/lib/roles";
 import { modulosPermitidosParaRolPorNombre } from "@/lib/roles-server";
+import { calcularEstadoCiclo } from "@/lib/ciclo-suscripcion";
 
 /**
  * Resolutor de "quién está haciendo esta acción", compartido por todos los
@@ -91,8 +92,24 @@ export function puedeOperarSucursal(actor: { branchId: string | null }, branchId
 export async function resolverActor(tenantSlug: string, modulo: ModuloKey | ModuloKey[]): Promise<ActorResult> {
   const modulosAceptados = Array.isArray(modulo) ? modulo : [modulo];
 
-  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug: tenantSlug },
+    select: { id: true, subscription: { select: { status: true, endDate: true } } },
+  });
   if (!tenant) return { ok: false, error: "Negocio no encontrado" };
+
+  // Bloqueo por ciclo de vida de suscripción (2026-09-22, a petición de
+  // Carlos — ver el comentario largo en lib/ciclo-suscripcion.ts). Defensa
+  // en profundidad: [tenant]/layout.tsx ya bloquea la RENDERIZACIÓN de
+  // cualquier página cuando la cuenta está bloqueada (así que en el flujo
+  // normal nadie llega siquiera a disparar un Server Action), pero un
+  // Server Action es un endpoint POST aparte que no vuelve a pasar por ese
+  // layout — este chequeo aquí es lo que de verdad lo cierra si alguien
+  // reintenta una acción ya en curso justo cuando la cuenta se bloquea.
+  const cicloSuscripcion = calcularEstadoCiclo(tenant.subscription);
+  if (cicloSuscripcion.bloqueada) {
+    return { ok: false, error: "Esta cuenta está bloqueada por falta de renovación. Contacta a Linkity para reactivarla." };
+  }
 
   // 1. Sesión de personal por PIN — se revisa PRIMERO (ver comentario de
   //    arriba). verificarSesionPersonalVigente (en vez de leerSesionPersonal

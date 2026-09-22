@@ -84,6 +84,34 @@ export async function updateSupportPhone(tenantSlug: string, phone: string) {
   }
 }
 
+// Cobro en devoluciones (Tenant.cobrarEnDevolucion, 2026-09-22, a petición
+// de Carlos, ejemplo "Fix Expres": "eso debe ser configurable desde la
+// pantalla del administrador" — una sola regla para TODO el negocio, no por
+// sucursal ("una sola regla para todo el negocio", respuesta explícita de
+// Carlos). Cuando está activo, entregar un equipo en devolución (SHOP_RETURN
+// -> DELIVERED) exige pasar por el cobro de "Cobrar y entregar" en vez de
+// una entrega directa sin cargo — ver avanzarEstadoAction/
+// cobrarYEntregarAction en reparaciones-actions.ts. Mismo criterio de
+// validación que updateWeekStartDay/updateSupportPhone: solo el
+// administrador dueño de la cuenta.
+export async function updateCobrarEnDevolucion(tenantSlug: string, valor: boolean) {
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
+  try {
+    await prisma.tenant.update({
+      where: { id: resuelto.tenant.id },
+      data: { cobrarEnDevolucion: valor },
+    });
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al actualizar cobro en devoluciones:", error);
+    return { success: false, error: "No se pudo actualizar esta configuración" };
+  }
+}
+
 export async function updateWeekStartDay(tenantSlug: string, weekStartDay: number) {
   if (!Number.isInteger(weekStartDay) || weekStartDay < 0 || weekStartDay > 6) {
     return { success: false, error: "Día inválido" };

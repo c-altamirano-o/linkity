@@ -83,7 +83,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true } });
+    const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true, code: true } });
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
 
     if (customerId) {
@@ -160,14 +160,24 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       cambio = Math.round((cubierto - total) * 100) / 100;
     }
 
+    // Folio con sigla de sucursal (2026-09-22, a petición de Carlos: "ya sea
+    // equipo o venta" — el mismo esquema que ya se aplicó al folio de
+    // reparaciones, ver crearReparacionAction en reparaciones-actions.ts, y
+    // el mismo motivo: "rastrear la fuente del ingreso" en una gestión
+    // centralizada multi-sucursal). Compatibilidad: si la sucursal no tiene
+    // código asignado (Branch.code null — negocio de una sola sucursal), se
+    // mantiene la secuencia global V-1001, V-1002... de siempre.
+    const prefijo = branch.code ? `V-${branch.code}-` : "V-";
+    const patron = branch.code ? new RegExp(`^V-${branch.code}-(\\d+)$`) : /^V-(\d+)$/;
     const ultimaVenta = await db.sale.findFirst({
+      where: branch.code ? { branchId } : { branch: { code: null } },
       orderBy: { createdAt: "desc" },
       select: { folio: true },
     });
     let siguienteNum = 1001;
-    const m = ultimaVenta?.folio.match(/^V-(\d+)$/);
+    const m = ultimaVenta?.folio.match(patron);
     if (m) siguienteNum = parseInt(m[1], 10) + 1;
-    const folio = `V-${siguienteNum}`;
+    const folio = `${prefijo}${siguienteNum}`;
 
     await db.$transaction(async (tx: any) => {
       const sale = await tx.sale.create({

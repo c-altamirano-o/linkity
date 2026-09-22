@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
@@ -11,7 +11,7 @@ import { cerrarSesionPersonalAction } from "@/app/actions/acceso-personal-action
 import {
   LayoutDashboard, ShoppingCart, Wrench, Users, Package,
   Warehouse, DollarSign, UserCog, BarChart3, FileText,
-  GitBranch, BookOpen, LogOut, Bell, ChevronDown,
+  GitBranch, BookOpen, LogOut, Bell, ChevronDown, Settings,
   Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck, CalendarDays
 } from "lucide-react";
 
@@ -36,6 +36,11 @@ const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloK
       // (u "Órdenes de Servicio" para un taller automotriz) — apuntando a la
       // página que le corresponde a cada quien.
       { labelKey: "module.repair.name", href: "taller", icon: Wrench },
+      // "aduana" (2026-09-22, corrección explícita de Carlos) — Recepción/
+      // Aduana del taller central: asigna técnico, cambia estatus y ajusta
+      // costo/piezas. Mismo labelKey que "reparaciones"/"taller" por el
+      // mismo motivo (un rol nunca tiene más de uno de los tres a la vez).
+      { labelKey: "module.repair.name", href: "aduana", icon: Wrench },
     ]
   },
   {
@@ -126,6 +131,28 @@ export default function TenantShell({
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
 
+  // Menú de usuario y notificaciones del encabezado (2026-09-21, a petición
+  // de Carlos: "tanto el nombre del usuario como las opciones solo estan
+  // simuladas... y al hacer click no hace nada, tambien muestra una flecha
+  // para abrir un menu y no abre nada") — antes ninguno de los dos tenía
+  // onClick. La campana a propósito NO abre un sistema de notificaciones
+  // real (no existe todavía ningún generador de notificaciones en el
+  // proyecto) — solo dice honestamente que no hay nada nuevo, en vez de
+  // seguir mostrando un punto rojo que no corresponde a nada real.
+  const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
+  const [menuNotifAbierto, setMenuNotifAbierto] = useState(false);
+  const menuUsuarioRef = useRef<HTMLDivElement>(null);
+  const menuNotifRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickFuera = (e: MouseEvent) => {
+      if (menuUsuarioRef.current && !menuUsuarioRef.current.contains(e.target as Node)) setMenuUsuarioAbierto(false);
+      if (menuNotifRef.current && !menuNotifRef.current.contains(e.target as Node)) setMenuNotifAbierto(false);
+    };
+    document.addEventListener("mousedown", handleClickFuera);
+    return () => document.removeEventListener("mousedown", handleClickFuera);
+  }, []);
+
   const businessName = decodeURIComponent(tenant)
     .replace(/-/g, " ")
     .replace(/\b\w/g, (l) => l.toUpperCase());
@@ -154,20 +181,36 @@ export default function TenantShell({
 
   const modulosInactivosSet = new Set(modulosInactivos);
 
+  // "taller" y "aduana" (2026-09-21/22) son vistas angostas de Reparaciones
+  // pensadas para un rol de PIN específico (el técnico solo ve lo suyo en
+  // "taller"; recepción asigna técnico/costo en "aduana") — nunca para el
+  // dueño/gerente, que ya tiene todo eso y más en "Reparaciones" completo.
+  // Como comparten labelKey con "reparaciones" a propósito (ver
+  // NAV_STRUCTURE arriba), sin este filtro el modo "admin" (que no filtra
+  // por permisos, ve TODO lo que esté activo) terminaba mostrando 2-3
+  // enlaces "Reparaciones" idénticos apuntando a páginas distintas — bug
+  // que Carlos reportó ("existen 2 módulos llamado Reparaciones"). En modo
+  // "staff" no hace falta excluirlos aquí: modulosPermitidos ya garantiza
+  // que un rol nunca tiene más de uno de los tres a la vez.
+  const OCULTOS_PARA_ADMIN = new Set(["taller", "aduana"]);
+
   // Primero se resuelve el nombre visible de cada ítem contra el
   // diccionario de labels (rubro + overrides del tenant), luego se filtra
-  // por dos criterios independientes: (1) el módulo está desactivado para
+  // por tres criterios independientes: (1) el módulo está desactivado para
   // ESTE negocio (personalización por rubro, aplica igual a admin y
-  // staff), y (2) en modo "staff", el rol de ese empleado no tiene
-  // permitido ese módulo (lib/roles.ts) — se descarta el grupo completo si
-  // queda vacío (ej. Cajero no ve nada de "GESTIÓN" — ese encabezado
-  // tampoco debe aparecer).
+  // staff), (2) en modo "staff", el rol de ese empleado no tiene permitido
+  // ese módulo (lib/roles.ts) — se descarta el grupo completo si queda
+  // vacío (ej. Cajero no ve nada de "GESTIÓN" — ese encabezado tampoco debe
+  // aparecer) — y (3) en modo "admin", las vistas angostas de Reparaciones
+  // (ver OCULTOS_PARA_ADMIN arriba) nunca aparecen duplicadas junto al
+  // "Reparaciones" completo.
   const gruposVisibles = NAV_STRUCTURE
     .map((grupo) => ({
       section: grupo.section,
       items: grupo.items
         .filter((item) => !modulosInactivosSet.has(item.href))
         .filter((item) => modo !== "staff" || (modulosPermitidos?.includes(item.href) ?? false))
+        .filter((item) => modo !== "admin" || !OCULTOS_PARA_ADMIN.has(item.href))
         .map((item) => ({ ...item, label: label(labels, item.labelKey) })),
     }))
     .filter((grupo) => grupo.items.length > 0);
@@ -364,16 +407,57 @@ export default function TenantShell({
           </div>
 
           <div className="flex items-center gap-2">
-            <button className="relative p-2 rounded-lg hover:bg-muted transition-colors">
-              <Bell className="w-4 h-4 text-muted-foreground" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-card" />
-            </button>
-            <div className="flex items-center gap-2 pl-2 border-l border-border cursor-pointer">
-              <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-medium">
-                {initials}
-              </div>
-              <span className="hidden sm:block text-sm text-muted-foreground">{userName}</span>
-              <ChevronDown className="hidden sm:block w-3 h-3 text-muted-foreground" />
+            <div className="relative" ref={menuNotifRef}>
+              <button onClick={() => setMenuNotifAbierto((v) => !v)} className="relative p-2 rounded-lg hover:bg-muted transition-colors">
+                <Bell className="w-4 h-4 text-muted-foreground" />
+              </button>
+              {menuNotifAbierto && (
+                <div className="absolute right-0 top-full mt-1.5 w-64 bg-card border border-border rounded-xl shadow-lg z-30 overflow-hidden">
+                  <p className="px-3 py-2 text-xs font-semibold text-foreground border-b border-border">Notificaciones</p>
+                  <p className="px-3 py-4 text-xs text-muted-foreground text-center">No tienes notificaciones nuevas por ahora.</p>
+                </div>
+              )}
+            </div>
+            <div className="relative pl-2 border-l border-border" ref={menuUsuarioRef}>
+              <button
+                onClick={() => setMenuUsuarioAbierto((v) => !v)}
+                className="flex items-center gap-2 py-1 pr-1 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-medium">
+                  {initials}
+                </div>
+                <span className="hidden sm:block text-sm text-muted-foreground">{userName}</span>
+                <ChevronDown className={`hidden sm:block w-3 h-3 text-muted-foreground transition-transform ${menuUsuarioAbierto ? "rotate-180" : ""}`} />
+              </button>
+              {menuUsuarioAbierto && (
+                <div className="absolute right-0 top-full mt-1.5 w-56 bg-card border border-border rounded-xl shadow-lg z-30 overflow-hidden">
+                  <div className="px-3 py-2.5 border-b border-border">
+                    <p className="text-xs font-medium text-foreground truncate">{userName}</p>
+                    <p className="text-[11.5px] text-muted-foreground truncate">{userRole || "Administrador"}</p>
+                  </div>
+                  {/* "Configuración" (subir logo del negocio, elegir tema,
+                      etc.) — ya existe completa en ConfiguracionClient.tsx,
+                      solo faltaba un acceso real desde aquí. Exclusiva del
+                      administrador (ningún rol de PIN la tiene permitida,
+                      ver RolesManager.tsx), así que en modo "staff" ni se
+                      ofrece — llevaría a un redirect inmediato. */}
+                  {modo === "admin" && (
+                    <Link
+                      href={`/${tenant}/configuracion`}
+                      onClick={() => setMenuUsuarioAbierto(false)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                    >
+                      <Settings className="w-3.5 h-3.5 text-muted-foreground" /> Configuración
+                    </Link>
+                  )}
+                  <button
+                    onClick={handleSignOut}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5 text-muted-foreground" /> {modo === "staff" ? "Cambiar de usuario" : "Cerrar sesión"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

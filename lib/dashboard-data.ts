@@ -186,7 +186,16 @@ export async function getDashboardData(
   tenantId: string,
   branches: Pick<Branch, "id" | "name" | "isActive">[],
   weekStartDay: number,
-  reparacionesActiva: boolean
+  reparacionesActiva: boolean,
+  // "Vista por sucursal" (2026-09-22, a petición de Carlos: "en el
+  // dashboard de administrador debe contener una vista global y una por
+  // tienda") — cuando viene, TODAS las queries de abajo se acotan a esa
+  // sola sucursal, y el Dashboard completo (tarjetas, gráficas, tablas,
+  // alertas) queda mostrando solo sus datos, reutilizando exactamente el
+  // mismo layout que la vista global (ver DashboardClient.tsx). `undefined`
+  // = vista global de siempre, sin filtrar nada — comportamiento idéntico
+  // al que ya existía antes de este parámetro.
+  branchIdFiltro?: string
 ): Promise<DashboardData> {
   // Sale y Repair tienen tenantId propio, así que getTenantPrisma se
   // encarga de inyectarlo — ya no se escribe a mano en su `where` de
@@ -227,12 +236,20 @@ export async function getDashboardData(
     categorySaleItems,
   ] = await Promise.all([
     db.sale.findMany({
-      where: { status: "COMPLETED", createdAt: { gte: today.start, lt: today.end } },
+      where: {
+        status: "COMPLETED",
+        createdAt: { gte: today.start, lt: today.end },
+        ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
+      },
       include: { items: { include: { product: true } } },
       orderBy: { createdAt: "desc" },
     }),
     db.sale.findMany({
-      where: { status: "COMPLETED", createdAt: { gte: consultaDesde, lt: today.end } },
+      where: {
+        status: "COMPLETED",
+        createdAt: { gte: consultaDesde, lt: today.end },
+        ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
+      },
       select: { branchId: true, total: true, createdAt: true },
     }),
     // Las 3 queries de reparaciones de abajo llevan un filtro `id` extra
@@ -249,6 +266,7 @@ export async function getDashboardData(
       where: {
         deliveredAt: { gte: weekStart, lt: weekEnd },
         id: reparacionesActiva ? undefined : REPARACIONES_INACTIVA_ID,
+        ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
       },
       select: { branchId: true, finalCost: true, deliveredAt: true },
     }),
@@ -256,6 +274,7 @@ export async function getDashboardData(
       where: {
         status: { notIn: CLOSED_STATUSES },
         id: reparacionesActiva ? undefined : REPARACIONES_INACTIVA_ID,
+        ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
       },
       include: { customer: true, user: true },
       orderBy: { receivedAt: "desc" },
@@ -265,15 +284,23 @@ export async function getDashboardData(
       where: {
         receivedAt: { gte: today.start, lt: today.end },
         id: reparacionesActiva ? undefined : REPARACIONES_INACTIVA_ID,
+        ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
       },
       _count: { _all: true },
     }),
     db.inventory.findMany({
-      where: { branch: { tenantId } },
+      where: { branch: { tenantId, ...(branchIdFiltro ? { id: branchIdFiltro } : {}) } },
       include: { product: true, branch: true },
     }),
     db.saleItem.findMany({
-      where: { sale: { tenantId, status: "COMPLETED", createdAt: { gte: month.start, lt: month.end } } },
+      where: {
+        sale: {
+          tenantId,
+          status: "COMPLETED",
+          createdAt: { gte: month.start, lt: month.end },
+          ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
+        },
+      },
       include: { product: { include: { category: true } } },
     }),
   ]);
@@ -384,7 +411,15 @@ export async function getDashboardData(
     repairsByBranch.set(r.branchId, arr);
   }
 
-  const sucursales: SucursalResumen[] = branches.map((b) => {
+  // En vista por sucursal el resumen comparativo no se usa en pantalla
+  // (DashboardClient oculta esa sección cuando hay un filtro activo — solo
+  // tiene sentido comparar cuando se ve el negocio completo), pero se
+  // acota igual por consistencia: sin esto, "sucursales" seguiría listando
+  // TODAS las sucursales con datos en cero salvo la filtrada, en vez de
+  // solo la que realmente se está viendo.
+  const branchesParaResumen = branchIdFiltro ? branches.filter((b) => b.id === branchIdFiltro) : branches;
+
+  const sucursales: SucursalResumen[] = branchesParaResumen.map((b) => {
     const ventasDiaBranch = weekSales
       .filter((s) => s.branchId === b.id && s.createdAt >= today.start && s.createdAt < today.end)
       .reduce((sum, s) => sum + Number(s.total), 0);
@@ -487,12 +522,20 @@ function formatHoraCorta(hora: number): string {
   return new Intl.DateTimeFormat("es-MX", { hour: "numeric", hour12: true, timeZone: "UTC" }).format(d);
 }
 
-export async function getVentasPorDia(tenantId: string, fechaStr: string): Promise<VentasPorDiaData> {
+export async function getVentasPorDia(tenantId: string, fechaStr: string, branchIdFiltro?: string): Promise<VentasPorDiaData> {
   const db = getTenantPrisma(tenantId);
   const { start, end } = diaMxRangeDesdeFecha(fechaStr);
 
+  // branchIdFiltro (2026-09-22): mismo filtro de "vista por sucursal" que
+  // getDashboardData — cuando el Dashboard está viendo una sola sucursal,
+  // el selector de "Ventas por día y hora" debe reflejar esa misma
+  // sucursal, no el negocio completo.
   const ventas = await db.sale.findMany({
-    where: { status: "COMPLETED", createdAt: { gte: start, lt: end } },
+    where: {
+      status: "COMPLETED",
+      createdAt: { gte: start, lt: end },
+      ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
+    },
     select: { total: true, createdAt: true },
   });
 

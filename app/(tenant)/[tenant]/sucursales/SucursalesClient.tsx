@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ArrowRight, Building2, Package, DollarSign, Wrench, X, Pencil } from "lucide-react";
+import { Plus, ArrowRight, Building2, Package, DollarSign, Wrench, X, Pencil, Link2, Check } from "lucide-react";
 import type { SucursalesData, SucursalUI } from "@/lib/sucursales-data";
+import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
 import {
   crearSucursalAction,
   editarSucursalAction,
@@ -44,6 +45,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
   const [editando, setEditando] = useState<SucursalUI | null>(null);
   const [form, setForm] = useState<DatosSucursal & { isActive: boolean }>({
     name: "",
+    code: "",
     address: "",
     phone: "",
     isActive: true,
@@ -56,20 +58,21 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
   const [cantidad, setCantidad] = useState("1");
   const [errorTransfer, setErrorTransfer] = useState<string | null>(null);
   const [okTransfer, setOkTransfer] = useState(false);
+  const [linkCopiadoId, setLinkCopiadoId] = useState<string | null>(null);
 
   const { sucursales, productos } = data;
   const totalVentas = sucursales.reduce((s, suc) => s + suc.ventasHoy, 0) || 1;
 
   function abrirNueva() {
     setEditando(null);
-    setForm({ name: "", address: "", phone: "", isActive: true });
+    setForm({ name: "", code: "", address: "", phone: "", isActive: true });
     setErrorModal(null);
     setModalAbierto(true);
   }
 
   function abrirEditar(suc: SucursalUI) {
     setEditando(suc);
-    setForm({ name: suc.name, address: suc.address ?? "", phone: suc.phone ?? "", isActive: suc.isActive });
+    setForm({ name: suc.name, code: suc.code ?? "", address: suc.address ?? "", phone: suc.phone ?? "", isActive: suc.isActive });
     setErrorModal(null);
     setModalAbierto(true);
   }
@@ -79,7 +82,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
     startTransition(async () => {
       const res = editando
         ? await editarSucursalAction({ tenantSlug, branchId: editando.id, ...form })
-        : await crearSucursalAction({ tenantSlug, name: form.name, address: form.address, phone: form.phone });
+        : await crearSucursalAction({ tenantSlug, name: form.name, code: form.code, address: form.address, phone: form.phone });
 
       if (!res.ok) {
         setErrorModal(res.error);
@@ -112,6 +115,19 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
   }
 
   const puedeTransferir = origenId && destinoId && origenId !== destinoId && productoId && Number(cantidad) > 0;
+
+  // 2026-09-21, a petición de Carlos: el link de entrada es por SUCURSAL
+  // (app/(auth)/entrada/[tenant]/[branch]/page.tsx) — copiarlo desde aquí
+  // es lo que le permite a un dueño remoto (ej. con 15 sucursales)
+  // compartírselo a cada una sin tener que ir en persona a dejarlo
+  // configurado en su tablet/mostrador.
+  function copiarLinkEntrada(branchId: string) {
+    const link = `${window.location.origin}/entrada/${tenantSlug}/${branchId}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setLinkCopiadoId(branchId);
+      setTimeout(() => setLinkCopiadoId((id) => (id === branchId ? null : id)), 2000);
+    });
+  }
 
   return (
     <div className="flex flex-col h-full overflow-y-auto p-4 gap-4">
@@ -158,6 +174,11 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="text-[13.5px] font-semibold text-foreground">{suc.name}</p>
+                      {suc.code && (
+                        <span className="text-[10.5px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-mono font-medium">
+                          {suc.code}
+                        </span>
+                      )}
                       {suc.esPrincipal && (
                         <span className="text-[10.5px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
                           Principal
@@ -221,12 +242,31 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                     </>
                   )}
                 </div>
-                <button
-                  onClick={() => abrirEditar(suc)}
-                  className="flex items-center gap-1 text-[11.5px] text-primary font-medium hover:underline"
-                >
-                  <Pencil className="w-3 h-3" /> Editar
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => copiarLinkEntrada(suc.id)}
+                    className={`flex items-center gap-1 text-[11.5px] font-medium hover:underline ${
+                      linkCopiadoId === suc.id ? "text-emerald-600" : "text-muted-foreground"
+                    }`}
+                    title="Copiar el link de entrada por PIN de esta sucursal"
+                  >
+                    {linkCopiadoId === suc.id ? (
+                      <>
+                        <Check className="w-3 h-3" /> Copiado
+                      </>
+                    ) : (
+                      <>
+                        <Link2 className="w-3 h-3" /> Link de entrada
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => abrirEditar(suc)}
+                    className="flex items-center gap-1 text-[11.5px] text-primary font-medium hover:underline"
+                  >
+                    <Pencil className="w-3 h-3" /> Editar
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -376,7 +416,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
       {modalAbierto && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => setModalAbierto(false)}
+          onClick={() => { if (confirmarSalirSinGuardar()) setModalAbierto(false); }}
         >
           <div
             className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
@@ -399,6 +439,22 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
                   placeholder="Ej. Sucursal Centro"
                 />
+              </div>
+              <div>
+                <label className="text-[12.5px] font-medium text-muted-foreground">
+                  Código de sucursal (opcional)
+                </label>
+                <input
+                  value={form.code ?? ""}
+                  onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                  maxLength={8}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm font-mono bg-muted focus:outline-none focus:border-primary"
+                  placeholder="Ej. CEN"
+                />
+                <p className="text-[11.5px] text-muted-foreground mt-1">
+                  Aparece en el folio de las reparaciones de esta sucursal (ej. REP-CEN-0001), para identificar de
+                  dónde viene cada equipo si manejas un taller centralizado.
+                </p>
               </div>
               <div>
                 <label className="text-[12.5px] font-medium text-muted-foreground">Dirección</label>

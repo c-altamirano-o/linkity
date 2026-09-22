@@ -18,11 +18,15 @@ function iniciales(nombre: string): string {
 
 export default function EntradaClient({
   tenantSlug,
+  branchId,
   businessName,
+  branchName,
   empleados,
 }: {
   tenantSlug: string;
+  branchId: string;
   businessName: string;
+  branchName: string;
   empleados: EmpleadoOption[];
 }) {
   const [seleccionado, setSeleccionado] = useState<EmpleadoOption | null>(null);
@@ -49,7 +53,7 @@ export default function EntradaClient({
     setError(null);
     if (siguiente.length === 4 && seleccionado) {
       startTransition(async () => {
-        const res = await iniciarSesionPersonalAction({ tenantSlug, staffId: seleccionado.id, pin: siguiente });
+        const res = await iniciarSesionPersonalAction({ tenantSlug, staffId: seleccionado.id, pin: siguiente, branchId });
         if (res.ok) {
           window.location.href = `/${tenantSlug}/dashboard`;
         } else {
@@ -70,7 +74,9 @@ export default function EntradaClient({
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <p className="text-xs text-muted-foreground tracking-widest uppercase mb-1">{businessName}</p>
+          <p className="text-xs text-muted-foreground tracking-widest uppercase mb-1">
+            {businessName} · {branchName}
+          </p>
           <h1 className="text-xl font-semibold text-foreground">
             {seleccionado ? `Hola, ${seleccionado.name.split(" ")[0]}` : "¿Quién eres?"}
           </h1>

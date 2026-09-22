@@ -2,9 +2,11 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Settings } from "lucide-react";
+import Link from "next/link";
+import { Settings, AlertTriangle } from "lucide-react";
 import type { SuscripcionesData, SuscripcionRow } from "@/lib/suscripciones-data";
 import { alternarSuscripcionAction } from "../dashboard/actions";
+import { ETAPA_LABEL } from "@/lib/ciclo-suscripcion";
 
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
@@ -38,7 +40,7 @@ function urgenciaBadge(row: SuscripcionRow): { label: string; classes: string } 
   return null;
 }
 
-type Filtro = "todos" | "vencidas" | "por_vencer" | "activos";
+type Filtro = "todos" | "vencidas" | "por_vencer" | "activos" | "listos_para_eliminar";
 
 export default function SuscripcionesClient({ data }: { data: SuscripcionesData }) {
   const router = useRouter();
@@ -55,6 +57,8 @@ export default function SuscripcionesClient({ data }: { data: SuscripcionesData 
         return data.rows.filter((r) => r.urgencia === "por_vencer");
       case "activos":
         return data.rows.filter((r) => r.status === "ACTIVE");
+      case "listos_para_eliminar":
+        return data.rows.filter((r) => r.etapaCiclo === "lista_para_eliminar");
       default:
         return data.rows;
     }
@@ -85,6 +89,33 @@ export default function SuscripcionesClient({ data }: { data: SuscripcionesData 
 
   return (
     <div>
+      {/* Alerta de negocios sin respuesta tras 90+ días bloqueados (ver
+          lib/ciclo-suscripcion.ts) — Carlos decide a mano si los borra desde
+          la pantalla de detalle de cada negocio (Zona de peligro); esto solo
+          avisa, nunca borra nada por sí sola. */}
+      {resumen.listosParaEliminar > 0 && (
+        <button
+          type="button"
+          onClick={() => setFiltro("listos_para_eliminar")}
+          className={`w-full text-left flex items-start gap-3 bg-red-50 border rounded-lg p-3.5 mb-4 transition-colors ${
+            filtro === "listos_para_eliminar" ? "border-red-400" : "border-red-200 hover:border-red-300"
+          }`}
+        >
+          <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[13.5px] font-medium text-red-700">
+              {resumen.listosParaEliminar} negocio{resumen.listosParaEliminar === 1 ? "" : "s"} sin respuesta —
+              lleva{resumen.listosParaEliminar === 1 ? "" : "n"} 90+ días bloqueado
+              {resumen.listosParaEliminar === 1 ? "" : "s"} sin renovar
+            </p>
+            <p className="text-[12.5px] text-red-500 mt-0.5">
+              Ya se les avisó por correo/WhatsApp en los 3 plazos (7, 30 y 90 días). Revisa cada negocio y, si
+              decides no conservar su información, puedes borrarlo desde su pantalla de detalle.
+            </p>
+          </div>
+        </button>
+      )}
+
       {/* Tarjetas resumen — clic para filtrar la tabla */}
       <div className="grid grid-cols-4 gap-3 mb-5">
         {cards.map((c) => (
@@ -143,7 +174,12 @@ export default function SuscripcionesClient({ data }: { data: SuscripcionesData 
                 return (
                   <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-2.5">
-                      <p className="text-[13.5px] font-medium text-slate-800">{r.name}</p>
+                      <Link
+                        href={`/maestro/tenants/${r.slug}`}
+                        className="text-[13.5px] font-medium text-slate-800 hover:text-[#4F46E5] hover:underline"
+                      >
+                        {r.name}
+                      </Link>
                       <p className="text-[12.5px] text-slate-400">{[r.city, r.state].filter(Boolean).join(", ") || "Sin ubicación"}</p>
                     </td>
                     <td className="px-4 py-2.5 text-[13.5px] text-slate-600">
@@ -165,6 +201,15 @@ export default function SuscripcionesClient({ data }: { data: SuscripcionesData 
                       <span className={`text-[12.5px] font-medium px-2 py-0.5 rounded-full ${estadoCfg?.classes ?? "bg-slate-100 text-slate-400"}`}>
                         {estadoCfg?.label ?? "Sin suscripción"}
                       </span>
+                      {(r.etapaCiclo === "en_gracia" || r.etapaCiclo === "bloqueada" || r.etapaCiclo === "lista_para_eliminar") && (
+                        <span
+                          className={`block mt-1 text-[11.5px] font-medium ${
+                            r.etapaCiclo === "lista_para_eliminar" ? "text-red-600" : "text-amber-600"
+                          }`}
+                        >
+                          {ETAPA_LABEL[r.etapaCiclo]}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-[13.5px] text-slate-600">{r.autoRenew ? "Sí" : "No"}</td>
                     <td className="px-4 py-2.5">

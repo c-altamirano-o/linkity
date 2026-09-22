@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { MODULE_CATALOG, ALL_MODULE_CODES } from "@/lib/modules-catalog";
 import { modulosRecomendadosOff } from "@/lib/modulos-rubro";
 import { getEsquemaDefault } from "@/lib/esquemas-data";
+import { asegurarRolesRubro } from "@/lib/roles-server";
 
 /**
  * Alta de un negocio nuevo por auto-registro público (app/(auth)/register).
@@ -190,6 +191,14 @@ export async function registrarNegocioAction(
 
       return tenant;
     });
+
+    // Roles con jerarquía y permisos reales para el rubro elegido (lib/
+    // roles-rubro.ts, 2026-09-21 a petición de Carlos) — fuera de la
+    // transacción de arriba a propósito (no es una operación atómica con
+    // el alta del tenant; si llegara a fallar, el negocio igual queda
+    // creado y "Roles y permisos" los crea solo en el primer vistazo, ver
+    // listarRolesTenant en lib/roles-server.ts).
+    await asegurarRolesRubro(result.id, input.businessType);
 
     return { success: true, tenantSlug: result.slug, ownerEmail: input.ownerEmail.trim(), tempPassword };
   } catch (err) {

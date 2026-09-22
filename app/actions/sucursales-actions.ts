@@ -52,10 +52,18 @@ export interface DatosSucursal {
   name: string;
   address?: string | null;
   phone?: string | null;
+  // Sigla/código de sucursal (Branch.code, 2026-09-22, a petición de
+  // Carlos: "tú la defines a mano por sucursal") — opcional, el admin la
+  // escribe a mano al crear/editar. Alimenta el folio de reparaciones (ver
+  // crearReparacionAction, reparaciones-actions.ts).
+  code?: string | null;
 }
 
 function validarDatosSucursal(datos: DatosSucursal): string | null {
   if (!datos.name?.trim()) return "El nombre de la sucursal es obligatorio";
+  if (datos.code && !/^[A-Za-z0-9]{1,8}$/.test(datos.code.trim())) {
+    return "El código de sucursal debe ser solo letras/números, máximo 8 caracteres";
+  }
   return null;
 }
 
@@ -86,10 +94,20 @@ export async function crearSucursalAction(
       }
     }
 
+    const codigoLimpio = datos.code?.trim().toUpperCase() || null;
+    if (codigoLimpio) {
+      // El código alimenta el folio de reparaciones (REP-{code}-0001) — dos
+      // sucursales con el mismo código compartirían secuencia de folios,
+      // así que se exige único por tenant.
+      const yaExiste = await db.branch.findFirst({ where: { code: codigoLimpio }, select: { id: true } });
+      if (yaExiste) return { ok: false, error: `Ya existe una sucursal con el código "${codigoLimpio}"` };
+    }
+
     const nueva = await db.branch.create({
       data: {
         tenantId: tenant.id,
         name: datos.name.trim(),
+        code: codigoLimpio,
         address: datos.address?.trim() || null,
         phone: datos.phone?.trim() || null,
       },
@@ -136,10 +154,20 @@ export async function editarSucursalAction(
       }
     }
 
+    const codigoLimpio = datos.code?.trim().toUpperCase() || null;
+    if (codigoLimpio) {
+      const yaExiste = await db.branch.findFirst({
+        where: { code: codigoLimpio, id: { not: branchId } },
+        select: { id: true },
+      });
+      if (yaExiste) return { ok: false, error: `Ya existe una sucursal con el código "${codigoLimpio}"` };
+    }
+
     await db.branch.update({
       where: { id: branchId },
       data: {
         name: datos.name.trim(),
+        code: codigoLimpio,
         address: datos.address?.trim() || null,
         phone: datos.phone?.trim() || null,
         isActive,

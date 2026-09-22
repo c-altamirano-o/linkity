@@ -2,30 +2,42 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Wrench, Package, Plus, ChevronLeft, Clock, AlertCircle, ArrowRight } from "lucide-react";
+import { Wrench, Clock, AlertCircle, ChevronLeft, Send, Users } from "lucide-react";
 import type { ReparacionesData, EstadoReparacion, PrioridadReparacion } from "@/lib/reparaciones-data";
 import { label, type LabelDictionary } from "@/lib/labels";
-import {
-  agregarPiezaReparacionAction,
-  avanzarEstadoAction,
-  type NuevoEstadoReparacion,
-} from "@/app/actions/reparaciones-actions";
+import { enviarAlertaTallerAction } from "@/app/actions/reparaciones-actions";
 
 /**
- * Vista del técnico reparador (módulo "taller", ver el comentario largo en
- * lib/roles.ts y en page.tsx de esta misma carpeta). A propósito angosta —
- * es un componente NUEVO, no una rama dentro de ReparacionesClient.tsx: solo
- * ofrece lo que un técnico de verdad necesita (ver sus reparaciones,
- * diagnosticar/agregar piezas, avanzar el estatus) y NUNCA muestra botón de
- * eliminar pieza, cambiar costo, cobrar/entregar ni contactar al cliente —
- * esos botones simplemente no existen aquí, y aunque alguien los recreara a
- * mano, el servidor los rechaza igual (ver reparaciones-actions.ts).
+ * Vista del técnico reparador (módulo "taller") — RECORTADA a solo lectura
+ * + alerta el 2026-09-22, corrección explícita de Carlos con el ejemplo
+ * hipotético "Fix Expres": "solo la encargada de recepción puede cambiar el
+ * estastus de un equipo" y "la edición del costo solo se puede hacer en
+ * recepción" — antes esta pantalla dejaba agregar piezas y avanzar el
+ * estatus, ambas cosas ahora exclusivas de /aduana (ver AduanaClient.tsx).
+ * Lo único que un técnico puede seguir "haciendo" aquí es mandar una alerta
+ * a Aduana/Recepción/Tienda cuando necesita información o una cotización
+ * (enviarAlertaTallerAction, que reutiliza RepairHistory — ver el
+ * comentario largo en esa acción).
+ *
+ * Campos visibles — exactamente la lista que dio Carlos ("Nombre del
+ * clente, numero de folio, sucursal, contraseña [= el folio mismo, ver la
+ * aclaración de Carlos], falla reportada, pieza cotizada y fecha
+ * prometida"), sin datos de contacto (teléfono) — "para evitar fraudes...
+ * y también evita problemas entre el personal de competir o envidias".
  */
 
 interface TallerClientProps {
   data: ReparacionesData;
   labels: LabelDictionary;
   tenantSlug: string;
+  // El staffId de la sesión de PIN actual — cuando viene presente y
+  // verTodoTaller es false, la lista se filtra a SOLO las reparaciones
+  // asignadas a este técnico. null en una sesión admin (ve todo).
+  miStaffId: string | null;
+  // "Jefe de técnicos" (Role.verTodoTaller, 2026-09-22, a petición de
+  // Carlos: "Ve todos los folios, pero sin editar") — cuando es true, se
+  // ignora miStaffId y se muestran TODAS las reparaciones del taller.
+  verTodoTaller: boolean;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -53,21 +65,6 @@ const PRIORIDAD_CLASES: Record<PrioridadReparacion, string> = {
   URGENT: "bg-red-100 text-red-700",
 };
 
-// Mismas transiciones que TRANSICIONES_VALIDAS en reparaciones-actions.ts —
-// duplicado a propósito (solo para decidir qué botón mostrar): el servidor
-// vuelve a validar esto en cada llamada, así que un valor equivocado aquí
-// nunca podría saltarse un estatus, solo mostraría un botón que el servidor
-// rechazaría.
-const SIGUIENTES_ESTADOS: Partial<Record<EstadoReparacion, { estado: NuevoEstadoReparacion; texto: string; clases: string }[]>> = {
-  RECEIVED: [{ estado: "IN_REPAIR", texto: "Iniciar reparación", clases: "bg-primary hover:bg-primary/90 text-primary-foreground" }],
-  IN_REPAIR: [
-    { estado: "WORKSHOP_READY", texto: "Marcar como reparado", clases: "bg-emerald-600 hover:bg-emerald-700 text-white" },
-    { estado: "WORKSHOP_RETURN", texto: "No se pudo reparar", clases: "bg-orange-100 hover:bg-orange-200 text-orange-700" },
-  ],
-  WORKSHOP_READY: [{ estado: "SHOP_READY", texto: "Pasar a mostrador", clases: "bg-cyan-600 hover:bg-cyan-700 text-white" }],
-  WORKSHOP_RETURN: [{ estado: "SHOP_RETURN", texto: "Pasar a mostrador (devolución)", clases: "bg-red-100 hover:bg-red-200 text-red-700" }],
-};
-
 function iniciales(nombre: string): string {
   const partes = nombre.trim().split(/\s+/).filter(Boolean);
   return ((partes[0]?.[0] ?? "") + (partes[1]?.[0] ?? "")).toUpperCase() || "?";
@@ -76,54 +73,48 @@ function iniciales(nombre: string): string {
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
-export default function TallerClient({ data, labels, tenantSlug }: TallerClientProps) {
+const formatFecha = (iso: string) =>
+  new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+
+const formatFechaHora = (iso: string) =>
+  new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true });
+
+export default function TallerClient({ data, labels, tenantSlug, miStaffId, verTodoTaller }: TallerClientProps) {
   const router = useRouter();
-  const { productos, reparaciones } = data;
   const [seleccionadaId, setSeleccionadaId] = useState<string | null>(null);
   const [soloActivas, setSoloActivas] = useState(true);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const [piezaProductId, setPiezaProductId] = useState("");
-  const [piezaCantidad, setPiezaCantidad] = useState("1");
+  const [alertaTexto, setAlertaTexto] = useState("");
+  const [alertaOk, setAlertaOk] = useState(false);
+
+  // "cada técnico solo debe ver SUS reparaciones asignadas, no toda la cola"
+  // (Carlos) salvo el Jefe de técnicos, que ve todo sin poder editar.
+  const reparaciones = verTodoTaller
+    ? data.reparaciones
+    : miStaffId
+      ? data.reparaciones.filter((r) => r.tecnicoAsignadoId === miStaffId)
+      : data.reparaciones;
 
   const activas = reparaciones.filter((r) => r.estado !== "DELIVERED" && r.estado !== "CANCELLED");
   const listaVisible = soloActivas ? activas : reparaciones;
   const seleccionada = reparaciones.find((r) => r.id === seleccionadaId) ?? null;
 
-  function refrescarYRecargar() {
-    router.refresh();
-  }
-
-  function avanzar(repairId: string, nuevoEstado: NuevoEstadoReparacion) {
+  function enviarAlerta(repairId: string) {
+    const mensaje = alertaTexto.trim();
+    if (!mensaje) return;
     setError(null);
     startTransition(async () => {
-      const res = await avanzarEstadoAction({ tenantSlug, repairId, nuevoEstado });
+      const res = await enviarAlertaTallerAction({ tenantSlug, repairId, mensaje });
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      refrescarYRecargar();
-    });
-  }
-
-  function agregarPieza(repairId: string) {
-    if (!piezaProductId || Number(piezaCantidad) <= 0) return;
-    setError(null);
-    startTransition(async () => {
-      const res = await agregarPiezaReparacionAction({
-        tenantSlug,
-        repairId,
-        productId: piezaProductId,
-        quantity: Number(piezaCantidad),
-      });
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      setPiezaProductId("");
-      setPiezaCantidad("1");
-      refrescarYRecargar();
+      setAlertaTexto("");
+      setAlertaOk(true);
+      setTimeout(() => setAlertaOk(false), 2500);
+      router.refresh();
     });
   }
 
@@ -139,7 +130,12 @@ export default function TallerClient({ data, labels, tenantSlug }: TallerClientP
             <Wrench className="w-4 h-4 text-primary" /> Taller
           </h1>
           <p className="text-[12.5px] text-muted-foreground mt-0.5">
-            {entidadPlural} de tu sucursal — diagnostica, agrega piezas y avanza el estatus.
+            {verTodoTaller
+              ? `Todas las ${entidadPlural.toLowerCase()} del taller`
+              : miStaffId
+                ? `${entidadPlural} asignadas a ti`
+                : `${entidadPlural} del taller`}
+            {" "}— consulta el detalle y avisa a Aduana/Recepción si necesitas algo.
           </p>
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
@@ -157,6 +153,12 @@ export default function TallerClient({ data, labels, tenantSlug }: TallerClientP
         </div>
       </div>
 
+      {verTodoTaller && (
+        <div className="mx-4 mb-2 flex items-center gap-2 bg-primary/5 text-primary text-[12px] px-3 py-1.5 rounded-lg">
+          <Users className="w-3.5 h-3.5 flex-shrink-0" /> Vista de Jefe de técnicos — ves todas las reparaciones del taller, sin poder editarlas.
+        </div>
+      )}
+
       {error && (
         <div className="mx-4 mb-2 flex items-center gap-2 bg-red-50 text-red-700 text-[12.5px] px-3 py-2 rounded-lg">
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {error}
@@ -168,7 +170,9 @@ export default function TallerClient({ data, labels, tenantSlug }: TallerClientP
         <div className={`w-full md:w-[340px] flex-shrink-0 border-r border-border overflow-y-auto ${seleccionada ? "hidden md:block" : ""}`}>
           {listaVisible.length === 0 ? (
             <div className="p-6 text-center text-[12.5px] text-muted-foreground">
-              No hay {entidadPlural.toLowerCase()} {soloActivas ? "activas" : "registradas"} en tu sucursal.
+              {miStaffId && !verTodoTaller
+                ? `No tienes ${entidadPlural.toLowerCase()} ${soloActivas ? "activas" : "registradas"} asignadas todavía.`
+                : `No hay ${entidadPlural.toLowerCase()} ${soloActivas ? "activas" : "registradas"} en el taller.`}
             </div>
           ) : (
             listaVisible.map((r) => (
@@ -192,13 +196,17 @@ export default function TallerClient({ data, labels, tenantSlug }: TallerClientP
                     {PRIORIDAD_TEXTO[r.prioridad]}
                   </span>
                   <span className="text-[10.5px] text-muted-foreground">{r.cliente}</span>
+                  {verTodoTaller && r.tecnicoAsignadoNombre && (
+                    <span className="text-[10.5px] text-muted-foreground">· {r.tecnicoAsignadoNombre}</span>
+                  )}
                 </div>
               </button>
             ))
           )}
         </div>
 
-        {/* Detalle */}
+        {/* Detalle — de solo lectura: sin botón de agregar/quitar pieza,
+            editar costo ni avanzar estatus (ver el comentario del archivo). */}
         <div className={`flex-1 overflow-y-auto p-4 ${seleccionada ? "" : "hidden md:block"}`}>
           {!seleccionada ? (
             <div className="h-full flex items-center justify-center text-center text-[12.5px] text-muted-foreground p-8">
@@ -234,6 +242,16 @@ export default function TallerClient({ data, labels, tenantSlug }: TallerClientP
                     <p className="text-[13px] font-medium text-foreground truncate">{seleccionada.cliente}</p>
                   </div>
                 </div>
+                <div className="bg-muted rounded-lg p-2.5">
+                  <p className="text-[10.5px] text-muted-foreground mb-0.5">Sucursal</p>
+                  <p className="text-[13px] font-medium text-foreground">{seleccionada.sucursalNombre}</p>
+                </div>
+                <div className="bg-muted rounded-lg p-2.5">
+                  <p className="text-[10.5px] text-muted-foreground mb-0.5">Fecha prometida</p>
+                  <p className="text-[13px] font-medium text-foreground">
+                    {seleccionada.fechaEstimada ? formatFecha(seleccionada.fechaEstimada) : "Sin definir"}
+                  </p>
+                </div>
               </div>
 
               <div className="mt-3">
@@ -243,24 +261,17 @@ export default function TallerClient({ data, labels, tenantSlug }: TallerClientP
 
               <div className="flex items-center gap-4 mt-3 text-[11.5px] text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" /> Recibido {new Date(seleccionada.fechaRecibido).toLocaleDateString("es-MX")}
+                  <Clock className="w-3.5 h-3.5" /> Recibido {formatFecha(seleccionada.fechaRecibido)}
                 </span>
                 {seleccionada.costoEstimado != null && (
-                  <span>Costo estimado: {formatMXN(seleccionada.costoEstimado)}</span>
+                  <span>Pieza cotizada: {formatMXN(seleccionada.costoEstimado)}</span>
                 )}
               </div>
 
-              {/* Piezas — agregar sí, eliminar/editar costo no (ver el
-                  comentario en TallerClient de arriba y en
-                  reparaciones-actions.ts) */}
-              <div className="mt-4">
-                <p className="text-[12.5px] font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                  <Package className="w-3.5 h-3.5" /> Piezas y servicios usados
-                </p>
-                {seleccionada.piezas.length === 0 ? (
-                  <p className="text-[12px] text-muted-foreground mb-2">Todavía no hay piezas registradas.</p>
-                ) : (
-                  <div className="flex flex-col gap-1.5 mb-2">
+              {seleccionada.piezas.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-[12.5px] font-semibold text-foreground mb-2">Piezas y servicios cotizados</p>
+                  <div className="flex flex-col gap-1.5">
                     {seleccionada.piezas.map((p) => (
                       <div key={p.id} className="flex items-center justify-between bg-muted rounded-lg px-2.5 py-1.5 text-[12px]">
                         <span className="text-foreground/90">{p.productName} × {p.quantity}</span>
@@ -268,61 +279,52 @@ export default function TallerClient({ data, labels, tenantSlug }: TallerClientP
                       </div>
                     ))}
                   </div>
-                )}
+                </div>
+              )}
 
-                {seleccionada.estado !== "DELIVERED" && seleccionada.estado !== "CANCELLED" && (
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={piezaProductId}
-                      onChange={(e) => setPiezaProductId(e.target.value)}
-                      className="flex-1 px-2.5 py-1.5 border border-border rounded-lg text-[12px] bg-card focus:outline-none focus:border-primary"
-                    >
-                      <option value="">Selecciona pieza o servicio…</option>
-                      {productos.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ""}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      min={1}
-                      value={piezaCantidad}
-                      onChange={(e) => setPiezaCantidad(e.target.value)}
-                      className="w-14 px-2 py-1.5 border border-border rounded-lg text-[12px] text-center bg-card focus:outline-none focus:border-primary"
-                    />
-                    <button
-                      onClick={() => agregarPieza(seleccionada.id)}
-                      disabled={pending || !piezaProductId}
-                      className="flex items-center gap-1 px-2.5 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12px] font-medium transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Agregar
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Avanzar estatus */}
-              <div className="mt-5">
-                {(SIGUIENTES_ESTADOS[seleccionada.estado] ?? []).length > 0 ? (
+              {/* Historial — incluye las alertas ya enviadas (ver
+                  enviarAlertaTallerAction), para que el técnico vea si ya
+                  levantó esta misma alerta antes. */}
+              {seleccionada.historial.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-[12.5px] font-semibold text-foreground mb-2">Historial</p>
                   <div className="flex flex-col gap-2">
-                    {SIGUIENTES_ESTADOS[seleccionada.estado]!.map((opcion) => (
-                      <button
-                        key={opcion.estado}
-                        onClick={() => avanzar(seleccionada.id, opcion.estado)}
-                        disabled={pending}
-                        className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px] font-medium transition-colors disabled:opacity-50 ${opcion.clases}`}
-                      >
-                        {opcion.texto} <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
+                    {seleccionada.historial.slice(0, 6).map((h, i) => (
+                      <div key={i} className="text-[12px] bg-muted rounded-lg px-2.5 py-1.5">
+                        <p className="text-foreground/90">{h.nota ?? label(labels, `repair.status.${h.estado}`)}</p>
+                        <p className="text-[10.5px] text-muted-foreground">{formatFechaHora(h.fecha)}</p>
+                      </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-[12px] text-muted-foreground bg-muted rounded-lg p-2.5">
-                    {seleccionada.estado === "SHOP_READY" || seleccionada.estado === "SHOP_RETURN"
-                      ? "Esperando cobro/entrega en mostrador — eso lo hace Encargado o Recepción."
-                      : "No hay un siguiente paso disponible desde aquí."}
-                  </p>
-                )}
-              </div>
+                </div>
+              )}
+
+              {/* Alerta a Aduana/Recepción/Tienda (2026-09-22, a petición de
+                  Carlos) — la única acción de escritura que le queda al
+                  técnico sobre esta reparación. Oculta para el Jefe de
+                  técnicos (verTodoTaller): ese puesto es supervisión sobre
+                  folios que no tiene asignados a sí mismo, no le toca
+                  alertar por ellos. */}
+              {!verTodoTaller && seleccionada.estado !== "DELIVERED" && seleccionada.estado !== "CANCELLED" && (
+                <div className="mt-5">
+                  <p className="text-[12.5px] font-semibold text-foreground mb-2">Enviar alerta a Aduana / Recepción / Tienda</p>
+                  <textarea
+                    value={alertaTexto}
+                    onChange={(e) => setAlertaTexto(e.target.value)}
+                    rows={2}
+                    placeholder="Ej. Necesito autorización para cotizar una pieza extra…"
+                    className="w-full px-3 py-2 border border-border rounded-lg text-[12.5px] bg-card focus:outline-none focus:border-primary resize-none"
+                  />
+                  <button
+                    onClick={() => enviarAlerta(seleccionada.id)}
+                    disabled={pending || !alertaTexto.trim()}
+                    className="mt-2 flex items-center gap-1.5 px-3 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12.5px] font-medium transition-colors"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Enviar alerta
+                  </button>
+                  {alertaOk && <p className="text-[11.5px] text-emerald-600 mt-1.5">Alerta enviada.</p>}
+                </div>
+              )}
             </div>
           )}
         </div>

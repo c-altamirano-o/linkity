@@ -4,12 +4,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, ShoppingCart, Barcode, Plus, Minus, X, Check,
-  User, ChevronDown, Building2, AlertTriangle,
+  User, ChevronDown, Building2, AlertTriangle, Printer,
 } from "lucide-react";
 import type { PosData, ProductoPOS } from "@/lib/pos-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearVentaAction, type MetodoPago } from "@/app/actions/pos-actions";
 import { ProductoIcono } from "@/lib/catalogo-iconos";
+import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
 
 interface BranchOption {
   id: string;
@@ -60,6 +61,10 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const [mixtoTransferencia, setMixtoTransferencia] = useState("");
 
   const [ultimaVenta, setUltimaVenta] = useState<{ folio: string; total: number; cambio: number } | null>(null);
+  // Snapshot completo para poder reimprimir el ticket sin depender del
+  // carrito (que ya se vació con limpiarCarrito al momento de mostrar
+  // "última venta") — ver handleCobrar.
+  const [ultimoRecibo, setUltimoRecibo] = useState<ReciboData | null>(null);
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
 
   const stockDe = (p: ProductoPOS) =>
@@ -168,9 +173,27 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     setMixtoEfectivo(""); setMixtoTarjeta(""); setMixtoTransferencia("");
   };
 
+  // Texto de método de pago para el ticket — mismo criterio que las
+  // etiquetas de los botones 2×2 de arriba, sin los emoji.
+  const METODO_PAGO_TEXTO_TICKET: Record<MetodoPago, string> = {
+    efectivo: "Efectivo",
+    tarjeta: "Tarjeta",
+    transferencia: "Transferencia",
+    mixto: "Mixto",
+  };
+
   const handleCobrar = () => {
     if (!puedeCobar || !branchId) return;
     setErrorVenta(null);
+
+    // Snapshot ANTES de limpiarCarrito()/setClienteId(null) — el ticket
+    // necesita los renglones y el cliente tal como estaban al momento de
+    // cobrar, no el carrito ya vacío que queda después.
+    const renglonesTicket = carrito.map((i) => ({ nombre: i.nombre, cantidad: i.cantidad, precioUnitario: i.precio }));
+    const clienteTicket = clienteSeleccionado?.name ?? null;
+    const metodoPagoAlCobrar = metodoPago;
+    const subtotalTicket = subtotal;
+    const ivaTicket = iva;
 
     startTransition(async () => {
       const res = await crearVentaAction({
@@ -185,6 +208,29 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
 
       if (res.ok) {
         setUltimaVenta({ folio: res.folio, total: res.total, cambio: res.cambio });
+
+        // "Es imprescindible que toda venta genere un ticket" (Carlos,
+        // 2026-09-21) — se imprime de una vez, sin esperar a que el usuario
+        // pida un ticket aparte (mismo criterio que ya seguía la recepción
+        // de una reparación, ver abrirTicketImprimible en
+        // ReparacionesClient.tsx). El botón "Reimprimir ticket" de abajo es
+        // el respaldo manual si el navegador bloqueó el pop-up.
+        const recibo: ReciboData = {
+          tipoDocumento: "Venta",
+          folio: res.folio,
+          cliente: clienteTicket,
+          telefono: null,
+          renglones: renglonesTicket,
+          subtotal: subtotalTicket,
+          iva: ivaTicket,
+          total: res.total,
+          metodoPago: METODO_PAGO_TEXTO_TICKET[metodoPagoAlCobrar],
+          montoRecibido: metodoPagoAlCobrar === "efectivo" ? montoNum : null,
+          cambio: res.cambio > 0 ? res.cambio : null,
+        };
+        setUltimoRecibo(recibo);
+        abrirReciboImprimible(recibo, nombreNegocioDeSlug(tenantSlug));
+
         limpiarCarrito();
         setClienteId(null);
         setClienteQuery("");
@@ -195,6 +241,20 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       }
     });
   };
+
+  // Por qué el botón "Cobrar" está deshabilitado ahora mismo, para que el
+  // usuario sepa en qué parte del proceso va (Carlos, 2026-09-21: "hay que
+  // enfatizar cada paso del proceso para que el usuario sepa en qué parte
+  // va") — null cuando ya se puede cobrar.
+  const razonNoPuedeCobrar: string | null = !branchId
+    ? "Selecciona una sucursal para continuar"
+    : carrito.length === 0
+    ? "Agrega al menos un producto o servicio al carrito"
+    : metodoPago === "efectivo" && montoNum < total
+    ? "Escribe cuánto recibiste en \"Monto recibido\" para continuar"
+    : metodoPago === "mixto" && !mixtoOk
+    ? "Completa el desglose de pago hasta cubrir el total"
+    : null;
 
   /* ── Sin sucursales activas: no se puede vender ── */
   if (branches.length === 0) {
@@ -332,10 +392,23 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
 
         {ultimaVenta && (
           <div className="mb-3 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-            <p className="text-xs font-medium text-emerald-700">✓ Venta {ultimaVenta.folio} registrada</p>
-            <p className="text-[12.5px] text-emerald-600">
-              {formatMXN(ultimaVenta.total)}{ultimaVenta.cambio > 0 ? ` · Cambio: ${formatMXN(ultimaVenta.cambio)}` : ""}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-medium text-emerald-700">✓ Venta {ultimaVenta.folio} registrada</p>
+                <p className="text-[12.5px] text-emerald-600">
+                  {formatMXN(ultimaVenta.total)}{ultimaVenta.cambio > 0 ? ` · Cambio: ${formatMXN(ultimaVenta.cambio)}` : ""}
+                </p>
+              </div>
+              {ultimoRecibo && (
+                <button
+                  onClick={() => abrirReciboImprimible(ultimoRecibo, nombreNegocioDeSlug(tenantSlug))}
+                  title="El ticket ya se imprimió solo al cobrar — usa esto si el navegador bloqueó esa ventana"
+                  className="flex items-center gap-1 px-2 py-1.5 bg-card border border-emerald-300 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[11.5px] font-medium flex-shrink-0"
+                >
+                  <Printer className="w-3 h-3" /> Reimprimir ticket
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -380,14 +453,29 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         {metodoPago === "efectivo" && carrito.length > 0 && (
           <div className="mb-3 bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Monto recibido</span>
-              <input
-                type="number"
-                value={montoRecibido}
-                onChange={(e) => setMontoRecibido(e.target.value)}
-                placeholder={formatMXN(total)}
-                className="w-28 text-right px-2 py-1.5 border border-border rounded-lg text-xs font-medium focus:outline-none focus:border-primary bg-card"
-              />
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                Monto recibido <span className="text-primary">— escríbelo para continuar</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                {/* Atajo para el caso más común (pago exacto) — a propósito
+                    ya NO se usa el total como placeholder (Carlos,
+                    2026-09-21: "como ya aparece 'pre llenado' da la
+                    impresión de que ya está hecho"); un botón explícito que
+                    el usuario debe tocar deja claro que es una acción, no un
+                    valor ya capturado. */}
+                <button type="button" onClick={() => setMontoRecibido(String(total))}
+                  className="px-2 py-1.5 border border-primary/30 hover:bg-primary/10 text-primary rounded-lg text-[11.5px] font-medium whitespace-nowrap">
+                  Exacto
+                </button>
+                <input
+                  type="number"
+                  value={montoRecibido}
+                  onChange={(e) => setMontoRecibido(e.target.value)}
+                  placeholder="$0"
+                  autoFocus
+                  className="w-24 text-right px-2 py-1.5 border border-primary/40 rounded-lg text-xs font-medium focus:outline-none focus:border-primary bg-card"
+                />
+              </div>
             </div>
             {montoNum > 0 && (
               <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${
@@ -472,6 +560,9 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             </>
           )}
         </button>
+        {razonNoPuedeCobrar && !isPending && (
+          <p className="text-[11.5px] text-amber-600 text-center mt-1.5">{razonNoPuedeCobrar}</p>
+        )}
       </div>
     </>
   );

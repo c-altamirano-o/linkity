@@ -2,6 +2,7 @@
 
 import { getVentasPorDia, hoyMx, type VentasPorDiaData } from "@/lib/dashboard-data";
 import { resolverActor } from "@/lib/actor";
+import { getTenantPrisma } from "@/lib/prisma";
 
 /**
  * Server Action del selector de fecha del Dashboard ("Ventas por día y
@@ -16,7 +17,14 @@ import { resolverActor } from "@/lib/actor";
  */
 export async function obtenerVentasPorDiaAction(
   tenantSlug: string,
-  fecha: string
+  fecha: string,
+  // "Vista por sucursal" del Dashboard (2026-09-22) — cuando DashboardClient
+  // está filtrado a una sucursal, el selector de fecha debe seguir
+  // reflejando esa misma sucursal al cambiar de día, no el negocio
+  // completo. Se revalida contra la BD (nunca se confía en que el branchId
+  // que manda el cliente de verdad pertenezca a este tenant), mismo
+  // criterio que puedeOperarSucursal en el resto del proyecto.
+  branchId?: string
 ): Promise<{ ok: true; data: VentasPorDiaData } | { ok: false; error: string }> {
   const resuelto = await resolverActor(tenantSlug, "dashboard");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
@@ -32,7 +40,14 @@ export async function obtenerVentasPorDiaAction(
   const fechaFinal = fecha > hoy ? hoy : fecha;
 
   try {
-    const data = await getVentasPorDia(resuelto.tenant.id, fechaFinal);
+    let branchIdValidado: string | undefined;
+    if (branchId) {
+      const db = getTenantPrisma(resuelto.tenant.id);
+      const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true } });
+      branchIdValidado = branch?.id;
+    }
+
+    const data = await getVentasPorDia(resuelto.tenant.id, fechaFinal, branchIdValidado);
     return { ok: true, data };
   } catch (err) {
     console.error("obtenerVentasPorDiaAction", err);

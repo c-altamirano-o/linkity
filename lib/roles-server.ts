@@ -124,7 +124,10 @@ export async function asegurarRolesRubro(tenantId: string, businessType: string 
     const rol = await prisma.role.upsert({
       where: { tenantId_name: { tenantId, name: sugerido.name } },
       update: {},
-      create: { tenantId, name: sugerido.name, description: sugerido.description, isSystem: true },
+      create: {
+        tenantId, name: sugerido.name, description: sugerido.description, isSystem: true,
+        verTodoTaller: sugerido.verTodoTaller ?? false,
+      },
       select: { id: true, _count: { select: { permissions: true } } },
     });
 
@@ -211,12 +214,35 @@ export async function listarRolesTenant(tenantId: string): Promise<RolTenantUI[]
     description: r.description,
     isSystem: r.isSystem,
     modulosPermitidos: modulosPorRol[i],
+    verTodoTaller: r.verTodoTaller,
     cantidadEmpleados: r._count.staff,
   }));
 }
 
-/** Reemplaza por completo el conjunto de módulos permitidos de un rol (borra y vuelve a insertar) — siempre une "dashboard" para evitar un rol sin ningún módulo permitido (ver comentario del archivo). */
-export async function guardarPermisosDeRol(roleId: string, modulos: ModuloKey[]): Promise<void> {
+/**
+ * true si el ROL (por tenant+nombre) tiene marcado "ver todas las
+ * reparaciones asignadas del taller" (Role.verTodoTaller — "Jefe de
+ * técnicos", 2026-09-22 a petición de Carlos). Mismo criterio de resolución
+ * por nombre que modulosPermitidosParaRolPorNombre, porque la sesión de PIN
+ * (lib/staff-auth.ts) solo guarda roleName en su cookie, nunca el roleId.
+ */
+export async function verTodoTallerParaRolPorNombre(tenantId: string, roleName: string | null | undefined): Promise<boolean> {
+  if (!roleName) return false;
+  const role = await prisma.role.findUnique({ where: { tenantId_name: { tenantId, name: roleName } }, select: { verTodoTaller: true } });
+  return role?.verTodoTaller ?? false;
+}
+
+/**
+ * Reemplaza por completo el conjunto de módulos permitidos de un rol (borra
+ * y vuelve a insertar) — siempre une "dashboard" para evitar un rol sin
+ * ningún módulo permitido (ver comentario del archivo). `verTodoTaller`
+ * (2026-09-22, opcional — undefined = no tocar el valor actual) actualiza
+ * Role.verTodoTaller ("Jefe de técnicos" ve todo el taller sin editar, ver
+ * el comentario largo en schema.prisma); si el rol ya no tiene "taller"
+ * entre sus módulos, se fuerza a false — no tiene sentido dejarlo prendido
+ * para un rol que ni siquiera entra a esa pantalla.
+ */
+export async function guardarPermisosDeRol(roleId: string, modulos: ModuloKey[], verTodoTaller?: boolean): Promise<void> {
   const mapaPermisos = await asegurarCatalogoPermisos();
   const conDashboard = new Set<ModuloKey>(modulos);
   // 2026-09-21: misma excepción que modulosPermitidosParaRol (ver ese
@@ -231,6 +257,10 @@ export async function guardarPermisosDeRol(roleId: string, modulos: ModuloKey[])
         .filter((id): id is string => Boolean(id))
         .map((permissionId) => ({ roleId, permissionId })),
       skipDuplicates: true,
+    }),
+    prisma.role.update({
+      where: { id: roleId },
+      data: { verTodoTaller: conDashboard.has("taller") ? (verTodoTaller ?? undefined) : false },
     }),
   ]);
 }

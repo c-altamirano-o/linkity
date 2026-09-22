@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, Download, XCircle, FileText, CheckCircle, Clock, AlertCircle, X, Info } from "lucide-react";
 import type { FacturacionData, FacturaUI, EstadoFactura } from "@/lib/facturacion-data";
 import { label, type LabelDictionary } from "@/lib/labels";
+import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
 import {
   crearFacturaAction,
   timbrarFacturaAction,
@@ -425,7 +426,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
       {modalNueva && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => setModalNueva(false)}
+          onClick={() => { if (confirmarSalirSinGuardar()) setModalNueva(false); }}
         >
           <div
             className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"

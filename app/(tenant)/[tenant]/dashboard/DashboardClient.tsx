@@ -117,19 +117,44 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
+interface SucursalOption {
+  id: string;
+  name: string;
+}
+
 export default function DashboardClient({
   data,
   labels,
   tenantSlug,
   ventasPorDiaInicial,
+  branches,
+  sucursalActualId,
 }: {
   data: DashboardData;
   labels: LabelDictionary;
   tenantSlug: string;
   ventasPorDiaInicial: VentasPorDiaData;
+  // "Vista global" / "vista por sucursal" (2026-09-22, a petición de
+  // Carlos). branches = TODAS las sucursales activas del tenant (para el
+  // selector, sin importar cuál esté filtrada ahora mismo — ver
+  // dashboard/page.tsx). sucursalActualId = null en vista global; el id de
+  // la sucursal cuando está filtrado. page.tsx ya remonta este componente
+  // (key={sucursalActualId}) al cambiar, así que aquí no hace falta
+  // resetear nada a mano.
+  branches: SucursalOption[];
+  sucursalActualId: string | null;
 }) {
   const router = useRouter();
   const t = (key: string) => label(labels, key);
+  const enVistaGlobal = sucursalActualId === null;
+
+  const cambiarVista = (destino: "global" | string) => {
+    if (destino === "global") {
+      router.push(`/${tenantSlug}/dashboard`);
+    } else {
+      router.push(`/${tenantSlug}/dashboard?sucursal=${destino}`);
+    }
+  };
 
   const [modalAbierto, setModalAbierto] = useState<ModalType>(null);
   const [ventasPorDia, setVentasPorDia] = useState<VentasPorDiaData>(ventasPorDiaInicial);
@@ -162,7 +187,7 @@ export default function DashboardClient({
     if (nuevaFecha === fechaSel || cargandoFecha) return;
     setFechaSel(nuevaFecha);
     setCargandoFecha(true);
-    const res = await obtenerVentasPorDiaAction(tenantSlug, nuevaFecha);
+    const res = await obtenerVentasPorDiaAction(tenantSlug, nuevaFecha, sucursalActualId ?? undefined);
     if (res.ok) setVentasPorDia(res.data);
     setCargandoFecha(false);
   };
@@ -425,13 +450,20 @@ export default function DashboardClient({
       : []),
   ];
 
+  // Comparativo "Ventas por sucursal" (vista global, 2026-09-22) — orden de
+  // mayor a menor, mismo criterio visual que el reporte diario que Carlos
+  // compartió como referencia de su sistema anterior.
+  const sucursalesOrdenadas = [...data.sucursales].sort((a, b) => b.ventasDia - a.ventasDia);
+
   return (
     <div className="p-3 sm:p-4 space-y-3 sm:space-y-4 overflow-y-auto h-full">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-base sm:text-lg font-semibold text-foreground">{saludo} 👋</h1>
+          <h1 className="text-base sm:text-lg font-semibold text-foreground">
+            {saludo} 👋{!enVistaGlobal && <span className="text-muted-foreground font-normal"> · {branches.find((b) => b.id === sucursalActualId)?.name ?? "Sucursal"}</span>}
+          </h1>
           <p className="text-xs text-muted-foreground mt-0.5 capitalize">{fechaHoy}</p>
         </div>
         <div className="text-right">
@@ -439,6 +471,48 @@ export default function DashboardClient({
           <p className="text-sm sm:text-base font-bold text-foreground">{formatMXN(data.totalSemana)}</p>
         </div>
       </div>
+
+      {/* ── Vista global / vista por sucursal ────────────────────────────
+          2026-09-22, a petición de Carlos: "en el dashboard de
+          administrador debe contener una vista global y una por tienda".
+          Solo se ofrece cuando el negocio tiene más de una sucursal
+          (data.multiSucursal) — con una sola no hay nada que comparar.
+          Cambiar de vista navega a ?sucursal=<id> (mismo patrón que ya usa
+          Caja) y el servidor recalcula TODO el Dashboard acotado a esa
+          sucursal — no es un filtro de solo apariencia en el cliente. */}
+      {data.multiSucursal && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+            <button
+              onClick={() => cambiarVista("global")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors ${
+                enVistaGlobal ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              Vista global
+            </button>
+            <button
+              onClick={() => cambiarVista(sucursalActualId ?? branches[0]?.id ?? "global")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors ${
+                !enVistaGlobal ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <Building2 className="w-3 h-3" /> Por sucursal
+            </button>
+          </div>
+          {!enVistaGlobal && (
+            <select
+              value={sucursalActualId ?? ""}
+              onChange={(e) => cambiarVista(e.target.value)}
+              className="text-xs border border-border rounded-lg px-2 py-1.5 bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
 
       {/* ── Métricas 5 fichas ─────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3">
@@ -698,8 +772,39 @@ export default function DashboardClient({
         </div>
       </div>
 
+      {/* ── Comparativo de ventas por sucursal (solo vista global) ───────
+          2026-09-22, a petición de Carlos, referencia de su sistema
+          anterior (reporte "AdminDaily") — comparación rápida de quién
+          vendió más hoy, de un vistazo. No aparece en vista por sucursal
+          (no hay nada que comparar viendo una sola). */}
+      {data.multiSucursal && enVistaGlobal && (
+        <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-foreground">Ventas por sucursal</p>
+            <span className="text-xs text-muted-foreground hidden sm:block capitalize">Hoy · {fechaHoy}</span>
+          </div>
+          <ResponsiveContainer width="100%" height={Math.max(120, sucursalesOrdenadas.length * 38)}>
+            <BarChart data={sucursalesOrdenadas} layout="vertical" margin={{ top: 5, right: 30, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+              <YAxis dataKey="nombre" type="category" width={110} tick={{ fontSize: 10.5, fill: "#64748B" }} axisLine={false} tickLine={false} />
+              <Tooltip
+                cursor={{ fill: "var(--muted)" }}
+                contentStyle={{ backgroundColor: "var(--card)", borderColor: "var(--border)", borderRadius: 8, fontSize: 12 }}
+                formatter={(v: any) => [formatMXN(Number(v)), "Venta"]}
+              />
+              <Bar dataKey="ventasDia" radius={[0, 4, 4, 0]} barSize={18}>
+                {sucursalesOrdenadas.map((_, i) => (
+                  <Cell key={i} fill={coloresDisponibles[i % coloresDisponibles.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {/* ── Grid sucursales ─────────────────────────────────────────────── */}
-      {data.multiSucursal && (
+      {data.multiSucursal && enVistaGlobal && (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <div className="flex items-center gap-2">

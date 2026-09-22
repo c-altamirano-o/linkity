@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { MODULE_CATALOG, ALL_MODULE_CODES } from "@/lib/modules-catalog";
 import type { SubscriptionStatus, BillingCycle } from "@prisma/client";
+import { calcularEstadoCiclo, type EtapaCiclo } from "@/lib/ciclo-suscripcion";
 
 /**
  * Capa de datos de la pantalla "Negocios" de Panel Maestro: el listado de
@@ -114,6 +115,11 @@ export interface TenantDetail {
   status: SubscriptionStatus | null;
   endDate: string | null; // ISO
   autoRenew: boolean;
+  // Ciclo de vida de la suscripción (2026-09-22, ver lib/ciclo-suscripcion.ts)
+  // — etapa y días vencida, para mostrarlo en la pantalla de detalle y
+  // decidir si ofrecer el botón de renovar/eliminar.
+  etapaCiclo: EtapaCiclo;
+  diasVencida: number | null;
   esquemaId: string | null;
   esquemaName: string | null;
   esquemaMaxBranches: number | null;
@@ -149,6 +155,8 @@ export async function getTenantDetailData(slug: string): Promise<TenantDetail | 
 
   if (!t) return null;
 
+  const ciclo = calcularEstadoCiclo(t.subscription);
+
   // "Default abierto": un código sin fila en absoluto cuenta como activo;
   // solo una fila con isActive:false lo marca inactivo.
   const inactiveCodes = new Set(t.modules.filter((m) => !m.isActive).map((m) => m.module.code));
@@ -180,6 +188,8 @@ export async function getTenantDetailData(slug: string): Promise<TenantDetail | 
     status: t.subscription?.status ?? null,
     endDate: t.subscription?.endDate ? t.subscription.endDate.toISOString() : null,
     autoRenew: t.subscription?.autoRenew ?? false,
+    etapaCiclo: ciclo.etapa,
+    diasVencida: ciclo.diasVencida,
     esquemaId: t.esquema?.id ?? null,
     esquemaName: t.esquema?.name ?? null,
     esquemaMaxBranches: t.esquema?.maxBranches ?? null,

@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Search, Plus, Check, Clock, ExternalLink, Copy,
+  Search, Plus, Check, Clock,
   Wrench, Package, Stethoscope, Store, ArrowRight,
   Phone, CheckCircle, AlertCircle, ChevronLeft, X,
-  Printer, Trash2, Pencil, MessageCircle, CalendarDays,
+  Printer,
 } from "lucide-react";
 import type {
   ReparacionesData, ReparacionUI, EstadoReparacion, PrioridadReparacion, ProductoParaReparacion,
@@ -14,10 +14,11 @@ import type {
 import { label, type LabelDictionary } from "@/lib/labels";
 import {
   crearReparacionAction, avanzarEstadoAction, marcarWhatsappEnviadoAction, cobrarYEntregarAction,
-  agregarPiezaReparacionAction, eliminarPiezaReparacionAction, actualizarCostoEstimadoAction,
   type NuevoEstadoReparacion, type MetodoPagoReparacion,
 } from "@/app/actions/reparaciones-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp } from "@/lib/paises";
+import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
+import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
 
 // Agrupa el catálogo de "agregar pieza" por tipo — piezas/productos primero,
 // servicios (mano de obra: "quitar cuenta Google", "limpieza general", etc.)
@@ -42,14 +43,6 @@ interface ReparacionesClientProps {
   labels: LabelDictionary;
   branches: BranchOption[];
   tenantSlug: string;
-  // Rol real del actor que abrió esta página (lib/roles.ts) — null para el
-  // dueño/administrador (cuenta de Supabase Auth, sin restricción de vista)
-  // y para Gerente/Técnico. Solo "Cajero" cambia a la vista de mostrador
-  // (VistaTienda): cobrar y entregar equipos ya reparados, sin el tablero
-  // completo de estados que sí necesita un Técnico. Reemplaza al viejo
-  // "simulador de rol" (rolDemo, puramente de UI) ahora que M11 sí tiene
-  // sesiones y roles reales.
-  roleName: string | null;
   // Tenant.phone — a petición de Carlos, 2026-09-21, para que aparezca en el
   // ticket ("el ticket debe venir el teléfono de soporte del taller o del
   // negocio"). Se captura en Configuración → Teléfono de soporte.
@@ -261,62 +254,13 @@ function abrirTicketImprimible(t: TicketData, negocio: string) {
   win.print();
 }
 
-/* ── Botón de acción por estado ── */
-function AccionBtn({
-  estado, onAvanzar, onCobrarClick, pending,
-}: {
-  estado: EstadoReparacion;
-  onAvanzar: (nuevoEstado: NuevoEstadoReparacion) => void;
-  onCobrarClick: () => void;
-  pending: boolean;
-}) {
-  if (estado === "RECEIVED") return (
-    <button disabled={pending} onClick={() => onAvanzar("IN_REPAIR")}
-      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500 hover:bg-purple-600 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors">
-      <Wrench className="w-3 h-3" /> Iniciar reparación
-    </button>
-  );
-  if (estado === "IN_REPAIR") return (
-    <div className="flex gap-2 flex-wrap">
-      <button disabled={pending} onClick={() => onAvanzar("WORKSHOP_READY")}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors">
-        <Check className="w-3 h-3" /> Listo en Taller
-      </button>
-      <button disabled={pending} onClick={() => onAvanzar("WORKSHOP_RETURN")}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors">
-        <ArrowRight className="w-3 h-3" /> Devolución Taller
-      </button>
-    </div>
-  );
-  if (estado === "WORKSHOP_READY" || estado === "WORKSHOP_RETURN") return (
-    <button disabled={pending} onClick={() => onAvanzar(estado === "WORKSHOP_READY" ? "SHOP_READY" : "SHOP_RETURN")}
-      className={`flex items-center gap-1.5 px-3 py-1.5 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
-        estado === "WORKSHOP_READY" ? "bg-cyan-500 hover:bg-cyan-600" : "bg-orange-500 hover:bg-orange-600"
-      }`}>
-      <Store className="w-3 h-3" /> Trasladar a Tienda
-    </button>
-  );
-  // SHOP_READY (reparación exitosa) SIEMPRE pasa por el modal de cobro antes
-  // de entregarse — ver cobrarYEntregarAction. SHOP_RETURN (devolución, no
-  // se pudo reparar) no tiene cargo, así que se entrega directo.
-  if (estado === "SHOP_READY") return (
-    <button disabled={pending} onClick={onCobrarClick}
-      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
-      <Check className="w-3 h-3" /> Cobrar y entregar
-    </button>
-  );
-  if (estado === "SHOP_RETURN") return (
-    <button disabled={pending} onClick={() => onAvanzar("DELIVERED")}
-      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
-      <Check className="w-3 h-3" /> Marcar entregado
-    </button>
-  );
-  return null;
-}
-
-/* ── VISTA TIENDA ── */
+/* ── VISTA TIENDA — única vista de /reparaciones desde 2026-09-22
+   (corrección de Carlos): tienda recibe con folio, ve el detalle de solo
+   lectura (costo, piezas, estatus, técnico asignado) y cobra/entrega — el
+   control de piezas/costo/estatus/técnico vive en /aduana. ── */
 function VistaTienda({
-  reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, pending,
+  reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, pending, onNuevaClick,
+  negocio, telefonoNegocio,
 }: {
   reparaciones: ReparacionUI[];
   labels: LabelDictionary;
@@ -324,6 +268,9 @@ function VistaTienda({
   onWhatsapp: (repairId: string) => void;
   onCobrarClick: (repairId: string, costoEstimado: number | null) => void;
   pending: boolean;
+  onNuevaClick: () => void;
+  negocio: string;
+  telefonoNegocio: string | null;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("Pendientes");
@@ -365,6 +312,12 @@ function VistaTienda({
   return (
     <div className="flex h-full">
       <div className={`${mostrarDetalle ? "hidden md:flex" : "flex"} w-full md:w-72 flex-col bg-card border-r border-border flex-shrink-0`}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <span className="text-sm font-medium text-foreground">{label(labels, "module.repair.name")}</span>
+          <button onClick={onNuevaClick} className="flex items-center gap-1 bg-primary text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg">
+            <Plus className="w-3 h-3" /> Nueva
+          </button>
+        </div>
         <div className="px-3 py-2 border-b border-border">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
@@ -447,6 +400,28 @@ function VistaTienda({
               </div>
             </div>
             <div className="flex gap-2 flex-wrap justify-end">
+              <button
+                onClick={() =>
+                  abrirTicketImprimible(
+                    {
+                      folio: seleccionada.folio,
+                      cliente: seleccionada.cliente,
+                      telefono: seleccionada.telefono,
+                      marca: seleccionada.marca,
+                      modelo: seleccionada.modelo,
+                      falla: seleccionada.falla,
+                      piezas: seleccionada.piezas,
+                      costoEstimado: seleccionada.costoEstimado,
+                      fechaEstimada: seleccionada.fechaEstimada,
+                      telefonoSoporte: telefonoNegocio,
+                    },
+                    negocio
+                  )
+                }
+                title="Reimprimir ticket de recepción"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors">
+                <Printer className="w-3 h-3" /> Ticket
+              </button>
               <button disabled={pending} onClick={() => onWhatsapp(seleccionada.id)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#22c35e] disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors">
                 <Phone className="w-3 h-3" /> Avisar
@@ -489,8 +464,15 @@ function VistaTienda({
               {[
                 { label: activoLabel, value: `${seleccionada.marca} ${seleccionada.modelo}` },
                 { label: "Falla", value: seleccionada.falla },
+                { label: "Sucursal", value: seleccionada.sucursalNombre },
+                { label: "Fecha prometida", value: seleccionada.fechaEstimada ? formatFecha(seleccionada.fechaEstimada) : "Sin definir" },
                 { label: "Costo final", value: seleccionada.costoFinal ? formatMXN(seleccionada.costoFinal) : isDev ? "Sin cargo" : "Por definir", color: isDev ? "text-amber-600" : "text-primary" },
-                { label: "Técnico", value: seleccionada.tecnico },
+                // "Técnico" (seleccionada.tecnico) en realidad es quien REGISTRÓ
+                // la reparación (Repair.userId — encargado/recepción), nunca
+                // el técnico que la trabajó; se relabela para no confundir con
+                // el técnico ASIGNADO real (assignedToStaffId, 2026-09-21).
+                { label: "Recibido por", value: seleccionada.tecnico },
+                { label: "Técnico asignado", value: seleccionada.tecnicoAsignadoNombre ?? "Sin asignar", color: seleccionada.tecnicoAsignadoNombre ? undefined : "text-amber-600" },
               ].map((f) => (
                 <div key={f.label} className="bg-muted rounded-lg p-2.5">
                   <p className="text-[10.5px] text-muted-foreground mb-0.5">{f.label}</p>
@@ -537,496 +519,15 @@ function VistaTienda({
   );
 }
 
-/* ── VISTA ADMIN / TÉCNICO ── */
-function VistaAdmin({
-  reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, pending, onNuevaClick,
-  productos, negocio, telefonoNegocio, tenantSlug, router,
-}: {
-  reparaciones: ReparacionUI[];
-  labels: LabelDictionary;
-  onAvanzar: (repairId: string, nuevoEstado: NuevoEstadoReparacion) => void;
-  onWhatsapp: (repairId: string) => void;
-  onCobrarClick: (repairId: string, costoEstimado: number | null) => void;
-  pending: boolean;
-  onNuevaClick: () => void;
-  productos: ProductoParaReparacion[];
-  negocio: string;
-  telefonoNegocio: string | null;
-  tenantSlug: string;
-  router: ReturnType<typeof useRouter>;
-}) {
-  const [busqueda, setBusqueda] = useState("");
-  const [filtro, setFiltro] = useState("Todas");
-  const [seleccionadaId, setSeleccionadaId] = useState<string | null>(reparaciones[0]?.id ?? null);
-  const [copiado, setCopiado] = useState(false);
-  const [mostrarDetalle, setMostrarDetalle] = useState(false);
-  const activoLabel = label(labels, "entity.repair.asset");
-
-  const [piezaAccion, startPiezaAccion] = useTransition();
-  const [piezaError, setPiezaError] = useState<string | null>(null);
-  const [piezaProductoId, setPiezaProductoId] = useState("");
-  const [piezaCantidad, setPiezaCantidad] = useState("1");
-  const [editandoCosto, setEditandoCosto] = useState(false);
-  const [costoEditado, setCostoEditado] = useState("");
-
-  const agregarPieza = (repairId: string) => {
-    if (!piezaProductoId) return;
-    const cantidad = Math.max(1, parseInt(piezaCantidad, 10) || 1);
-    setPiezaError(null);
-    startPiezaAccion(async () => {
-      const res = await agregarPiezaReparacionAction({ tenantSlug, repairId, productId: piezaProductoId, quantity: cantidad });
-      if (res.ok) {
-        setPiezaProductoId("");
-        setPiezaCantidad("1");
-        router.refresh();
-      } else {
-        setPiezaError(res.error);
-      }
-    });
-  };
-
-  const quitarPieza = (repairId: string, itemId: string) => {
-    setPiezaError(null);
-    startPiezaAccion(async () => {
-      const res = await eliminarPiezaReparacionAction({ tenantSlug, repairId, itemId });
-      if (res.ok) router.refresh();
-      else setPiezaError(res.error);
-    });
-  };
-
-  const guardarCostoEditado = (repairId: string) => {
-    const valor = parseFloat(costoEditado);
-    if (!Number.isFinite(valor) || valor < 0) {
-      setPiezaError("Ingresa un costo válido");
-      return;
-    }
-    setPiezaError(null);
-    startPiezaAccion(async () => {
-      const res = await actualizarCostoEstimadoAction({ tenantSlug, repairId, costoEstimado: valor });
-      if (res.ok) {
-        setEditandoCosto(false);
-        router.refresh();
-      } else {
-        setPiezaError(res.error);
-      }
-    });
-  };
-
-  const filtrosMap: Record<string, EstadoReparacion[]> = {
-    "Todas": [],
-    "Recibidas": ["RECEIVED", "DIAGNOSING", "WAITING_PARTS", "IN_REPAIR"],
-    "En taller": ["WORKSHOP_READY", "WORKSHOP_RETURN"],
-    "En tienda": ["SHOP_READY", "SHOP_RETURN"],
-    "Entregadas": ["DELIVERED"],
-  };
-
-  const filtradas = reparaciones.filter((r) => {
-    const ok1 = filtrosMap[filtro].length === 0 || filtrosMap[filtro].includes(r.estado);
-    const ok2 = r.folio.toLowerCase().includes(busqueda.toLowerCase()) || r.cliente.toLowerCase().includes(busqueda.toLowerCase());
-    return ok1 && ok2;
-  });
-
-  const seleccionada = reparaciones.find((r) => r.id === seleccionadaId) ?? null;
-
-  if (!seleccionada) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
-          <span className="text-sm font-medium text-foreground">{label(labels, "module.repair.name")}</span>
-          <button onClick={onNuevaClick} className="flex items-center gap-1 bg-primary text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg">
-            <Plus className="w-3 h-3" /> Nueva
-          </button>
-        </div>
-        <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-          <Wrench className="w-8 h-8 text-muted-foreground/40 mb-2" />
-          <p className="text-sm font-medium text-foreground mb-1">Sin {label(labels, "entity.repair.plural").toLowerCase()} registradas</p>
-          <p className="text-xs text-muted-foreground">Crea la primera con el botón "Nueva".</p>
-        </div>
-      </div>
-    );
-  }
-
-  const stepIdx = getStepIndex(seleccionada.estado);
-  const devolucion = esDevolucion(seleccionada.estado);
-  const copiarLink = () => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(`linkity.mx/rep/${seleccionada.publicToken}`).catch(() => {});
-    }
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 2000);
-  };
-
-  return (
-    <div className="flex h-full">
-      <div className={`${mostrarDetalle ? "hidden md:flex" : "flex"} w-full md:w-72 flex-col bg-card border-r border-border flex-shrink-0`}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <span className="text-sm font-medium text-foreground">{label(labels, "module.repair.name")}</span>
-          <button onClick={onNuevaClick} className="flex items-center gap-1 bg-primary text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg">
-            <Plus className="w-3 h-3" /> Nueva
-          </button>
-        </div>
-
-        <div className="px-3 py-2 border-b border-border">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-            <input type="text" value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar folio o cliente..."
-              className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
-          </div>
-        </div>
-
-        <div className="flex gap-1 px-3 py-2 border-b border-border overflow-x-auto">
-          {Object.keys(filtrosMap).map((tab) => (
-            <button key={tab} onClick={() => setFiltro(tab)}
-              className={`px-2 py-1 rounded-full text-[11.5px] font-medium whitespace-nowrap transition-colors ${
-                filtro === tab ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"
-              }`}>
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {filtradas.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-xs">Sin resultados</div>
-          ) : filtradas.map((rep) => (
-            <div key={rep.id} onClick={() => { setSeleccionadaId(rep.id); setMostrarDetalle(true); }}
-              className={`px-3 py-3 border-b border-border/60 cursor-pointer transition-all border-l-2 ${
-                seleccionada.id === rep.id ? "bg-primary/5 border-l-primary" : "hover:bg-muted border-l-transparent"
-              }`}>
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11.5px] font-semibold flex-shrink-0 ${ESTADO_BADGE[rep.estado]}`}>
-                  {rep.iniciales}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{rep.folio}</p>
-                  <p className="text-[11.5px] text-muted-foreground truncate">{rep.modelo} · {rep.falla}</p>
-                </div>
-                <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${ESTADO_BADGE[rep.estado]}`}>
-                  {label(labels, `repair.status.${rep.estado}`)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11.5px] text-muted-foreground">{formatFecha(rep.fechaRecibido)}</span>
-                <span className={`text-[11.5px] font-medium ${PRIORIDAD_CONFIG[rep.prioridad].dot}`}>
-                  ● {PRIORIDAD_TEXTO[rep.prioridad]}
-                </span>
-              </div>
-              <div className="h-1 bg-muted rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${esDevolucion(rep.estado) ? "bg-orange-400" : "bg-primary"}`}
-                  style={{ width: `${(getStepIndex(rep.estado) / 4) * 100}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className={`${mostrarDetalle ? "flex" : "hidden md:flex"} flex-1 flex-col bg-muted overflow-hidden`}>
-        <div className="bg-card border-b border-border px-4 sm:px-5 py-3">
-          <button onClick={() => setMostrarDetalle(false)} className="md:hidden flex items-center gap-1 text-primary text-xs font-medium mb-3">
-            <ChevronLeft className="w-4 h-4" /> Volver a la lista
-          </button>
-
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-xs font-semibold flex-shrink-0 ${ESTADO_BADGE[seleccionada.estado]}`}>
-                {seleccionada.iniciales}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  {seleccionada.folio}
-                  <span className="text-xs font-normal text-muted-foreground ml-1 hidden sm:inline">— {seleccionada.marca} {seleccionada.modelo}</span>
-                </p>
-                <p className="text-xs text-muted-foreground truncate max-w-[200px] sm:max-w-none">{seleccionada.cliente} · {seleccionada.telefono ?? "sin teléfono"}</p>
-              </div>
-            </div>
-            <div className="flex gap-1.5 sm:gap-2 items-center flex-wrap justify-end">
-              <button
-                onClick={() =>
-                  abrirTicketImprimible(
-                    {
-                      folio: seleccionada.folio,
-                      cliente: seleccionada.cliente,
-                      telefono: seleccionada.telefono,
-                      marca: seleccionada.marca,
-                      modelo: seleccionada.modelo,
-                      falla: seleccionada.falla,
-                      piezas: seleccionada.piezas,
-                      costoEstimado: seleccionada.costoEstimado,
-                      fechaEstimada: seleccionada.fechaEstimada,
-                      telefonoSoporte: telefonoNegocio,
-                    },
-                    negocio
-                  )
-                }
-                title="Ticket impreso"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors">
-                <Printer className="w-3 h-3" /> Imprimir
-              </button>
-              {/* Ticket digital — a petición de Carlos, 2026-09-21: "poner un
-                  botón que dé la opción para ticket impreso o digital, el
-                  digital se enviará por correo o whatsapp". Solo WhatsApp por
-                  ahora (mismo mecanismo de wa.me con texto precargado que ya
-                  usa Clientes) — correo necesitaría contratar un proveedor de
-                  envío (Resend, etc.), pendiente de que Carlos decida si lo
-                  quiere. */}
-              {seleccionada.telefono && (
-                <a
-                  href={`https://wa.me/${telefonoWhatsapp(seleccionada.telefono, null)}?text=${encodeURIComponent(
-                    textoTicketWhatsapp(
-                      {
-                        folio: seleccionada.folio,
-                        cliente: seleccionada.cliente,
-                        telefono: seleccionada.telefono,
-                        marca: seleccionada.marca,
-                        modelo: seleccionada.modelo,
-                        falla: seleccionada.falla,
-                        piezas: seleccionada.piezas,
-                        costoEstimado: seleccionada.costoEstimado,
-                        fechaEstimada: seleccionada.fechaEstimada,
-                        telefonoSoporte: telefonoNegocio,
-                      },
-                      negocio
-                    )
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => onWhatsapp(seleccionada.id)}
-                  title="Ticket digital por WhatsApp"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors">
-                  <MessageCircle className="w-3 h-3" /> WhatsApp
-                </a>
-              )}
-              <AccionBtn estado={seleccionada.estado} pending={pending}
-                onAvanzar={(nuevo) => onAvanzar(seleccionada.id, nuevo)}
-                onCobrarClick={() => onCobrarClick(seleccionada.id, seleccionada.costoEstimado)} />
-            </div>
-          </div>
-
-          {seleccionada.estado !== "CANCELLED" && (
-            <div className="flex items-center">
-              {flujoSteps.map((step, i) => {
-                const Icon = step.icon;
-                const isDone = i < stepIdx;
-                const isCurrent = i === stepIdx;
-                const isDevStep = devolucion && (isCurrent || isDone) && i >= 1;
-                const stepColor = isDevStep ? "bg-orange-500 border-orange-500" : "bg-primary border-primary";
-                const lineColor = isDevStep ? "bg-orange-400" : "bg-primary";
-                const labelColor = isCurrent ? (devolucion ? "text-orange-500" : "text-primary") : isDone ? "text-primary" : "text-muted-foreground";
-                return (
-                  <div key={step.key} className="flex items-center flex-1 last:flex-none">
-                    <div className="flex flex-col items-center">
-                      <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center border-2 transition-all ${
-                        isDone ? stepColor : isCurrent ? `bg-card ${devolucion ? "border-orange-500" : "border-primary"}` : "bg-card border-border"
-                      }`}>
-                        {isDone ? <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" /> : <Icon className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${isCurrent ? (devolucion ? "text-orange-500" : "text-primary") : "text-muted-foreground/50"}`} />}
-                      </div>
-                      <div className="flex flex-col items-center mt-1">
-                        <span className={`text-[9.5px] sm:text-[10.5px] whitespace-nowrap font-medium ${labelColor}`}>{step.label}</span>
-                        {(step.key === "taller" || step.key === "tienda") && isCurrent && (
-                          <span className={`text-[8.5px] sm:text-[9.5px] font-semibold ${devolucion ? "text-orange-500" : "text-emerald-500"}`}>
-                            {devolucion ? "Dev." : "Listo"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {i < flujoSteps.length - 1 && (
-                      <div className={`flex-1 h-0.5 mx-1 mb-5 transition-all ${i < stepIdx ? lineColor : "bg-border"}`} />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">DETALLES DE {activoLabel.toUpperCase()}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: `Marca / Modelo`, value: `${seleccionada.marca} ${seleccionada.modelo}` },
-                { label: "Falla reportada", value: seleccionada.falla },
-                { label: "Fecha estimada", value: seleccionada.fechaEstimada ? formatFecha(seleccionada.fechaEstimada) : "Sin definir" },
-                { label: "Técnico", value: seleccionada.tecnico },
-                { label: "Prioridad", value: PRIORIDAD_TEXTO[seleccionada.prioridad], badge: PRIORIDAD_CONFIG[seleccionada.prioridad].classes },
-              ].map((f) => (
-                <div key={f.label} className="bg-muted rounded-lg p-2.5">
-                  <p className="text-[10.5px] text-muted-foreground mb-0.5">{f.label}</p>
-                  {f.badge
-                    ? <span className={`text-[11.5px] font-medium px-2 py-0.5 rounded-full ${f.badge}`}>{f.value}</span>
-                    : <p className="text-xs font-medium text-foreground">{f.value}</p>}
-                </div>
-              ))}
-
-              <div className="bg-muted rounded-lg p-2.5 col-span-2">
-                <p className="text-[10.5px] text-muted-foreground mb-0.5">Costo estimado</p>
-                {editandoCosto ? (
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <input type="number" autoFocus value={costoEditado} onChange={(e) => setCostoEditado(e.target.value)}
-                      placeholder="$0"
-                      className="w-24 px-2 py-1 border border-border rounded-md text-xs bg-card focus:outline-none focus:border-primary" />
-                    <button disabled={piezaAccion} onClick={() => guardarCostoEditado(seleccionada.id)}
-                      className="px-2 py-1 bg-primary text-primary-foreground rounded-md text-[12.5px] disabled:opacity-50">
-                      Guardar
-                    </button>
-                    <button onClick={() => setEditandoCosto(false)} className="px-2 py-1 text-[12.5px] text-muted-foreground">
-                      Cancelar
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-medium text-primary">
-                      {seleccionada.costoEstimado ? formatMXN(seleccionada.costoEstimado) : "Por definir"}
-                    </p>
-                    <button
-                      onClick={() => { setEditandoCosto(true); setCostoEditado(seleccionada.costoEstimado != null ? String(seleccionada.costoEstimado) : ""); }}
-                      className="text-muted-foreground hover:text-foreground">
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">PIEZAS Y SERVICIOS</p>
-            {piezaError && <p className="text-[11.5px] text-red-600 mb-2">{piezaError}</p>}
-            {seleccionada.piezas.length === 0 ? (
-              <p className="text-[12.5px] text-muted-foreground mb-2">Sin piezas ni servicios asignados todavía.</p>
-            ) : (
-              <div className="mb-2 divide-y divide-border border border-border rounded-lg">
-                {seleccionada.piezas.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between px-2.5 py-1.5 text-xs">
-                    <span className="flex-1 truncate">{p.productName} × {p.quantity}</span>
-                    <span className="text-muted-foreground mr-2">{formatMXN(p.price * p.quantity)}</span>
-                    <button disabled={piezaAccion} onClick={() => quitarPieza(seleccionada.id, p.id)}
-                      className="text-muted-foreground hover:text-red-600 disabled:opacity-40">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between px-2.5 py-1.5 text-xs font-medium">
-                  <span>Subtotal</span>
-                  <span>{formatMXN(seleccionada.piezas.reduce((s, p) => s + p.price * p.quantity, 0))}</span>
-                </div>
-              </div>
-            )}
-            {seleccionada.estado !== "DELIVERED" && seleccionada.estado !== "CANCELLED" && (
-              <div className="flex gap-1.5">
-                <select value={piezaProductoId} onChange={(e) => setPiezaProductoId(e.target.value)}
-                  className="flex-1 min-w-0 px-2 py-1.5 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary">
-                  <option value="">Selecciona una pieza o servicio…</option>
-                  {(() => {
-                    const { piezas: piezasCat, servicios } = agruparProductosParaSelector(productos);
-                    return (
-                      <>
-                        {piezasCat.length > 0 && (
-                          <optgroup label="Piezas / productos">
-                            {piezasCat.map((p) => (
-                              <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {servicios.length > 0 && (
-                          <optgroup label="Servicios">
-                            {servicios.map((p) => (
-                              <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </>
-                    );
-                  })()}
-                </select>
-                <input type="number" min={1} value={piezaCantidad} onChange={(e) => setPiezaCantidad(e.target.value)}
-                  className="w-12 px-2 py-1.5 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary" />
-                <button disabled={!piezaProductoId || piezaAccion} onClick={() => agregarPieza(seleccionada.id)}
-                  className="px-2.5 py-1.5 bg-muted hover:bg-accent disabled:opacity-40 rounded-lg text-primary">
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">HISTORIAL</p>
-            <div className="space-y-3">
-              {seleccionada.historial.map((h, i) => {
-                const cfg = HISTORIAL_ICONOS[h.estado] || HISTORIAL_ICONOS.RECEIVED;
-                const Icon = cfg.icon;
-                return (
-                  <div key={i} className="flex items-start gap-2.5">
-                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${cfg.bg}`}>
-                      <Icon className={`w-3 h-3 ${cfg.color}`} />
-                    </div>
-                    <div>
-                      <p className="text-xs text-foreground">{h.nota ?? label(labels, `repair.status.${h.estado}`)}</p>
-                      <p className="text-[11.5px] text-muted-foreground">{formatFechaHora(h.fecha)}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="sm:col-span-2 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 bg-[#25D366] rounded-xl flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-xs font-bold">W</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-emerald-700 truncate">
-                  {seleccionada.whatsappSent ? `Mensaje enviado a ${seleccionada.cliente}` : "WhatsApp no enviado aún"}
-                </p>
-              </div>
-              {seleccionada.whatsappSent && (
-                <button disabled={pending} onClick={() => onWhatsapp(seleccionada.id)}
-                  className="px-3 py-1.5 bg-[#25D366] hover:bg-[#22c35e] disabled:opacity-50 text-white text-xs font-medium rounded-lg flex-shrink-0">
-                  Reenviar
-                </button>
-              )}
-            </div>
-            {seleccionada.whatsappSent ? (
-              <>
-                <div className="bg-[#DCF8C6] rounded-lg p-3 text-xs text-slate-800 leading-relaxed mb-2">
-                  Hola {seleccionada.cliente.split(" ")[0]} 👋, tu <strong>{seleccionada.modelo}</strong> está siendo atendido.{" "}
-                  {seleccionada.costoEstimado
-                    ? <>Costo estimado: <strong>{formatMXN(seleccionada.costoEstimado)}</strong>. </>
-                    : ""}
-                  Puedes ver el estado aquí:
-                </div>
-                <div className="flex items-center gap-2 bg-card rounded-lg px-3 py-2 border border-emerald-200">
-                  <ExternalLink className="w-3 h-3 text-primary flex-shrink-0" />
-                  <span className="text-xs text-primary flex-1 truncate">linkity.mx/rep/{seleccionada.publicToken}</span>
-                  <button onClick={copiarLink} className="text-[11.5px] text-muted-foreground hover:text-foreground flex items-center gap-1 flex-shrink-0">
-                    <Copy className="w-3 h-3" /> {copiado ? "¡Copiado!" : "Copiar"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <button disabled={pending} onClick={() => onWhatsapp(seleccionada.id)}
-                className="w-full max-w-xs py-2 bg-[#25D366] hover:bg-[#22c35e] disabled:opacity-50 text-white text-xs font-medium rounded-lg">
-                Enviar notificación WhatsApp
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function ReparacionesClient({ data, labels, branches, tenantSlug, roleName, telefonoNegocio }: ReparacionesClientProps) {
+/* ── (VistaAdmin fue eliminada el 2026-09-22, corrección de Carlos: el
+   control de piezas/costo/estatus/técnico ya no vive en /reparaciones para
+   NINGÚN rol — se movió por completo a /aduana, ver AduanaClient.tsx. Esta
+   pantalla ahora es SIEMPRE la vista de tienda: recibir con folio, ver el
+   detalle de solo lectura, y cobrar/entregar/avisar.) ── */
+export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio }: ReparacionesClientProps) {
   const { reparaciones, clientes, productos } = data;
   const router = useRouter();
   const negocio = nombreNegocio(tenantSlug);
-
-  // Cajero ve el mostrador (cobrar/entregar); todos los demás (dueño,
-  // Gerente, Técnico) ven el tablero completo — ver el comentario en
-  // ReparacionesClientProps.
-  const vistaTienda = roleName === "Cajero";
   const [pendingAccion, startAccion] = useTransition();
   const [accionError, setAccionError] = useState<string | null>(null);
 
@@ -1110,14 +611,34 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     setCobroError(null);
   };
 
+  const METODO_PAGO_REPARACION_TEXTO: Record<MetodoPagoReparacion, string> = {
+    EFECTIVO: "Efectivo", TARJETA: "Tarjeta", TRANSFERENCIA: "Transferencia",
+  };
+
   const handleCobrarYEntregar = () => {
-    if (!cobroRepairId) return;
+    if (!cobroRepairId || !reparacionCobro) return;
     const valor = parseFloat(cobroMonto);
     if (!Number.isFinite(valor) || valor < 0) {
       setCobroError("Ingresa un monto válido");
       return;
     }
     setCobroError(null);
+
+    // Snapshot antes de cerrar el modal — igual que en POSClient, el ticket
+    // necesita estos datos tal como estaban al momento de cobrar.
+    const reciboBase: ReciboData = {
+      tipoDocumento: "Reparación",
+      folio: reparacionCobro.folio,
+      cliente: reparacionCobro.cliente,
+      telefono: reparacionCobro.telefono,
+      renglones: reparacionCobro.piezas.map((p) => ({ nombre: p.productName, cantidad: p.quantity, precioUnitario: p.price })),
+      subtotal: valor,
+      iva: 0,
+      total: valor,
+      metodoPago: METODO_PAGO_REPARACION_TEXTO[cobroMetodo],
+      notaPie: `${reparacionCobro.marca} ${reparacionCobro.modelo}`.trim(),
+    };
+
     startCobrar(async () => {
       const res = await cobrarYEntregarAction({
         tenantSlug,
@@ -1132,6 +653,12 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
         if (res.sinCajaAbierta) {
           setAccionError("Cobro registrado, pero no hay una caja abierta en esta sucursal — no se reflejó en el efectivo esperado de Caja.");
         }
+        // "Al cobrar en el punto de venta, solo guarda la venta, no genera
+        // un ticket... ya sea de una reparación, articulo o servicio"
+        // (Carlos, 2026-09-21) — el cobro final de una reparación entregada
+        // es exactamente ese caso, antes solo quedaba el ticket de
+        // RECEPCIÓN (con el costo estimado), nunca uno del pago real.
+        abrirReciboImprimible(reciboBase, nombreNegocioDeSlug(tenantSlug));
       } else {
         setCobroError(res.error);
       }
@@ -1216,16 +743,13 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
       )}
 
       <div className="flex-1 overflow-hidden">
-        {vistaTienda ? (
-          <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={abrirModalCobro} pending={pendingAccion} />
-        ) : (
-          <VistaAdmin reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={abrirModalCobro} pending={pendingAccion} onNuevaClick={() => setModalNuevaAbierto(true)}
-            productos={productos} negocio={negocio} telefonoNegocio={telefonoNegocio} tenantSlug={tenantSlug} router={router} />
-        )}
+        <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={abrirModalCobro} pending={pendingAccion}
+          onNuevaClick={() => setModalNuevaAbierto(true)} negocio={negocio} telefonoNegocio={telefonoNegocio} />
       </div>
 
       {modalNuevaAbierto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setModalNuevaAbierto(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={() => { if (confirmarSalirSinGuardar()) setModalNuevaAbierto(false); }}>
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-medium text-foreground">Nueva {label(labels, "entity.repair.singular").toLowerCase()}</span>
@@ -1295,6 +819,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                   </select>
                 </div>
               )}
+
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -1414,7 +939,8 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
       )}
 
       {reparacionCobro && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setCobroRepairId(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={() => { if (confirmarSalirSinGuardar()) setCobroRepairId(null); }}>
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-medium text-foreground">Cobrar y entregar</span>

@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import type { BillingCycle, SubscriptionStatus } from "@prisma/client";
+import { calcularEstadoCiclo, type EtapaCiclo } from "@/lib/ciclo-suscripcion";
 
 /**
  * Capa de datos de la pantalla "Suscripciones" de Panel Maestro (menú que
@@ -34,6 +35,8 @@ export interface SuscripcionRow {
   autoRenew: boolean;
   diasRestantes: number | null; // negativo = días de vencida; null = sin fecha de vigencia
   urgencia: Urgencia;
+  // Ciclo de vida de suscripción vencida (2026-09-22, ver lib/ciclo-suscripcion.ts)
+  etapaCiclo: EtapaCiclo;
 }
 
 export interface SuscripcionesResumen {
@@ -44,6 +47,10 @@ export interface SuscripcionesResumen {
   suspendidas: number;
   canceladas: number;
   mrr: number;
+  // 2026-09-22: negocios que llevan 90+ días bloqueados sin responder — ver
+  // lib/ciclo-suscripcion.ts. Se muestra como alerta en Panel Maestro para
+  // que Carlos decida a mano si los borra (nunca automático).
+  listosParaEliminar: number;
 }
 
 export interface SuscripcionesData {
@@ -122,6 +129,7 @@ export async function getSuscripcionesData(): Promise<SuscripcionesData> {
       autoRenew: s?.autoRenew ?? false,
       diasRestantes,
       urgencia,
+      etapaCiclo: calcularEstadoCiclo(s, now).etapa,
     };
   });
 
@@ -147,6 +155,7 @@ export async function getSuscripcionesData(): Promise<SuscripcionesData> {
         return sum + equivalenteMensual(Number(t.subscription.price), t.subscription.billingCycle);
       }, 0)
     ),
+    listosParaEliminar: rows.filter((r) => r.etapaCiclo === "lista_para_eliminar").length,
   };
 
   return { rows, resumen };

@@ -10,6 +10,8 @@ import type { ModuloKey } from "@/lib/roles";
 import { modulosPermitidosParaRolPorNombre } from "@/lib/roles-server";
 import { getTenantLabels } from "@/lib/labels-server";
 import type { LabelDictionary } from "@/lib/labels";
+import { calcularEstadoCiclo } from "@/lib/ciclo-suscripcion";
+import CuentaBloqueada from "@/components/tenant/CuentaBloqueada";
 
 export const metadata: Metadata = {
   title: "Linkity",
@@ -91,8 +93,23 @@ export default async function TenantLayout({
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
-    select: { id: true, themePreset: true, businessType: true, logo: true },
+    select: { id: true, themePreset: true, businessType: true, logo: true, subscription: { select: { status: true, endDate: true } } },
   });
+
+  // Bloqueo por ciclo de vida de suscripción (2026-09-22, a petición de
+  // Carlos — ver el comentario largo en lib/ciclo-suscripcion.ts). Se
+  // revisa aquí, ANTES de armar el menú/labels/tema (ahorra ese trabajo
+  // si de todos modos no se va a mostrar), y se renderiza directo la
+  // pantalla de bloqueo EN VEZ de TenantShell — no tiene caso mostrar un
+  // menú completo de módulos que de todos modos van a rechazar cualquier
+  // acción (ver el mismo chequeo en lib/actor.ts). resolverActor cubre los
+  // Server Actions; esto cubre la renderización de cualquier página.
+  if (dbTenant) {
+    const cicloSuscripcion = calcularEstadoCiclo(dbTenant.subscription);
+    if (cicloSuscripcion.bloqueada) {
+      return <CuentaBloqueada etapa={cicloSuscripcion.etapa} tenantSlug={tenant} />;
+    }
+  }
 
   if (dbTenant?.themePreset) {
     activePreset = THEME_PRESETS[dbTenant.themePreset as keyof typeof THEME_PRESETS] || THEME_PRESETS.NEUTRAL_TECH;

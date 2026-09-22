@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getTenantPrisma } from "@/lib/prisma";
+import { prisma, getTenantPrisma } from "@/lib/prisma";
 
 /**
  * Capa de datos reales del módulo Reparaciones (M9). Sigue la misma
@@ -59,6 +59,21 @@ export interface ReparacionUI {
   fechaEstimada: string | null; // ISO
   fechaEntregado: string | null; // ISO
   tecnico: string;
+  // Técnico ASIGNADO para trabajar esta reparación — distinto de `tecnico`
+  // (arriba), que en realidad es quien la REGISTRÓ (Repair.userId), casi
+  // siempre el encargado de sucursal/recepcionista, nunca el técnico mismo
+  // (ver el comentario largo de Repair.assignedToStaffId). Null = todavía
+  // sin asignar, así que no aparece en la vista de ningún técnico en
+  // /taller (2026-09-21, a petición de Carlos).
+  tecnicoAsignadoId: string | null;
+  tecnicoAsignadoNombre: string | null;
+  // Nombre (y código/sigla si el admin ya lo definió) de la sucursal donde
+  // se recibió el equipo — 2026-09-22, a petición de Carlos: el técnico
+  // debe poder ver "sucursal" (folio de dónde viene el equipo) aunque
+  // trabaje en el taller central, y tienda debe ver la sucursal en el
+  // detalle igual que ve la fecha prometida. Ver Branch.code (schema.prisma).
+  sucursalNombre: string;
+  sucursalCodigo: string | null;
   whatsappSent: boolean;
   publicToken: string;
   historial: HistorialItem[];
@@ -69,6 +84,19 @@ export interface ClienteOption {
   id: string;
   name: string;
   phone: string | null;
+}
+
+// Técnicos disponibles para asignar en la recepción de una reparación
+// (2026-09-21, a petición de Carlos) — cualquier Staff activo cuyo rol
+// incluya el módulo "taller" (ver lib/roles.ts), sin importar el nombre que
+// el negocio le haya puesto a ese rol ("Técnico", "Mecánico", etc.). Se
+// manda con su branchId para que el selector de la UI solo ofrezca los
+// técnicos de la sucursal que se está eligiendo en el formulario — "el
+// taller se concentra en un solo lugar" (Carlos).
+export interface TecnicoOption {
+  id: string;
+  name: string;
+  branchId: string;
 }
 
 // Catálogo simplificado para el selector de "agregar pieza" — se manda
@@ -88,6 +116,7 @@ export interface ReparacionesData {
   reparaciones: ReparacionUI[];
   clientes: ClienteOption[];
   productos: ProductoParaReparacion[];
+  tecnicos: TecnicoOption[];
 }
 
 function iniciales(nombre: string): string {
@@ -103,12 +132,27 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
   // branchIdFiltro (2026-09-21, a petición de Carlos): mismo criterio que
   // getCitasData — un empleado de PIN solo ve las reparaciones de SU
   // sucursal; clientes y catálogo de productos se quedan tenant-wide.
-  const [repairsRaw, customersRaw, productsRaw] = await Promise.all([
+  // Técnicos asignables (2026-09-21): cualquier Staff activo cuyo Role
+  // incluya el permiso "taller" — se resuelve UNA vez aquí (no por cada
+  // reparación) vía RolePermission, mismo criterio que
+  // modulosPermitidosParaRol (lib/roles-server.ts) pero a la inversa
+  // (¿qué roles tienen este módulo?, no ¿qué módulos tiene este rol?).
+  const permisoTaller = await prisma.permission.findUnique({
+    where: { module_action: { module: "taller", action: "acceso" } },
+    select: { id: true },
+  });
+  const roleIdsConTaller = permisoTaller
+    ? (await prisma.rolePermission.findMany({ where: { permissionId: permisoTaller.id }, select: { roleId: true } })).map((r) => r.roleId)
+    : [];
+
+  const [repairsRaw, customersRaw, productsRaw, tecnicosRaw] = await Promise.all([
     db.repair.findMany({
       where: branchIdFiltro ? { branchId: branchIdFiltro } : undefined,
       include: {
         customer: { select: { id: true, name: true, phone: true } },
         user: { select: { name: true } },
+        assignedTo: { select: { id: true, name: true } },
+        branch: { select: { name: true, code: true } },
         history: { orderBy: { createdAt: "desc" } },
         items: { include: { product: { select: { name: true } } } },
       },
@@ -123,6 +167,13 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
       orderBy: { name: "asc" },
       select: { id: true, name: true, sku: true, type: true, price: true },
     }),
+    roleIdsConTaller.length > 0
+      ? db.staff.findMany({
+          where: { roleId: { in: roleIdsConTaller }, isActive: true },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, branchId: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const reparaciones: ReparacionUI[] = repairsRaw.map((r) => ({
@@ -144,6 +195,10 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
     fechaEstimada: r.estimatedAt ? r.estimatedAt.toISOString() : null,
     fechaEntregado: r.deliveredAt ? r.deliveredAt.toISOString() : null,
     tecnico: r.user.name,
+    tecnicoAsignadoId: r.assignedToStaffId,
+    tecnicoAsignadoNombre: r.assignedTo?.name ?? null,
+    sucursalNombre: r.branch.name,
+    sucursalCodigo: r.branch.code,
     whatsappSent: r.whatsappSent,
     publicToken: r.publicToken,
     historial: r.history.map((h) => ({
@@ -170,5 +225,7 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
     price: Number(p.price),
   }));
 
-  return { reparaciones, clientes, productos };
+  const tecnicos: TecnicoOption[] = tecnicosRaw.map((s) => ({ id: s.id, name: s.name, branchId: s.branchId }));
+
+  return { reparaciones, clientes, productos, tecnicos };
 }

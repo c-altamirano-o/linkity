@@ -47,20 +47,30 @@
  *      los rubros de taller (reparación de celulares, autos, motos,
  *      electrodomésticos, relojería, zapatería, etc. — ver
  *      lib/modules-catalog.ts) esto es a propósito "taller" y NO
- *      "reparaciones": el especialista (técnico/mecánico/relojero/etc.)
- *      puede diagnosticar, agregar piezas y avanzar el estatus, pero el
- *      sistema le bloquea eliminar piezas, cambiar el costo, cobrar/entregar
- *      y contactar al cliente — eso queda para el puesto de mando o
- *      Recepción (2026-09-21, a petición de Carlos, tras encontrar el hueco
- *      real en el demo de reparación de celulares: un técnico con acceso
- *      total podía quitar una pieza que sí reparó, cobrar completo por
- *      fuera y quedarse con la diferencia). Ver el comentario de "taller" en
- *      lib/roles.ts para el porqué de la ruta/módulo aparte en vez de un
- *      permiso fino dentro del mismo "reparaciones".
- *   3. Un puesto de "Recepción" (cobra, agenda, recibe) con Punto de
- *      Venta + Caja + Clientes + Citas/Reparaciones — pero SIN Expediente
- *      Clínico: quien solo cobra no tiene por qué ver datos clínicos del
- *      paciente (NOM-004), mismo criterio que ya regía en MATRIZ_ACCESO_BASE.
+ *      "reparaciones": el especialista (técnico/mecánico/relojero/etc.) ve
+ *      SOLO el folio que tiene asignado y puede alertar a Recepción/Aduana
+ *      si necesita información o una cotización, pero YA NO puede agregar
+ *      piezas, cambiar el costo ni avanzar el estatus él mismo (2026-09-22,
+ *      corregido a petición de Carlos con el ejemplo hipotético "Fix
+ *      Expres" — antes sí podía, y eso seguía sin resolver el hueco real:
+ *      un técnico con edición de piezas/costo podía quitar una que sí
+ *      reparó, cobrar completo por fuera y quedarse con la diferencia). Ver
+ *      el comentario de "taller"/"aduana" en lib/roles.ts.
+ *   2.b Un puesto de "Recepción/Aduana" (permiso "aduana") — SOLO en los
+ *      rubros de taller, donde el trabajo técnico ocurre en una ubicación
+ *      centralizada separada de cada punto de venta ("Fix Expres": 5
+ *      tiendas + 1 taller central con recepción/aduana). Es quien asigna
+ *      el técnico a cada equipo, cambia su estatus y ajusta costo/piezas —
+ *      "eso no lo hacen desde tienda". Y, cuando el rubro lo amerita (más
+ *      de un técnico), un "Jefe de técnicos" con el mismo módulo "taller"
+ *      pero verTodoTaller:true — ve TODOS los folios del taller, sin poder
+ *      editar nada ("ve todos los folios, pero sin editar").
+ *   3. Un puesto de "Recepción"/"Encargado de sucursal" (cobra, agenda,
+ *      recibe, da de alta el folio) con Punto de Venta + Caja + Clientes +
+ *      Citas/Reparaciones — pero SIN Expediente Clínico (quien solo cobra
+ *      no tiene por qué ver datos clínicos del paciente, NOM-004) y, para
+ *      los rubros de taller, SIN control de costo/piezas/estatus/técnico
+ *      (eso es del puesto de Recepción/Aduana del punto 2.b, no de tienda).
  *
  * Son solo el PUNTO DE PARTIDA — el admin sigue pudiendo editar, agregar o
  * quitar módulos de cualquiera de estos roles desde "Roles y permisos" en
@@ -78,6 +88,12 @@ export interface RolSugeridoRubro {
   name: string;
   description: string;
   modulos: ModuloKey[];
+  // Solo tiene efecto cuando modulos incluye "taller" — ver el comentario
+  // largo junto a Role.verTodoTaller (schema.prisma). Usado por el puesto
+  // "Jefe de técnicos"/"Jefe de taller" de los rubros de taller (2026-09-22,
+  // a petición de Carlos, ejemplo "Fix Expres": "Ve todos los folios, pero
+  // sin editar").
+  verTodoTaller?: boolean;
 }
 
 export const ROLES_SUGERIDOS_RUBRO: Record<string, RolSugeridoRubro[]> = {
@@ -134,59 +150,64 @@ export const ROLES_SUGERIDOS_RUBRO: Record<string, RolSugeridoRubro[]> = {
     { name: "Almacenista", description: "Controla inventario y compras, con acceso al catálogo.", modulos: ["inventario", "compras", "catalogo"] },
   ],
   reparacion_celulares: [
-    { name: "Encargado de sucursal", description: "Reparaciones, clientes, catálogo, inventario, compras, caja y reportes de la sucursal.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Técnico reparador", description: "Sus órdenes de reparación, ficha de clientes, catálogo de servicios e inventario de refacciones.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
-    { name: "Recepcionista", description: "Recibe equipos, da seguimiento a reparaciones y cobra en Punto de Venta y Caja.", modulos: ["pos", "reparaciones", "clientes", "caja"] },
+    { name: "Encargado de sucursal", description: "Recibe equipos con folio, clientes, catálogo, inventario, compras, caja y reportes de la sucursal — cobra y entrega cuando el taller lo marca listo.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Recepción/Aduana", description: "Asigna técnico, cambia el estatus del equipo y ajusta costo/piezas cotizadas — control exclusivo del taller central.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Jefe de técnicos", description: "Ve todas las reparaciones asignadas del taller, sin poder editarlas.", modulos: ["taller", "clientes", "catalogo", "inventario"], verTodoTaller: true },
+    { name: "Técnico reparador", description: "Ve solo sus propias reparaciones asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
   ],
   taller_autos: [
-    { name: "Jefe de taller", description: "Reparaciones, clientes, catálogo, inventario, compras, caja y reportes del taller.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Mecánico", description: "Sus órdenes de reparación, ficha de clientes, catálogo de servicios e inventario de refacciones.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
-    { name: "Asesor de servicio", description: "Recibe el vehículo, cotiza y da seguimiento a la reparación, cobra en Punto de Venta y Caja.", modulos: ["reparaciones", "clientes", "pos", "caja"] },
-    { name: "Recepción", description: "Recibe vehículos, da seguimiento a reparaciones y cobra en Punto de Venta y Caja.", modulos: ["pos", "reparaciones", "clientes", "caja"] },
+    { name: "Jefe de taller", description: "Recibe vehículos con folio, clientes, catálogo, inventario, compras, caja y reportes del taller — cobra y entrega cuando queda listo.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Asesor de servicio", description: "Asigna mecánico, cambia el estatus de la reparación y ajusta costo/refacciones cotizadas.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Jefe de mecánicos", description: "Ve todas las órdenes de reparación asignadas del taller, sin poder editarlas.", modulos: ["taller", "clientes", "catalogo", "inventario"], verTodoTaller: true },
+    { name: "Mecánico", description: "Ve solo sus propias órdenes de reparación asignadas (sin datos de contacto del cliente) y puede alertar al Asesor de servicio.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
   ],
   taller_motos: [
-    { name: "Jefe de taller", description: "Reparaciones, clientes, catálogo, inventario, compras, caja y reportes del taller.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Mecánico", description: "Sus órdenes de reparación, ficha de clientes, catálogo de servicios e inventario de refacciones.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
-    { name: "Recepción", description: "Recibe motos, da seguimiento a reparaciones y cobra en Punto de Venta y Caja.", modulos: ["pos", "reparaciones", "clientes", "caja"] },
+    { name: "Jefe de taller", description: "Recibe motos con folio, clientes, catálogo, inventario, compras, caja y reportes del taller — cobra y entrega cuando queda lista.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Recepción", description: "Asigna mecánico, cambia el estatus de la reparación y ajusta costo/refacciones cotizadas.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Mecánico", description: "Ve solo sus propias órdenes de reparación asignadas (sin datos de contacto del cliente) y puede alertar a Recepción.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
   ],
   electrodomesticos: [
-    { name: "Encargado de sucursal", description: "Reparaciones, clientes, catálogo, inventario, compras, caja y reportes de la sucursal.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Técnico reparador", description: "Sus órdenes de reparación, ficha de clientes, catálogo de servicios e inventario de refacciones.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
-    { name: "Recepcionista", description: "Recibe equipos, da seguimiento a reparaciones y cobra en Punto de Venta y Caja.", modulos: ["pos", "reparaciones", "clientes", "caja"] },
+    { name: "Encargado de sucursal", description: "Recibe equipos con folio, clientes, catálogo, inventario, compras, caja y reportes de la sucursal — cobra y entrega cuando el taller lo marca listo.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Recepcionista/Aduana", description: "Asigna técnico, cambia el estatus del equipo y ajusta costo/piezas cotizadas.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Técnico reparador", description: "Ve solo sus propias reparaciones asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
   ],
   computadoras: [
-    { name: "Encargado de sucursal", description: "Reparaciones, clientes, catálogo, inventario, compras, caja y reportes de la sucursal.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Técnico reparador", description: "Sus órdenes de reparación, ficha de clientes, catálogo de servicios e inventario de refacciones.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
-    { name: "Recepcionista", description: "Recibe equipos, da seguimiento a reparaciones y cobra en Punto de Venta y Caja.", modulos: ["pos", "reparaciones", "clientes", "caja"] },
+    { name: "Encargado de sucursal", description: "Recibe equipos con folio, clientes, catálogo, inventario, compras, caja y reportes de la sucursal — cobra y entrega cuando el taller lo marca listo.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Recepcionista/Aduana", description: "Asigna técnico, cambia el estatus del equipo y ajusta costo/piezas cotizadas.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Técnico reparador", description: "Ve solo sus propias reparaciones asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
   ],
   relojeria_joyeria: [
-    { name: "Encargado de tienda", description: "Reparaciones, ventas, clientes, catálogo, inventario, compras, caja y reportes de la tienda.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Relojero/Joyero", description: "Sus órdenes de reparación/ajuste, ficha de clientes, catálogo e inventario de piezas.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
+    { name: "Encargado de tienda", description: "Recibe piezas con folio, ventas, clientes, catálogo, inventario, compras, caja y reportes de la tienda.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Recepción/Aduana", description: "Asigna relojero/joyero, cambia el estatus del ajuste/reparación y ajusta costo/piezas cotizadas.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Relojero/Joyero", description: "Ve solo sus propias órdenes de reparación/ajuste asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
     { name: "Vendedor", description: "Vende en Punto de Venta, ve el catálogo y la ficha de sus clientes.", modulos: ["pos", "clientes", "catalogo"] },
   ],
   zapateria: [
-    { name: "Encargado de tienda", description: "Reparaciones, ventas, clientes, catálogo, inventario, compras, caja y reportes de la tienda.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Zapatero remendón", description: "Sus órdenes de reparación, ficha de clientes, catálogo e inventario de materiales.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
+    { name: "Encargado de tienda", description: "Recibe calzado con folio, ventas, clientes, catálogo, inventario, compras, caja y reportes de la tienda.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Recepción/Aduana", description: "Asigna zapatero, cambia el estatus de la reparación y ajusta costo/materiales cotizados.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Zapatero remendón", description: "Ve solo sus propias órdenes de reparación asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
     { name: "Vendedor", description: "Vende en Punto de Venta, ve el catálogo y la ficha de sus clientes.", modulos: ["pos", "clientes", "catalogo"] },
   ],
   refrigeracion_ac: [
-    { name: "Encargado de sucursal", description: "Reparaciones/instalaciones, clientes, catálogo, inventario, compras, caja y reportes de la sucursal.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Técnico instalador", description: "Sus órdenes de servicio, ficha de clientes, catálogo de servicios e inventario de refacciones.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
-    { name: "Recepcionista", description: "Recibe solicitudes de servicio, da seguimiento y cobra en Punto de Venta y Caja.", modulos: ["pos", "reparaciones", "clientes", "caja"] },
+    { name: "Encargado de sucursal", description: "Recibe solicitudes de servicio con folio, clientes, catálogo, inventario, compras, caja y reportes de la sucursal.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Recepcionista/Aduana", description: "Asigna técnico instalador, cambia el estatus del servicio y ajusta costo/refacciones cotizadas.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Técnico instalador", description: "Ve solo sus propias órdenes de servicio asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
   ],
   bicicletas: [
-    { name: "Encargado de tienda", description: "Reparaciones, ventas, clientes, catálogo, inventario, compras, caja y reportes de la tienda.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Mecánico de bicicletas", description: "Sus órdenes de reparación, ficha de clientes, catálogo e inventario de refacciones.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
+    { name: "Encargado de tienda", description: "Recibe bicicletas con folio, ventas, clientes, catálogo, inventario, compras, caja y reportes de la tienda.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Recepción/Aduana", description: "Asigna mecánico, cambia el estatus de la reparación y ajusta costo/refacciones cotizadas.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Mecánico de bicicletas", description: "Ve solo sus propias órdenes de reparación asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
     { name: "Vendedor", description: "Vende en Punto de Venta, ve el catálogo y la ficha de sus clientes.", modulos: ["pos", "clientes", "catalogo"] },
   ],
   cerrajeria: [
-    { name: "Encargado de sucursal", description: "Reparaciones/servicios, clientes, catálogo, inventario, compras, caja y reportes de la sucursal.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Cerrajero", description: "Sus órdenes de servicio, ficha de clientes, catálogo de servicios e inventario de piezas.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
-    { name: "Recepcionista", description: "Recibe solicitudes de servicio, da seguimiento y cobra en Punto de Venta y Caja.", modulos: ["pos", "reparaciones", "clientes", "caja"] },
+    { name: "Encargado de sucursal", description: "Recibe solicitudes de servicio con folio, clientes, catálogo, inventario, compras, caja y reportes de la sucursal.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Recepcionista/Aduana", description: "Asigna cerrajero, cambia el estatus del servicio y ajusta costo/piezas cotizadas.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Cerrajero", description: "Ve solo sus propias órdenes de servicio asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
   ],
   tapiceria: [
-    { name: "Encargado de taller", description: "Reparaciones, ventas, clientes, catálogo, inventario, compras, caja y reportes del taller.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    { name: "Tapicero", description: "Sus órdenes de trabajo, ficha de clientes, catálogo e inventario de materiales.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
+    { name: "Encargado de taller", description: "Recibe piezas con folio, ventas, clientes, catálogo, inventario, compras, caja y reportes del taller.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    { name: "Recepción/Aduana", description: "Asigna tapicero, cambia el estatus del trabajo y ajusta costo/materiales cotizados.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
+    { name: "Tapicero", description: "Ve solo sus propias órdenes de trabajo asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
     { name: "Vendedor", description: "Vende en Punto de Venta, ve el catálogo y la ficha de sus clientes.", modulos: ["pos", "clientes", "catalogo"] },
   ],
 };

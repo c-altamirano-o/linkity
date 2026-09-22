@@ -3,13 +3,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   LayoutDashboard, Building2, Puzzle, CreditCard, Layers,
-  Users, Ticket, BarChart3, Settings, LogOut, Link as LinkIcon, ShieldAlert
+  Users, Ticket, BarChart3, Settings, Link as LinkIcon, ShieldAlert
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/maestro-auth";
 import { prisma } from "@/lib/prisma";
 import { getSuscripcionesData } from "@/lib/suscripciones-data";
 import { getTicketsAbiertosCount } from "@/lib/maestro-soporte-data";
+import { CerrarSesionMaestro } from "@/components/maestro/CerrarSesionMaestro";
 
 export const metadata: Metadata = {
   title: "Panel Maestro — Linkity",
@@ -156,10 +157,7 @@ export default async function MaestroLayout({
 
         {/* Footer */}
         <div className="border-t border-white/8 p-2">
-          <button className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-md text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors text-[12.5px]">
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Cerrar sesión</span>
-          </button>
+          <CerrarSesionMaestro />
         </div>
       </aside>
 

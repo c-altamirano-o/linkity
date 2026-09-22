@@ -7,6 +7,7 @@ import { MODULE_CATALOG } from "@/lib/modules-catalog";
 import {
   listarRolesTenantAction, crearRolAction, actualizarRolAction, eliminarRolAction,
 } from "@/app/actions/roles-tenant-actions";
+import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
 
 /**
  * "Roles y permisos" (2026-09-17) — editor de los roles/puestos de este
@@ -23,11 +24,17 @@ import {
  * "configuracion" tampoco se ofrecen: son de acceso exclusivo del dueño con
  * cuenta real, nunca de un empleado con PIN — mismo criterio que ya regía
  * antes de este cambio (ver MATRIZ_ACCESO_BASE en lib/roles.ts).
+ *
+ * 2026-09-22 (a petición de Carlos: "tener información de más nos hace ver
+ * como un multitenant barato creado al azar") — antes esta lista era fija
+ * para CUALQUIER negocio: una barbería veía casillas de "Reparaciones",
+ * "Taller" y "Aduana" entre las opciones para armar un rol, aunque ese
+ * negocio nunca reciba un aparato a reparar. Ahora se filtra también contra
+ * lo que este negocio en particular tiene activo (modulosInactivos, mismo
+ * prop/criterio que ya usa TenantShell.tsx para el menú lateral).
  */
 
-const MODULOS_ASIGNABLES: ModuloKey[] = MODULOS.filter(
-  (m) => !["dashboard", "personal", "asistencia", "facturacion", "configuracion"].includes(m)
-);
+const MODULOS_BASE_EXCLUIDOS: ModuloKey[] = ["dashboard", "personal", "asistencia", "facturacion", "configuracion"];
 
 interface RolesManagerProps {
   tenantSlug: string;
@@ -37,18 +44,34 @@ interface RolesManagerProps {
   // de empleado) — aquí se ofrecen como chips de un clic para crear el rol
   // correspondiente, sin tener que escribir el nombre a mano.
   sugerenciasRoles?: string[];
+  // Códigos de módulo desactivados para ESTE negocio (2026-09-22, ver el
+  // comentario largo arriba) — mismo criterio "ausente de la lista = activo"
+  // que ya usa TenantShell.tsx. "taller"/"aduana" no viven en
+  // lib/modules-catalog.ts (no son una capacidad de negocio, ver su propio
+  // comentario más abajo) así que no pueden aparecer aquí directo — el
+  // padre (PersonalClient/page.tsx) ya los agrega a este arreglo cuando
+  // "reparaciones" está inactivo, para que sigan la misma regla.
+  modulosInactivos?: string[];
   onCerrar: () => void;
   onCambio: () => void;
 }
 
-export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRoles = [], onCerrar, onCambio }: RolesManagerProps) {
+export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRoles = [], modulosInactivos = [], onCerrar, onCambio }: RolesManagerProps) {
+  const modulosInactivosSet = new Set(modulosInactivos);
+  const MODULOS_ASIGNABLES: ModuloKey[] = MODULOS.filter(
+    (m) => !MODULOS_BASE_EXCLUIDOS.includes(m) && !modulosInactivosSet.has(m)
+  );
   const [roles, setRoles] = useState<RolTenantUI[]>(rolesIniciales);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [nombreEdit, setNombreEdit] = useState("");
   const [modulosEdit, setModulosEdit] = useState<Set<ModuloKey>>(new Set());
+  // "Jefe de técnicos" (2026-09-22, a petición de Carlos) — solo aplica
+  // cuando el rol tiene "taller" entre sus módulos, ver Role.verTodoTaller.
+  const [verTodoTallerEdit, setVerTodoTallerEdit] = useState(false);
   const [creando, setCreando] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [modulosNuevo, setModulosNuevo] = useState<Set<ModuloKey>>(new Set());
+  const [verTodoTallerNuevo, setVerTodoTallerNuevo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -64,6 +87,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     setEditandoId(rol.id);
     setNombreEdit(rol.name);
     setModulosEdit(new Set(rol.modulosPermitidos));
+    setVerTodoTallerEdit(rol.verTodoTaller);
     setCreando(false);
     setError(null);
   };
@@ -80,6 +104,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     startTransition(async () => {
       const res = await actualizarRolAction({
         tenantSlug, roleId: editandoId, nombre: nombreEdit, modulos: Array.from(modulosEdit),
+        verTodoTaller: verTodoTallerEdit,
       });
       if (res.ok) {
         setEditandoId(null);
@@ -94,11 +119,14 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     if (!nombreNuevo.trim()) { setError("El nombre del rol es obligatorio"); return; }
     setError(null);
     startTransition(async () => {
-      const res = await crearRolAction({ tenantSlug, nombre: nombreNuevo, modulos: Array.from(modulosNuevo) });
+      const res = await crearRolAction({
+        tenantSlug, nombre: nombreNuevo, modulos: Array.from(modulosNuevo), verTodoTaller: verTodoTallerNuevo,
+      });
       if (res.ok) {
         setCreando(false);
         setNombreNuevo("");
         setModulosNuevo(new Set());
+        setVerTodoTallerNuevo(false);
         refrescar();
       } else {
         setError(res.error);
@@ -124,10 +152,13 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
   // Necesita su propio nombre aquí para que en este selector de casillas se
   // distinga claramente de "Reparaciones" (control total).
   const nombreModulo = (m: ModuloKey) =>
-    m === "taller" ? "Taller (solo trabajo técnico, sin costos ni cobro)" : MODULE_CATALOG[m]?.name ?? m;
+    m === "taller" ? "Taller (solo ve lo asignado, sin editar)"
+    : m === "aduana" ? "Recepción / Aduana de taller (asigna técnico, estatus y costo)"
+    : MODULE_CATALOG[m]?.name ?? m;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40" onClick={onCerrar}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40"
+      onClick={() => { if (confirmarSalirSinGuardar()) onCerrar(); }}>
       <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="text-sm font-medium text-foreground flex items-center gap-1.5"><Shield className="w-4 h-4" /> Roles y permisos</span>
@@ -156,6 +187,12 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                       </label>
                     ))}
                   </div>
+                  {modulosEdit.has("taller") && (
+                    <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
+                      <input type="checkbox" checked={verTodoTallerEdit} onChange={(e) => setVerTodoTallerEdit(e.target.checked)} />
+                      Jefe de técnicos: ve TODAS las reparaciones asignadas del taller (no solo las propias)
+                    </label>
+                  )}
                   <div className="flex justify-end gap-2">
                     <button onClick={() => setEditandoId(null)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
                     <button disabled={pending} onClick={guardarEdicion}
@@ -214,6 +251,12 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                   </label>
                 ))}
               </div>
+              {modulosNuevo.has("taller") && (
+                <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
+                  <input type="checkbox" checked={verTodoTallerNuevo} onChange={(e) => setVerTodoTallerNuevo(e.target.checked)} />
+                  Jefe de técnicos: ve TODAS las reparaciones asignadas del taller (no solo las propias)
+                </label>
+              )}
               <div className="flex justify-end gap-2">
                 <button onClick={() => setCreando(false)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
                 <button disabled={pending} onClick={crearRol}
