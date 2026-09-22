@@ -37,6 +37,23 @@ const formatMXN = (n: number) =>
 
 const BARRA_COLORES = ["bg-primary", "bg-cyan-500", "bg-emerald-500", "bg-amber-500", "bg-purple-500"];
 
+// Días de la semana para el selector de "días que opera" — Fase 2 de
+// notificaciones (2026-09-22, ver Branch.diasOperacion en schema.prisma).
+// Se muestran en orden lunes→domingo (más natural para leer), pero cada
+// uno guarda su índice real 0=domingo…6=sábado (mismo criterio que
+// Tenant.weekStartDay) — el orden de despliegue no tiene que coincidir con
+// el valor almacenado.
+const DIAS_SEMANA_SELECTOR = [
+  { valor: 1, etiqueta: "L" },
+  { valor: 2, etiqueta: "M" },
+  { valor: 3, etiqueta: "M" },
+  { valor: 4, etiqueta: "J" },
+  { valor: 5, etiqueta: "V" },
+  { valor: 6, etiqueta: "S" },
+  { valor: 0, etiqueta: "D" },
+];
+const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6];
+
 export default function SucursalesClient({ data, tenantSlug }: SucursalesClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -56,6 +73,9 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
     code: "",
     address: "",
     phone: "",
+    horaAperturaEsperada: "",
+    horaCierreEsperada: "",
+    diasOperacion: TODOS_LOS_DIAS,
     isActive: true,
   });
   const [errorModal, setErrorModal] = useState<string | null>(null);
@@ -73,16 +93,34 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
 
   function abrirNueva() {
     setEditando(null);
-    setForm({ name: "", code: "", address: "", phone: "", isActive: true });
+    setForm({
+      name: "", code: "", address: "", phone: "",
+      horaAperturaEsperada: "", horaCierreEsperada: "", diasOperacion: TODOS_LOS_DIAS,
+      isActive: true,
+    });
     setErrorModal(null);
     setModalAbierto(true);
   }
 
   function abrirEditar(suc: SucursalUI) {
     setEditando(suc);
-    setForm({ name: suc.name, code: suc.code ?? "", address: suc.address ?? "", phone: suc.phone ?? "", isActive: suc.isActive });
+    setForm({
+      name: suc.name, code: suc.code ?? "", address: suc.address ?? "", phone: suc.phone ?? "",
+      horaAperturaEsperada: suc.horaAperturaEsperada ?? "",
+      horaCierreEsperada: suc.horaCierreEsperada ?? "",
+      diasOperacion: suc.diasOperacion.length > 0 ? suc.diasOperacion : TODOS_LOS_DIAS,
+      isActive: suc.isActive,
+    });
     setErrorModal(null);
     setModalAbierto(true);
+  }
+
+  function alternarDia(dia: number) {
+    setForm((f) => {
+      const actuales = f.diasOperacion ?? TODOS_LOS_DIAS;
+      const siguiente = actuales.includes(dia) ? actuales.filter((d) => d !== dia) : [...actuales, dia];
+      return { ...f, diasOperacion: siguiente };
+    });
   }
 
   function guardarSucursal() {
@@ -90,7 +128,16 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
     startTransition(async () => {
       const res = editando
         ? await editarSucursalAction({ tenantSlug, branchId: editando.id, ...form })
-        : await crearSucursalAction({ tenantSlug, name: form.name, code: form.code, address: form.address, phone: form.phone });
+        : await crearSucursalAction({
+            tenantSlug,
+            name: form.name,
+            code: form.code,
+            address: form.address,
+            phone: form.phone,
+            horaAperturaEsperada: form.horaAperturaEsperada,
+            horaCierreEsperada: form.horaCierreEsperada,
+            diasOperacion: form.diasOperacion,
+          });
 
       if (!res.ok) {
         setErrorModal(res.error);
@@ -479,6 +526,58 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
                 />
+              </div>
+
+              <div className="pt-1 border-t border-border">
+                <label className="text-[12.5px] font-medium text-muted-foreground">
+                  Horario esperado de caja (opcional)
+                </label>
+                <p className="text-[11.5px] text-muted-foreground mt-0.5 mb-2">
+                  Si lo defines, recibirás un aviso si esta sucursal no reporta apertura o cierre de caja a esta hora
+                  (con 15 minutos de margen).
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11.5px] text-muted-foreground">Abre</label>
+                    <input
+                      type="time"
+                      value={form.horaAperturaEsperada ?? ""}
+                      onChange={(e) => setForm({ ...form, horaAperturaEsperada: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11.5px] text-muted-foreground">Cierra</label>
+                    <input
+                      type="time"
+                      value={form.horaCierreEsperada ?? ""}
+                      onChange={(e) => setForm({ ...form, horaCierreEsperada: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+                {(form.horaAperturaEsperada || form.horaCierreEsperada) && (
+                  <div className="mt-2">
+                    <label className="text-[11.5px] text-muted-foreground">Días que opera</label>
+                    <div className="flex gap-1 mt-1">
+                      {DIAS_SEMANA_SELECTOR.map((d) => {
+                        const activo = (form.diasOperacion ?? TODOS_LOS_DIAS).includes(d.valor);
+                        return (
+                          <button
+                            key={d.valor}
+                            type="button"
+                            onClick={() => alternarDia(d.valor)}
+                            className={`w-8 h-8 rounded-lg text-[12.5px] font-medium transition-colors ${
+                              activo ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {d.etiqueta}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
               {editando && (
                 <label className="flex items-center gap-2 text-[12.5px] text-foreground/80">

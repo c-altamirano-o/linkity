@@ -1,0 +1,29 @@
+# Cron cada 15 minutos para la Fase 2 de notificaciones en tiempo real
+# (2026-09-22, a peticion de Carlos) — revisa si alguna sucursal con
+# horario configurado no reporto apertura/cierre de caja a tiempo.
+#
+# Requiere UN secreto en este repositorio de GitHub (Settings → Secrets
+# and variables → Actions → New repository secret): CRON_SECRET, con el
+# MISMO valor que ya existe como variable de entorno CRON_SECRET en Vercel.
+name: Revisar horarios de caja
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar al endpoint de revision
+        run: |
+          respuesta=$(curl -s -o /tmp/respuesta.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://linkity-phi.vercel.app/api/cron/revisar-horarios-caja")
+          echo "HTTP status: $respuesta"
+          cat /tmp/respuesta.json
+          if [ "$respuesta" -ge 400 ]; then
+            echo "El endpoint respondio con un error."
+            exit 1
+          fi

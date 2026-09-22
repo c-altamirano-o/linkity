@@ -137,6 +137,31 @@ model Branch {
   // tienda no aplica" (Carlos), así ningún negocio existente con una sola
   // sucursal se ve obligado a definir uno.
   code      String?
+
+  // Horario esperado de apertura/cierre de caja — Fase 2 de notificaciones
+  // en tiempo real (2026-09-22, a petición de Carlos: "cuando se llegue
+  // determinada hora y una sucursal no haya reportado apertura de caja o
+  // que a la hora del cierre no hayan cerrado caja"). Ambos son opcionales
+  // Y los dos deben estar capturados para que el cron (ver
+  // app/api/cron/revisar-horarios-caja) revise esta sucursal — así ninguna
+  // sucursal existente antes de este campo empieza a recibir alertas sin
+  // que su dueño configure el horario primero. Formato "HH:MM" en 24h
+  // (validado en sucursales-actions.ts), hora de America/Mexico_City —
+  // única zona horaria que maneja hoy el proyecto (mismo criterio que
+  // formatHoraLlegada/formatHoraCorta en lib/dashboard-data.ts) — ver
+  // lib/horarios-sucursal.ts para toda la lógica de comparación.
+  horaAperturaEsperada String?
+  horaCierreEsperada   String?
+
+  // Días de la semana que esta sucursal opera — 0=domingo … 6=sábado
+  // (mismo índice que Tenant.weekStartDay, arriba). Si el día de hoy no
+  // está en esta lista, el cron de horarios no revisa nada para esta
+  // sucursal ese día. Default: los 7 días, para que definir el horario no
+  // obligue también a definir los días — la mayoría de negocios opera
+  // todos los días; el dueño desmarca manualmente el que no aplique (ej.
+  // domingo).
+  diasOperacion Int[] @default([0, 1, 2, 3, 4, 5, 6])
+
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -774,6 +799,14 @@ model Notificacion {
 enum NotificacionTipo {
   CAJA_ABIERTA
   CAJA_CERRADA
+  // Fase 2 (2026-09-22): incumplimiento de horario configurado en la
+  // sucursal — ver app/api/cron/revisar-horarios-caja/route.ts y
+  // Branch.horaAperturaEsperada/horaCierreEsperada arriba. A diferencia de
+  // CAJA_ABIERTA/CAJA_CERRADA (que reportan un hecho que sí ocurrió), estos
+  // dos reportan la AUSENCIA de un hecho a cierta hora — el front los pinta
+  // en rojo/urgente para distinguirlos a simple vista (TenantShell.tsx).
+  CAJA_NO_ABIERTA
+  CAJA_NO_CERRADA
 }
 
 // ============================================

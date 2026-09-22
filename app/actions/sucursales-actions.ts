@@ -3,6 +3,7 @@
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { resolverActor, type ActorResult } from "@/lib/actor";
+import { horaValida } from "@/lib/horarios-sucursal";
 
 /**
  * Server Actions del módulo Sucursales. Antes de este cambio no existía
@@ -57,12 +58,29 @@ export interface DatosSucursal {
   // escribe a mano al crear/editar. Alimenta el folio de reparaciones (ver
   // crearReparacionAction, reparaciones-actions.ts).
   code?: string | null;
+  // Horario esperado de apertura/cierre de caja — Fase 2 de notificaciones
+  // (2026-09-22, ver el comentario largo en Branch, schema.prisma). Ambos
+  // "HH:MM" en 24h u null/vacío para no monitorear esta sucursal.
+  horaAperturaEsperada?: string | null;
+  horaCierreEsperada?: string | null;
+  // 0=domingo…6=sábado. undefined al crear = default del schema (los 7
+  // días); se manda explícito al editar para poder desmarcar un día.
+  diasOperacion?: number[];
 }
 
 function validarDatosSucursal(datos: DatosSucursal): string | null {
   if (!datos.name?.trim()) return "El nombre de la sucursal es obligatorio";
   if (datos.code && !/^[A-Za-z0-9]{1,8}$/.test(datos.code.trim())) {
     return "El código de sucursal debe ser solo letras/números, máximo 8 caracteres";
+  }
+  if (datos.horaAperturaEsperada && !horaValida(datos.horaAperturaEsperada)) {
+    return "La hora de apertura esperada no es válida";
+  }
+  if (datos.horaCierreEsperada && !horaValida(datos.horaCierreEsperada)) {
+    return "La hora de cierre esperada no es válida";
+  }
+  if (datos.diasOperacion && datos.diasOperacion.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) {
+    return "Los días de operación no son válidos";
   }
   return null;
 }
@@ -110,6 +128,9 @@ export async function crearSucursalAction(
         code: codigoLimpio,
         address: datos.address?.trim() || null,
         phone: datos.phone?.trim() || null,
+        horaAperturaEsperada: datos.horaAperturaEsperada?.trim() || null,
+        horaCierreEsperada: datos.horaCierreEsperada?.trim() || null,
+        ...(datos.diasOperacion ? { diasOperacion: datos.diasOperacion } : {}),
       },
     });
 
@@ -170,6 +191,9 @@ export async function editarSucursalAction(
         code: codigoLimpio,
         address: datos.address?.trim() || null,
         phone: datos.phone?.trim() || null,
+        horaAperturaEsperada: datos.horaAperturaEsperada?.trim() || null,
+        horaCierreEsperada: datos.horaCierreEsperada?.trim() || null,
+        ...(datos.diasOperacion ? { diasOperacion: datos.diasOperacion } : {}),
         isActive,
       },
     });

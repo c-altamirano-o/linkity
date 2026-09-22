@@ -15,8 +15,31 @@ import {
   Warehouse, DollarSign, UserCog, BarChart3, FileText,
   GitBranch, BookOpen, LogOut, Bell, ChevronDown, Settings,
   Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck, CalendarDays,
-  Unlock, Lock,
+  Unlock, Lock, AlertTriangle,
 } from "lucide-react";
+
+// Tipo real de NotificacionUI (lib/notificaciones.ts) — se reusa aquí en
+// vez de importar el enum NotificacionTipo de @prisma/client directo, para
+// no depender de un import más en un componente de cliente.
+type TipoNotificacion = NotificacionUI["tipo"];
+
+// Ícono/color por tipo de aviso — Fase 1 (CAJA_ABIERTA/CERRADA, informativo)
+// y Fase 2 (CAJA_NO_ABIERTA/CERRADA, incumplimiento de horario — 2026-09-22,
+// a petición de Carlos). Los dos de Fase 2 van en rojo/urgente a propósito,
+// para que se distingan a simple vista de un aviso meramente informativo
+// (Carlos, al elegir el estilo de alerta: "mismo toast + campana, pero en
+// rojo/urgente") — se usa tanto en los toasts como en la lista de la
+// campanita, un solo lugar para no duplicar el mapeo.
+const ESTILO_NOTIFICACION: Record<TipoNotificacion, { icon: typeof Unlock; bg: string; color: string }> = {
+  CAJA_ABIERTA: { icon: Unlock, bg: "bg-emerald-50", color: "text-emerald-600" },
+  CAJA_CERRADA: { icon: Lock, bg: "bg-slate-100", color: "text-slate-600" },
+  CAJA_NO_ABIERTA: { icon: AlertTriangle, bg: "bg-red-50", color: "text-red-600" },
+  CAJA_NO_CERRADA: { icon: AlertTriangle, bg: "bg-red-50", color: "text-red-600" },
+};
+
+function esAlertaUrgente(tipo: TipoNotificacion): boolean {
+  return tipo === "CAJA_NO_ABIERTA" || tipo === "CAJA_NO_CERRADA";
+}
 
 // Estructura fija (secciones, orden, ícono) — el NOMBRE de cada ítem ya no
 // se escribe aquí a mano: sale del diccionario de labels (lib/labels.ts),
@@ -170,7 +193,7 @@ export default function TenantShell({
   // campanita: se ven aunque no la tengas abierta, y se autodesaparecen
   // solos. La campanita es la copia persistente; esto es solo el "aviso
   // ahora mismo".
-  const [toasts, setToasts] = useState<{ id: string; mensaje: string; tipo: "CAJA_ABIERTA" | "CAJA_CERRADA" }[]>([]);
+  const [toasts, setToasts] = useState<{ id: string; mensaje: string; tipo: TipoNotificacion }[]>([]);
 
   useEffect(() => {
     const handleClickFuera = (e: MouseEvent) => {
@@ -193,21 +216,28 @@ export default function TenantShell({
     const supabase = createClient();
     const canal = supabase.channel(`notificaciones:${tenantId}`);
 
-    const recibir = (tipo: "CAJA_ABIERTA" | "CAJA_CERRADA") => (msg: {
+    const recibir = (tipo: TipoNotificacion) => (msg: {
       payload: { id: string; mensaje: string; branchName: string | null; fecha: string };
     }) => {
       const { id, mensaje, branchName, fecha } = msg.payload;
       setNotificaciones((prev) => [{ id, tipo, mensaje, branchName, leida: false, fecha }, ...prev].slice(0, 30));
       setNotifNoLeidas((n) => n + 1);
 
+      // Los avisos de incumplimiento (Fase 2, "no reportó a tiempo") se
+      // quedan más tiempo en pantalla que los informativos de Fase 1 — son
+      // más importantes de no perderse de vista.
       const toastId = `${id}-${Date.now()}`;
       setToasts((prev) => [...prev, { id: toastId, mensaje, tipo }]);
-      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), 7000);
+      const duracion = esAlertaUrgente(tipo) ? 15000 : 7000;
+      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), duracion);
     };
 
     canal
       .on("broadcast", { event: "caja_abierta" }, recibir("CAJA_ABIERTA"))
       .on("broadcast", { event: "caja_cerrada" }, recibir("CAJA_CERRADA"))
+      // Fase 2 (2026-09-22) — ver app/api/cron/revisar-horarios-caja.
+      .on("broadcast", { event: "caja_no_abierta" }, recibir("CAJA_NO_ABIERTA"))
+      .on("broadcast", { event: "caja_no_cerrada" }, recibir("CAJA_NO_CERRADA"))
       .subscribe();
 
     return () => {
@@ -309,25 +339,29 @@ export default function TenantShell({
           independiente del layout de sidebar/contenido de abajo. */}
       {toasts.length > 0 && (
         <div className="fixed top-4 right-4 z-[60] flex flex-col gap-2 w-72 max-w-[calc(100vw-2rem)]">
-          {toasts.map((t) => (
-            <div
-              key={t.id}
-              className="bg-card border border-border rounded-xl shadow-lg px-3 py-2.5 flex items-start gap-2 animate-in fade-in slide-in-from-top-2"
-            >
-              <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
-                t.tipo === "CAJA_ABIERTA" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-600"
-              }`}>
-                {t.tipo === "CAJA_ABIERTA" ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-              </div>
-              <p className="text-[12.5px] text-foreground leading-snug">{t.mensaje}</p>
-              <button
-                onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
-                className="ml-auto text-muted-foreground hover:text-foreground flex-shrink-0"
+          {toasts.map((t) => {
+            const estilo = ESTILO_NOTIFICACION[t.tipo];
+            const Icono = estilo.icon;
+            return (
+              <div
+                key={t.id}
+                className={`bg-card border rounded-xl shadow-lg px-3 py-2.5 flex items-start gap-2 animate-in fade-in slide-in-from-top-2 ${
+                  esAlertaUrgente(t.tipo) ? "border-red-200" : "border-border"
+                }`}
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
+                <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${estilo.bg} ${estilo.color}`}>
+                  <Icono className="w-3.5 h-3.5" />
+                </div>
+                <p className="text-[12.5px] text-foreground leading-snug">{t.mensaje}</p>
+                <button
+                  onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+                  className="ml-auto text-muted-foreground hover:text-foreground flex-shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -525,21 +559,23 @@ export default function TenantShell({
                     <p className="px-3 py-4 text-xs text-muted-foreground text-center">No tienes notificaciones nuevas por ahora.</p>
                   ) : (
                     <div className="max-h-80 overflow-y-auto divide-y divide-border">
-                      {notificaciones.map((n) => (
-                        <div key={n.id} className="px-3 py-2.5 flex items-start gap-2 hover:bg-muted/60">
-                          <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            n.tipo === "CAJA_ABIERTA" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-600"
-                          }`}>
-                            {n.tipo === "CAJA_ABIERTA" ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                      {notificaciones.map((n) => {
+                        const estilo = ESTILO_NOTIFICACION[n.tipo];
+                        const Icono = estilo.icon;
+                        return (
+                          <div key={n.id} className="px-3 py-2.5 flex items-start gap-2 hover:bg-muted/60">
+                            <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${estilo.bg} ${estilo.color}`}>
+                              <Icono className="w-3 h-3" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[11.5px] text-foreground leading-snug">{n.mensaje}</p>
+                              <p className="text-[10.5px] text-muted-foreground mt-0.5">
+                                {new Date(n.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}
+                              </p>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-[11.5px] text-foreground leading-snug">{n.mensaje}</p>
-                            <p className="text-[10.5px] text-muted-foreground mt-0.5">
-                              {new Date(n.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

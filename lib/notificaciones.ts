@@ -64,7 +64,13 @@ export async function marcarNotificacionesLeidas(tenantId: string): Promise<void
 }
 
 /**
- * Crea el aviso de apertura/cierre de caja y lo transmite en vivo.
+ * Crea un aviso de caja (apertura/cierre — Fase 1, o incumplimiento de
+ * horario — Fase 2, ver lib/horarios-sucursal.ts) y lo transmite en vivo.
+ * El nombre del evento de broadcast sale directo del propio tipo en
+ * minúsculas ("CAJA_ABIERTA" → "caja_abierta"), así que agregar un nuevo
+ * NotificacionTipo no requiere tocar el mapeo de eventos aquí ni en
+ * TenantShell.tsx — cada tipo nuevo solo necesita su propio ícono/color en
+ * ese archivo.
  *
  * Canal PÚBLICO, sin autenticación por RLS (simplificación consciente para
  * esta primera fase): el nombre del canal incluye el tenantId (un cuid no
@@ -76,15 +82,16 @@ export async function marcarNotificacionesLeidas(tenantId: string): Promise<void
  * listener del cliente — no toca el resto del sistema.
  *
  * Si el broadcast en vivo falla (Realtime caído, red, etc.) el aviso YA
- * quedó guardado — no se revierte ni se le hace fallar la acción que lo
- * disparó (abrirCajaAction/cerrarCajaAction): quien no lo vea aparecer al
- * instante lo verá igual la próxima vez que abra la campanita.
+ * quedó guardado — no se revierte ni se le hace fallar quien lo disparó
+ * (abrirCajaAction/cerrarCajaAction, o el cron de horarios): quien no lo
+ * vea aparecer al instante lo verá igual la próxima vez que abra la
+ * campanita.
  */
 export async function crearNotificacionCaja(params: {
   tenantId: string;
   branchId: string;
   branchName: string;
-  tipo: typeof NotificacionTipo.CAJA_ABIERTA | typeof NotificacionTipo.CAJA_CERRADA;
+  tipo: NotificacionTipo;
   mensaje: string;
 }): Promise<void> {
   const { tenantId, branchId, branchName, tipo, mensaje } = params;
@@ -98,7 +105,7 @@ export async function crearNotificacionCaja(params: {
     const supabase = createAdminClient();
     await supabase.channel(`notificaciones:${tenantId}`).send({
       type: "broadcast",
-      event: tipo === NotificacionTipo.CAJA_ABIERTA ? "caja_abierta" : "caja_cerrada",
+      event: tipo.toLowerCase(),
       payload: {
         id: notificacion.id,
         mensaje,

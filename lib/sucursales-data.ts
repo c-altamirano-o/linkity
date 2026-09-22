@@ -36,6 +36,11 @@ export interface SucursalUI {
   code: string | null;
   address: string | null;
   phone: string | null;
+  // Horario esperado de apertura/cierre de caja — Fase 2 de notificaciones
+  // (2026-09-22, ver el comentario largo en Branch, schema.prisma).
+  horaAperturaEsperada: string | null;
+  horaCierreEsperada: string | null;
+  diasOperacion: number[];
   isActive: boolean;
   esPrincipal: boolean;
   ventasHoy: number;
@@ -150,6 +155,9 @@ export async function getSucursalesData(tenantId: string): Promise<SucursalesDat
       code: b.code,
       address: b.address,
       phone: b.phone,
+      horaAperturaEsperada: b.horaAperturaEsperada,
+      horaCierreEsperada: b.horaCierreEsperada,
+      diasOperacion: b.diasOperacion,
       isActive: b.isActive,
       esPrincipal: idx === 0,
       ventasHoy: ventasHoyPorBranch.get(b.id) ?? 0,
