@@ -6,6 +6,7 @@ import { Search, SlidersHorizontal, FileDown, ChevronDown, Plus, AlertTriangle, 
 import type { ProductoInventario } from "@/lib/inventario-data";
 import { ajustarStock, type AjusteTipo } from "@/lib/inventario-actions";
 import { label, type LabelDictionary } from "@/lib/labels";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import { ProductoIcono } from "@/lib/catalogo-iconos";
 
 interface BranchOption {
@@ -195,6 +196,20 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   const sucursalNombre = sucursal === TODAS_SUCURSALES_ID
     ? "Todas las sucursales"
     : branches.find((b) => b.id === sucursal)?.name ?? "Sucursal";
+
+  // 2026-09-22, a petición de Carlos ("pide confirmación para cerrarlas
+  // cuando abandone la acción a mitad del proceso"): antes este modal se
+  // cerraba sin más (click fuera no hacía nada; "Cancelar" cerraba sin
+  // preguntar) — perdiendo lo capturado sin aviso.
+  const cancelarModal = () => {
+    if (confirmarSalirSinGuardar()) setModalAjuste(null);
+  };
+
+  // Aviso al cerrar/recargar la PESTAÑA del navegador mientras el modal de
+  // ajuste de stock sigue abierto (ver el comentario largo en
+  // lib/confirmar-cierre.ts) — complementa a cancelarModal() de arriba, que
+  // solo cubre cerrar el modal sin salir de la pestaña.
+  useAdvertirCierrePestaña(modalAjuste !== null);
 
   const abrirModal = (p: VistaProducto) => {
     setModalAjuste(p);
@@ -430,8 +445,11 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
 
       {/* ── Modal ajuste — bottom sheet en móvil ─────────────── */}
       {modalAjuste && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
-          <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl">
+        <div
+          className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50"
+          onClick={cancelarModal}
+        >
+          <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-sm font-semibold text-foreground mb-1">Ajuste de stock</h2>
             <p className="text-xs text-muted-foreground mb-4 truncate">{modalAjuste.name}</p>
 
@@ -479,7 +497,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
             {!ajusteError && <div className="mb-3" />}
 
             <div className="flex gap-2">
-              <button onClick={() => setModalAjuste(null)} disabled={isPending}
+              <button onClick={cancelarModal} disabled={isPending}
                 className="flex-1 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted disabled:opacity-50">
                 Cancelar
               </button>

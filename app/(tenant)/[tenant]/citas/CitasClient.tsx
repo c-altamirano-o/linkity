@@ -12,6 +12,7 @@ import {
   crearCitaAction, editarCitaAction, cambiarEstadoCitaAction, type NuevoEstadoCita,
 } from "@/app/actions/citas-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, formatoTelefono } from "@/lib/paises";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 
 interface CitasClientProps {
   data: CitasData;
@@ -123,6 +124,20 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
 
   const etiquetaEntidad = label(labels, "entity.appointment.plural") || "Citas";
 
+  // 2026-09-22, a petición de Carlos ("pide confirmación para cerrarlas
+  // cuando abandone la acción a mitad del proceso"): antes este modal se
+  // cerraba sin más (click fuera no hacía nada; la X y "Cancelar" cerraban
+  // sin preguntar) — perdiendo lo capturado sin aviso.
+  const cancelarModal = () => {
+    if (confirmarSalirSinGuardar()) setModalAbierto(false);
+  };
+
+  // Aviso al cerrar/recargar la PESTAÑA del navegador mientras el modal de
+  // nueva/editar cita sigue abierto (ver el comentario largo en
+  // lib/confirmar-cierre.ts) — complementa a cancelarModal() de arriba, que
+  // solo cubre cerrar el modal sin salir de la pestaña.
+  useAdvertirCierrePestaña(modalAbierto);
+
   function abrirModalNueva() {
     setCitaEditando(null);
     setForm(formVacio(branches, diaSeleccionado));
@@ -210,11 +225,14 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
   }
 
   const modal = modalAbierto && (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-card rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      onClick={cancelarModal}
+    >
+      <div className="bg-card rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <p className="text-sm font-semibold text-foreground">{citaEditando ? "Editar cita" : "Nueva cita"}</p>
-          <button onClick={() => setModalAbierto(false)} className="p-1 rounded-md hover:bg-muted">
+          <button onClick={cancelarModal} className="p-1 rounded-md hover:bg-muted">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
@@ -356,7 +374,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
         </div>
         <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
           <button
-            onClick={() => setModalAbierto(false)}
+            onClick={cancelarModal}
             className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
           >
             Cancelar

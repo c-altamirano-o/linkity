@@ -16,7 +16,7 @@ import {
   obtenerSugerenciaComisionAction, restablecerPinAction, type DatosEmpleado,
 } from "@/app/actions/personal-actions";
 import RolesManager from "./RolesManager";
-import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 
 interface BranchOption {
   id: string;
@@ -255,6 +255,13 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
     });
   };
 
+  // Cierra el modal de empleado por cualquier vía (fondo, X o Cancelar) —
+  // siempre pide confirmación, sin importar si hubo cambios reales (mismo
+  // criterio que ya regía solo para el click en el fondo).
+  const cancelarModalEmpleado = () => {
+    if (confirmarSalirSinGuardar()) setModalEmpleado(null);
+  };
+
   // ── Modal restablecer PIN ────────────────────────────────
   const abrirRestablecerPin = (emp: EmpleadoUI) => {
     setModalPinStaffId(emp.id);
@@ -275,6 +282,12 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
         setPinError(res.error);
       }
     });
+  };
+
+  // Cierra el modal de PIN por cualquier vía (fondo, X o Cancelar) — mismo
+  // criterio de siempre preguntar, sin dirty-tracking.
+  const cancelarModalPin = () => {
+    if (confirmarSalirSinGuardar()) setModalPinStaffId(null);
   };
 
   // ── Modal generar pago ───────────────────────────────────
@@ -343,6 +356,12 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
     });
   };
 
+  // Cierra el modal de generar pago por cualquier vía (fondo, X o Cancelar)
+  // — mismo criterio de siempre preguntar, sin dirty-tracking.
+  const cancelarModalPago = () => {
+    if (confirmarSalirSinGuardar()) setModalPagoStaffId(null);
+  };
+
   const handleActualizarPago = (paymentId: string, estado: "PAID" | "CANCELLED") => {
     setAccionError(null);
     startAccion(async () => {
@@ -354,6 +373,11 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
   const moduloNombre = label(labels, "module.staff.name");
   const empleadoParaPin = empleados.find((e) => e.id === modalPinStaffId) ?? null;
+
+  // Advierte al cerrar/recargar la PESTAÑA (no solo el modal) mientras
+  // cualquiera de los tres modales de captura de este módulo esté abierto
+  // (2026-09-22, a petición de Carlos — ver lib/confirmar-cierre.ts).
+  useAdvertirCierrePestaña(modalEmpleado !== null || empleadoParaPin !== null || seleccionadoParaPago !== null);
 
   return (
     <div className="flex flex-col h-full">
@@ -614,7 +638,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
       {/* Modal empleado */}
       {modalEmpleado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => { if (confirmarSalirSinGuardar()) setModalEmpleado(null); }}>
+          onClick={cancelarModalEmpleado}>
           {/* flex flex-col + max-h (en vez de overflow-y-auto en este mismo
               div) para que el encabezado y, sobre todo, el pie con el botón
               "Guardar" NUNCA se salgan de la vista al hacer scroll — antes,
@@ -631,7 +655,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
               <span className="text-sm font-medium text-foreground">{modalEmpleado.modo === "crear" ? "Nuevo empleado" : "Editar empleado"}</span>
-              <button onClick={() => setModalEmpleado(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+              <button onClick={cancelarModalEmpleado} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-4 space-y-3 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-2">
@@ -872,7 +896,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 <div className="mx-4 mt-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{formError}</div>
               )}
               <div className="flex justify-end gap-2 px-4 py-3">
-                <button onClick={() => setModalEmpleado(null)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+                <button onClick={cancelarModalEmpleado} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
                 <button disabled={guardando} onClick={handleGuardarEmpleado}
                   className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
                   {guardando ? "Guardando..." : "Guardar"}
@@ -886,13 +910,13 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
       {/* Modal restablecer PIN */}
       {empleadoParaPin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => { if (confirmarSalirSinGuardar()) setModalPinStaffId(null); }}>
+          onClick={cancelarModalPin}>
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-medium text-foreground">
                 {empleadoParaPin.tienePin ? "Restablecer PIN" : "Asignar PIN"} — {empleadoParaPin.name}
               </span>
-              <button onClick={() => setModalPinStaffId(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+              <button onClick={cancelarModalPin} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-4 space-y-3">
               {pinError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{pinError}</div>}
@@ -906,7 +930,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
-              <button onClick={() => setModalPinStaffId(null)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+              <button onClick={cancelarModalPin} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
               <button disabled={restableciendoPin} onClick={handleRestablecerPin}
                 className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
                 {restableciendoPin ? "Guardando..." : "Guardar PIN"}
@@ -919,11 +943,11 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
       {/* Modal generar pago */}
       {seleccionadoParaPago && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => { if (confirmarSalirSinGuardar()) setModalPagoStaffId(null); }}>
+          onClick={cancelarModalPago}>
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-medium text-foreground">Generar pago — {seleccionadoParaPago.name}</span>
-              <button onClick={() => setModalPagoStaffId(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+              <button onClick={cancelarModalPago} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-4 space-y-3">
               {pagoError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{pagoError}</div>}
@@ -972,7 +996,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
-              <button onClick={() => setModalPagoStaffId(null)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+              <button onClick={cancelarModalPago} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
               <button disabled={generandoPago} onClick={handleGenerarPago}
                 className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
                 {generandoPago ? "Generando..." : "Generar pago"}

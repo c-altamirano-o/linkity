@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Lock, Unlock, Plus, Filter, TrendingDown, TrendingUp, ShoppingCart, Calculator, FileDown, ChevronDown } from "lucide-react";
 import type { CajaData } from "@/lib/caja-data";
 import { abrirCajaAction, cerrarCajaAction, registrarMovimientoAction } from "@/app/actions/caja-actions";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 
 type Periodo = "hoy" | "semana" | "mes" | "año" | "periodo";
 
@@ -121,6 +122,24 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
     setMostrarCerrarModal(false);
     setError(null);
   };
+
+  // 2026-09-22, a petición de Carlos ("revisando el flujo de datos... pide
+  // confirmación para cerrarlas cuando abandone la acción a mitad del
+  // proceso"): a diferencia de cerrarModales() de arriba — que también se
+  // usa para "limpiar antes de abrir OTRO modal" y por eso no debe
+  // preguntar nada — esta función es específicamente para cuando el
+  // usuario está ABANDONANDO un modal ya abierto (click fuera, Cancelar,
+  // la X): pregunta primero, y solo cierra si confirma.
+  const cancelarModal = () => {
+    if (!confirmarSalirSinGuardar()) return;
+    cerrarModales();
+  };
+
+  // Aviso al cerrar/recargar la PESTAÑA del navegador mientras alguno de
+  // los 3 modales de captura de Caja sigue abierto (ver el comentario
+  // largo en lib/confirmar-cierre.ts) — complementa a cancelarModal() de
+  // arriba, que solo cubre cerrar el modal sin salir de la pestaña.
+  useAdvertirCierrePestaña(mostrarModal || mostrarAbrirModal || mostrarCerrarModal);
 
   const handleAbrirCaja = () => {
     const valor = parseFloat(montoApertura);
@@ -996,8 +1015,11 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
 
       {/* Modal registrar movimiento */}
       {mostrarModal && sesionActual && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
-          <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl">
+        <div
+          className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50"
+          onClick={cancelarModal}
+        >
+          <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-sm font-semibold text-foreground mb-4">Nuevo movimiento</h2>
             <div className="grid grid-cols-2 gap-2 mb-4">
               {(["ingreso", "egreso"] as const).map((t) => (
@@ -1041,7 +1063,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
             </div>
             <div className="flex gap-2">
               <button
-                onClick={cerrarModales}
+                onClick={cancelarModal}
                 disabled={pending}
                 className="flex-1 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"
               >
@@ -1063,8 +1085,11 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
 
       {/* Modal abrir caja */}
       {mostrarAbrirModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
-          <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl">
+        <div
+          className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50"
+          onClick={cancelarModal}
+        >
+          <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-sm font-semibold text-foreground mb-4">Abrir caja</h2>
             <div className="space-y-3 mb-4">
               <div>
@@ -1082,7 +1107,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
             </div>
             <div className="flex gap-2">
               <button
-                onClick={cerrarModales}
+                onClick={cancelarModal}
                 disabled={pending}
                 className="flex-1 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"
               >
@@ -1102,8 +1127,11 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
 
       {/* Modal cerrar caja */}
       {mostrarCerrarModal && sesionActual && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
-          <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl">
+        <div
+          className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50"
+          onClick={cancelarModal}
+        >
+          <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-sm font-semibold text-foreground mb-1">Cerrar caja</h2>
             <p className="text-[12.5px] text-muted-foreground mb-4">
               Efectivo esperado: <span className="font-semibold text-foreground">{formatMXN(sesionActual.efectivoEsperado)}</span>
@@ -1147,7 +1175,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
             </div>
             <div className="flex gap-2">
               <button
-                onClick={cerrarModales}
+                onClick={cancelarModal}
                 disabled={pending}
                 className="flex-1 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"
               >

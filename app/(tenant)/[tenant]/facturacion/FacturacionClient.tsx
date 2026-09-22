@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, Download, XCircle, FileText, CheckCircle, Clock, AlertCircle, X, Info } from "lucide-react";
 import type { FacturacionData, FacturaUI, EstadoFactura } from "@/lib/facturacion-data";
 import { label, type LabelDictionary } from "@/lib/labels";
-import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import {
   crearFacturaAction,
   timbrarFacturaAction,
@@ -52,6 +52,14 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
   const [accionError, setAccionError] = useState<string | null>(null);
 
   const [modalNueva, setModalNueva] = useState(false);
+  // 2026-09-22, a petición de Carlos ("pide confirmación para cerrarlas
+  // cuando abandone la acción a mitad del proceso"): el click fuera de
+  // este modal ya preguntaba antes de cerrar (2026-09-21), pero la X y
+  // "Cancelar" seguían cerrando sin preguntar nada.
+  const cancelarModalNueva = () => {
+    if (confirmarSalirSinGuardar()) setModalNueva(false);
+  };
+  useAdvertirCierrePestaña(modalNueva);
   const [nvSaleId, setNvSaleId] = useState<string>(ventasSinFacturar[0]?.id ?? "");
   const [nvCustomerId, setNvCustomerId] = useState<string>("");
   const [nvClienteNuevo, setNvClienteNuevo] = useState(false);
@@ -426,7 +434,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
       {modalNueva && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => { if (confirmarSalirSinGuardar()) setModalNueva(false); }}
+          onClick={cancelarModalNueva}
         >
           <div
             className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
@@ -434,7 +442,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-semibold text-foreground">Nueva factura</span>
-              <button onClick={() => setModalNueva(false)} className="text-muted-foreground hover:text-foreground">
+              <button onClick={cancelarModalNueva} className="text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -515,7 +523,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
             {ventasSinFacturar.length > 0 && (
               <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
                 <button
-                  onClick={() => setModalNueva(false)}
+                  onClick={cancelarModalNueva}
                   className="px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted"
                 >
                   Cancelar

@@ -18,7 +18,7 @@ import {
 } from "@/app/actions/reparaciones-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp } from "@/lib/paises";
 import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
-import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 
 // Agrupa el catálogo de "agregar pieza" por tipo — piezas/productos primero,
 // servicios (mano de obra: "quitar cuenta Google", "limpieza general", etc.)
@@ -582,6 +582,10 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   const [cobrando, startCobrar] = useTransition();
   const reparacionCobro = reparaciones.find((r) => r.id === cobroRepairId) ?? null;
 
+  // Aviso al cerrar/recargar la pestaña mientras cualquiera de los 2 modales
+  // de captura de esta pantalla esté abierto — ver lib/confirmar-cierre.ts.
+  useAdvertirCierrePestaña(modalNuevaAbierto || reparacionCobro !== null);
+
   const clientesFiltrados = clientes
     .filter((c) => c.name.toLowerCase().includes(nuevaClienteQuery.toLowerCase()))
     .slice(0, 8);
@@ -609,6 +613,11 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     setCobroMonto(costoEstimado != null ? String(costoEstimado) : "");
     setCobroMetodo("EFECTIVO");
     setCobroError(null);
+  };
+
+  const cancelarModalCobro = () => {
+    if (!confirmarSalirSinGuardar()) return;
+    setCobroRepairId(null);
   };
 
   const METODO_PAGO_REPARACION_TEXTO: Record<MetodoPagoReparacion, string> = {
@@ -671,6 +680,11 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     setNuevaClienteNuevoNombre(""); setNuevaClienteNuevoTelefono(""); setNuevaClienteNuevoCodigoPais(PAIS_TELEFONO_DEFAULT);
     setNuevaPrioridad("NORMAL"); setNuevaError(null);
     setNuevasPiezas([]); setPiezaNuevaId(""); setPiezaNuevaCantidad("1");
+  };
+
+  const cancelarModalNueva = () => {
+    if (!confirmarSalirSinGuardar()) return;
+    setModalNuevaAbierto(false);
   };
 
   const handleCrearReparacion = () => {
@@ -749,11 +763,11 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
       {modalNuevaAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => { if (confirmarSalirSinGuardar()) setModalNuevaAbierto(false); }}>
+          onClick={cancelarModalNueva}>
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-medium text-foreground">Nueva {label(labels, "entity.repair.singular").toLowerCase()}</span>
-              <button onClick={() => setModalNuevaAbierto(false)} className="text-muted-foreground hover:text-foreground">
+              <button onClick={cancelarModalNueva} className="text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -926,7 +940,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
               </div>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
-              <button onClick={() => setModalNuevaAbierto(false)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
+              <button onClick={cancelarModalNueva} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
                 Cancelar
               </button>
               <button disabled={creando} onClick={handleCrearReparacion}
@@ -940,11 +954,11 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
       {reparacionCobro && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => { if (confirmarSalirSinGuardar()) setCobroRepairId(null); }}>
+          onClick={cancelarModalCobro}>
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-medium text-foreground">Cobrar y entregar</span>
-              <button onClick={() => setCobroRepairId(null)} className="text-muted-foreground hover:text-foreground">
+              <button onClick={cancelarModalCobro} className="text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -975,7 +989,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
               </div>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
-              <button onClick={() => setCobroRepairId(null)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
+              <button onClick={cancelarModalCobro} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
                 Cancelar
               </button>
               <button disabled={cobrando} onClick={handleCobrarYEntregar}

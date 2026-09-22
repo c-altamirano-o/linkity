@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, ArrowRight, Building2, Package, DollarSign, Wrench, X, Pencil, Link2, Check } from "lucide-react";
 import type { SucursalesData, SucursalUI } from "@/lib/sucursales-data";
-import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import {
   crearSucursalAction,
   editarSucursalAction,
@@ -42,6 +42,14 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
   const [isPending, startTransition] = useTransition();
 
   const [modalAbierto, setModalAbierto] = useState(false);
+  // 2026-09-22, a petición de Carlos ("pide confirmación para cerrarlas
+  // cuando abandone la acción a mitad del proceso"): el click fuera de
+  // este modal ya preguntaba antes de cerrar (2026-09-21), pero la X y
+  // "Cancelar" seguían cerrando sin preguntar nada.
+  const cancelarModal = () => {
+    if (confirmarSalirSinGuardar()) setModalAbierto(false);
+  };
+  useAdvertirCierrePestaña(modalAbierto);
   const [editando, setEditando] = useState<SucursalUI | null>(null);
   const [form, setForm] = useState<DatosSucursal & { isActive: boolean }>({
     name: "",
@@ -416,7 +424,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
       {modalAbierto && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => { if (confirmarSalirSinGuardar()) setModalAbierto(false); }}
+          onClick={cancelarModal}
         >
           <div
             className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
@@ -426,7 +434,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
               <h3 className="text-[14.5px] font-semibold text-foreground">
                 {editando ? "Editar sucursal" : "Nueva sucursal"}
               </h3>
-              <button onClick={() => setModalAbierto(false)} className="text-muted-foreground hover:text-foreground">
+              <button onClick={cancelarModal} className="text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -486,7 +494,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
-                onClick={() => setModalAbierto(false)}
+                onClick={cancelarModal}
                 className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground"
               >
                 Cancelar

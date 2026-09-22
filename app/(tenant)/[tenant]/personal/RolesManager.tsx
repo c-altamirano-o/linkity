@@ -7,7 +7,7 @@ import { MODULE_CATALOG } from "@/lib/modules-catalog";
 import {
   listarRolesTenantAction, crearRolAction, actualizarRolAction, eliminarRolAction,
 } from "@/app/actions/roles-tenant-actions";
-import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 
 /**
  * "Roles y permisos" (2026-09-17) — editor de los roles/puestos de este
@@ -74,6 +74,19 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
   const [verTodoTallerNuevo, setVerTodoTallerNuevo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Este componente SIEMPRE es el modal — el padre (PersonalClient) lo
+  // monta/desmonta condicionalmente en vez de tener aquí un estado
+  // "abierto/cerrado" propio — así que mientras esté montado, la pestaña
+  // siempre debe advertir antes de cerrarse/recargarse (2026-09-22, ver
+  // lib/confirmar-cierre.ts).
+  useAdvertirCierrePestaña(true);
+
+  // Cierra el modal por cualquier vía (fondo o X) — siempre pregunta, sin
+  // dirty-tracking (mismo criterio que ya regía solo para el fondo).
+  const cancelarModal = () => {
+    if (confirmarSalirSinGuardar()) onCerrar();
+  };
 
   const refrescar = () => {
     startTransition(async () => {
@@ -158,11 +171,11 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40"
-      onClick={() => { if (confirmarSalirSinGuardar()) onCerrar(); }}>
+      onClick={cancelarModal}>
       <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="text-sm font-medium text-foreground flex items-center gap-1.5"><Shield className="w-4 h-4" /> Roles y permisos</span>
-          <button onClick={onCerrar} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+          <button onClick={cancelarModal} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-4 space-y-3">

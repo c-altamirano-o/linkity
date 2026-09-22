@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { LifeBuoy, Plus, X, Send } from "lucide-react";
 import type { TicketUI, TicketPriority, TicketStatus } from "@/lib/soporte-data";
 import { crearTicketAction, responderTicketAction } from "@/app/actions/soporte-actions";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 
 const formatFecha = (iso: string) =>
   new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -44,6 +45,20 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
   const [priority, setPriority] = useState<TicketPriority>("NORMAL");
 
   const ticketActivo = tickets.find((t) => t.id === seleccionado) ?? null;
+
+  // 2026-09-22, a petición de Carlos ("pide confirmación para cerrarlas
+  // cuando abandone la acción a mitad del proceso"): antes este modal se
+  // cerraba sin más (click fuera no hacía nada; la X y "Cancelar" cerraban
+  // sin preguntar) — perdiendo lo capturado sin aviso.
+  const cancelarModal = () => {
+    if (confirmarSalirSinGuardar()) setModalAbierto(false);
+  };
+
+  // Aviso al cerrar/recargar la PESTAÑA del navegador mientras el modal de
+  // nuevo ticket sigue abierto (ver el comentario largo en
+  // lib/confirmar-cierre.ts) — complementa a cancelarModal() de arriba, que
+  // solo cubre cerrar el modal sin salir de la pestaña.
+  useAdvertirCierrePestaña(modalAbierto);
 
   function abrirModal() {
     setSubject("");
@@ -193,11 +208,14 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
 
       {/* Modal nuevo ticket */}
       {modalAbierto && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-lg w-full max-w-md">
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={cancelarModal}
+        >
+          <div className="bg-card border border-border rounded-lg w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <p className="text-[14.5px] font-medium text-foreground">Nuevo ticket de soporte</p>
-              <button onClick={() => setModalAbierto(false)}>
+              <button onClick={cancelarModal}>
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
@@ -238,7 +256,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
-                onClick={() => setModalAbierto(false)}
+                onClick={cancelarModal}
                 className="text-[13.5px] text-muted-foreground px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
               >
                 Cancelar

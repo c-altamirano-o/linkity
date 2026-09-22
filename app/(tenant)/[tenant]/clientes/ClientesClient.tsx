@@ -29,6 +29,7 @@ import { crearConsentimientoAction } from "@/app/actions/consentimiento-actions"
 import { crearRecetaAction } from "@/app/actions/receta-actions";
 import FirmaCanvas from "@/components/tenant/FirmaCanvas";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp, formatoTelefono } from "@/lib/paises";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 
 interface ClientesClientProps {
   clientes: ClienteUI[];
@@ -405,6 +406,20 @@ export default function ClientesClient({
   const [notaError, setNotaError] = useState<string | null>(null);
   const [notaGuardando, startNotaGuardar] = useTransition();
 
+  // 2026-09-22, a petición de Carlos ("revisando el flujo de datos... pide
+  // confirmación para cerrarlas cuando abandone la acción a mitad del
+  // proceso"): antes este modal (y los otros 5 de este archivo — plan de
+  // tratamiento, cobrar fase, consentimiento, receta y el de cliente) se
+  // cerraba sin más: el click fuera del recuadro no hacía nada, y la X y
+  // "Cancelar" cerraban sin preguntar, perdiendo lo ya capturado sin aviso.
+  // Cada modal tiene aquí su propio cancelarModalX porque cada uno cierra
+  // un state distinto (ver useAdvertirCierrePestaña más abajo, junto al
+  // formulario de cliente, para el aviso complementario al cerrar/recargar
+  // la pestaña del navegador).
+  const cancelarModalNota = () => {
+    if (confirmarSalirSinGuardar()) setNotaModalAbierto(false);
+  };
+
   const [dienteSeleccionado, setDienteSeleccionado] = useState<number | null>(null);
   const [dienteCondicion, setDienteCondicion] = useState<CondicionDiente>("SANO");
   const [dienteNotas, setDienteNotas] = useState("");
@@ -422,6 +437,16 @@ export default function ClientesClient({
   const [cobroModal, setCobroModal] = useState<{ itemId: string; descripcion: string; costo: number } | null>(null);
   const [cobroMetodo, setCobroMetodo] = useState<MetodoPagoPlanInput>("CASH");
 
+  // 2026-09-22, mismo criterio que cancelarModalNota de arriba.
+  const cancelarModalPlan = () => {
+    if (confirmarSalirSinGuardar()) setPlanModalAbierto(false);
+  };
+
+  // 2026-09-22, mismo criterio que cancelarModalNota de arriba.
+  const cancelarModalCobro = () => {
+    if (confirmarSalirSinGuardar()) setCobroModal(null);
+  };
+
   // Consentimiento Informado (M17, Fase 2, 2026-09-21).
   const [consentModalAbierto, setConsentModalAbierto] = useState(false);
   const [consentProcedureType, setConsentProcedureType] = useState("");
@@ -431,6 +456,13 @@ export default function ClientesClient({
   const [consentError, setConsentError] = useState<string | null>(null);
   const [consentGuardando, startConsentGuardar] = useTransition();
   const [consentVerModal, setConsentVerModal] = useState<ConsentimientoUI | null>(null);
+
+  // 2026-09-22, mismo criterio que cancelarModalNota de arriba. No aplica a
+  // consentVerModal: ese modal solo MUESTRA un consentimiento ya firmado, no
+  // hay nada que capturar ahí que se pueda perder.
+  const cancelarModalConsent = () => {
+    if (confirmarSalirSinGuardar()) setConsentModalAbierto(false);
+  };
 
   // Recetas digitales (M17, Fase 2, 2026-09-21) — mismo patrón que
   // Consentimiento Informado, pero aquí firma el DOCTOR (doctorUserId
@@ -444,6 +476,13 @@ export default function ClientesClient({
   const [recetaGuardando, startRecetaGuardar] = useTransition();
   const [recetaVerModal, setRecetaVerModal] = useState<RecetaUI | null>(null);
 
+  // 2026-09-22, mismo criterio que cancelarModalNota de arriba. No aplica a
+  // recetaVerModal: ese modal solo MUESTRA una receta ya firmada, no hay
+  // nada que capturar ahí que se pueda perder.
+  const cancelarModalReceta = () => {
+    if (confirmarSalirSinGuardar()) setRecetaModalAbierto(false);
+  };
+
   // Negocio con el módulo de Reparaciones apagado (ej. una barbería): ni la
   // pestaña "Reparaciones" del historial ni ningún registro de tipo
   // "reparacion" que pudiera haber quedado de antes deben aparecer aquí.
@@ -456,6 +495,21 @@ export default function ClientesClient({
   const [form, setForm] = useState<DatosCliente>(FORM_VACIO);
   const [formError, setFormError] = useState<string | null>(null);
   const [guardando, startGuardar] = useTransition();
+
+  // 2026-09-22, mismo criterio que cancelarModalNota de arriba.
+  const cancelarModalCliente = () => {
+    if (confirmarSalirSinGuardar()) setModalAbierto(false);
+  };
+
+  // Aviso al cerrar/recargar la PESTAÑA del navegador mientras alguno de los
+  // 6 modales de captura de este archivo sigue abierto (ver el comentario
+  // largo en lib/confirmar-cierre.ts) — complementa a los cancelarModalX de
+  // arriba, que solo cubren cerrar el modal sin salir de la pestaña.
+  // consentVerModal/recetaVerModal quedan fuera a propósito: son de solo
+  // lectura, no capturan nada que se pueda perder.
+  useAdvertirCierrePestaña(
+    modalAbierto || notaModalAbierto || planModalAbierto || !!cobroModal || consentModalAbierto || recetaModalAbierto
+  );
 
   const clientesFiltrados = clientes.filter(
     (c) => c.name.toLowerCase().includes(busqueda.toLowerCase()) || (c.phone ?? "").includes(busqueda)
@@ -810,13 +864,13 @@ export default function ClientesClient({
   }
 
   const modal = modalAbierto && (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-card rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={cancelarModalCliente}>
+      <div className="bg-card rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <p className="text-sm font-semibold text-foreground">
             {modoModal === "crear" ? "Nuevo cliente" : "Editar cliente"}
           </p>
-          <button onClick={() => setModalAbierto(false)} className="p-1 rounded-md hover:bg-muted">
+          <button onClick={cancelarModalCliente} className="p-1 rounded-md hover:bg-muted">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
@@ -890,7 +944,7 @@ export default function ClientesClient({
         </div>
         <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
           <button
-            onClick={() => setModalAbierto(false)}
+            onClick={cancelarModalCliente}
             className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
           >
             Cancelar
@@ -1601,11 +1655,11 @@ export default function ClientesClient({
       </div>
 
       {notaModalAbierto && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={cancelarModalNota}>
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <p className="text-sm font-semibold text-foreground">Nueva nota de evolución</p>
-              <button onClick={() => setNotaModalAbierto(false)} className="p-1 rounded-md hover:bg-muted">
+              <button onClick={cancelarModalNota} className="p-1 rounded-md hover:bg-muted">
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
@@ -1654,7 +1708,7 @@ export default function ClientesClient({
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
-                onClick={() => setNotaModalAbierto(false)}
+                onClick={cancelarModalNota}
                 className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
               >
                 Cancelar
@@ -1672,11 +1726,11 @@ export default function ClientesClient({
       )}
 
       {planModalAbierto && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={cancelarModalPlan}>
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <p className="text-sm font-semibold text-foreground">Nuevo plan de tratamiento</p>
-              <button onClick={() => setPlanModalAbierto(false)} className="p-1 rounded-md hover:bg-muted">
+              <button onClick={cancelarModalPlan} className="p-1 rounded-md hover:bg-muted">
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
@@ -1778,7 +1832,7 @@ export default function ClientesClient({
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
-                onClick={() => setPlanModalAbierto(false)}
+                onClick={cancelarModalPlan}
                 className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
               >
                 Cancelar
@@ -1796,11 +1850,11 @@ export default function ClientesClient({
       )}
 
       {cobroModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-xl shadow-lg w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={cancelarModalCobro}>
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <p className="text-sm font-semibold text-foreground">Cobrar fase</p>
-              <button onClick={() => setCobroModal(null)} className="p-1 rounded-md hover:bg-muted">
+              <button onClick={cancelarModalCobro} className="p-1 rounded-md hover:bg-muted">
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
@@ -1824,7 +1878,7 @@ export default function ClientesClient({
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
-                onClick={() => setCobroModal(null)}
+                onClick={cancelarModalCobro}
                 className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
               >
                 Cancelar
@@ -1842,11 +1896,11 @@ export default function ClientesClient({
       )}
 
       {consentModalAbierto && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={cancelarModalConsent}>
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <p className="text-sm font-semibold text-foreground">Nuevo consentimiento informado</p>
-              <button onClick={() => setConsentModalAbierto(false)} className="p-1 rounded-md hover:bg-muted">
+              <button onClick={cancelarModalConsent} className="p-1 rounded-md hover:bg-muted">
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
@@ -1907,7 +1961,7 @@ export default function ClientesClient({
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
-                onClick={() => setConsentModalAbierto(false)}
+                onClick={cancelarModalConsent}
                 className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
               >
                 Cancelar
@@ -1978,11 +2032,11 @@ export default function ClientesClient({
       )}
 
       {recetaModalAbierto && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={cancelarModalReceta}>
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <p className="text-sm font-semibold text-foreground">Nueva receta</p>
-              <button onClick={() => setRecetaModalAbierto(false)} className="p-1 rounded-md hover:bg-muted">
+              <button onClick={cancelarModalReceta} className="p-1 rounded-md hover:bg-muted">
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
@@ -2031,7 +2085,7 @@ export default function ClientesClient({
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
-                onClick={() => setRecetaModalAbierto(false)}
+                onClick={cancelarModalReceta}
                 className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
               >
                 Cancelar

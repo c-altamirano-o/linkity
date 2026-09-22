@@ -11,7 +11,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import type { CatalogoData, TipoCatalogo, ProductoCatalogo } from "@/lib/catalogo-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { ProductoIcono, ICON_PREFIX, ICONOS } from "@/lib/catalogo-iconos";
-import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import {
   crearProductoAction, editarProductoAction, crearCategoriaAction,
   cargarCatalogoArranqueAction, importarProductosAction,
@@ -208,6 +208,17 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   const [errorImportar, setErrorImportar] = useState<string | null>(null);
   const [resultadoImportar, setResultadoImportar] = useState<{ creados: number; omitidos: { fila: number; motivo: string }[] } | null>(null);
 
+  // 2026-09-22, a petición de Carlos ("pide confirmación para cerrarlas
+  // cuando abandone la acción a mitad del proceso"): antes este modal
+  // cerraba sin más (click fuera, X o Cancelar) — a diferencia del modal de
+  // producto de abajo, aquí SÍ hay un caso en el que no hace falta
+  // preguntar: una vez que `resultadoImportar` ya existe, la importación ya
+  // terminó (por eso el botón cambia a "Cerrar") y no hay nada pendiente
+  // que se pierda.
+  const cancelarModalImportar = () => {
+    if (resultadoImportar || confirmarSalirSinGuardar()) setModalImportar(false);
+  };
+
   const TIPO_ARCHIVO_A_ENUM: Record<string, TipoProductoInput> = {
     producto: "PRODUCT", productos: "PRODUCT", product: "PRODUCT",
     refaccion: "PART", "refacción": "PART", refacciones: "PART", part: "PART",
@@ -328,6 +339,19 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
 
   // ── Modal crear/editar producto ──────────────────────────────
   const [modalAbierto, setModalAbierto] = useState(false);
+
+  // 2026-09-22, a petición de Carlos: el click fuera de este modal ya
+  // preguntaba antes de cerrar (2026-09-21), pero la X y "Cancelar" seguían
+  // cerrando sin preguntar nada — mismo hueco que el resto de los módulos
+  // auditados ese día.
+  const cancelarModalProducto = () => {
+    if (confirmarSalirSinGuardar()) setModalAbierto(false);
+  };
+
+  // Aviso al cerrar/recargar la pestaña del navegador mientras cualquiera
+  // de los 2 modales de captura de este módulo sigue abierto (ver el
+  // comentario largo en lib/confirmar-cierre.ts).
+  useAdvertirCierrePestaña(modalAbierto || modalImportar);
   const [editando, setEditando] = useState<ProductoCatalogo | null>(null);
   const [form, setForm] = useState<FormProducto>(FORM_VACIO);
   const [errorModal, setErrorModal] = useState<string | null>(null);
@@ -824,7 +848,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
               <h3 className="text-[14.5px] font-semibold text-foreground">
                 {editando ? "Editar producto" : "Nuevo producto"}
               </h3>
-              <button onClick={() => setModalAbierto(false)} className="text-muted-foreground hover:text-foreground">
+              <button onClick={cancelarModalProducto} className="text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -995,7 +1019,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
-                onClick={() => setModalAbierto(false)}
+                onClick={cancelarModalProducto}
                 className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground"
               >
                 Cancelar
@@ -1016,7 +1040,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       {modalImportar && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => setModalImportar(false)}
+          onClick={cancelarModalImportar}
         >
           <div
             className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
@@ -1024,7 +1048,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <h3 className="text-[14.5px] font-semibold text-foreground">Importar catálogo</h3>
-              <button onClick={() => setModalImportar(false)} className="text-muted-foreground hover:text-foreground">
+              <button onClick={cancelarModalImportar} className="text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1094,7 +1118,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
-                onClick={() => setModalImportar(false)}
+                onClick={cancelarModalImportar}
                 className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground"
               >
                 {resultadoImportar ? "Cerrar" : "Cancelar"}

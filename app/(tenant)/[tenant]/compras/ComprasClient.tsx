@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, Plus, Printer, Check, Building2, Package, X, Ban } from "lucide-react";
 import type { ComprasData, CompraUI, EstadoCompra } from "@/lib/compras-data";
 import { label, type LabelDictionary } from "@/lib/labels";
-import { confirmarSalirSinGuardar } from "@/lib/confirmar-cierre";
+import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import {
   crearCompraAction,
   actualizarEstadoCompraAction,
@@ -92,6 +92,14 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
   const [accionError, setAccionError] = useState<string | null>(null);
 
   const [modalNueva, setModalNueva] = useState(false);
+  // 2026-09-22, a petición de Carlos ("pide confirmación para cerrarlas
+  // cuando abandone la acción a mitad del proceso"): el click fuera de
+  // este modal ya preguntaba antes de cerrar (2026-09-21), pero la X y
+  // "Cancelar" seguían cerrando sin preguntar nada.
+  const cancelarModalNueva = () => {
+    if (confirmarSalirSinGuardar()) setModalNueva(false);
+  };
+  useAdvertirCierrePestaña(modalNueva);
   const [nvBranchId, setNvBranchId] = useState(branches[0]?.id ?? "");
   const [nvSupplierId, setNvSupplierId] = useState<string>(proveedores[0]?.id ?? "");
   const [nvProveedorNuevo, setNvProveedorNuevo] = useState(false);
@@ -442,7 +450,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
       {modalNueva && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={() => { if (confirmarSalirSinGuardar()) setModalNueva(false); }}
+          onClick={cancelarModalNueva}
         >
           <div
             className="bg-card border border-border rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
@@ -450,7 +458,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-semibold text-foreground">Nueva orden de compra</span>
-              <button onClick={() => setModalNueva(false)} className="text-muted-foreground hover:text-foreground">
+              <button onClick={cancelarModalNueva} className="text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -588,7 +596,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
 
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
-                onClick={() => setModalNueva(false)}
+                onClick={cancelarModalNueva}
                 className="px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted"
               >
                 Cancelar
