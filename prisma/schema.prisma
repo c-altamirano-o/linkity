@@ -54,6 +54,22 @@ model Tenant {
   // reparaciones-actions.ts para dónde se lee.
   cobrarEnDevolucion Boolean @default(false)
 
+  // Qué categorías se muestran en la gráfica de pastel de "Ventas por
+  // categoría" del Dashboard y de qué color — antes (2026-09-22, a
+  // petición de Carlos, pendiente registrado) era solo estado del
+  // navegador (useState en DashboardClient.tsx): se perdía cada vez que
+  // recargaba la página. Guardado como JSON libre, no una tabla propia,
+  // porque la clave es el NOMBRE de la categoría, no su id: el bucket
+  // "Sin categoría" que arma getDashboardData (lib/dashboard-data.ts) no
+  // tiene una fila de Category real detrás, así que no hay a qué
+  // Category.id amarrar esta configuración. Forma: un arreglo de
+  // {name, color, visible} — ver aplicarConfigCategorias en
+  // lib/dashboard-data.ts. null = tenant que nunca ha guardado esta
+  // config todavía → usa el default de siempre (las primeras 6 por monto
+  // vendido este mes), para no cambiarle nada a un tenant existente hasta
+  // que su dueño toque el modal de configuración.
+  dashboardCategoriasConfig Json?
+
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 

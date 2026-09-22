@@ -103,10 +103,21 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
   const [pending, startTransition] = useTransition();
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
+  // Filtro por tipo de movimiento/método de pago (2026-09-22, pendiente
+  // registrado: el botón "Filtrar" existía desde antes pero no hacía nada)
+  // — se combina con el filtro de período que ya existía (periodo/
+  // fechaInicio/fechaFin), no lo reemplaza.
+  const [filtroTipo, setFiltroTipo] = useState<string>("todos");
+  const [filtroMetodo, setFiltroMetodo] = useState<string>("todos");
+  const [mostrarFiltroPanel, setMostrarFiltroPanel] = useState(false);
+  const filtroPanelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node))
         setMostrarExportMenu(false);
+      if (filtroPanelRef.current && !filtroPanelRef.current.contains(e.target as Node))
+        setMostrarFiltroPanel(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -228,13 +239,21 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
 
   const movsFiltrados = movimientos.filter((m) => {
     const f = new Date(m.fecha);
-    if (periodo === "hoy") return f >= inicioHoy;
-    if (periodo === "semana") return f >= inicioSemana;
-    if (periodo === "mes") return f >= inicioMes;
-    if (periodo === "año") return f >= inicioAnio;
-    if (periodo === "periodo") return f >= rangoInicio && f <= rangoFin;
+    const enPeriodo =
+      periodo === "hoy" ? f >= inicioHoy :
+      periodo === "semana" ? f >= inicioSemana :
+      periodo === "mes" ? f >= inicioMes :
+      periodo === "año" ? f >= inicioAnio :
+      periodo === "periodo" ? (f >= rangoInicio && f <= rangoFin) :
+      true;
+    if (!enPeriodo) return false;
+    if (filtroTipo !== "todos" && m.tipo !== filtroTipo) return false;
+    if (filtroMetodo !== "todos" && m.metodo !== filtroMetodo) return false;
     return true;
   });
+
+  const filtrosActivos = filtroTipo !== "todos" || filtroMetodo !== "todos";
+  const limpiarFiltros = () => { setFiltroTipo("todos"); setFiltroMetodo("todos"); };
 
   // "cierre" (2026-09-22, cambio de turno) se excluye de ambos: su monto es
   // la DIFERENCIA del corte (contado − esperado), no un ingreso o egreso
@@ -873,9 +892,58 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
             )}
 
             <div className="flex gap-2 ml-auto items-center">
-              <button className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted">
-                <Filter className="w-3 h-3" /> <span className="hidden sm:inline">Filtrar</span>
-              </button>
+              <div className="relative" ref={filtroPanelRef}>
+                <button
+                  onClick={() => setMostrarFiltroPanel((v) => !v)}
+                  className="relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted"
+                >
+                  <Filter className="w-3 h-3" /> <span className="hidden sm:inline">Filtrar</span>
+                  {filtrosActivos && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary" />
+                  )}
+                </button>
+                {mostrarFiltroPanel && (
+                  <div className="absolute right-0 top-full mt-1.5 w-60 bg-card border border-border rounded-xl shadow-lg z-30 p-3 space-y-3">
+                    <div>
+                      <p className="text-[10.5px] font-semibold text-muted-foreground tracking-widest mb-1.5">TIPO DE MOVIMIENTO</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["todos", "venta", "ingreso", "egreso", "apertura", "cierre"] as const).map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => setFiltroTipo(t)}
+                            className={`px-2 py-1 rounded-full text-[11.5px] font-medium capitalize transition-colors ${
+                              filtroTipo === t ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                            }`}
+                          >
+                            {t === "todos" ? "Todos" : tipoLabel[t]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10.5px] font-semibold text-muted-foreground tracking-widest mb-1.5">MÉTODO DE PAGO</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["todos", "Efectivo", "Tarjeta", "Transferencia", "Mixto"] as const).map((m) => (
+                          <button
+                            key={m}
+                            onClick={() => setFiltroMetodo(m)}
+                            className={`px-2 py-1 rounded-full text-[11.5px] font-medium transition-colors ${
+                              filtroMetodo === m ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                            }`}
+                          >
+                            {m === "todos" ? "Todos" : m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {filtrosActivos && (
+                      <button onClick={limpiarFiltros} className="text-[11.5px] text-primary hover:underline">
+                        Limpiar filtros
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="relative" ref={exportMenuRef}>
                 <button
                   onClick={() => setMostrarExportMenu(!mostrarExportMenu)}

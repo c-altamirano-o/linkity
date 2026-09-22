@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -12,6 +12,7 @@ import { label, type LabelDictionary } from "@/lib/labels";
 import { crearVentaAction, type MetodoPago } from "@/app/actions/pos-actions";
 import { ProductoIcono } from "@/lib/catalogo-iconos";
 import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
+import EscanearModal from "./EscanearModal";
 
 interface BranchOption {
   id: string;
@@ -68,6 +69,15 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const [ultimoRecibo, setUltimoRecibo] = useState<ReciboData | null>(null);
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
 
+  // Escaneo de código de barras (2026-09-22, pendiente registrado: el
+  // botón "Escanear" no hacía nada) — ver EscanearModal.tsx.
+  const [mostrarEscaner, setMostrarEscaner] = useState(false);
+  const [errorEscaner, setErrorEscaner] = useState<string | null>(null);
+  // Evita procesar el MISMO código varias veces seguidas: la cámara sigue
+  // "viendo" el código en cuadro por varios frames mientras el usuario
+  // reacciona, y decodeFromVideoDevice llama a su callback en cada uno.
+  const ultimoEscaneoRef = useRef<{ codigo: string; ts: number } | null>(null);
+
   const stockDe = (p: ProductoPOS) =>
     p.isService ? Infinity : (branchId ? p.stockPorSucursal[branchId] ?? 0 : 0);
 
@@ -94,7 +104,15 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         : categoriaActiva === SIN_CATEGORIA_ID
         ? p.categoryId === null
         : p.categoryId === categoriaActiva;
-    const matchSearch = p.name.toLowerCase().includes(busqueda.toLowerCase());
+    // También busca por SKU/código de barras, no solo por nombre — así
+    // un lector físico de código de barras (que "escribe" el código en
+    // cualquier input enfocado) ya funciona aquí sin abrir el escáner de
+    // cámara siquiera, con solo tener el foco en este buscador.
+    const busquedaNorm = busqueda.toLowerCase();
+    const matchSearch =
+      p.name.toLowerCase().includes(busquedaNorm) ||
+      (!!p.sku && p.sku.toLowerCase().includes(busquedaNorm)) ||
+      (!!p.barcode && p.barcode.toLowerCase().includes(busquedaNorm));
     return matchCat && matchSearch;
   });
 
@@ -152,6 +170,35 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       }
       return [...prev, { productId: p.id, nombre: p.name, precio: p.price, taxRate: p.taxRate, cantidad: 1, isService: p.isService }];
     });
+  };
+
+  // Se llama con lo que detecta la cámara de EscanearModal.tsx (o lo que
+  // el cajero escribió a mano ahí mismo). Busca el producto por barcode
+  // exacto o, si no hay match, por SKU exacto (sin distinguir mayúsculas)
+  // — un código de barras real nunca es un match parcial, así que aquí sí
+  // se compara completo, a diferencia del buscador de texto de arriba.
+  const handleCodigoEscaneado = (codigoCrudo: string) => {
+    const codigo = codigoCrudo.trim();
+    if (!codigo) return;
+
+    const ahora = Date.now();
+    if (ultimoEscaneoRef.current?.codigo === codigo && ahora - ultimoEscaneoRef.current.ts < 2000) return;
+    ultimoEscaneoRef.current = { codigo, ts: ahora };
+
+    const producto = productos.find(
+      (p) => p.barcode === codigo || (!!p.sku && p.sku.toLowerCase() === codigo.toLowerCase())
+    );
+    if (!producto) {
+      setErrorEscaner(`No se encontró ningún producto con el código "${codigo}".`);
+      return;
+    }
+    if (!producto.isService && stockDe(producto) <= 0) {
+      setErrorEscaner(`"${producto.name}" no tiene stock disponible en esta sucursal.`);
+      return;
+    }
+    agregarAlCarrito(producto);
+    setErrorEscaner(null);
+    setMostrarEscaner(false);
   };
 
   const cambiarCantidad = (productId: string, delta: number) => {
@@ -619,7 +666,10 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               className="w-full pl-9 pr-4 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
-          <button className="flex items-center gap-1.5 px-3 py-2.5 bg-muted hover:bg-accent rounded-lg text-xs text-muted-foreground transition-colors">
+          <button
+            onClick={() => { setErrorEscaner(null); setMostrarEscaner(true); }}
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-muted hover:bg-accent rounded-lg text-xs text-muted-foreground transition-colors"
+          >
             <Barcode className="w-4 h-4" />
             <span className="hidden sm:inline">Escanear</span>
           </button>
@@ -701,6 +751,14 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             {carritoContent}
           </div>
         </>
+      )}
+
+      {mostrarEscaner && (
+        <EscanearModal
+          onCerrar={() => { setMostrarEscaner(false); setErrorEscaner(null); }}
+          onCodigoDetectado={handleCodigoEscaneado}
+          error={errorEscaner}
+        />
       )}
     </div>
   );

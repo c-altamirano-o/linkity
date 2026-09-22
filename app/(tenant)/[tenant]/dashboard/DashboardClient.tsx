@@ -16,7 +16,7 @@ import { label, type LabelDictionary } from "@/lib/labels";
 import type {
   DashboardData, RepairRow, CategoriaVenta, VentasPorDiaData, VentaPorHora,
 } from "@/lib/dashboard-data";
-import { obtenerVentasPorDiaAction } from "@/app/actions/dashboard-actions";
+import { obtenerVentasPorDiaAction, guardarConfigCategoriasDashboardAction } from "@/app/actions/dashboard-actions";
 
 // ── Config de presentación (claves = valores reales del enum) ───────────────
 const estadoConfig: Record<RepairStatus, { label: string; classes: string }> = {
@@ -57,7 +57,11 @@ const coloresDisponibles = [
 ];
 
 type ModalType = "ventas" | "tickets" | "reparaciones" | "listos" | "devoluciones" | null;
-type CatConfig = CategoriaVenta & { visible: boolean };
+// CategoriaVenta ya trae "visible" (2026-09-22: el servidor lo resuelve
+// con la config guardada del tenant, ver aplicarConfigCategorias en
+// lib/dashboard-data.ts) — este alias se queda solo por lo descriptivo
+// del nombre en este archivo, ya no agrega ningún campo extra.
+type CatConfig = CategoriaVenta;
 
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
@@ -162,10 +166,16 @@ export default function DashboardClient({
   const [hoyStr, setHoyStr] = useState(ventasPorDiaInicial.fecha);
   const [cargandoFecha, setCargandoFecha] = useState(false);
   const [configurandoCategorias, setConfigurandoCategorias] = useState(false);
-  const [categoriasConfig, setCategoriasConfig] = useState<CatConfig[]>(
-    data.categorias.map((c, i) => ({ ...c, visible: i < 6 }))
-  );
+  // 2026-09-22: data.categorias ya viene con "visible" resuelto desde el
+  // servidor (config guardada del tenant, o el default de las primeras 6
+  // si nunca la ha configurado — ver aplicarConfigCategorias en
+  // lib/dashboard-data.ts) — antes este useState recalculaba "las primeras
+  // 6" localmente cada vez, así que cualquier cambio del dueño se perdía
+  // al recargar la página (pendiente registrado, ya resuelto).
+  const [categoriasConfig, setCategoriasConfig] = useState<CatConfig[]>(data.categorias);
   const [catTemp, setCatTemp] = useState<CatConfig[]>([]);
+  const [guardandoCategorias, setGuardandoCategorias] = useState(false);
+  const [errorCategorias, setErrorCategorias] = useState<string | null>(null);
   const [saludo, setSaludo] = useState("Hola");
   const [fechaHoy, setFechaHoy] = useState("");
 
@@ -218,7 +228,31 @@ export default function DashboardClient({
   const cambiarColor = (name: string, color: string) =>
     setCatTemp((prev) => prev.map((c) => (c.name === name ? { ...c, color } : c)));
 
-  const guardarConfig = () => { setCategoriasConfig(catTemp); setConfigurandoCategorias(false); };
+  // 2026-09-22: ahora persiste en el servidor (Tenant.dashboardCategoriasConfig)
+  // en vez de solo actualizar el useState local — así el dueño no pierde su
+  // configuración al recargar la página. Se actualiza el estado local de una
+  // vez (optimista) en cuanto el servidor confirma, sin esperar a un
+  // router.refresh() completo — el propio Dashboard ya tiene todo lo que
+  // necesita mostrar en catTemp.
+  const guardarConfig = () => {
+    setErrorCategorias(null);
+    setGuardandoCategorias(true);
+    const config = catTemp.map((c) => ({ name: c.name, color: c.color, visible: c.visible }));
+    guardarConfigCategoriasDashboardAction(tenantSlug, config)
+      .then((res) => {
+        setGuardandoCategorias(false);
+        if (!res.ok) {
+          setErrorCategorias(res.error);
+          return;
+        }
+        setCategoriasConfig(catTemp);
+        setConfigurandoCategorias(false);
+      })
+      .catch(() => {
+        setGuardandoCategorias(false);
+        setErrorCategorias("No se pudo guardar la configuración");
+      });
+  };
 
   // ── Tabla ventas reutilizable ────────────────────────
   function TablaVentas() {
@@ -917,14 +951,17 @@ export default function DashboardClient({
                 );
               })}
             </div>
+            {errorCategorias && (
+              <p className="px-5 pt-1 text-[11.5px] text-red-600">{errorCategorias}</p>
+            )}
             <div className="flex items-center justify-between px-5 py-4 border-t border-border flex-shrink-0">
               <button onClick={() => setConfigurandoCategorias(false)}
                 className="px-4 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted/40">
                 Cancelar
               </button>
-              <button onClick={guardarConfig}
-                className="px-5 py-2 bg-primary hover:opacity-90 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
-                Guardar cambios
+              <button onClick={guardarConfig} disabled={guardandoCategorias}
+                className="px-5 py-2 bg-primary hover:opacity-90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
+                {guardandoCategorias ? "Guardando…" : "Guardar cambios"}
               </button>
             </div>
           </div>

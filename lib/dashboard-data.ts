@@ -41,6 +41,64 @@ export interface CategoriaVenta {
   name: string;
   value: number; // porcentaje del mes, 0-100
   color: string;
+  // Si esta categoría se muestra en la gráfica de pastel del Dashboard —
+  // 2026-09-22, ver Tenant.dashboardCategoriasConfig (schema.prisma) y
+  // aplicarConfigCategorias más abajo. Antes era un cálculo puramente
+  // local en DashboardClient.tsx (las primeras 6, sin persistir); ahora
+  // ya viene resuelto desde el servidor con la config guardada del tenant.
+  visible: boolean;
+}
+
+/**
+ * Entrada guardada en Tenant.dashboardCategoriasConfig — un JSON libre,
+ * así que se valida forma por forma en vez de confiar en el tipo de
+ * Prisma (Prisma.JsonValue es básicamente `unknown`).
+ */
+interface CategoriaDashboardConfigGuardada {
+  name: string;
+  color: string;
+  visible: boolean;
+}
+
+/**
+ * Aplica la config de categorías del Dashboard guardada por el tenant
+ * (Tenant.dashboardCategoriasConfig) sobre la lista de categorías
+ * calculada este mes. Separado de getDashboardData para poder razonar
+ * sobre los 2 casos por separado:
+ *
+ * - Sin config guardada (null — tenant que nunca ha tocado el modal de
+ *   configuración, o creado antes de que existiera este campo):
+ *   comportamiento de siempre, las primeras 6 por monto vendido.
+ * - Con config guardada: cada categoría de ESTE mes se busca por NOMBRE
+ *   en la config guardada (no por posición ni por id, ver el comentario
+ *   largo en el schema) — si se encuentra, usa su color/visible
+ *   guardados; si no (una categoría nueva que nunca se vio antes de
+ *   guardar la config), queda oculta por default — el dueño la muestra a
+ *   mano si quiere, en vez de que aparezca sola y potencialmente rompa el
+ *   límite de 6 visibles que ya impone el modal.
+ */
+function aplicarConfigCategorias(
+  categoriasBase: { name: string; value: number; color: string }[],
+  categoriasConfigGuardada: unknown
+): CategoriaVenta[] {
+  if (!Array.isArray(categoriasConfigGuardada)) {
+    return categoriasBase.map((c, i) => ({ ...c, visible: i < 6 }));
+  }
+  const porNombre = new Map<string, CategoriaDashboardConfigGuardada>();
+  for (const entrada of categoriasConfigGuardada as any[]) {
+    if (entrada && typeof entrada.name === "string") {
+      porNombre.set(entrada.name, entrada);
+    }
+  }
+  return categoriasBase.map((c) => {
+    const guardada = porNombre.get(c.name);
+    return {
+      name: c.name,
+      value: c.value,
+      color: guardada?.color ?? c.color,
+      visible: guardada ? !!guardada.visible : false,
+    };
+  });
 }
 
 export interface VentaSemanaDia {
@@ -195,7 +253,11 @@ export async function getDashboardData(
   // mismo layout que la vista global (ver DashboardClient.tsx). `undefined`
   // = vista global de siempre, sin filtrar nada — comportamiento idéntico
   // al que ya existía antes de este parámetro.
-  branchIdFiltro?: string
+  branchIdFiltro?: string,
+  // Tenant.dashboardCategoriasConfig tal cual (JSON crudo, puede ser
+  // null) — dashboard/page.tsx ya trae el Tenant completo, así que no
+  // hace falta una query aparte aquí; ver aplicarConfigCategorias arriba.
+  categoriasConfigGuardada?: unknown
 ): Promise<DashboardData> {
   // Sale y Repair tienen tenantId propio, así que getTenantPrisma se
   // encarga de inyectarlo — ya no se escribe a mano en su `where` de
@@ -373,7 +435,7 @@ export async function getDashboardData(
     if (prev) prev.total += subtotal;
     else catTotals.set(key, { name, color, total: subtotal });
   }
-  const categorias: CategoriaVenta[] = totalMes > 0
+  const categoriasBase = totalMes > 0
     ? Array.from(catTotals.values())
         .sort((a, b) => b.total - a.total)
         .map((c, i) => ({
@@ -382,6 +444,7 @@ export async function getDashboardData(
           color: c.color ?? CATEGORY_FALLBACK_COLORS[i % CATEGORY_FALLBACK_COLORS.length],
         }))
     : [];
+  const categorias: CategoriaVenta[] = aplicarConfigCategorias(categoriasBase, categoriasConfigGuardada);
 
   // ── Ventas de la semana (área) ─────────────────────────
   const ventasSemana: VentaSemanaDia[] = week.map(({ start, end }) => {

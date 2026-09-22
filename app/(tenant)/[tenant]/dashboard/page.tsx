@@ -58,7 +58,7 @@ export default async function DashboardPage({
   const branchIdFiltro = tenant.branches.find((b) => b.id === sucursal)?.id;
 
   const [data, labels, ventasPorDiaInicial] = await Promise.all([
-    getDashboardData(tenant.id, tenant.branches, tenant.weekStartDay, reparacionesActiva, branchIdFiltro),
+    getDashboardData(tenant.id, tenant.branches, tenant.weekStartDay, reparacionesActiva, branchIdFiltro, tenant.dashboardCategoriasConfig),
     getTenantLabels(tenant.id, tenant.businessType),
     getVentasPorDia(tenant.id, hoyMx(), branchIdFiltro),
   ]);

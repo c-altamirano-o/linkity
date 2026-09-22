@@ -31,6 +31,14 @@ export interface ProductoPOS {
   isService: boolean;
   price: number;
   taxRate: number;
+  // SKU/código de barras (Product.sku/barcode) — 2026-09-22, pendiente
+  // registrado: el botón "Escanear" de POS no hacía nada todavía. Se usan
+  // para (a) que la búsqueda de texto también encuentre por código, no
+  // solo por nombre, y (b) resolver el código que detecta la cámara en
+  // EscanearModal.tsx a un producto concreto. null si el producto nunca
+  // los capturó en Catálogo (son opcionales ahí).
+  sku: string | null;
+  barcode: string | null;
   // Solo tiene entradas para productos/refacciones (no servicios); la
   // sucursal seleccionada en el cliente decide qué valor leer de aquí.
   stockPorSucursal: Record<string, number>;
@@ -113,6 +121,8 @@ export async function getPosData(
       isService,
       price: Number(p.price),
       taxRate: Number(p.taxRate),
+      sku: p.sku,
+      barcode: p.barcode,
       stockPorSucursal,
     };
   });
