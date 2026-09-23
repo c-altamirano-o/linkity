@@ -329,16 +329,16 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const carritoContent = (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-bold text-foreground">Venta actual</span>
+      <div className="flex items-center justify-between px-5 py-3.5">
+        <div className="flex items-center gap-2">
+          <span className="text-base font-bold text-foreground">Venta actual</span>
           {carrito.length > 0 && (
-            <span className="bg-primary text-primary-foreground text-[10.5px] font-medium px-1.5 py-0.5 rounded-full">{totalItems}</span>
+            <span className="bg-primary text-primary-foreground text-xs font-bold px-2 py-0.5 rounded-full">{totalItems}</span>
           )}
         </div>
         <div className="flex items-center gap-3">
           {carrito.length > 0 && (
-            <button onClick={limpiarCarrito} className="text-[11.5px] text-red-500 hover:text-red-600">Limpiar</button>
+            <button onClick={limpiarCarrito} className="text-sm font-medium text-red-500 hover:text-red-600">Limpiar</button>
           )}
           <button onClick={() => setCarritoAbierto(false)} className="lg:hidden text-muted-foreground">
             <ChevronDown className="w-5 h-5" />
@@ -347,23 +347,23 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       </div>
 
       {/* Cliente */}
-      <div className="relative px-4 py-2">
+      <div className="relative px-5 py-2">
         {clienteSeleccionado ? (
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-foreground min-w-0">
-              <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-              <span className="truncate">{clienteSeleccionado.name}</span>
+            <div className="flex items-center gap-1.5 text-sm text-foreground min-w-0">
+              <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <span className="truncate font-medium">{clienteSeleccionado.name}</span>
             </div>
             <button onClick={() => setClienteId(null)} className="text-muted-foreground hover:text-foreground flex-shrink-0">
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         ) : (
           <button
             onClick={() => setClientePickerAbierto((v) => !v)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
           >
-            <User className="w-3.5 h-3.5" />
+            <User className="w-4 h-4" />
             <span>Agregar cliente</span>
           </button>
         )}
@@ -403,33 +403,33 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       </div>
 
       {/* Items */}
-      <div className="flex-1 overflow-y-auto px-4 py-2">
+      <div className="flex-1 overflow-y-auto px-5 py-2">
         {carrito.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-8 text-center">
-            <ShoppingCart className="w-8 h-8 text-muted-foreground/30 mb-2" />
-            <p className="text-xs text-muted-foreground/70">El carrito está vacío</p>
-            <p className="text-[12.5px] text-muted-foreground/50 mt-1">Selecciona productos del catálogo</p>
+            <ShoppingCart className="w-9 h-9 text-muted-foreground/30 mb-2" />
+            <p className="text-sm font-medium text-muted-foreground/70">El carrito está vacío</p>
+            <p className="text-xs text-muted-foreground/50 mt-1">Selecciona productos del catálogo</p>
           </div>
         ) : (
           <div className="space-y-2">
             {carrito.map((item) => (
-              <div key={item.productId} className="flex items-center gap-2 py-2 border-b border-border/60 last:border-0">
+              <div key={item.productId} className="flex items-center gap-2 py-2.5 border-b border-border/60 last:border-0">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground truncate">{item.nombre}</p>
-                  <p className="text-[11.5px] text-muted-foreground">{formatMXN(item.precio)} c/u</p>
+                  <p className="text-sm font-semibold text-foreground truncate">{item.nombre}</p>
+                  <p className="text-xs text-muted-foreground">{formatMXN(item.precio)} c/u</p>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                   <button onClick={() => cambiarCantidad(item.productId, -1)}
-                    className="w-[26px] h-[26px] rounded-lg bg-muted flex items-center justify-center hover:bg-accent">
-                    <Minus className="w-3 h-3 text-foreground" />
+                    className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center hover:bg-accent">
+                    <Minus className="w-3.5 h-3.5 text-foreground" />
                   </button>
-                  <span className="text-xs font-bold text-foreground w-5 text-center">{item.cantidad}</span>
+                  <span className="text-sm font-bold text-foreground w-6 text-center">{item.cantidad}</span>
                   <button onClick={() => cambiarCantidad(item.productId, 1)}
-                    className="w-[26px] h-[26px] rounded-lg bg-muted flex items-center justify-center hover:bg-accent">
-                    <Plus className="w-3 h-3 text-foreground" />
+                    className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center hover:bg-accent">
+                    <Plus className="w-3.5 h-3.5 text-foreground" />
                   </button>
                 </div>
-                <span className="text-xs font-medium text-foreground min-w-[48px] text-right">
+                <span className="text-sm font-bold text-foreground min-w-[56px] text-right">
                   {formatMXN(item.precio * item.cantidad)}
                 </span>
               </div>
@@ -439,11 +439,11 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       </div>
 
       {/* Footer — Totales y cobro */}
-      <div className="border-t border-border p-4">
+      <div className="border-t border-border p-5">
         {errorVenta && (
           <div className="mb-3 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-[12.5px] text-red-600">{errorVenta}</p>
+            <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-600">{errorVenta}</p>
           </div>
         )}
 
@@ -451,8 +451,8 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           <div className="mb-3 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-xs font-medium text-emerald-700">✓ Venta {ultimaVenta.folio} registrada</p>
-                <p className="text-[12.5px] text-emerald-600">
+                <p className="text-sm font-semibold text-emerald-700">✓ Venta {ultimaVenta.folio} registrada</p>
+                <p className="text-xs text-emerald-600">
                   {formatMXN(ultimaVenta.total)}{ultimaVenta.cambio > 0 ? ` · Cambio: ${formatMXN(ultimaVenta.cambio)}` : ""}
                 </p>
               </div>
@@ -460,38 +460,43 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 <button
                   onClick={() => abrirReciboImprimible(ultimoRecibo, nombreNegocioDeSlug(tenantSlug))}
                   title="El ticket ya se imprimió solo al cobrar — usa esto si el navegador bloqueó esa ventana"
-                  className="flex items-center gap-1 px-2 py-1.5 bg-card border border-emerald-300 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[11.5px] font-medium flex-shrink-0"
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-card border border-emerald-300 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold flex-shrink-0"
                 >
-                  <Printer className="w-3 h-3" /> Reimprimir ticket
+                  <Printer className="w-3.5 h-3.5" /> Reimprimir ticket
                 </button>
               )}
             </div>
           </div>
         )}
 
-        {/* Totales */}
+        {/* Totales — el monto Total es el número más importante del panel,
+            se agranda a propósito (2026-09-23, misma petición de "textos
+            grandes" de Carlos). */}
         <div className="space-y-1.5 mb-3">
           <div className="flex justify-between">
-            <span className="text-xs text-muted-foreground">Subtotal</span>
-            <span className="text-xs text-foreground">{formatMXN(subtotal)}</span>
+            <span className="text-sm text-muted-foreground">Subtotal</span>
+            <span className="text-sm text-foreground">{formatMXN(subtotal)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-xs text-muted-foreground">IVA</span>
-            <span className="text-xs text-foreground">{formatMXN(iva)}</span>
+            <span className="text-sm text-muted-foreground">IVA</span>
+            <span className="text-sm text-foreground">{formatMXN(iva)}</span>
           </div>
-          <div className="h-px bg-border" />
+          <div className="h-px bg-border my-1" />
           <div className="flex justify-between items-baseline">
-            <span className="text-sm font-semibold text-foreground">Total</span>
-            <span className="text-base font-bold text-primary">{formatMXN(total)}</span>
+            <span className="text-base font-bold text-foreground">Total</span>
+            <span className="text-2xl font-extrabold text-primary">{formatMXN(total)}</span>
           </div>
-          <p className="text-[11.5px] text-muted-foreground text-right">Los precios ya incluyen IVA</p>
+          <p className="text-xs text-muted-foreground text-right">Los precios ya incluyen IVA</p>
         </div>
 
         {/* Botones de método de pago — 2×2, sin emoji, un solo acento
             (2026-09-23, a petición de Carlos: "pocos botones... solo lo
             esencial" — antes cada método tenía su propio color, que sumaba
-            ruido visual sin aportar información real). */}
-        <div className="grid grid-cols-2 gap-1.5 mb-3">
+            ruido visual sin aportar información real). Estado seleccionado
+            con relleno sólido (no un tinte tenue) para que se vea igual de
+            "marcado" que las píldoras de categoría del catálogo — mismo
+            ajuste de "contenedores marcados" del 2026-09-23. */}
+        <div className="grid grid-cols-2 gap-2 mb-3">
           {([
             { key: "efectivo", label: "Efectivo" },
             { key: "tarjeta", label: "Tarjeta" },
@@ -499,9 +504,9 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             { key: "mixto", label: "Mixto" },
           ] as { key: MetodoPago; label: string }[]).map((m) => (
             <button key={m.key} onClick={() => handleMetodo(m.key)}
-              className={`py-2.5 rounded-xl text-xs font-semibold transition-colors ${
+              className={`py-3 rounded-xl text-sm font-bold transition-colors ${
                 metodoPago === m.key
-                  ? "bg-primary/[0.12] text-primary ring-1 ring-inset ring-primary/40"
+                  ? "bg-primary text-primary-foreground shadow-[0_2px_6px_rgba(0,0,0,0.14)]"
                   : "bg-muted text-muted-foreground hover:bg-accent"
               }`}>
               {m.label}
@@ -511,12 +516,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
 
         {/* Panel Efectivo — monto recibido y cambio */}
         {metodoPago === "efectivo" && carrito.length > 0 && (
-          <div className="mb-3 bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-2">
+          <div className="mb-3 bg-primary/5 border border-primary/20 rounded-xl p-3.5 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                Monto recibido <span className="text-primary">— escríbelo para continuar</span>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
+                Monto recibido <span className="text-primary font-medium">— escríbelo para continuar</span>
               </span>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 {/* Atajo para el caso más común (pago exacto) — a propósito
                     ya NO se usa el total como placeholder (Carlos,
                     2026-09-21: "como ya aparece 'pre llenado' da la
@@ -524,7 +529,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                     el usuario debe tocar deja claro que es una acción, no un
                     valor ya capturado. */}
                 <button type="button" onClick={() => setMontoRecibido(String(total))}
-                  className="px-2 py-1.5 border border-primary/30 hover:bg-primary/10 text-primary rounded-lg text-[11.5px] font-medium whitespace-nowrap">
+                  className="px-2.5 py-2 border border-primary/30 hover:bg-primary/10 text-primary rounded-lg text-sm font-semibold whitespace-nowrap">
                   Exacto
                 </button>
                 <input
@@ -533,22 +538,22 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                   onChange={(e) => setMontoRecibido(e.target.value)}
                   placeholder="$0"
                   autoFocus
-                  className="w-24 text-right px-2 py-1.5 border border-primary/40 rounded-lg text-xs font-medium focus:outline-none focus:border-primary bg-card"
+                  className="w-28 text-right px-2.5 py-2 border border-primary/40 rounded-lg text-sm font-semibold focus:outline-none focus:border-primary bg-card"
                 />
               </div>
             </div>
             {montoNum > 0 && (
-              <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${
+              <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg ${
                 cambio > 0 ? "bg-emerald-50 border border-emerald-200" :
                 faltaEfec ? "bg-red-50 border border-red-200" :
                 "bg-muted border border-border"
               }`}>
-                <span className={`text-xs font-medium ${
+                <span className={`text-sm font-medium ${
                   cambio > 0 ? "text-emerald-700" : faltaEfec ? "text-red-600" : "text-muted-foreground"
                 }`}>
                   {cambio > 0 ? "Cambio" : faltaEfec ? "Falta" : "Exacto"}
                 </span>
-                <span className={`text-sm font-bold ${
+                <span className={`text-base font-bold ${
                   cambio > 0 ? "text-emerald-700" : faltaEfec ? "text-red-600" : "text-foreground"
                 }`}>
                   {cambio > 0 ? formatMXN(cambio) : faltaEfec ? formatMXN(total - montoNum) : "—"}
@@ -560,8 +565,8 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
 
         {/* Panel Mixto */}
         {metodoPago === "mixto" && carrito.length > 0 && (
-          <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-            <p className="text-[11.5px] font-semibold text-amber-700 mb-1">Desglose de pago</p>
+          <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl p-3.5 space-y-2.5">
+            <p className="text-sm font-bold text-amber-700 mb-1">Desglose de pago</p>
 
             {[
               { label: "Efectivo", value: mixtoEfectivo, setter: setMixtoEfectivo },
@@ -569,13 +574,13 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               { label: "Transferencia", value: mixtoTransferencia, setter: setMixtoTransferencia },
             ].map((f) => (
               <div key={f.label} className="flex items-center justify-between gap-2">
-                <span className="text-xs text-amber-700/80 whitespace-nowrap">{f.label}</span>
+                <span className="text-sm text-amber-700/80 whitespace-nowrap">{f.label}</span>
                 <input
                   type="number"
                   value={f.value}
                   onChange={(e) => f.setter(e.target.value)}
                   placeholder="$0"
-                  className="w-28 text-right px-2 py-1.5 border border-amber-200 rounded-lg text-xs font-medium focus:outline-none focus:border-amber-400 bg-card"
+                  className="w-28 text-right px-2.5 py-2 border border-amber-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-amber-400 bg-card"
                 />
               </div>
             ))}
@@ -583,23 +588,23 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             <div className="h-px bg-amber-200" />
 
             <div className="flex items-center justify-between">
-              <span className="text-xs text-amber-700 font-medium">Total cubierto</span>
-              <span className={`text-sm font-bold ${mixtoOk ? "text-emerald-600" : "text-amber-700"}`}>
+              <span className="text-sm text-amber-700 font-semibold">Total cubierto</span>
+              <span className={`text-base font-bold ${mixtoOk ? "text-emerald-600" : "text-amber-700"}`}>
                 {formatMXN(totalMixto)} {mixtoOk ? "✓" : ""}
               </span>
             </div>
 
             {!mixtoOk && totalMixto > 0 && (
-              <div className="flex items-center justify-between px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg">
-                <span className="text-xs text-red-600">Falta</span>
-                <span className="text-sm font-bold text-red-600">{formatMXN(faltaMixto)}</span>
+              <div className="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                <span className="text-sm text-red-600">Falta</span>
+                <span className="text-base font-bold text-red-600">{formatMXN(faltaMixto)}</span>
               </div>
             )}
 
             {cambioMixto > 0 && (
-              <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-                <span className="text-xs text-emerald-700 font-medium">Cambio</span>
-                <span className="text-sm font-bold text-emerald-700">{formatMXN(cambioMixto)}</span>
+              <div className="flex items-center justify-between px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <span className="text-sm text-emerald-700 font-semibold">Cambio</span>
+                <span className="text-base font-bold text-emerald-700">{formatMXN(cambioMixto)}</span>
               </div>
             )}
           </div>
@@ -612,7 +617,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         <button
           onClick={handleCobrar}
           disabled={!puedeCobar}
-          className="w-full h-[60px] bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-bold rounded-2xl text-base transition-colors flex items-center justify-center gap-2.5"
+          className="w-full h-16 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-bold rounded-2xl text-lg transition-colors flex items-center justify-center gap-2.5"
         >
           {isPending ? (
             <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
@@ -624,7 +629,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           )}
         </button>
         {razonNoPuedeCobrar && !isPending && (
-          <p className="text-[11.5px] text-amber-600 text-center mt-1.5">
+          <p className="text-xs text-amber-600 text-center mt-2">
             {razonNoPuedeCobrar}
             {branchId && !cajaAbierta && (
               <>
@@ -646,16 +651,16 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       {/* Panel izquierdo — Catálogo */}
       <div className="flex-1 flex flex-col bg-card lg:shadow-[1px_0_0_rgba(0,0,0,0.045)] min-h-0">
 
-        <div className="flex items-center gap-2 px-4 py-3.5 flex-wrap">
-          <span className="text-sm font-medium text-foreground w-full sm:w-auto sm:mr-1">
+        <div className="flex items-center gap-2.5 px-5 py-4 flex-wrap">
+          <span className="text-lg font-bold text-foreground w-full sm:w-auto sm:mr-2">
             {label(labels, "module.pos.name")}
           </span>
 
           {branches.length > 1 && (
             <div className="flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+              <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
               <select value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)}
-                className="px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary">
+                className="px-2.5 py-2 border border-border rounded-lg text-sm font-medium bg-muted focus:outline-none focus:border-primary">
                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
@@ -668,24 +673,24 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Buscar producto o servicio"
-              className="w-full pl-11 pr-4 py-3 rounded-full text-sm bg-card shadow-[0_1px_2px_rgba(0,0,0,0.05)] focus:outline-none focus:ring-2 focus:ring-primary/25"
+              className="w-full pl-11 pr-4 py-3 rounded-full text-base bg-card shadow-[0_1px_2px_rgba(0,0,0,0.05)] focus:outline-none focus:ring-2 focus:ring-primary/25"
             />
           </div>
           <button
             onClick={() => { setErrorEscaner(null); setMostrarEscaner(true); }}
             aria-label="Escanear código de barras"
-            className="flex-shrink-0 w-11 h-11 flex items-center justify-center bg-card hover:bg-primary/10 rounded-full text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-colors"
+            className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-card hover:bg-primary/10 rounded-full text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-colors"
           >
-            <Barcode className="w-[18px] h-[18px]" />
+            <Barcode className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="flex gap-2 px-4 py-1 overflow-x-auto">
+        <div className="flex gap-2 px-5 py-1.5 overflow-x-auto">
           {categoriasOpciones.map((cat) => (
             <button key={cat.id ?? "todos"} onClick={() => setCategoriaActiva(cat.id)}
-              className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+              className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
                 categoriaActiva === cat.id
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-primary text-primary-foreground shadow-[0_2px_6px_rgba(0,0,0,0.14)]"
                   : "bg-card text-muted-foreground hover:bg-primary/10"
               }`}>
               {cat.name}
@@ -695,9 +700,9 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
 
         {productosFiltrados.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-            <Search className="w-8 h-8 text-muted-foreground/40 mb-2" />
-            <p className="text-sm font-medium text-foreground mb-1">Sin resultados</p>
-            <p className="text-xs text-muted-foreground">
+            <Search className="w-9 h-9 text-muted-foreground/40 mb-2" />
+            <p className="text-base font-semibold text-foreground mb-1">Sin resultados</p>
+            <p className="text-sm text-muted-foreground">
               {productos.length === 0 ? "Aún no hay productos en el catálogo." : "Prueba con otra búsqueda o categoría."}
             </p>
           </div>
@@ -723,18 +728,25 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                       : "bg-card shadow-[0_1px_3px_rgba(0,0,0,0.06)] hover:shadow-[0_0_0_1.5px_var(--primary),0_4px_14px_rgba(0,0,0,0.08)] hover:bg-primary/[0.04]"
                   }`}>
                   {cantidadEnCarrito > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-primary text-primary-foreground text-[10.5px] font-bold flex items-center justify-center leading-none shadow-sm">
+                    <span className="absolute -top-2 -right-2 min-w-[24px] h-6 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center leading-none shadow-sm">
                       {cantidadEnCarrito}
                     </span>
                   )}
-                  <div className="w-11 h-11 bg-primary/[0.12] rounded-xl flex items-center justify-center">
-                    <ProductoIcono value={producto.emoji} className="w-5 h-5 text-primary" />
+                  {/* Insignia de ícono sólida (2026-09-23, a petición de
+                      Carlos tras ver el resultado en producción: "Linkity se
+                      ve plano... quiero llegar a iconos o contenedores
+                      marcados, estetico... con textos grandes" — antes era
+                      un tinte del 12% de primary, casi invisible; ahora es
+                      el color de acento sólido, igual de "marcado" que los
+                      iconos de las referencias que compartió). */}
+                  <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center shadow-[0_2px_6px_rgba(0,0,0,0.14)]">
+                    <ProductoIcono value={producto.emoji} className="w-7 h-7 text-primary-foreground" />
                   </div>
                   <div className="w-full">
-                    <p className="text-xs font-semibold text-foreground leading-tight mb-1 line-clamp-2">{producto.name}</p>
-                    <p className="text-sm font-bold text-primary">{formatMXN(producto.price)}</p>
+                    <p className="text-[15px] font-semibold text-foreground leading-snug mb-1 line-clamp-2">{producto.name}</p>
+                    <p className="text-lg font-extrabold text-primary">{formatMXN(producto.price)}</p>
                     {!producto.isService && (
-                      <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                      <p className="text-xs text-muted-foreground/70 mt-0.5">
                         {agotado ? "Agotado" : `Stock: ${stock}`}
                       </p>
                     )}
@@ -747,7 +759,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       </div>
 
       {/* Carrito desktop */}
-      <div className="hidden lg:flex w-72 flex-col bg-card">
+      <div className="hidden lg:flex w-80 flex-col bg-card">
         {carritoContent}
       </div>
 
@@ -758,11 +770,11 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           <ShoppingCart className="w-5 h-5" />
           {totalItems > 0 ? (
             <>
-              <span className="text-sm font-semibold">{formatMXN(total)}</span>
+              <span className="text-base font-bold">{formatMXN(total)}</span>
               <span className="bg-primary-foreground text-primary text-xs font-bold px-2 py-0.5 rounded-full">{totalItems}</span>
             </>
           ) : (
-            <span className="text-sm font-medium">Carrito</span>
+            <span className="text-base font-semibold">Carrito</span>
           )}
         </button>
       )}
