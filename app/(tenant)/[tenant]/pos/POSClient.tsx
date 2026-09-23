@@ -329,10 +329,9 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const carritoContent = (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+      <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-1.5">
-          <ShoppingCart className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">Venta actual</span>
+          <span className="text-sm font-bold text-foreground">Venta actual</span>
           {carrito.length > 0 && (
             <span className="bg-primary text-primary-foreground text-[10.5px] font-medium px-1.5 py-0.5 rounded-full">{totalItems}</span>
           )}
@@ -348,7 +347,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       </div>
 
       {/* Cliente */}
-      <div className="relative px-4 py-2 border-b border-border">
+      <div className="relative px-4 py-2">
         {clienteSeleccionado ? (
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-xs text-foreground min-w-0">
@@ -419,15 +418,15 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                   <p className="text-xs font-medium text-foreground truncate">{item.nombre}</p>
                   <p className="text-[11.5px] text-muted-foreground">{formatMXN(item.precio)} c/u</p>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   <button onClick={() => cambiarCantidad(item.productId, -1)}
-                    className="w-6 h-6 rounded border border-border flex items-center justify-center hover:bg-muted">
-                    <Minus className="w-3 h-3 text-muted-foreground" />
+                    className="w-[26px] h-[26px] rounded-lg bg-muted flex items-center justify-center hover:bg-accent">
+                    <Minus className="w-3 h-3 text-foreground" />
                   </button>
-                  <span className="text-xs font-medium text-foreground w-5 text-center">{item.cantidad}</span>
+                  <span className="text-xs font-bold text-foreground w-5 text-center">{item.cantidad}</span>
                   <button onClick={() => cambiarCantidad(item.productId, 1)}
-                    className="w-6 h-6 rounded border border-border flex items-center justify-center hover:bg-muted">
-                    <Plus className="w-3 h-3 text-muted-foreground" />
+                    className="w-[26px] h-[26px] rounded-lg bg-muted flex items-center justify-center hover:bg-accent">
+                    <Plus className="w-3 h-3 text-foreground" />
                   </button>
                 </div>
                 <span className="text-xs font-medium text-foreground min-w-[48px] text-right">
@@ -488,19 +487,22 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           <p className="text-[11.5px] text-muted-foreground text-right">Los precios ya incluyen IVA</p>
         </div>
 
-        {/* Botones de método de pago — 2×2 */}
+        {/* Botones de método de pago — 2×2, sin emoji, un solo acento
+            (2026-09-23, a petición de Carlos: "pocos botones... solo lo
+            esencial" — antes cada método tenía su propio color, que sumaba
+            ruido visual sin aportar información real). */}
         <div className="grid grid-cols-2 gap-1.5 mb-3">
           {([
-            { key: "efectivo", label: "💵 Efectivo", active: "bg-primary/10 text-primary border-primary/30" },
-            { key: "tarjeta", label: "💳 Tarjeta", active: "bg-cyan-50 text-cyan-700 border-cyan-300" },
-            { key: "transferencia", label: "📲 Transferencia", active: "bg-emerald-50 text-emerald-700 border-emerald-300" },
-            { key: "mixto", label: "🔀 Mixto", active: "bg-amber-50 text-amber-700 border-amber-300" },
-          ] as { key: MetodoPago; label: string; active: string }[]).map((m) => (
+            { key: "efectivo", label: "Efectivo" },
+            { key: "tarjeta", label: "Tarjeta" },
+            { key: "transferencia", label: "Transferencia" },
+            { key: "mixto", label: "Mixto" },
+          ] as { key: MetodoPago; label: string }[]).map((m) => (
             <button key={m.key} onClick={() => handleMetodo(m.key)}
-              className={`py-2 rounded-lg text-xs font-medium transition-colors border ${
+              className={`py-2.5 rounded-xl text-xs font-semibold transition-colors ${
                 metodoPago === m.key
-                  ? m.active
-                  : "bg-muted text-muted-foreground border-border hover:bg-accent"
+                  ? "bg-primary/[0.12] text-primary ring-1 ring-inset ring-primary/40"
+                  : "bg-muted text-muted-foreground hover:bg-accent"
               }`}>
               {m.label}
             </button>
@@ -544,7 +546,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 <span className={`text-xs font-medium ${
                   cambio > 0 ? "text-emerald-700" : faltaEfec ? "text-red-600" : "text-muted-foreground"
                 }`}>
-                  {cambio > 0 ? "💰 Cambio" : faltaEfec ? "⚠️ Falta" : "✓ Exacto"}
+                  {cambio > 0 ? "Cambio" : faltaEfec ? "Falta" : "Exacto"}
                 </span>
                 <span className={`text-sm font-bold ${
                   cambio > 0 ? "text-emerald-700" : faltaEfec ? "text-red-600" : "text-foreground"
@@ -559,12 +561,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         {/* Panel Mixto */}
         {metodoPago === "mixto" && carrito.length > 0 && (
           <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-            <p className="text-[11.5px] font-semibold text-amber-700 mb-1">🔀 Desglose de pago</p>
+            <p className="text-[11.5px] font-semibold text-amber-700 mb-1">Desglose de pago</p>
 
             {[
-              { label: "💵 Efectivo", value: mixtoEfectivo, setter: setMixtoEfectivo },
-              { label: "💳 Tarjeta", value: mixtoTarjeta, setter: setMixtoTarjeta },
-              { label: "📲 Transferencia", value: mixtoTransferencia, setter: setMixtoTransferencia },
+              { label: "Efectivo", value: mixtoEfectivo, setter: setMixtoEfectivo },
+              { label: "Tarjeta", value: mixtoTarjeta, setter: setMixtoTarjeta },
+              { label: "Transferencia", value: mixtoTransferencia, setter: setMixtoTransferencia },
             ].map((f) => (
               <div key={f.label} className="flex items-center justify-between gap-2">
                 <span className="text-xs text-amber-700/80 whitespace-nowrap">{f.label}</span>
@@ -589,31 +591,34 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
 
             {!mixtoOk && totalMixto > 0 && (
               <div className="flex items-center justify-between px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg">
-                <span className="text-xs text-red-600">⚠️ Falta</span>
+                <span className="text-xs text-red-600">Falta</span>
                 <span className="text-sm font-bold text-red-600">{formatMXN(faltaMixto)}</span>
               </div>
             )}
 
             {cambioMixto > 0 && (
               <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-                <span className="text-xs text-emerald-700 font-medium">💰 Cambio</span>
+                <span className="text-xs text-emerald-700 font-medium">Cambio</span>
                 <span className="text-sm font-bold text-emerald-700">{formatMXN(cambioMixto)}</span>
               </div>
             )}
           </div>
         )}
 
-        {/* Botón cobrar */}
+        {/* Botón cobrar — el elemento más grande y llamativo del panel a
+            propósito (2026-09-23, lenguaje visual nuevo del POS: "el botón
+            de Cobrar es el elemento más grande y llamativo de la
+            pantalla"). */}
         <button
           onClick={handleCobrar}
           disabled={!puedeCobar}
-          className="w-full bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground font-semibold py-3 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+          className="w-full h-[60px] bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-bold rounded-2xl text-base transition-colors flex items-center justify-center gap-2.5"
         >
           {isPending ? (
-            <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
           ) : (
             <>
-              <Check className="w-4 h-4" />
+              <Check className="w-5 h-5" />
               {carrito.length > 0 ? `Cobrar ${formatMXN(total)}` : "Cobrar"}
             </>
           )}
@@ -639,9 +644,9 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     <div className="flex flex-col lg:flex-row h-full bg-muted">
 
       {/* Panel izquierdo — Catálogo */}
-      <div className="flex-1 flex flex-col bg-card lg:border-r border-border min-h-0">
+      <div className="flex-1 flex flex-col bg-card lg:shadow-[1px_0_0_rgba(0,0,0,0.045)] min-h-0">
 
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-wrap">
+        <div className="flex items-center gap-2 px-4 py-3.5 flex-wrap">
           <span className="text-sm font-medium text-foreground w-full sm:w-auto sm:mr-1">
             {label(labels, "module.pos.name")}
           </span>
@@ -657,31 +662,31 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           )}
 
           <div className="relative flex-1 min-w-[160px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
             <input
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar producto..."
-              className="w-full pl-9 pr-4 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              placeholder="Buscar producto o servicio"
+              className="w-full pl-11 pr-4 py-3 rounded-full text-sm bg-card shadow-[0_1px_2px_rgba(0,0,0,0.05)] focus:outline-none focus:ring-2 focus:ring-primary/25"
             />
           </div>
           <button
             onClick={() => { setErrorEscaner(null); setMostrarEscaner(true); }}
-            className="flex items-center gap-1.5 px-3 py-2.5 bg-muted hover:bg-accent rounded-lg text-xs text-muted-foreground transition-colors"
+            aria-label="Escanear código de barras"
+            className="flex-shrink-0 w-11 h-11 flex items-center justify-center bg-card hover:bg-primary/10 rounded-full text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-colors"
           >
-            <Barcode className="w-4 h-4" />
-            <span className="hidden sm:inline">Escanear</span>
+            <Barcode className="w-[18px] h-[18px]" />
           </button>
         </div>
 
-        <div className="flex gap-2 px-4 py-2 border-b border-border overflow-x-auto">
+        <div className="flex gap-2 px-4 py-1 overflow-x-auto">
           {categoriasOpciones.map((cat) => (
             <button key={cat.id ?? "todos"} onClick={() => setCategoriaActiva(cat.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
                 categoriaActiva === cat.id
                   ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-accent"
+                  : "bg-card text-muted-foreground hover:bg-primary/10"
               }`}>
               {cat.name}
             </button>
@@ -697,21 +702,25 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             </p>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 content-start pb-24 lg:pb-4">
+          <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5 content-start pb-24 lg:pb-4">
             {productosFiltrados.map((producto) => {
               const stock = stockDe(producto);
               const agotado = !producto.isService && stock <= 0;
               return (
                 <button key={producto.id} onClick={() => agregarAlCarrito(producto)} disabled={agotado}
-                  className="flex flex-col items-start p-3 bg-card border border-border rounded-xl hover:border-primary hover:bg-primary/5 transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-card">
-                  <div className="w-full h-14 bg-muted rounded-lg flex items-center justify-center mb-2 text-2xl">
-                    <ProductoIcono value={producto.emoji} className="w-6 h-6 text-primary" />
+                  className="flex flex-col items-start gap-3 p-4 bg-card rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.06)] hover:shadow-[0_2px_10px_rgba(0,0,0,0.09)] active:scale-[0.98] transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-[0_1px_3px_rgba(0,0,0,0.06)] disabled:active:scale-100">
+                  <div className="w-11 h-11 bg-primary/[0.12] rounded-xl flex items-center justify-center">
+                    <ProductoIcono value={producto.emoji} className="w-5 h-5 text-primary" />
                   </div>
-                  <p className="text-xs font-medium text-foreground leading-tight mb-1 line-clamp-2">{producto.name}</p>
-                  <p className="text-sm font-bold text-primary">{formatMXN(producto.price)}</p>
-                  <p className="text-[11.5px] text-muted-foreground mt-0.5">
-                    {producto.isService ? "Servicio" : agotado ? "Agotado" : `Stock: ${stock}`}
-                  </p>
+                  <div className="w-full">
+                    <p className="text-xs font-semibold text-foreground leading-tight mb-1 line-clamp-2">{producto.name}</p>
+                    <p className="text-sm font-bold text-primary">{formatMXN(producto.price)}</p>
+                    {!producto.isService && (
+                      <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                        {agotado ? "Agotado" : `Stock: ${stock}`}
+                      </p>
+                    )}
+                  </div>
                 </button>
               );
             })}

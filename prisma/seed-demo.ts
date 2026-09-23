@@ -98,7 +98,19 @@ function hashPin(pin: string): string {
 
 const DEMO_PASSWORD = "Demo2026!";
 const ACCION_UNICA = "acceso";
-const PINES = ["1111", "2222", "3333", "4444"];
+// 2026-09-23, a petición de Carlos ("En todos los demos, al pin de los
+// empleados coloca 111111 para evitar confusiones, necesito que mi cliente
+// vea las funciones. No que se quiebre la cabeza tratando de adivinar que
+// sigue"): antes era ["1111","2222","3333","4444"] rotando por posición de
+// alta — un mismo valor repetido 4 veces deja `PINES[i % PINES.length]`
+// (más abajo) devolviendo siempre "111111" sin tener que tocar esa lógica.
+// Esto solo aplica a negocios demo NUEVOS creados desde aquí (crearNegocioDemo)
+// — los 20 que ya existen se actualizaron aparte con
+// `npx tsx prisma/reset-demo-pins.ts` (ver ese archivo), porque este script
+// omite por completo cualquier slug que ya exista (no lo toca — ver el
+// comentario grande al inicio del archivo) y el refresco semanal tampoco
+// reescribe pinHash (ver el comentario en refrescarNegocioDemo).
+const PINES = ["111111", "111111", "111111", "111111"];
 
 // M15/M16 (2026-09-18): "citas" y "expediente-clinico" se agregan aquí —
 // antes de este cambio faltaban por completo de este catálogo local, así
@@ -1721,7 +1733,7 @@ function guardarResumenCredenciales() {
   const lineas: string[] = [
     "# Credenciales de los 20 negocios DEMO", "",
     `Contraseña del dueño en los 20 negocios (misma para todos, fácil de copiar/pegar): **${DEMO_PASSWORD}**`, "",
-    "El PIN de cada empleado es el mismo en todos los negocios según su posición de alta (1111, 2222, 3333, 4444) — solo aplica dentro del negocio al que pertenece, entrando por `/[negocio]/entrada`.", "",
+    "El PIN de TODOS los empleados, en TODOS los negocios demo, es el mismo: **111111** — así nadie tiene que adivinar cuál PIN usar al mostrar el demo.", "",
   ];
   for (const c of RESUMEN_CREDENCIALES) {
     lineas.push(`## ${c.tenantName}`);

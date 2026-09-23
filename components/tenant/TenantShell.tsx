@@ -112,6 +112,10 @@ const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloK
   }
 ];
 
+// 20 min elegidos por Carlos — ver el comentario largo junto al useEffect
+// que la usa, más abajo.
+const DURACION_INACTIVIDAD_ADMIN_MS = 20 * 60 * 1000;
+
 export default function TenantShell({
   children,
   tenant,
@@ -299,6 +303,56 @@ export default function TenantShell({
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  // Cierre de sesión automático por inactividad — SOLO para "admin" (cuenta
+  // real de Supabase Auth del dueño/gerente), 2026-09-23 a petición de
+  // Carlos: "En mi navegador se queda muy accesible entrar como
+  // administrador, ya que permite guardar contraseña. Debemos proteger a
+  // nuestro cliente de empleados deshonestos" — eligió específicamente
+  // "cierre por inactividad, con margen de 20 min" entre las opciones que se
+  // le presentaron. El personal con PIN (modo "staff") NO se ve afectado a
+  // propósito: su sesión ya expira sola a las 12h (DURACION_SESION_MS,
+  // lib/staff-auth.ts) y un PIN de 6 dígitos nunca queda "recordado" por el
+  // navegador de la misma forma que una contraseña real — el riesgo que esto
+  // resuelve es específico de la cuenta con autofill, no del PIN.
+  useEffect(() => {
+    if (modo !== "admin") return;
+
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let ultimoReinicio = 0;
+
+    const cerrarPorInactividad = async () => {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      // alert() bloquea hasta que alguien lo cierre — si nadie está ahí (el
+      // caso normal, es POR ESO que se cerró la sesión), simplemente se
+      // queda esperando en la puerta del negocio sin sesión activa, que es
+      // el objetivo; si el dueño vuelve, entiende de inmediato por qué ya
+      // no está su sesión en vez de verlo como un error random.
+      window.alert("Tu sesión se cerró automáticamente por 20 minutos de inactividad.");
+      window.location.href = `/${tenant}`;
+    };
+
+    const reiniciar = () => {
+      const ahora = Date.now();
+      // Throttle a 5s: mousemove/scroll pueden dispararse decenas de veces
+      // por segundo — reiniciar el timer en cada uno sería puro desperdicio
+      // frente a una ventana de 20 minutos, donde 5s de margen no se nota.
+      if (ahora - ultimoReinicio < 5000) return;
+      ultimoReinicio = ahora;
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(cerrarPorInactividad, DURACION_INACTIVIDAD_ADMIN_MS);
+    };
+
+    const eventos: (keyof DocumentEventMap)[] = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "wheel"];
+    eventos.forEach((ev) => document.addEventListener(ev, reiniciar, { passive: true }));
+    timeoutId = setTimeout(cerrarPorInactividad, DURACION_INACTIVIDAD_ADMIN_MS);
+
+    return () => {
+      clearTimeout(timeoutId);
+      eventos.forEach((ev) => document.removeEventListener(ev, reiniciar));
+    };
+  }, [modo, tenant]);
 
   useEffect(() => {
     setMobileOpen(false);

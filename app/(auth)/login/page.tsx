@@ -143,14 +143,38 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          {/* autoComplete="off" en el form + trucos de abajo (2026-09-23, a
+              petición de Carlos: "en mi navegador se queda muy accesible
+              entrar como administrador, ya que permite guardar contraseña...
+              debemos proteger a nuestro cliente de empleados deshonestos" —
+              eligió, junto con el cierre por inactividad de TenantShell.tsx,
+              "desactivar la función para que el navegador pueda guardar la
+              contraseña"). Importante ser honestos sobre el límite real de
+              esto: Chrome/Edge/Firefox NO le dan al sitio control total
+              sobre su propio prompt de "¿guardar contraseña?" — es una
+              decisión que el navegador reserva para el USUARIO a propósito
+              (si un sitio pudiera forzarlo apagado, un sitio malicioso
+              podría hacerlo para que la contraseña robada de alguien nunca
+              quede guardada donde esa persona la note). Lo de aquí es la mitigación
+              real del lado del código: autoComplete="off"/"new-password" (en
+              vez de "email"/"current-password", que son justo los valores
+              que le dicen al navegador "esto sí es un login, ofrece
+              guardar") + data-lpignore/data-1p-ignore para los gestores de
+              contraseña más comunes que si respetan esos atributos. Para
+              blindarlo del todo en cada compu del mostrador, hace falta
+              ADEMÁS el paso manual de una sola vez: en Chrome,
+              chrome://settings/passwords → "Nunca guardar" → agregar el
+              dominio de Linkity (mismo en Edge, edge://settings/passwords).
+          */}
+          <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
                 Correo electrónico
               </label>
               <div className="relative">
                 <input
-                  type="email" name="email" autoComplete="email"
+                  type="email" name="email" autoComplete="off"
+                  data-lpignore="true" data-1p-ignore="true" data-bwignore="true"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="tu@negocio.com"
@@ -175,7 +199,8 @@ export default function LoginPage() {
               </div>
               <div className="relative">
                 <input
-                  type={showPassword ? "text" : "password"} name="password" autoComplete="current-password"
+                  type={showPassword ? "text" : "password"} name="password" autoComplete="new-password"
+                  data-lpignore="true" data-1p-ignore="true" data-bwignore="true"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="********"
