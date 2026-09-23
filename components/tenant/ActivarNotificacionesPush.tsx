@@ -30,7 +30,15 @@ import { guardarSuscripcionPushAction, eliminarSuscripcionPushAction } from "@/a
 // Uint8Array que pide pushManager.subscribe — no hay atajo de la API del
 // navegador para esto, así que es el mismo snippet que aparece en cualquier
 // implementación de Web Push.
-function llavePublicaComoUint8Array(base64: string): Uint8Array {
+// 2026-09-23: el tipo `Uint8Array` a secas (sin el genérico) se resuelve a
+// `Uint8Array<ArrayBufferLike>` en las definiciones de TypeScript/DOM más
+// nuevas — y `ArrayBufferLike` incluye SharedArrayBuffer, que
+// pushManager.subscribe() rechaza (pide `BufferSource`, es decir un
+// ArrayBuffer normal). `new Uint8Array(n)` SÍ crea uno respaldado por un
+// ArrayBuffer normal en tiempo de ejecución; el genérico explícito
+// `Uint8Array<ArrayBuffer>` es lo que hace que el tipo declarado coincida
+// con lo que realmente se construye.
+function llavePublicaComoUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const base64Normalizado = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = atob(base64Normalizado);

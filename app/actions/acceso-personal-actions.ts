@@ -122,7 +122,14 @@ export async function iniciarSesionPersonalAction(params: {
   return { ok: true };
 }
 
-export async function cerrarSesionPersonalAction(): Promise<AccionAccesoPersonalResult> {
+// Tipo aparte de AccionAccesoPersonalResult (2026-09-23): cerrar sesión
+// nunca puede toparse con "dispositivo sin autorizar" — esa validación es
+// solo al ENTRAR (iniciarSesionPersonalAction). Reusar el tipo de arriba
+// obligaba a TenantShell.tsx a manejar una rama de autorización que aquí
+// nunca ocurre; con esto, `res.error` narrowa directo sin el `in` extra.
+export type AccionCerrarSesionResult = { ok: true } | { ok: false; error: string };
+
+export async function cerrarSesionPersonalAction(): Promise<AccionCerrarSesionResult> {
   // Se lee la sesión ANTES de borrar la cookie para poder cerrar su fila de
   // asistencia (checkOut = ahora, closedBy MANUAL) — updateMany + checkOut:
   // null por si ya se había cerrado sola por cambio de día (poco probable
