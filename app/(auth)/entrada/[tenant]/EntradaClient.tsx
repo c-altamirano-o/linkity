@@ -5,6 +5,20 @@ import Link from "next/link";
 import { Delete, ArrowLeft, User } from "lucide-react";
 import { iniciarSesionPersonalAction } from "@/app/actions/acceso-personal-actions";
 
+/**
+ * 2026-09-23: esta pantalla quedó SIN ninguna ruta que la use — tanto
+ * app/(auth)/entrada/[tenant]/page.tsx como .../[tenant]/[branch]/page.tsx
+ * ahora son puros redirect() hacia /[tenant] (ver AccesoNegocioClient.tsx,
+ * la pantalla unificada de "¿quién eres?" + PIN que sustituyó a esta). No
+ * pude borrar el archivo yo mismo (esta sesión no tiene una herramienta de
+ * shell sobre tu compu, solo lectura/escritura de archivos) — si quieres
+ * quitarlo del todo basta con:
+ *   Remove-Item "app\(auth)\entrada\[tenant]\EntradaClient.tsx"
+ * Mientras tanto, solo se actualizó lo mínimo para que compile (PIN de 6
+ * dígitos y el nuevo tipo de resultado con autorización de dispositivo) —
+ * como nada la enruta, nunca se renderiza.
+ */
+
 interface EmpleadoOption {
   id: string;
   name: string;
@@ -47,15 +61,20 @@ export default function EntradaClient({
   };
 
   const tecla = (d: string) => {
-    if (pending || pin.length >= 4) return;
+    if (pending || pin.length >= 6) return;
     const siguiente = pin + d;
     setPin(siguiente);
     setError(null);
-    if (siguiente.length === 4 && seleccionado) {
+    if (siguiente.length === 6 && seleccionado) {
       startTransition(async () => {
         const res = await iniciarSesionPersonalAction({ tenantSlug, staffId: seleccionado.id, pin: siguiente, branchId });
         if (res.ok) {
           window.location.href = `/${tenantSlug}/dashboard`;
+        } else if (res.necesitaAutorizacion) {
+          // Ruta muerta (ver comentario de archivo) — esta pantalla no tiene
+          // el flujo de espera/autorización de AccesoNegocioClient.tsx.
+          setError("Este dispositivo necesita autorización — usa el link principal de entrada del negocio.");
+          setPin("");
         } else {
           setError(res.error);
           setPin("");
@@ -117,7 +136,7 @@ export default function EntradaClient({
         ) : (
           <div className="flex flex-col items-center">
             <div className="flex items-center gap-3 mb-6">
-              {[0, 1, 2, 3].map((i) => (
+              {[0, 1, 2, 3, 4, 5].map((i) => (
                 <div
                   key={i}
                   className={`w-3.5 h-3.5 rounded-full border-2 transition-colors ${
