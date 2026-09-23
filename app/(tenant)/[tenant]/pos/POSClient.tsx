@@ -11,6 +11,7 @@ import type { PosData, ProductoPOS } from "@/lib/pos-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearVentaAction, type MetodoPago } from "@/app/actions/pos-actions";
 import { ProductoIcono } from "@/lib/catalogo-iconos";
+import { CANTIDAD_CHIPS_CATEGORIA } from "@/lib/theme-presets";
 import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
 import EscanearModal from "./EscanearModal";
 
@@ -95,6 +96,18 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     ...categorias.map((c) => ({ id: c.id as string | null, name: c.name })),
     ...(hayNoCategorizados ? [{ id: SIN_CATEGORIA_ID as string | null, name: "Sin categoría" }] : []),
   ];
+
+  // "Chip" de color por categoría (2026-09-23, a petición de Carlos: "la
+  // variedad de colores... se vé novedoso y dinámico" — ver el comentario
+  // largo en lib/theme-presets.ts). Un número de 1 a CANTIDAD_CHIPS_CATEGORIA
+  // fijo por categoría, en el mismo orden en que vienen del servidor — así
+  // cada categoría se queda siempre con el mismo color aunque el catálogo se
+  // filtre o se reordene en pantalla. "Sin categoría" (producto.categoryId
+  // null) no recibe chip: se queda con el color de marca --primary de
+  // siempre, porque no hay una categoría real que resaltar.
+  const chipPorCategoria = new Map<string, number>(
+    categorias.map((c, i) => [c.id, (i % CANTIDAD_CHIPS_CATEGORIA) + 1])
+  );
 
   /* ── Cálculos ── */
   const productosFiltrados = productos.filter((p) => {
@@ -720,6 +733,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               // era mirar la lista del carrito aparte.
               const enCarrito = carrito.find((i) => i.productId === producto.id);
               const cantidadEnCarrito = enCarrito?.cantidad ?? 0;
+              const chip = producto.categoryId ? chipPorCategoria.get(producto.categoryId) ?? null : null;
               return (
                 <button key={producto.id} onClick={() => agregarAlCarrito(producto)} disabled={agotado}
                   className={`relative flex flex-col items-start gap-3 p-4 rounded-2xl transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] ${
@@ -737,10 +751,20 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                       ve plano... quiero llegar a iconos o contenedores
                       marcados, estetico... con textos grandes" — antes era
                       un tinte del 12% de primary, casi invisible; ahora es
-                      el color de acento sólido, igual de "marcado" que los
-                      iconos de las referencias que compartió). */}
-                  <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center shadow-[0_2px_6px_rgba(0,0,0,0.14)]">
-                    <ProductoIcono value={producto.emoji} className="w-7 h-7 text-primary-foreground" />
+                      un color sólido, igual de "marcado" que los iconos de
+                      las referencias que compartió). Con chip de categoría
+                      (variedad de color real, no un solo tono repetido en
+                      todo el catálogo — ver chipPorCategoria arriba); sin
+                      categoría, cae de vuelta al --primary del tema del
+                      negocio, como antes. */}
+                  <div
+                    className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-[0_2px_6px_rgba(0,0,0,0.14)] ${chip ? "" : "bg-primary"}`}
+                    style={chip ? { backgroundColor: `var(--chip-${chip})`, color: `var(--chip-${chip}-fg)` } : undefined}
+                  >
+                    <ProductoIcono
+                      value={producto.emoji}
+                      className={`w-7 h-7 ${chip ? "" : "text-primary-foreground"}`}
+                    />
                   </div>
                   <div className="w-full">
                     <p className="text-[15px] font-semibold text-foreground leading-snug mb-1 line-clamp-2">{producto.name}</p>
