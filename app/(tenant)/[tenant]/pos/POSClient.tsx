@@ -530,10 +530,19 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         {/* Panel Efectivo — monto recibido y cambio */}
         {metodoPago === "efectivo" && carrito.length > 0 && (
           <div className="mb-3 bg-primary/5 border border-primary/20 rounded-xl p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">
-                Monto recibido <span className="text-primary font-medium">— escríbelo para continuar</span>
-              </span>
+            {/* 2026-09-24, a petición de Carlos: la leyenda "— escríbelo para
+                continuar" junto con el botón "Exacto" y el input ya no cabían
+                en una sola línea dentro del ancho fijo del carrito (w-80) —
+                como el texto tenía whitespace-nowrap y la fila no envolvía,
+                en vez de acomodarse/apilarse empujaba TODA la página a
+                desbordarse de lado (mismo síntoma que el min-w-0 de arriba,
+                pero aquí adentro del carrito). Se quita la leyenda por ser
+                redundante (el aviso rojo debajo del botón Cobrar ya dice
+                "Escribe cuánto recibiste...") y de paso se le agrega
+                flex-wrap a la fila como respaldo, para que si algo no cabe se
+                apile en vez de desbordar. */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-sm text-muted-foreground">Monto recibido</span>
               <div className="flex items-center gap-2">
                 {/* Atajo para el caso más común (pago exacto) — a propósito
                     ya NO se usa el total como placeholder (Carlos,
