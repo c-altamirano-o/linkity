@@ -706,9 +706,27 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             {productosFiltrados.map((producto) => {
               const stock = stockDe(producto);
               const agotado = !producto.isService && stock <= 0;
+              // "Seleccionado" = ya está en el carrito actual (2026-09-23, a
+              // petición de Carlos: "efecto de mouseover o select para que
+              // lo ilumine cuando se pase el cursor o se seleccione") — el
+              // tile se queda iluminado mientras tenga cantidad > 0, no solo
+              // al pasar el cursor, y muestra cuántos lleva en una insignia
+              // — antes la única forma de saber si ya lo habías agregado
+              // era mirar la lista del carrito aparte.
+              const enCarrito = carrito.find((i) => i.productId === producto.id);
+              const cantidadEnCarrito = enCarrito?.cantidad ?? 0;
               return (
                 <button key={producto.id} onClick={() => agregarAlCarrito(producto)} disabled={agotado}
-                  className="flex flex-col items-start gap-3 p-4 bg-card rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.06)] hover:shadow-[0_2px_10px_rgba(0,0,0,0.09)] active:scale-[0.98] transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-[0_1px_3px_rgba(0,0,0,0.06)] disabled:active:scale-100">
+                  className={`relative flex flex-col items-start gap-3 p-4 rounded-2xl transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] ${
+                    cantidadEnCarrito > 0
+                      ? "bg-primary/[0.07] shadow-[0_0_0_1.5px_var(--primary),0_4px_14px_rgba(0,0,0,0.07)]"
+                      : "bg-card shadow-[0_1px_3px_rgba(0,0,0,0.06)] hover:shadow-[0_0_0_1.5px_var(--primary),0_4px_14px_rgba(0,0,0,0.08)] hover:bg-primary/[0.04]"
+                  }`}>
+                  {cantidadEnCarrito > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-primary text-primary-foreground text-[10.5px] font-bold flex items-center justify-center leading-none shadow-sm">
+                      {cantidadEnCarrito}
+                    </span>
+                  )}
                   <div className="w-11 h-11 bg-primary/[0.12] rounded-xl flex items-center justify-center">
                     <ProductoIcono value={producto.emoji} className="w-5 h-5 text-primary" />
                   </div>
