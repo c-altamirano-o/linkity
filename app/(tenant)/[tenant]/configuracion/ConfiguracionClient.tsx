@@ -6,12 +6,15 @@ import { useRouter } from "next/navigation";
 import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
+import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/client";
 import { THEME_PRESETS, TENANT_THEME_ROOT_ID, type ThemePresetId } from "@/lib/theme-presets";
+import ActivarNotificacionesPush from "@/components/tenant/ActivarNotificacionesPush";
 import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
   LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock, Phone, Undo2,
+  Bell, RefreshCw, Smartphone, X,
 } from "lucide-react";
 
 const TIPOS_LOGO_PERMITIDOS = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
@@ -360,6 +363,36 @@ export default function ConfiguracionClient({
     setConfirmarContrasena("");
     setContrasenaMensaje({ tipo: "ok", texto: "Contraseña actualizada correctamente." });
     setTimeout(() => setContrasenaMensaje(null), 4000);
+  };
+
+  // ── Dispositivos pendientes ────────────────────────────────
+  // 2026-09-23, a petición de Carlos: respaldo dentro de Configuración para
+  // cuando la notificación en vivo (campanita/toast, TenantShell.tsx) o el
+  // push no llegan a tiempo — mismas acciones (aprobar/rechazar), solo que
+  // consultadas a demanda en vez de en vivo. Ver dispositivos-actions.ts.
+  const [solicitudes, setSolicitudes] = useState<
+    { id: string; branchName: string; userAgent: string | null; fecha: string }[]
+  >([]);
+  const [solicitudesCargando, setSolicitudesCargando] = useState(true);
+  const [solicitudEnCurso, setSolicitudEnCurso] = useState<string | null>(null);
+
+  const cargarSolicitudes = async () => {
+    setSolicitudesCargando(true);
+    const result = await listarSolicitudesPendientesAction(tenantSlug);
+    setSolicitudesCargando(false);
+    if (result.ok) setSolicitudes(result.solicitudes);
+  };
+
+  useEffect(() => {
+    cargarSolicitudes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const resolverSolicitud = async (solicitudId: string, aprobar: boolean) => {
+    setSolicitudEnCurso(solicitudId);
+    await resolverSolicitudDispositivoAction({ tenantSlug, solicitudId, aprobar }).catch(() => {});
+    setSolicitudes((prev) => prev.filter((s) => s.id !== solicitudId));
+    setSolicitudEnCurso(null);
   };
 
   return (
@@ -714,6 +747,81 @@ export default function ConfiguracionClient({
                 </p>
               )}
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Notificaciones y dispositivos ──────────────────────── */}
+      {/* 2026-09-23, a petición de Carlos ("que ningún empleado pueda
+          entrar desde otro lugar y fingir que está en la tienda"): cada
+          dispositivo (PC/tablet/navegador) se autoriza una sola vez por
+          sucursal — ver el comentario largo en lib/dispositivos-confianza.ts
+          y en SolicitudDispositivo (schema.prisma). Esta tarjeta junta las
+          dos formas de aprobar un dispositivo nuevo: la notificación con
+          push (arriba) y este listado de respaldo (abajo). */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <Bell className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold text-foreground">Notificaciones y dispositivos</h2>
+        </div>
+
+        <div className="p-5">
+          <ActivarNotificacionesPush tenantSlug={tenantSlug} />
+
+          <div className="mt-6 border-t border-border pt-5">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-sm font-semibold text-foreground">Dispositivos pendientes de autorizar</h3>
+              <button
+                onClick={cargarSolicitudes}
+                disabled={solicitudesCargando}
+                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${solicitudesCargando ? "animate-spin" : ""}`} /> Actualizar
+              </button>
+            </div>
+
+            {solicitudesCargando && solicitudes.length === 0 ? (
+              <p className="text-xs text-muted-foreground flex items-center gap-2 py-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando solicitudes…
+              </p>
+            ) : solicitudes.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-2">No hay dispositivos esperando autorización por ahora.</p>
+            ) : (
+              <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
+                {solicitudes.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between gap-3 px-3.5 py-3 flex-wrap">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <Smartphone className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-foreground">Sucursal: {s.branchName}</p>
+                        <p className="text-[10.5px] text-muted-foreground mt-0.5 truncate max-w-[220px]">
+                          {s.userAgent ?? "Dispositivo sin identificar"}
+                        </p>
+                        <p className="text-[10.5px] text-muted-foreground mt-0.5">
+                          {new Date(s.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => resolverSolicitud(s.id, true)}
+                        disabled={solicitudEnCurso === s.id}
+                        className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-[11.5px] font-medium px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <Check className="w-3 h-3" /> Aprobar
+                      </button>
+                      <button
+                        onClick={() => resolverSolicitud(s.id, false)}
+                        disabled={solicitudEnCurso === s.id}
+                        className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground hover:text-red-600 transition-colors px-2.5 py-1.5 disabled:opacity-50"
+                      >
+                        <X className="w-3 h-3" /> Rechazar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

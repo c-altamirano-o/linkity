@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { CashSessionStatus } from "@prisma/client";
 import TenantShell from "@/components/tenant/TenantShell";
 import { THEME_PRESETS, TENANT_THEME_ROOT_ID } from "@/lib/theme-presets";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
@@ -38,12 +39,13 @@ export default async function TenantLayout({
   } = await supabase.auth.getUser();
 
   // A partir de M11 hay dos formas válidas de tener sesión aquí: una cuenta
-  // real (Supabase Auth, el dueño/gerente que entró por /login) o una
-  // sesión de personal por PIN (ver lib/staff-auth.ts, entra por
-  // /entrada/[tenant]). Sin ninguna de las dos, se manda a la pantalla de
-  // PIN — no a /login directo — porque en un negocio real quien abre el
-  // sistema todos los días suele ser un empleado, no el dueño; /login sigue
-  // ahí, con un link visible desde /entrada, para cuando sí es el dueño.
+  // real (Supabase Auth, el dueño/gerente) o una sesión de personal por PIN
+  // (ver lib/staff-auth.ts). Sin ninguna de las dos, se manda a la puerta
+  // única del negocio (/[tenant], app/(auth)/[tenant]/page.tsx — 2026-09-23,
+  // reemplaza /entrada/[tenant]) — no a /login directo — porque en un
+  // negocio real quien abre el sistema todos los días suele ser un
+  // empleado, no el dueño; esa puerta ya incluye una ficha de administrador
+  // con correo y contraseña para cuando sí es el dueño.
   // verificarSesionPersonalVigente (en vez de leerSesionPersonal a secas)
   // hace cumplir el cierre automático de la sesión de PIN al cambiar de día
   // calendario (lib/asistencia.ts) — así ninguna sesión de personal se
@@ -64,7 +66,7 @@ export default async function TenantLayout({
   const sesionPersonal = await verificarSesionPersonalVigente();
 
   if (!user && !sesionPersonal) {
-    redirect(`/entrada/${tenant}`);
+    redirect(`/${tenant}`);
   }
 
   // Cuentas creadas con contraseña temporal (Panel Maestro o
@@ -163,7 +165,7 @@ export default async function TenantLayout({
     // mismo navegador/dispositivo compartido), se manda a la entrada del
     // negocio correcto en vez de dejarla pasar.
     if (sesionPersonal.tenantId !== dbTenant.id) {
-      redirect(`/entrada/${tenant}`);
+      redirect(`/${tenant}`);
     }
 
     modo = "staff";
@@ -185,6 +187,32 @@ export default async function TenantLayout({
     if (modulo && !modulosPermitidosParaNav.includes(modulo)) {
       redirect(`/${tenant}/${modulosPermitidosParaNav[0] ?? "dashboard"}`);
     }
+
+    // "Abrir caja" como primera tarea del turno (2026-09-23, a petición de
+    // Carlos: "la primer pantalla que le debe aparecer es Abrir caja...
+    // siempre debe ser la tarea inicial"). Solo aplica a personal de PIN
+    // cuyo rol tiene Punto de Venta Y Caja permitidos (si un rol no tiene
+    // Caja, ni siquiera puede abrir una, así que no tiene caso empujarlo
+    // ahí) — un administrador con cuenta real nunca pasa por este bloque
+    // (ve/opera varias sucursales a la vez, "abrir caja" no tiene una única
+    // sucursal obvia para él). Se deja pasar libremente la propia pantalla
+    // de Caja (si no, nunca podría llegar a abrirla) y Asistencia (para que
+    // pueda registrar su salida si por lo que sea ya se fue sin cerrar —
+    // caso raro, pero no tiene sentido atraparlo sin ver ni eso).
+    if (
+      modulo !== "caja" &&
+      modulo !== "asistencia" &&
+      modulosPermitidosParaNav.includes("pos") &&
+      modulosPermitidosParaNav.includes("caja")
+    ) {
+      const cajaAbierta = await prisma.cashSession.findFirst({
+        where: { tenantId: dbTenant.id, branchId: sesionPersonal.branchId, status: CashSessionStatus.OPEN },
+        select: { id: true },
+      });
+      if (!cajaAbierta) {
+        redirect(`/${tenant}/caja`);
+      }
+    }
   } else if (dbTenant && user) {
     // Modo administrador/gerente con cuenta real — mismo guard de siempre,
     // sin ningún cambio de comportamiento para el dueño cuando NO hay
@@ -202,7 +230,7 @@ export default async function TenantLayout({
     // de una cuenta desactivada desde Panel Maestro (Usuarios) aunque ya
     // tuviera una sesión abierta.
     if (!dbUser || !dbUser.isActive) {
-      redirect(`/entrada/${tenant}`);
+      redirect(`/${tenant}`);
     } else if (dbUser.tenantId !== dbTenant.id) {
       redirect(`/${dbUser.tenant.slug}/dashboard`);
     }

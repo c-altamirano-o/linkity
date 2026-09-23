@@ -171,13 +171,17 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
 
   const puedeTransferir = origenId && destinoId && origenId !== destinoId && productoId && Number(cantidad) > 0;
 
-  // 2026-09-21, a petición de Carlos: el link de entrada es por SUCURSAL
-  // (app/(auth)/entrada/[tenant]/[branch]/page.tsx) — copiarlo desde aquí
-  // es lo que le permite a un dueño remoto (ej. con 15 sucursales)
-  // compartírselo a cada una sin tener que ir en persona a dejarlo
-  // configurado en su tablet/mostrador.
+  // 2026-09-21, a petición de Carlos: el link de entrada es por SUCURSAL —
+  // copiarlo desde aquí es lo que le permite a un dueño remoto (ej. con 15
+  // sucursales) compartírselo a cada una sin tener que ir en persona a
+  // dejarlo configurado en su tablet/mostrador. 2026-09-23: apunta a la
+  // puerta única del negocio (app/(auth)/[tenant]/page.tsx) con
+  // ?sucursal=<id> para que la ficha de Empleado arranque ya posicionada
+  // en esta sucursal — reemplaza la vieja /entrada/[tenant]/[branch], que
+  // ahora solo redirige aquí por compatibilidad con links viejos ya
+  // repartidos.
   function copiarLinkEntrada(branchId: string) {
-    const link = `${window.location.origin}/entrada/${tenantSlug}/${branchId}`;
+    const link = `${window.location.origin}/${tenantSlug}?sucursal=${branchId}`;
     navigator.clipboard.writeText(link).then(() => {
       setLinkCopiadoId(branchId);
       setTimeout(() => setLinkCopiadoId((id) => (id === branchId ? null : id)), 2000);

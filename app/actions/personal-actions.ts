@@ -29,7 +29,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * crearEmpleadoAction/editarEmpleadoAction ya no piden correo ni ofrecen
  * "vincular una cuenta existente" — todo empleado nuevo recibe
  * automáticamente una cuenta de atribución oculta (ver el comentario largo
- * en Staff.userId, schema.prisma) más un PIN de 4 dígitos y un Rol del
+ * en Staff.userId, schema.prisma) más un PIN de 6 dígitos y un Rol del
  * catálogo de ESTE tenant (base o personalizado — "Administrador" nunca se
  * ofrece aquí, ver ROL_ADMINISTRADOR en lib/roles.ts). Personal se queda
  * 100% admin-only vía resolverActor(tenantSlug, "personal") — ningún rol
@@ -131,7 +131,7 @@ export async function crearEmpleadoAction(
   const { tenantSlug, pin, ...datos } = params;
   const errorValidacion = validarDatosEmpleado(datos);
   if (errorValidacion) return { ok: false, error: errorValidacion };
-  if (!pinValido(pin)) return { ok: false, error: "El PIN de inicio debe ser de 4 dígitos" };
+  if (!pinValido(pin)) return { ok: false, error: "El PIN de inicio debe ser de 6 dígitos" };
 
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
@@ -289,7 +289,7 @@ export async function restablecerPinAction(params: {
   pin: string;
 }): Promise<AccionPersonalResult> {
   const { tenantSlug, staffId, pin } = params;
-  if (!pinValido(pin)) return { ok: false, error: "El PIN debe ser de 4 dígitos" };
+  if (!pinValido(pin)) return { ok: false, error: "El PIN debe ser de 6 dígitos" };
 
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };

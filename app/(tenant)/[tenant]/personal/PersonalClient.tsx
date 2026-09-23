@@ -94,6 +94,17 @@ interface FormEmpleado {
   clabe: string;
 }
 
+// 2026-09-23, a petición de Carlos ("Todo personal al crearlo, debe pedir
+// asignación a una sucursal"): antes esta función se llamaba con
+// branches[0]?.id, así que en un negocio de varias sucursales el modal de
+// alta ya arrancaba con una sucursal pre-elegida (la primera de la lista)
+// sin que el administrador la hubiera tocado — fácil de no notar y dar de
+// alta a alguien en la sucursal equivocada. Ahora, cuando SÍ hay más de una
+// sucursal entre las que elegir, arranca vacío a propósito (el selector de
+// abajo obliga a escogerla, con un placeholder deshabilitado) — la
+// validación de guardarEmpleadoAction ya rechazaba branchId vacío, pero
+// nada en la UI forzaba antes a que ese vacío fuera visible. Con una sola
+// sucursal no tiene caso pedir nada: se sigue asignando sola, como siempre.
 function formVacio(branchId: string): FormEmpleado {
   return {
     branchId, name: "", phone: "", phoneCountryCode: PAIS_TELEFONO_DEFAULT, position: "", roleId: "", pin: "",
@@ -128,7 +139,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
   const [accionError, setAccionError] = useState<string | null>(null);
 
   const [modalEmpleado, setModalEmpleado] = useState<{ modo: "crear" | "editar"; id: string | null } | null>(null);
-  const [form, setForm] = useState<FormEmpleado>(formVacio(branches[0]?.id ?? ""));
+  const [form, setForm] = useState<FormEmpleado>(formVacio(branches.length === 1 ? branches[0].id : ""));
   const [formError, setFormError] = useState<string | null>(null);
   const [guardando, startGuardar] = useTransition();
 
@@ -187,7 +198,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
   // ── Modal empleado (crear/editar) ────────────────────────
   const abrirNuevoEmpleado = () => {
-    setForm(formVacio(branches[0]?.id ?? ""));
+    setForm(formVacio(branches.length === 1 ? branches[0].id : ""));
     setFormError(null);
     setModalEmpleado({ modo: "crear", id: null });
   };
@@ -202,8 +213,8 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
     if (!form.name.trim()) { setFormError("El nombre es obligatorio"); return; }
     if (!form.branchId) { setFormError("Selecciona una sucursal"); return; }
     if (!form.roleId) { setFormError("Selecciona un rol — determina a qué módulos tendrá acceso"); return; }
-    if (modalEmpleado?.modo === "crear" && !/^\d{4}$/.test(form.pin)) {
-      setFormError("Asigna un PIN de inicio de 4 dígitos");
+    if (modalEmpleado?.modo === "crear" && !/^\d{6}$/.test(form.pin)) {
+      setFormError("Asigna un PIN de inicio de 6 dígitos");
       return;
     }
     const baseSalary = parseFloat(form.baseSalary || "0");
@@ -271,7 +282,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
   const handleRestablecerPin = () => {
     if (!modalPinStaffId) return;
-    if (!/^\d{4}$/.test(nuevoPin)) { setPinError("El PIN debe ser de 4 dígitos"); return; }
+    if (!/^\d{6}$/.test(nuevoPin)) { setPinError("El PIN debe ser de 6 dígitos"); return; }
     setPinError(null);
     startRestablecerPin(async () => {
       const res = await restablecerPinAction({ tenantSlug, staffId: modalPinStaffId, pin: nuevoPin });
@@ -703,9 +714,15 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 <div>
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
                   <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                    className={`w-full mt-1 px-3 py-2 border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary ${
+                      !form.branchId ? "border-amber-400" : "border-border"
+                    }`}>
+                    <option value="" disabled>Selecciona una sucursal...</option>
                     {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
+                  {!form.branchId && (
+                    <p className="text-[11.5px] text-amber-600 mt-1">Obligatorio: define en qué sucursal (o Taller, si la diste de alta como una) trabaja.</p>
+                  )}
                 </div>
               )}
 
@@ -726,12 +743,12 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               {modalEmpleado.modo === "crear" ? (
                 <div>
-                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PIN DE INICIO (4 DÍGITOS)</label>
-                  <input type="text" inputMode="numeric" maxLength={4} value={form.pin}
-                    onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                    placeholder="0000"
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PIN DE INICIO (6 DÍGITOS)</label>
+                  <input type="text" inputMode="numeric" maxLength={6} value={form.pin}
+                    onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                    placeholder="000000"
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary tracking-[0.3em]" />
-                  <p className="text-[11.5px] text-muted-foreground mt-1">Con este PIN el empleado entra en {branches.length ? `/${tenantSlug}/entrada` : "la pantalla de entrada"} — nunca con tu contraseña de administrador.</p>
+                  <p className="text-[11.5px] text-muted-foreground mt-1">Con este PIN el empleado entra en {branches.length ? `/${tenantSlug}` : "la pantalla de entrada"} — nunca con tu contraseña de administrador.</p>
                 </div>
               ) : (
                 <p className="text-[11.5px] text-muted-foreground">Para cambiar el PIN de este empleado, usa el botón &quot;Restablecer PIN&quot; en su ficha.</p>
@@ -921,10 +938,10 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
             <div className="p-4 space-y-3">
               {pinError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{pinError}</div>}
               <div>
-                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NUEVO PIN (4 DÍGITOS)</label>
-                <input type="text" inputMode="numeric" maxLength={4} value={nuevoPin} autoFocus
-                  onChange={(e) => setNuevoPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                  placeholder="0000"
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NUEVO PIN (6 DÍGITOS)</label>
+                <input type="text" inputMode="numeric" maxLength={6} value={nuevoPin} autoFocus
+                  onChange={(e) => setNuevoPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary tracking-[0.3em]" />
                 <p className="text-[11.5px] text-muted-foreground mt-1">El PIN anterior deja de funcionar de inmediato.</p>
               </div>

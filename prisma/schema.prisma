@@ -105,6 +105,8 @@ model Tenant {
   informedConsents  InformedConsent[]
   prescriptions     Prescription[]
   notificaciones    Notificacion[]
+  pushSubscriptions      PushSubscription[]
+  solicitudesDispositivo SolicitudDispositivo[]
 }
 
 // Textos de UI personalizables por tenant (nombre del módulo, de la entidad,
@@ -194,6 +196,7 @@ model Branch {
   appointments Appointment[]
   treatmentPlans TreatmentPlan[]
   notificaciones Notificacion[]
+  solicitudesDispositivo SolicitudDispositivo[]
 }
 
 // ============================================
@@ -259,6 +262,17 @@ model User {
   treatmentPlansCreated    TreatmentPlan[]
   informedConsentsTaken    InformedConsent[]
   prescriptionsWritten     Prescription[]
+  // Suscripciones de notificaciones push del navegador de ESTE
+  // administrador (2026-09-23, a petición de Carlos — ver el comentario
+  // largo junto a PushSubscription, más abajo). Un mismo User puede tener
+  // varias (su celular, su compu) — cada dispositivo que active
+  // notificaciones se guarda aparte.
+  pushSubscriptions PushSubscription[]
+  // Solicitudes de dispositivo que ESTE administrador aprobó o rechazó
+  // (SolicitudDispositivo.resueltoPor, 2026-09-23) — Prisma exige esta
+  // relación de vuelta aunque nunca se consulte desde este lado; solo
+  // sirve para poder guardar "quién resolvió cada solicitud" del otro lado.
+  solicitudesDispositivoResueltas SolicitudDispositivo[]
   // Nota: StaffLoginSession NO se relaciona con User — apunta directo a
   // Staff, que es la identidad real detrás de una sesión de PIN (ver
   // comentario largo en ese modelo).
@@ -806,8 +820,18 @@ model Notificacion {
   leida     Boolean          @default(false)
   createdAt DateTime         @default(now())
 
+  // Solo para tipo DISPOSITIVO_PENDIENTE (2026-09-23): a qué
+  // SolicitudDispositivo aprobar/rechazar apuntan los botones de este
+  // aviso en TenantShell.tsx. Nullable porque ningún otro tipo de
+  // notificación lo usa. Guardarlo AQUÍ (no solo mandarlo por el broadcast
+  // en vivo) es lo que permite que los botones de Aprobar/Rechazar sigan
+  // funcionando si el administrador abre la campanita después, no solo en
+  // el pop-up del momento.
+  solicitudDispositivoId String?
+
   tenant Tenant  @relation(fields: [tenantId], references: [id])
   branch Branch? @relation(fields: [branchId], references: [id])
+  solicitudDispositivo SolicitudDispositivo? @relation(fields: [solicitudDispositivoId], references: [id])
 
   @@index([tenantId, createdAt])
 }
@@ -823,6 +847,89 @@ enum NotificacionTipo {
   // en rojo/urgente para distinguirlos a simple vista (TenantShell.tsx).
   CAJA_NO_ABIERTA
   CAJA_NO_CERRADA
+  // Fase 3 (2026-09-23, a petición de Carlos): un empleado intentó entrar
+  // con su PIN desde un dispositivo que nunca se ha autorizado para su
+  // sucursal (ver SolicitudDispositivo, más abajo). A diferencia de los
+  // cuatro tipos de arriba (solo informativos), este SÍ trae una acción —
+  // Aprobar/Rechazar — ver ESTILO_NOTIFICACION y el bloque de acción en
+  // TenantShell.tsx.
+  DISPOSITIVO_PENDIENTE
+}
+
+// 2026-09-23, a petición de Carlos ("que ningún empleado pueda entrar desde
+// otro lugar y fingir que está en la tienda"): cada sucursal solo deja
+// entrar PIN de personal desde un navegador ya autorizado para ELLA — ver
+// crearConfianzaDispositivo/tieneConfianzaDispositivo en lib/staff-auth.ts.
+// Esta tabla es la solicitud de autorización que se crea cuando un
+// dispositivo nuevo lo intenta: queda PENDIENTE mientras el administrador
+// no responde (por la notificación en tiempo real + push de su celular, o
+// desde el listado de "Dispositivos pendientes" en Configuración), y el
+// navegador que espera hace polling de su propio `token` (nunca del id, que
+// sí queda visible en la lista del administrador) para saber cuándo
+// aprobar/rechazar y seguir — o no — con el login.
+model SolicitudDispositivo {
+  id         String                     @id @default(cuid())
+  tenantId   String
+  branchId   String
+  // Token opaco que solo conoce el navegador que hizo la solicitud —
+  // separado del `id` (que sí es visible para el administrador en la
+  // lista de pendientes) para que un navegador en espera nunca pueda, con
+  // solo adivinar/probar ids, consultar ni resolver la solicitud de OTRO
+  // dispositivo.
+  token      String                     @unique
+  status     SolicitudDispositivoStatus @default(PENDIENTE)
+  userAgent  String?
+  createdAt  DateTime                   @default(now())
+  resueltoEn DateTime?
+  // Quién la resolvió (administrador) — para dejar rastro de auditoría de
+  // quién autorizó qué equipo.
+  resueltoPorId String?
+
+  tenant        Tenant  @relation(fields: [tenantId], references: [id])
+  branch        Branch  @relation(fields: [branchId], references: [id])
+  resueltoPor   User?   @relation(fields: [resueltoPorId], references: [id])
+  notificaciones Notificacion[]
+
+  @@index([tenantId, status, createdAt])
+}
+
+enum SolicitudDispositivoStatus {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  // Nunca se borra una solicitud vieja no atendida — se marca vencida (ver
+  // EXPIRACION_SOLICITUD_MS en lib/dispositivos-confianza.ts) para que el
+  // administrador entienda en la lista por qué ya no puede resolverla,
+  // en vez de que simplemente desaparezca.
+  EXPIRADO
+}
+
+// Suscripción de notificaciones push del navegador (Web Push estándar —
+// funciona en Chrome/Edge/Firefox de escritorio y Android directo; en
+// iPhone requiere agregar la página a la pantalla de inicio primero, es
+// una restricción de Apple, no de Linkity — ver el botón "Activar
+// notificaciones" en Configuración). 2026-09-23, a petición de Carlos: que
+// una solicitud de dispositivo pendiente (arriba) le suene al administrador
+// aunque no tenga el panel abierto en ese momento, sin depender de WhatsApp
+// ni de ninguna cuenta externa — el propio navegador ya trae esta función.
+// Un mismo User puede tener varias filas (una por cada dispositivo donde
+// activó notificaciones). Guarda el endpoint + llaves que entrega el propio
+// navegador al suscribirse (ver guardarSuscripcionPushAction) — nunca datos
+// de una cuenta de terceros, esto es 100% del propio navegador del usuario.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
 }
 
 // ============================================

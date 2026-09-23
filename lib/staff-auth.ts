@@ -18,9 +18,12 @@ import { randomBytes, scryptSync, timingSafeEqual, createHmac } from "crypto";
  * también viene en el módulo `crypto` de Node — no hay ninguna librería de
  * hashing de contraseñas instalada en este proyecto (la única cuenta con
  * contraseña real, la del dueño, la maneja Supabase Auth del lado de
- * Supabase, nunca se hashea aquí). Un PIN de 4 dígitos tiene poca entropía
- * por diseño (así es más rápido de teclear en un mostrador), así que la
- * seguridad real depende de 3 cosas además del hash: el PIN se valida
+ * Supabase, nunca se hashea aquí). Un PIN de 6 dígitos (subido de 4 el
+ * 2026-09-23, a petición de Carlos: "subir la dificultad... para evitar que
+ * alguien ingrese por suerte a un usuario") tiene poca entropía por diseño
+ * frente a una contraseña real (sigue siendo rápido de teclear en un
+ * mostrador), así que la seguridad real depende de 3 cosas además del hash:
+ * el PIN se valida
  * siempre contra UN tenant+empleado específico (nunca una búsqueda global
  * por PIN), fallarPinAction limita intentos seguidos (ver
  * app/actions/acceso-personal-actions.ts), y la cookie de sesión resultante
@@ -71,7 +74,11 @@ function secreto(): string {
   return s;
 }
 
-function firmar(payload: string): string {
+// Exportada para que lib/dispositivos-confianza.ts pueda firmar su propia
+// cookie (confianza de dispositivo por sucursal) con el MISMO secreto —
+// ambas cosas viven del lado del personal de PIN, así que no tiene caso
+// pedirle a Carlos una segunda variable de entorno solo para esto.
+export function firmar(payload: string): string {
   return createHmac("sha256", secreto()).update(payload).digest("base64url");
 }
 
@@ -94,7 +101,7 @@ export function verificarPin(pin: string, hashGuardado: string): boolean {
 }
 
 export function pinValido(pin: string): boolean {
-  return /^\d{4}$/.test(pin);
+  return /^\d{6}$/.test(pin);
 }
 
 // ── Sesión (cookie firmada) ─────────────────────────────────────────────

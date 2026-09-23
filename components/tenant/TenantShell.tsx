@@ -9,13 +9,14 @@ import type { ModuloKey } from "@/lib/roles";
 import { label, DEFAULT_LABELS, type LabelDictionary } from "@/lib/labels";
 import { cerrarSesionPersonalAction } from "@/app/actions/acceso-personal-actions";
 import { marcarNotificacionesLeidasAction } from "@/app/actions/notificaciones-actions";
+import { resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
 import type { NotificacionUI } from "@/lib/notificaciones";
 import {
   LayoutDashboard, ShoppingCart, Wrench, Users, Package,
   Warehouse, DollarSign, UserCog, BarChart3, FileText,
   GitBranch, BookOpen, LogOut, Bell, ChevronDown, Settings,
   Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck, CalendarDays,
-  Unlock, Lock, AlertTriangle,
+  Unlock, Lock, AlertTriangle, Smartphone, Check,
 } from "lucide-react";
 
 // Tipo real de NotificacionUI (lib/notificaciones.ts) — se reusa aquí en
@@ -35,6 +36,10 @@ const ESTILO_NOTIFICACION: Record<TipoNotificacion, { icon: typeof Unlock; bg: s
   CAJA_CERRADA: { icon: Lock, bg: "bg-slate-100", color: "text-slate-600" },
   CAJA_NO_ABIERTA: { icon: AlertTriangle, bg: "bg-red-50", color: "text-red-600" },
   CAJA_NO_CERRADA: { icon: AlertTriangle, bg: "bg-red-50", color: "text-red-600" },
+  // Fase 3 (2026-09-23) — ver el comentario largo junto a
+  // SolicitudDispositivo, schema.prisma. Azul para distinguirlo a simple
+  // vista de los avisos de caja (verde/gris/rojo).
+  DISPOSITIVO_PENDIENTE: { icon: Smartphone, bg: "bg-blue-50", color: "text-blue-600" },
 };
 
 function esAlertaUrgente(tipo: TipoNotificacion): boolean {
@@ -193,7 +198,16 @@ export default function TenantShell({
   // campanita: se ven aunque no la tengas abierta, y se autodesaparecen
   // solos. La campanita es la copia persistente; esto es solo el "aviso
   // ahora mismo".
-  const [toasts, setToasts] = useState<{ id: string; mensaje: string; tipo: TipoNotificacion }[]>([]);
+  const [toasts, setToasts] = useState<
+    { id: string; mensaje: string; tipo: TipoNotificacion; solicitudDispositivoId: string | null }[]
+  >([]);
+  // Ids de SolicitudDispositivo ya resueltas DESDE ESTA pestaña (2026-09-23)
+  // — para ocultar los botones Aprobar/Rechazar apenas se usan, sin esperar
+  // a que la campanita se vuelva a abrir. Solo es un ajuste visual local: la
+  // fuente de verdad real es el status en la base de datos, que
+  // resolverSolicitudDispositivoAction ya valida (rechaza si alguien más ya
+  // la resolvió desde otra pestaña/dispositivo).
+  const [solicitudesResueltas, setSolicitudesResueltas] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const handleClickFuera = (e: MouseEvent) => {
@@ -217,18 +231,21 @@ export default function TenantShell({
     const canal = supabase.channel(`notificaciones:${tenantId}`);
 
     const recibir = (tipo: TipoNotificacion) => (msg: {
-      payload: { id: string; mensaje: string; branchName: string | null; fecha: string };
+      payload: { id: string; mensaje: string; branchName: string | null; fecha: string; solicitudDispositivoId?: string };
     }) => {
-      const { id, mensaje, branchName, fecha } = msg.payload;
-      setNotificaciones((prev) => [{ id, tipo, mensaje, branchName, leida: false, fecha }, ...prev].slice(0, 30));
+      const { id, mensaje, branchName, fecha, solicitudDispositivoId } = msg.payload;
+      setNotificaciones((prev) =>
+        [{ id, tipo, mensaje, branchName, leida: false, fecha, solicitudDispositivoId: solicitudDispositivoId ?? null }, ...prev].slice(0, 30)
+      );
       setNotifNoLeidas((n) => n + 1);
 
-      // Los avisos de incumplimiento (Fase 2, "no reportó a tiempo") se
-      // quedan más tiempo en pantalla que los informativos de Fase 1 — son
-      // más importantes de no perderse de vista.
+      // Los avisos de incumplimiento (Fase 2, "no reportó a tiempo") y de
+      // dispositivo pendiente (Fase 3) se quedan más tiempo en pantalla que
+      // los informativos de Fase 1 — son más importantes de no perderse de
+      // vista (el de dispositivo, además, trae una acción con vencimiento).
       const toastId = `${id}-${Date.now()}`;
-      setToasts((prev) => [...prev, { id: toastId, mensaje, tipo }]);
-      const duracion = esAlertaUrgente(tipo) ? 15000 : 7000;
+      setToasts((prev) => [...prev, { id: toastId, mensaje, tipo, solicitudDispositivoId: solicitudDispositivoId ?? null }]);
+      const duracion = esAlertaUrgente(tipo) || tipo === "DISPOSITIVO_PENDIENTE" ? 15000 : 7000;
       setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), duracion);
     };
 
@@ -238,6 +255,8 @@ export default function TenantShell({
       // Fase 2 (2026-09-22) — ver app/api/cron/revisar-horarios-caja.
       .on("broadcast", { event: "caja_no_abierta" }, recibir("CAJA_NO_ABIERTA"))
       .on("broadcast", { event: "caja_no_cerrada" }, recibir("CAJA_NO_CERRADA"))
+      // Fase 3 (2026-09-23) — ver dispositivos-actions.ts.
+      .on("broadcast", { event: "dispositivo_pendiente" }, recibir("DISPOSITIVO_PENDIENTE"))
       .subscribe();
 
     return () => {
@@ -257,6 +276,16 @@ export default function TenantShell({
       }
       return siguiente;
     });
+  };
+
+  // Aprobar/Rechazar un dispositivo pendiente — usable tanto desde el
+  // pop-up como desde la lista de la campanita (2026-09-23). El "ok:false,
+  // error: ya fue resuelta" no se muestra al usuario: significa que otro
+  // administrador (u otra pestaña) ya la resolvió, así que basta con
+  // ocultar los botones aquí también, sin alarmar con un error.
+  const resolverDispositivo = async (solicitudId: string, aprobar: boolean) => {
+    setSolicitudesResueltas((prev) => new Set(prev).add(solicitudId));
+    await resolverSolicitudDispositivoAction({ tenantSlug: tenant, solicitudId, aprobar }).catch(() => {});
   };
 
   const businessName = decodeURIComponent(tenant)
@@ -323,13 +352,30 @@ export default function TenantShell({
 
   const handleSignOut = async () => {
     if (modo === "staff") {
-      await cerrarSesionPersonalAction();
-      window.location.href = `/entrada/${tenant}`;
+      // 2026-09-23, a petición de Carlos: si la sucursal de este empleado
+      // tiene una caja abierta, cerrarSesionPersonalAction ahora rechaza el
+      // cierre (ver el comentario largo ahí) — en vez de dejarlo "colgado"
+      // sin explicación, se le avisa y se le manda directo a Caja para que
+      // pueda hacer el corte, en lugar de a la puerta del negocio.
+      const res = await cerrarSesionPersonalAction();
+      if (!res.ok) {
+        window.alert(res.error);
+        window.location.href = `/${tenant}/caja`;
+        return;
+      }
+      window.location.href = `/${tenant}`;
       return;
     }
+    // 2026-09-23, a petición de Carlos ("debe existir una forma sencilla de
+    // hacer logout y cambiar de usuarios"): tanto administrador como
+    // empleado regresan a la MISMA puerta única del negocio
+    // (app/(auth)/[tenant]/page.tsx) al cerrar sesión — desde ahí es un
+    // toque entrar como alguien más (la otra ficha, o el siguiente PIN),
+    // en vez de mandar al administrador a un /login genérico que ni
+    // siquiera menciona el negocio.
     const supabase = createClient();
     await supabase.auth.signOut();
-    window.location.href = "/login";
+    window.location.href = `/${tenant}`;
   };
 
   return (
@@ -342,23 +388,43 @@ export default function TenantShell({
           {toasts.map((t) => {
             const estilo = ESTILO_NOTIFICACION[t.tipo];
             const Icono = estilo.icon;
+            const necesitaAccion =
+              t.tipo === "DISPOSITIVO_PENDIENTE" && t.solicitudDispositivoId && !solicitudesResueltas.has(t.solicitudDispositivoId);
             return (
               <div
                 key={t.id}
-                className={`bg-card border rounded-xl shadow-lg px-3 py-2.5 flex items-start gap-2 animate-in fade-in slide-in-from-top-2 ${
+                className={`bg-card border rounded-xl shadow-lg px-3 py-2.5 flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 ${
                   esAlertaUrgente(t.tipo) ? "border-red-200" : "border-border"
                 }`}
               >
-                <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${estilo.bg} ${estilo.color}`}>
-                  <Icono className="w-3.5 h-3.5" />
+                <div className="flex items-start gap-2">
+                  <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${estilo.bg} ${estilo.color}`}>
+                    <Icono className="w-3.5 h-3.5" />
+                  </div>
+                  <p className="text-[12.5px] text-foreground leading-snug">{t.mensaje}</p>
+                  <button
+                    onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+                    className="ml-auto text-muted-foreground hover:text-foreground flex-shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <p className="text-[12.5px] text-foreground leading-snug">{t.mensaje}</p>
-                <button
-                  onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
-                  className="ml-auto text-muted-foreground hover:text-foreground flex-shrink-0"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                {necesitaAccion && (
+                  <div className="flex items-center gap-2 pl-8">
+                    <button
+                      onClick={() => resolverDispositivo(t.solicitudDispositivoId!, true)}
+                      className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-[11.5px] font-medium px-2.5 py-1 rounded-lg transition-colors"
+                    >
+                      <Check className="w-3 h-3" /> Aprobar
+                    </button>
+                    <button
+                      onClick={() => resolverDispositivo(t.solicitudDispositivoId!, false)}
+                      className="text-[11.5px] font-medium text-muted-foreground hover:text-red-600 transition-colors px-2.5 py-1"
+                    >
+                      Rechazar
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -562,17 +628,41 @@ export default function TenantShell({
                       {notificaciones.map((n) => {
                         const estilo = ESTILO_NOTIFICACION[n.tipo];
                         const Icono = estilo.icon;
+                        // 2026-09-23: mismo criterio que el toast — un aviso
+                        // de dispositivo pendiente se queda accionable aquí
+                        // aunque su pop-up ya se haya desaparecido solo (p.
+                        // ej. si el administrador no lo vio a tiempo).
+                        const necesitaAccion =
+                          n.tipo === "DISPOSITIVO_PENDIENTE" && n.solicitudDispositivoId && !solicitudesResueltas.has(n.solicitudDispositivoId);
                         return (
-                          <div key={n.id} className="px-3 py-2.5 flex items-start gap-2 hover:bg-muted/60">
-                            <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${estilo.bg} ${estilo.color}`}>
-                              <Icono className="w-3 h-3" />
+                          <div key={n.id} className="px-3 py-2.5 flex flex-col gap-2 hover:bg-muted/60">
+                            <div className="flex items-start gap-2">
+                              <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${estilo.bg} ${estilo.color}`}>
+                                <Icono className="w-3 h-3" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[11.5px] text-foreground leading-snug">{n.mensaje}</p>
+                                <p className="text-[10.5px] text-muted-foreground mt-0.5">
+                                  {new Date(n.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}
+                                </p>
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <p className="text-[11.5px] text-foreground leading-snug">{n.mensaje}</p>
-                              <p className="text-[10.5px] text-muted-foreground mt-0.5">
-                                {new Date(n.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}
-                              </p>
-                            </div>
+                            {necesitaAccion && (
+                              <div className="flex items-center gap-2 pl-7">
+                                <button
+                                  onClick={() => resolverDispositivo(n.solicitudDispositivoId!, true)}
+                                  className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-[11.5px] font-medium px-2.5 py-1 rounded-lg transition-colors"
+                                >
+                                  <Check className="w-3 h-3" /> Aprobar
+                                </button>
+                                <button
+                                  onClick={() => resolverDispositivo(n.solicitudDispositivoId!, false)}
+                                  className="text-[11.5px] font-medium text-muted-foreground hover:text-red-600 transition-colors px-2.5 py-1"
+                                >
+                                  Rechazar
+                                </button>
+                              </div>
+                            )}
                           </div>
                         );
                       })}

@@ -151,6 +151,19 @@ export const ROLES_SUGERIDOS_RUBRO: Record<string, RolSugeridoRubro[]> = {
   ],
   reparacion_celulares: [
     { name: "Encargado de sucursal", description: "Recibe equipos con folio, clientes, catálogo, inventario, compras, caja y reportes de la sucursal — cobra y entrega cuando el taller lo marca listo.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
+    // 2026-09-23, a petición de Carlos: el catálogo de este rubro no traía
+    // ningún puesto de "solo mostrador" — el más angosto que existía era
+    // "Encargado de sucursal", que de encargado no tiene solo el cobro: ve
+    // inventario, compras y reportes del negocio completo. Carlos fue
+    // explícito en que un cajero de mostrador "no debe saber de
+    // inventarios, existencias o métricas... es solo cobrar" — salvo
+    // Reparaciones, que SÍ debe ver (para saber qué hay listo para
+    // entregar hoy o consultar el estatus si el cliente pregunta), y ese
+    // módulo para el personal de tienda ya es de solo recibir/cobrar/
+    // entregar (nunca costo, piezas ni estatus — ver el comentario de
+    // "taller"/"aduana" en lib/roles.ts), así que no hace falta acotarlo
+    // más aquí. Mismo patrón que el Cajero de comercio_retail (arriba).
+    { name: "Cajero", description: "Cobra en Punto de Venta y Caja, ve la ficha de clientes y consulta/entrega reparaciones — sin inventario, compras, catálogo ni reportes del negocio.", modulos: ["pos", "caja", "clientes", "reparaciones"] },
     { name: "Recepción/Aduana", description: "Asigna técnico, cambia el estatus del equipo y ajusta costo/piezas cotizadas — control exclusivo del taller central.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
     { name: "Jefe de técnicos", description: "Ve todas las reparaciones asignadas del taller, sin poder editarlas.", modulos: ["taller", "clientes", "catalogo", "inventario"], verTodoTaller: true },
     { name: "Técnico reparador", description: "Ve solo sus propias reparaciones asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },

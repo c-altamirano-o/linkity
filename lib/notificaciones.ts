@@ -3,6 +3,7 @@ import "server-only";
 import { getTenantPrisma } from "@/lib/prisma";
 import { NotificacionTipo } from "@prisma/client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { enviarPushTenant } from "@/lib/push";
 
 /**
  * Capa de datos + envío del panel de notificaciones en tiempo real
@@ -26,6 +27,9 @@ export interface NotificacionUI {
   branchName: string | null;
   leida: boolean;
   fecha: string; // ISO
+  // Solo en tipo DISPOSITIVO_PENDIENTE — ver el comentario largo junto a
+  // Notificacion.solicitudDispositivoId, schema.prisma.
+  solicitudDispositivoId: string | null;
 }
 
 const LIMITE_NOTIFICACIONES = 30;
@@ -44,6 +48,7 @@ export async function getNotificaciones(tenantId: string): Promise<NotificacionU
     branchName: r.branch?.name ?? null,
     leida: r.leida,
     fecha: r.createdAt.toISOString(),
+    solicitudDispositivoId: r.solicitudDispositivoId ?? null,
   }));
 }
 
@@ -116,4 +121,53 @@ export async function crearNotificacionCaja(params: {
   } catch (err) {
     console.error("No se pudo enviar el broadcast de notificación (el aviso ya quedó guardado):", err);
   }
+}
+
+/**
+ * Aviso de "dispositivo pidiendo autorización" (2026-09-23, a petición de
+ * Carlos) — a diferencia de crearNotificacionCaja (arriba), este SÍ trae
+ * una acción (Aprobar/Rechazar, ver solicitudDispositivoId) y además
+ * dispara una notificación push (lib/push.ts) a todos los dispositivos
+ * donde algún administrador la haya activado, para que le suene el
+ * teléfono aunque no tenga el panel abierto en ese momento — el aviso
+ * dentro del panel y el push son dos entregas independientes del MISMO
+ * evento, ninguna depende de que la otra funcione.
+ */
+export async function crearNotificacionDispositivo(params: {
+  tenantId: string;
+  tenantSlug: string;
+  branchId: string;
+  branchName: string;
+  solicitudDispositivoId: string;
+}): Promise<void> {
+  const { tenantId, tenantSlug, branchId, branchName, solicitudDispositivoId } = params;
+  const db = getTenantPrisma(tenantId);
+  const mensaje = `Un dispositivo nuevo pide entrar en ${branchName} — apruébalo si eres tú o tu personal.`;
+
+  const notificacion = await db.notificacion.create({
+    data: { tenantId, branchId, tipo: NotificacionTipo.DISPOSITIVO_PENDIENTE, mensaje, solicitudDispositivoId },
+  });
+
+  try {
+    const supabase = createAdminClient();
+    await supabase.channel(`notificaciones:${tenantId}`).send({
+      type: "broadcast",
+      event: "dispositivo_pendiente",
+      payload: {
+        id: notificacion.id,
+        mensaje,
+        branchName,
+        fecha: notificacion.createdAt.toISOString(),
+        solicitudDispositivoId,
+      },
+    });
+  } catch (err) {
+    console.error("No se pudo enviar el broadcast de dispositivo pendiente (el aviso ya quedó guardado):", err);
+  }
+
+  await enviarPushTenant(tenantId, {
+    title: "Nuevo dispositivo pidiendo entrar",
+    body: mensaje,
+    url: `/${tenantSlug}/configuracion?dispositivos=1`,
+  }).catch((err) => console.error("No se pudo enviar el push de dispositivo pendiente:", err));
 }

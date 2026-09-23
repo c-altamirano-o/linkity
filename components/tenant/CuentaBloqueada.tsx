@@ -54,7 +54,7 @@ export default function CuentaBloqueada({ etapa, tenantSlug }: { etapa: EtapaCic
         ) : (
           <p className="text-xs text-slate-400">Contacta a Linkity Soluciones para renovar tu cuenta.</p>
         )}
-        <Link href={`/entrada/${tenantSlug}`} className="block mt-4 text-xs text-slate-400 hover:text-slate-600">
+        <Link href={`/${tenantSlug}`} className="block mt-4 text-xs text-slate-400 hover:text-slate-600">
           Volver
         </Link>
       </div>
