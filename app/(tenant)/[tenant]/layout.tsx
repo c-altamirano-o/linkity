@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { CashSessionStatus } from "@prisma/client";
 import TenantShell from "@/components/tenant/TenantShell";
-import { THEME_PRESETS, TENANT_THEME_ROOT_ID } from "@/lib/theme-presets";
+import { resolverPresetTenant, TENANT_THEME_ROOT_ID } from "@/lib/theme-presets";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import type { ModuloKey } from "@/lib/roles";
 import { modulosPermitidosParaRolPorNombre } from "@/lib/roles-server";
@@ -79,13 +79,11 @@ export default async function TenantLayout({
 
   let userName = "Usuario";
   let userRole = "";
-  // Tipado explícito como Record<string, string> (en vez de dejar que TS
-  // infiera el tipo literal exacto de NEUTRAL_TECH) — THEME_PRESETS ahora
-  // se declara `as const` en lib/theme-presets.ts para que ThemePresetId
-  // se pueda derivar con keyof, pero eso vuelve cada preset un tipo
-  // literal DISTINTO entre sí; sin esta anotación, la reasignación de
-  // abajo a un preset distinto de NEUTRAL_TECH no compilaría.
-  let activePreset: Record<string, string> = THEME_PRESETS.NEUTRAL_TECH;
+  // El valor por default (antes de conocer dbTenant) usa la misma función
+  // que todo lo demás — resolverPresetTenant ya sabe caer a LUMIA_COBALT si
+  // el string que recibe no es un tema válido. Así no hace falta mantener un
+  // segundo "default" hardcodeado aparte de INTENSIDAD_DEFAULT.
+  let activePreset: Record<string, string> = resolverPresetTenant("LUMIA_COBALT", 100);
   let modo: "admin" | "staff" = "admin";
   // Módulos que el rol de la sesión de PIN tiene permitido — se calcula una
   // sola vez más abajo (modo "staff") y se reusa tanto para el guard de ruta
@@ -96,7 +94,7 @@ export default async function TenantLayout({
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
-    select: { id: true, themePreset: true, businessType: true, logo: true, subscription: { select: { status: true, endDate: true } } },
+    select: { id: true, themePreset: true, themeIntensity: true, businessType: true, logo: true, subscription: { select: { status: true, endDate: true } } },
   });
 
   // Bloqueo por ciclo de vida de suscripción (2026-09-22, a petición de
@@ -115,7 +113,7 @@ export default async function TenantLayout({
   }
 
   if (dbTenant?.themePreset) {
-    activePreset = THEME_PRESETS[dbTenant.themePreset as keyof typeof THEME_PRESETS] || THEME_PRESETS.NEUTRAL_TECH;
+    activePreset = resolverPresetTenant(dbTenant.themePreset, dbTenant.themeIntensity);
   }
 
   // Personalización por rubro (2026-09-17): labels ya resueltos (rubro +

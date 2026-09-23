@@ -22,7 +22,18 @@ model Tenant {
   state        String?
   rfc          String?
   businessType String?
-  themePreset  ThemePreset @default(NEUTRAL_TECH)
+  themePreset  ThemePreset @default(LUMIA_COBALT)
+
+  // Intensidad de color del tema (2026-09-23, a petición de Carlos: "hazlas
+  // personalizables para subir o bajar la intensidad de los colores", sobre
+  // los 10 temas estilo Windows Phone/Metro de abajo). 0–200, 100 = la
+  // paleta tal cual fue definida (ver WINDOWS_THEMES en lib/theme-presets.ts).
+  // Escala SOLO la saturación de backgroundColor/tileColors, nunca el matiz
+  // — así "más o menos vivo" nunca cambia DE QUÉ color se trata. Vive en el
+  // tenant (no por sucursal, mismo criterio que cobrarEnDevolucion) porque
+  // el tema es una decisión de marca de todo el negocio, no de una tienda en
+  // particular.
+  themeIntensity Int       @default(100)
   isActive     Boolean     @default(true)
 
   // Día en que abre la "semana laboral" de ESTE negocio (2026-09-18, a
@@ -127,11 +138,29 @@ model TenantLabel {
 }
 
 enum ThemePreset {
+  // Presets originales (oklch) — se conservan sin borrar para no romper
+  // ningún tenant que ya los tenga elegidos (ver el comentario largo junto a
+  // THEME_PRESETS en lib/theme-presets.ts). Ya no se ofrecen en Configuración.
   NEUTRAL_TECH
   BLACK_GOLD
   EMERALD
   CORAL_WARM
   OCEAN_BLUE
+
+  // Temas estilo Windows Phone/Metro (2026-09-24, a petición de Carlos — ver
+  // WINDOWS_THEMES en lib/theme-presets.ts para el detalle completo de cada
+  // uno). Agregados de forma aditiva, nunca se quitan ni renombran valores
+  // de un enum ya usado por tenants reales.
+  LUMIA_COBALT
+  METRO_MAGENTA
+  WINDOWS8_LIGHT
+  SAPPHIRE_NIGHT
+  MONOCHROME_METRO
+  VIBRANT_LUMIA
+  MANGO_TANGERINE
+  LAWN_LIME
+  DEEP_PLUM
+  CRIMSON_START
 }
 
 model Branch {

@@ -4,11 +4,20 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { resolverActor } from "@/lib/actor";
 
-export async function updateThemePreset(tenantSlug: string, preset: any) {
+// intensity: 0–200 (100 = paleta original, ver INTENSIDAD_DEFAULT en
+// lib/theme-presets.ts). Se guarda junto con el preset porque ambos valores
+// viajan siempre juntos desde el slider de Configuración — ver el comentario
+// largo en resolverPresetTenant sobre por qué esa función es el único punto
+// que debe interpretar la combinación de los dos.
+export async function updateThemePreset(tenantSlug: string, preset: any, intensity: number) {
+  const intensidadValida = Number.isFinite(intensity)
+    ? Math.max(0, Math.min(200, Math.round(intensity)))
+    : 100;
+
   try {
     await prisma.tenant.update({
       where: { slug: tenantSlug },
-      data: { themePreset: preset },
+      data: { themePreset: preset, themeIntensity: intensidadValida },
     });
 
     // Purga el caché de Next.js para que el layout aplique el nuevo color al instante

@@ -49,6 +49,14 @@
 }
 
 :root {
+  /* Tipografía de todo el SaaS (2026-09-24, a petición de Carlos: "usemos
+     SF Pro Display o alguna similar para todo el saas") — ver el comentario
+     largo en app/layout.tsx sobre por qué la pila empieza con
+     -apple-system/BlinkMacSystemFont (SF Pro real, solo en macOS/iOS/iPadOS,
+     sin distribuir la fuente) y cae en Inter (--font-inter, auto-hospedada
+     aquí) para Windows/Android/Linux — la mayoría de las computadoras de
+     mostrador de los negocios de Carlos. */
+  --font-sans: -apple-system, BlinkMacSystemFont, var(--font-inter), "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

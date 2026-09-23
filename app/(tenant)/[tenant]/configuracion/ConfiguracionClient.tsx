@@ -9,7 +9,10 @@ import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions"
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/client";
-import { THEME_PRESETS, TENANT_THEME_ROOT_ID, type ThemePresetId } from "@/lib/theme-presets";
+import {
+  WINDOWS_THEMES, resolverPresetTenant, TENANT_THEME_ROOT_ID,
+  INTENSIDAD_DEFAULT, INTENSIDAD_MIN, INTENSIDAD_MAX,
+} from "@/lib/theme-presets";
 import ActivarNotificacionesPush from "@/components/tenant/ActivarNotificacionesPush";
 import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
@@ -27,9 +30,13 @@ const TAMANO_MAXIMO_LOGO = 2 * 1024 * 1024; // 2 MB — mismo límite que valida
 // que el negocio confirme con "Guardar cambios". Si el nodo no existe
 // todavía (ej. muy al inicio del primer render) no hace nada — el layout
 // ya lo habrá pintado con el valor real de la BD de cualquier forma.
-function aplicarTemaEnVivo(themeId: string) {
-  const preset = THEME_PRESETS[themeId as ThemePresetId];
-  if (!preset) return;
+//
+// Llama a resolverPresetTenant — la MISMA función que usa el servidor para
+// pintar el tema real — con el par (tema, intensidad) que el admin está
+// eligiendo/arrastrando en este momento, para que la vista previa nunca
+// pueda desincronizarse de lo que de verdad se va a guardar.
+function aplicarTemaEnVivo(themeId: string, intensidad: number) {
+  const preset = resolverPresetTenant(themeId, intensidad);
   const nodo = document.getElementById(TENANT_THEME_ROOT_ID);
   if (!nodo) return;
   for (const [variable, valor] of Object.entries(preset)) {
@@ -37,13 +44,15 @@ function aplicarTemaEnVivo(themeId: string) {
   }
 }
 
-const THEMES = [
-  { id: "NEUTRAL_TECH", name: "Neutral Tech", color: "bg-slate-800" },
-  { id: "BLACK_GOLD", name: "Black & Gold", color: "bg-amber-500" },
-  { id: "EMERALD", name: "Esmeralda", color: "bg-emerald-500" },
-  { id: "CORAL_WARM", name: "Coral Cálido", color: "bg-rose-500" },
-  { id: "OCEAN_BLUE", name: "Azul Océano", color: "bg-blue-600" },
-];
+// Los 10 temas estilo Windows Phone/Metro que Carlos aprobó (ver el
+// comentario largo en lib/theme-presets.ts) — el swatch de cada tarjeta usa
+// backgroundColor (el color de fondo de toda la ventana del POS), que es lo
+// que más distingue un tema de otro a simple vista.
+const THEMES = Object.entries(WINDOWS_THEMES).map(([id, tema]) => ({
+  id,
+  name: tema.name,
+  swatch: tema.backgroundColor,
+}));
 
 const SIN_RUBRO = "";
 
@@ -60,6 +69,7 @@ interface ModuloPersonalizable {
 interface ConfiguracionClientProps {
   tenantSlug: string;
   themePresetInicial: string;
+  themeIntensityInicial: number;
   businessTypeInicial: string | null;
   modulos: ModuloPersonalizable[];
   recomendadosOff: string[];
@@ -72,6 +82,7 @@ interface ConfiguracionClientProps {
 export default function ConfiguracionClient({
   tenantSlug,
   themePresetInicial,
+  themeIntensityInicial,
   businessTypeInicial,
   modulos,
   recomendadosOff,
@@ -84,31 +95,39 @@ export default function ConfiguracionClient({
 
   // ── Tema ──────────────────────────────────────────────────
   const [temaSeleccionado, setTemaSeleccionado] = useState(themePresetInicial);
+  const [intensidadSeleccionada, setIntensidadSeleccionada] = useState(themeIntensityInicial ?? INTENSIDAD_DEFAULT);
   const [temaPending, startTemaTransition] = useTransition();
   const [temaMensaje, setTemaMensaje] = useState("");
 
-  // Guarda cuál es el tema REALMENTE guardado en BD (no el que se está
-  // previsualizando) — si el negocio sale de esta pantalla sin darle
+  // Guarda cuál es el tema/intensidad REALMENTE guardados en BD (no lo que
+  // se está previsualizando) — si el negocio sale de esta pantalla sin darle
   // "Guardar cambios", el efecto de limpieza de abajo revierte la vista
-  // previa a este valor, para que un color nunca confirmado no se quede
+  // previa a estos valores, para que un color nunca confirmado no se quede
   // "pegado" en el resto de la app.
   const temaConfirmadoRef = useRef(themePresetInicial);
+  const intensidadConfirmadaRef = useRef(themeIntensityInicial ?? INTENSIDAD_DEFAULT);
 
   const seleccionarTema = (themeId: string) => {
     setTemaSeleccionado(themeId);
-    aplicarTemaEnVivo(themeId); // vista previa instantánea, sin esperar a guardar
+    aplicarTemaEnVivo(themeId, intensidadSeleccionada); // vista previa instantánea, sin esperar a guardar
+  };
+
+  const cambiarIntensidad = (valor: number) => {
+    setIntensidadSeleccionada(valor);
+    aplicarTemaEnVivo(temaSeleccionado, valor); // vista previa instantánea, mientras se arrastra el slider
   };
 
   useEffect(() => {
-    return () => aplicarTemaEnVivo(temaConfirmadoRef.current);
+    return () => aplicarTemaEnVivo(temaConfirmadoRef.current, intensidadConfirmadaRef.current);
   }, []);
 
   const guardarTema = () => {
     startTemaTransition(async () => {
-      const result = await updateThemePreset(tenantSlug, temaSeleccionado);
+      const result = await updateThemePreset(tenantSlug, temaSeleccionado, intensidadSeleccionada);
       setTemaMensaje(result.success ? "Tema actualizado correctamente." : "Error al actualizar el tema.");
       if (result.success) {
         temaConfirmadoRef.current = temaSeleccionado;
+        intensidadConfirmadaRef.current = intensidadSeleccionada;
         router.refresh();
         setTimeout(() => setTemaMensaje(""), 3000);
       }
@@ -435,7 +454,7 @@ export default function ConfiguracionClient({
         </div>
 
         <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">Selecciona la paleta de colores principal para tu interfaz.</p>
+          <p className="text-sm text-muted-foreground mb-5">Selecciona la paleta de colores principal para tu interfaz, estilo Windows Phone.</p>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
             {THEMES.map((theme) => (
@@ -446,12 +465,41 @@ export default function ConfiguracionClient({
                   temaSeleccionado === theme.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
                 }`}
               >
-                <div className={`w-10 h-10 rounded-full shadow-inner ${theme.color} flex items-center justify-center`}>
-                  {temaSeleccionado === theme.id && <Check className="w-5 h-5 text-white" />}
+                <div
+                  className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
+                  style={{ backgroundColor: theme.swatch }}
+                >
+                  {temaSeleccionado === theme.id && <Check className="w-5 h-5 text-white drop-shadow" />}
                 </div>
                 <span className="text-xs font-medium text-foreground">{theme.name}</span>
               </button>
             ))}
+          </div>
+
+          {/* Intensidad (2026-09-23, a petición de Carlos: "hazlas
+              personalizables para subir o bajar la intensidad de los
+              colores") — escala solo la saturación de la paleta elegida
+              arriba, ver escalarSaturacion en lib/theme-presets.ts. 100 =
+              la paleta tal cual, sin tocar. */}
+          <div className="mt-6 border-t border-border pt-5">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-muted-foreground">Intensidad del color</label>
+              <span className="text-xs font-semibold text-foreground tabular-nums">{intensidadSeleccionada}%</span>
+            </div>
+            <input
+              type="range"
+              min={INTENSIDAD_MIN}
+              max={INTENSIDAD_MAX}
+              step={5}
+              value={intensidadSeleccionada}
+              onChange={(e) => cambiarIntensidad(Number(e.target.value))}
+              className="w-full accent-primary"
+            />
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[11px] text-muted-foreground">Apagado</span>
+              <span className="text-[11px] text-muted-foreground">Original</span>
+              <span className="text-[11px] text-muted-foreground">Vivo</span>
+            </div>
           </div>
 
           <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">

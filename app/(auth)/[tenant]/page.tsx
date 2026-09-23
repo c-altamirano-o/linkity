@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { THEME_PRESETS, TENANT_THEME_ROOT_ID } from "@/lib/theme-presets";
+import { resolverPresetTenant, TENANT_THEME_ROOT_ID } from "@/lib/theme-presets";
 import AccesoNegocioClient from "./AccesoNegocioClient";
 
 /**
@@ -51,6 +51,7 @@ export default async function AccesoNegocioPage({
       id: true,
       name: true,
       themePreset: true,
+      themeIntensity: true,
       branches: {
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
@@ -66,7 +67,7 @@ export default async function AccesoNegocioPage({
 
   if (!tenant) notFound();
 
-  const activePreset = THEME_PRESETS[tenant.themePreset as keyof typeof THEME_PRESETS] || THEME_PRESETS.NEUTRAL_TECH;
+  const activePreset = resolverPresetTenant(tenant.themePreset, tenant.themeIntensity);
 
   return (
     <div id={TENANT_THEME_ROOT_ID} style={activePreset as React.CSSProperties}>
