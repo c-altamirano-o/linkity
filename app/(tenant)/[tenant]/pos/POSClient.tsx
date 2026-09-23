@@ -389,7 +389,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               value={clienteQuery}
               onChange={(e) => setClienteQuery(e.target.value)}
               placeholder="Buscar cliente..."
-              className="w-full px-3 py-2 text-xs bg-muted border-b border-border focus:outline-none"
+              className="w-full px-3 py-2 text-xs bg-muted border-b border-border focus:outline-none text-foreground placeholder:text-muted-foreground"
             />
             <div className="max-h-40 overflow-y-auto">
               <button
@@ -551,7 +551,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                   onChange={(e) => setMontoRecibido(e.target.value)}
                   placeholder="$0"
                   autoFocus
-                  className="w-28 text-right px-2.5 py-2 border border-primary/40 rounded-lg text-sm font-semibold focus:outline-none focus:border-primary bg-card"
+                  className="w-28 text-right px-2.5 py-2 border border-primary/40 rounded-lg text-sm font-semibold focus:outline-none focus:border-primary bg-card text-foreground placeholder:text-muted-foreground"
                 />
               </div>
             </div>
@@ -593,7 +593,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                   value={f.value}
                   onChange={(e) => f.setter(e.target.value)}
                   placeholder="$0"
-                  className="w-28 text-right px-2.5 py-2 border border-amber-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-amber-400 bg-card"
+                  className="w-28 text-right px-2.5 py-2 border border-amber-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-amber-400 bg-card text-foreground placeholder:text-muted-foreground"
                 />
               </div>
             ))}
@@ -672,7 +672,21 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           fondo neutral --card a propósito: es una lista de números
           (totales, cambio) que debe seguir siendo legible como una
           pantalla de trabajo, no como el "launcher" de tiles. */}
-      <div className="flex-1 flex flex-col bg-primary lg:shadow-[1px_0_0_rgba(0,0,0,0.045)] min-h-0">
+      {/* min-w-0 es necesario aquí (2026-09-24, a petición de Carlos: vio que
+          la pantalla completa se corría/recortaba horizontalmente en vez de
+          acomodar el contenido): sin esto, un flex item por default NUNCA se
+          encoge más allá del ancho mínimo de su contenido (min-width: auto
+          es el default de flexbox, no 0) — como este panel vive junto al
+          carrito de ancho fijo (w-80) dentro de un flex lg:flex-row, cuando
+          el contenido interno (píldoras de categoría, buscador, etc.) pedía
+          más espacio del disponible, en vez de acomodarse/apilarse adentro,
+          empujaba TODA la fila a desbordar y aparecía una barra de scroll
+          horizontal en la página completa. Con min-w-0 el panel sí se puede
+          encoger al ancho real disponible, y cada hijo (la barra de
+          categorías ya trae su propio overflow-x-auto, la cuadrícula de
+          productos ya se ajusta con sus columnas responsivas) se acomoda
+          dentro de ese espacio en vez de forzar el desbordamiento global. */}
+      <div className="flex-1 flex flex-col bg-primary lg:shadow-[1px_0_0_rgba(0,0,0,0.045)] min-h-0 min-w-0">
 
         <div className="flex items-center gap-2.5 px-5 py-4 flex-wrap">
           <span className="text-lg font-bold text-primary-foreground w-full sm:w-auto sm:mr-2">
@@ -696,7 +710,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Buscar producto o servicio"
-              className="w-full pl-11 pr-4 py-3 rounded-full text-base bg-card text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] focus:outline-none focus:ring-2 focus:ring-card/50"
+              className="w-full pl-11 pr-4 py-3 rounded-full text-base bg-card text-foreground placeholder:text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] focus:outline-none focus:ring-2 focus:ring-card/50"
             />
           </div>
           <button
