@@ -390,8 +390,25 @@ export default function ConfiguracionClient({
 
   const resolverSolicitud = async (solicitudId: string, aprobar: boolean) => {
     setSolicitudEnCurso(solicitudId);
-    await resolverSolicitudDispositivoAction({ tenantSlug, solicitudId, aprobar }).catch(() => {});
-    setSolicitudes((prev) => prev.filter((s) => s.id !== solicitudId));
+    // 2026-09-23, corrección: antes esto no revisaba res.ok — si
+    // resolverSolicitudDispositivoAction fallaba por CUALQUIER motivo (la
+    // sesión de quien hace clic no calificó como admin, la solicitud ya
+    // había vencido, otro administrador ya la había resuelto, etc.), el
+    // botón igual desaparecía de la lista como si hubiera funcionado, sin
+    // avisar nada — Carlos reportó justo este síntoma ("aunque autentique
+    // al usuario no ingresa automáticamente": aprobaba aquí, pero del otro
+    // lado nunca se aprobaba de verdad). Ahora si falla se avisa con el
+    // motivo real y se recarga la lista (por si de verdad ya se había
+    // resuelto por otro lado, para que no se quede huérfana en pantalla).
+    const res = await resolverSolicitudDispositivoAction({ tenantSlug, solicitudId, aprobar }).catch(
+      (): { ok: false; error: string } => ({ ok: false, error: "No se pudo conectar con el servidor — inténtalo de nuevo." })
+    );
+    if (res.ok) {
+      setSolicitudes((prev) => prev.filter((s) => s.id !== solicitudId));
+    } else {
+      window.alert(res.error);
+      await cargarSolicitudes();
+    }
     setSolicitudEnCurso(null);
   };
 

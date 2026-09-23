@@ -288,8 +288,23 @@ export default function TenantShell({
   // administrador (u otra pestaña) ya la resolvió, así que basta con
   // ocultar los botones aquí también, sin alarmar con un error.
   const resolverDispositivo = async (solicitudId: string, aprobar: boolean) => {
-    setSolicitudesResueltas((prev) => new Set(prev).add(solicitudId));
-    await resolverSolicitudDispositivoAction({ tenantSlug: tenant, solicitudId, aprobar }).catch(() => {});
+    // 2026-09-23, corrección: antes esto marcaba la solicitud como
+    // "resuelta" en pantalla (ocultando los botones Aprobar/Rechazar) SIN
+    // esperar a saber si resolverSolicitudDispositivoAction de verdad
+    // funcionó — si fallaba por cualquier motivo, el administrador veía
+    // "Aprobar" desaparecer como si ya hubiera pasado, pero la solicitud
+    // seguía PENDIENTE del lado del empleado, que nunca entraba solo (el
+    // síntoma que reportó Carlos). Ahora solo se marca como resuelta cuando
+    // el servidor de verdad confirma ok:true; si falla, se avisa el motivo
+    // y los botones se quedan para poder reintentar.
+    const res = await resolverSolicitudDispositivoAction({ tenantSlug: tenant, solicitudId, aprobar }).catch(
+      (): { ok: false; error: string } => ({ ok: false, error: "No se pudo conectar con el servidor — inténtalo de nuevo." })
+    );
+    if (res.ok) {
+      setSolicitudesResueltas((prev) => new Set(prev).add(solicitudId));
+    } else {
+      window.alert(res.error);
+    }
   };
 
   const businessName = decodeURIComponent(tenant)
