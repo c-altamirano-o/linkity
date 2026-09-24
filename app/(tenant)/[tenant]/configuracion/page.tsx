@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { MODULE_CATALOG } from "@/lib/modules-catalog";
 import { modulosRecomendadosOff } from "@/lib/modulos-rubro";
+import { getEstadoTallerChecklist } from "@/lib/roles-server";
 import ConfiguracionClient from "./ConfiguracionClient";
 
 export default async function ConfiguracionPage({
@@ -35,6 +36,7 @@ export default async function ConfiguracionPage({
     .map(([code, info]) => ({ code, name: info.name, activo: !codigosInactivos.has(code) }));
 
   const recomendadosOff = modulosRecomendadosOff(tenant.businessType);
+  const checklistTaller = await getEstadoTallerChecklist(tenant.id, tenant.businessType);
 
   return (
     <ConfiguracionClient
@@ -50,6 +52,7 @@ export default async function ConfiguracionPage({
       weekStartDayInicial={tenant.weekStartDay}
       supportPhoneInicial={tenant.phone}
       cobrarEnDevolucionInicial={tenant.cobrarEnDevolucion}
+      checklistTaller={checklistTaller}
     />
   );
 }

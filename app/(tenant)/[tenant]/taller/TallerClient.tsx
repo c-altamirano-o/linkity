@@ -87,6 +87,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
   const [error, setError] = useState<string | null>(null);
 
   const [alertaTexto, setAlertaTexto] = useState("");
+  const [alertaParaCliente, setAlertaParaCliente] = useState(false);
   const [alertaOk, setAlertaOk] = useState(false);
 
   // "cada técnico solo debe ver SUS reparaciones asignadas, no toda la cola"
@@ -106,12 +107,13 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
     if (!mensaje) return;
     setError(null);
     startTransition(async () => {
-      const res = await enviarAlertaTallerAction({ tenantSlug, repairId, mensaje });
+      const res = await enviarAlertaTallerAction({ tenantSlug, repairId, mensaje, paraCliente: alertaParaCliente });
       if (!res.ok) {
         setError(res.error);
         return;
       }
       setAlertaTexto("");
+      setAlertaParaCliente(false);
       setAlertaOk(true);
       setTimeout(() => setAlertaOk(false), 2500);
       router.refresh();
@@ -315,6 +317,18 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
                     placeholder="Ej. Necesito autorización para cotizar una pieza extra…"
                     className="w-full px-3 py-2 border border-border rounded-lg text-[12.5px] bg-card focus:outline-none focus:border-primary resize-none"
                   />
+                  {/* 2026-09-24, a petición de Carlos: la página pública de
+                      seguimiento del cliente puede mostrar "un mensaje por
+                      parte del personal de taller en caso de que necesite
+                      retroalimentación del cliente" — esta casilla es lo que
+                      decide si ESTA alerta también se le muestra a él (ver
+                      enviarAlertaTallerAction, parámetro paraCliente). Sin
+                      marcar, la alerta sigue siendo solo interna (Aduana/Tienda),
+                      como siempre. */}
+                  <label className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-muted-foreground">
+                    <input type="checkbox" checked={alertaParaCliente} onChange={(e) => setAlertaParaCliente(e.target.checked)} />
+                    Mostrar este mensaje también al cliente en su página de seguimiento
+                  </label>
                   <button
                     onClick={() => enviarAlerta(seleccionada.id)}
                     disabled={pending || !alertaTexto.trim()}

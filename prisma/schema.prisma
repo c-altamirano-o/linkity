@@ -802,6 +802,21 @@ model RepairHistory {
   notes     String?
   createdAt DateTime     @default(now())
 
+  // 2026-09-24, a petición de Carlos: quiere una página pública de
+  // seguimiento (/rep/[publicToken]) donde el cliente vea el avance de su
+  // equipo "similar a Amazon o DiDi Food" — SIN información sensible del
+  // negocio (nunca costo de piezas por separado, nunca el nombre del
+  // técnico, solo su puesto). En vez de inventar una tabla/modelo aparte
+  // para esto, se reutiliza RepairHistory (que ya es el registro de TODO lo
+  // que le pasa a una reparación) marcando cuáles de sus filas son
+  // presentables al cliente. Default false = comportamiento de siempre
+  // para cualquier fila ya existente (alertas de técnico, ajustes de costo)
+  // — solo las transiciones de estatus reales, la asignación de técnico (sin
+  // nombre, ver asignarTecnicoAction) y una alerta que el propio técnico
+  // marque explícitamente "es para el cliente" (ver enviarAlertaTallerAction,
+  // parámetro paraCliente) se marcan en true.
+  visibleCliente Boolean @default(false)
+
   repair Repair @relation(fields: [repairId], references: [id])
 }
 

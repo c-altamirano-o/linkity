@@ -119,8 +119,17 @@ export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
 // nunca de un empleado con PIN, aunque el negocio decida más adelante darle
 // esos módulos a un rol personalizado.
 export const MATRIZ_ACCESO_BASE: Record<RolBase, ModuloKey[]> = {
+  // "aduana" agregado 2026-09-24, a petición explícita de Carlos: "cualquier
+  // movimiento o cambio de estatus del equipo en Taller lo debe hacer
+  // alguien con rol de aduana, recepcionista o superior (gerente,
+  // supervisor, dueño)". El Dueño (cuenta real, Supabase Auth) ya tenía
+  // acceso sin restricción de módulo (ver resolverActor); lo que faltaba era
+  // que el rol semilla "Gerente" (empleado de PIN) también pudiera entrar a
+  // Aduana sin que cada negocio tuviera que ir a marcarlo a mano. Ver
+  // prisma/migrar-aduana-gerente.ts para el backfill de los roles "Gerente"
+  // que ya existían en negocios reales antes de este cambio.
   Gerente: [
-    "dashboard", "pos", "reparaciones", "citas", "expediente-clinico", "clientes", "catalogo", "inventario",
+    "dashboard", "pos", "reparaciones", "aduana", "citas", "expediente-clinico", "clientes", "catalogo", "inventario",
     "compras", "caja", "sucursales", "reportes", "soporte",
   ],
   Cajero: ["dashboard", "pos", "caja", "clientes", "reparaciones", "citas"],

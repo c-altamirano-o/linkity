@@ -180,7 +180,14 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
       }
       setMontoApertura("");
       setMostrarAbrirModal(false);
-      router.refresh();
+      // 2026-09-24, a petición de Carlos: "Cajera, Empleado de mostrador, o
+      // Encargado de tienda" — al guardar el fondo inicial, van derecho al
+      // Punto de Venta, no se quedan viendo la pantalla de Caja (que para
+      // ellos es la vista restringida con montos ocultos). Un supervisor
+      // que abre caja sí se queda aquí — puede que lo esté haciendo desde
+      // el panel de administración, no para vender él mismo.
+      if (puedeVerMontos) router.refresh();
+      else router.push(`/${tenantSlug}/pos`);
     });
   };
 
@@ -709,6 +716,48 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
     doc.save(nombreArchivo("pdf"));
     setMostrarExportMenu(false);
   };
+
+  // 2026-09-24, a petición de Carlos: "se me hace innecesario que aparezca
+  // una ventana independiente con todo oculto y ofensivo que aparezcan los
+  // candados. Que mejor... aparezca una ventana emergente que le indique
+  // abrir caja, que coloque el fondo inicial y al guardar se cierre y la
+  // dirija al punto de venta" — para Cajera/Empleado de mostrador/Encargado
+  // de tienda (cualquiera sin nivel supervisor, ver Role.verMontosCaja) con
+  // la caja de su sucursal todavía cerrada, esta pantalla reemplaza por
+  // completo la vista normal de Caja (que para ellos vendría llena de
+  // "🔒 Oculto" y el panel "Sección restringida") — no hay nada que
+  // ocultar/candar si no hay nada que mostrar todavía. Un supervisor con
+  // caja cerrada sigue viendo la pantalla completa de siempre (con el botón
+  // "Abrir caja" de la barra lateral), porque a él nada le está oculto.
+  if (!sesionActual && !puedeVerMontos) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-xs">
+          <h1 className="text-base font-semibold text-foreground text-center mb-1">Antes de comenzar, abre la caja</h1>
+          <p className="text-[12.5px] text-muted-foreground text-center mb-5">Captura el fondo inicial con el que arrancas hoy tu turno.</p>
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <label className="block text-[12.5px] font-medium text-muted-foreground mb-1">Fondo inicial</label>
+            <input
+              type="number"
+              value={montoApertura}
+              onChange={(e) => setMontoApertura(e.target.value)}
+              placeholder="$0.00"
+              autoFocus
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+            {error && <p className="text-[12.5px] text-red-500 mt-2">{error}</p>}
+            <button
+              onClick={handleAbrirCaja}
+              disabled={pending}
+              className="w-full mt-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-50"
+            >
+              {pending ? "Abriendo..." : "Guardar y continuar"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">

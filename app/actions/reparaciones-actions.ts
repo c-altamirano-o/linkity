@@ -36,7 +36,6 @@ export interface CrearReparacionParams {
   marca: string;
   modelo: string;
   falla: string;
-  costoEstimado?: number | null;
   // Fecha estimada de entrega — se captura al recibir el equipo (a petición
   // de Carlos, 2026-09-21: "falta la fecha estimada de reparación, eso se
   // debe capturar al momento de ingresar el equipo, y debe aparecer en el
@@ -46,12 +45,20 @@ export interface CrearReparacionParams {
   // la hora exacta para esta fecha estimada.
   fechaEstimada?: string | null;
   prioridad: "LOW" | "NORMAL" | "HIGH" | "URGENT";
-  // Piezas/refacciones que ya se saben necesarias desde la recepción (ej.
-  // "se ve que necesita pantalla nueva"). Solo se manda productId+quantity
-  // — el precio SIEMPRE se toma del catálogo aquí en el servidor, nunca de
-  // lo que mande el cliente, para que nadie pueda cotizar una pieza más
-  // barata manipulando la petición.
-  piezas?: { productId: string; quantity: number }[];
+  // Piezas/refacciones y/o servicios cotizados desde la recepción — 2026-09-24,
+  // corrección explícita de Carlos: "esto debe ser un campo obligatorio, si
+  // no existe una pieza cotizada debe ser un servicio, pero una reparación
+  // no puede ingresar sin costo estipulado". Antes `costoEstimado` era un
+  // número libre que alguien tecleaba, desconectado de las piezas (que a su
+  // vez eran opcionales) — una reparación podía quedar sin nada cotizado.
+  // Ahora se exige al menos UNA línea (una pieza del catálogo o un servicio,
+  // ej. "diagnóstico"/"mano de obra" cuando no hay repuesto físico de por
+  // medio — el catálogo de productos ya distingue PRODUCT/PART/SERVICE) y el
+  // costo estimado de la reparación se calcula SIEMPRE como la suma de estas
+  // líneas (ver más abajo) — nunca un número aparte que alguien capture a
+  // mano. Solo se manda productId+quantity — el precio SIEMPRE se toma del
+  // catálogo aquí en el servidor, nunca de lo que mande el cliente.
+  piezas: { productId: string; quantity: number }[];
 }
 
 export type CrearReparacionResult =
@@ -59,7 +66,7 @@ export type CrearReparacionResult =
   | { ok: false; error: string };
 
 export async function crearReparacionAction(params: CrearReparacionParams): Promise<CrearReparacionResult> {
-  const { tenantSlug, branchId, clienteId, clienteNuevo, marca, modelo, falla, costoEstimado, fechaEstimada, prioridad, piezas } = params;
+  const { tenantSlug, branchId, clienteId, clienteNuevo, marca, modelo, falla, fechaEstimada, prioridad, piezas } = params;
 
   if (!branchId) return { ok: false, error: "Selecciona una sucursal" };
   if (!marca.trim() || !modelo.trim()) return { ok: false, error: "Marca y modelo son obligatorios" };
@@ -76,6 +83,12 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
   const piezasLimpias = (piezas ?? [])
     .filter((p) => p.productId && Number.isFinite(p.quantity) && p.quantity > 0)
     .map((p) => ({ productId: p.productId, quantity: Math.floor(p.quantity) }));
+
+  // 2026-09-24, a petición de Carlos: "una reparación no puede ingresar sin
+  // costo estipulado" — ver el comentario largo en CrearReparacionParams.piezas.
+  if (piezasLimpias.length === 0) {
+    return { ok: false, error: "Agrega al menos una pieza del catálogo o un servicio cotizado (ej. diagnóstico/mano de obra) — una reparación no puede ingresar sin un costo estipulado" };
+  }
 
   // resolverActor (lib/actor.ts) acepta tanto una cuenta real (Supabase
   // Auth) como una sesión de PIN de personal (M11). A propósito SOLO
@@ -110,6 +123,14 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
       const faltante = piezasLimpias.find((p) => !preciosPiezas.has(p.productId));
       if (faltante) return { ok: false, error: "Una de las piezas seleccionadas ya no existe en el catálogo" };
     }
+
+    // Costo estimado = suma de lo cotizado (2026-09-24, a petición de Carlos)
+    // — ya no es un número que alguien captura aparte, así el costo que ve
+    // el cliente SIEMPRE coincide con lo que realmente se le cotizó.
+    const costoEstimadoCalculado = piezasLimpias.reduce(
+      (total, p) => total + (preciosPiezas.get(p.productId) ?? 0) * p.quantity,
+      0,
+    );
 
     let finalCustomerId = clienteId ?? null;
     if (finalCustomerId) {
@@ -164,24 +185,25 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
           issueDesc: falla.trim(),
           status: RepairStatus.RECEIVED,
           priority: PRIORIDAD_A_ENUM[prioridad] ?? Priority.NORMAL,
-          estimatedCost: costoEstimado ?? null,
+          estimatedCost: costoEstimadoCalculado,
           estimatedAt: fechaEstimadaDate,
         },
       });
+      // visibleCliente:true — este es el primer checkpoint que verá el
+      // cliente en la página pública de seguimiento (ver el comentario
+      // largo en RepairHistory.visibleCliente, schema.prisma).
       await tx.repairHistory.create({
-        data: { repairId: nuevo.id, status: RepairStatus.RECEIVED, notes: "Equipo recibido en taller" },
+        data: { repairId: nuevo.id, status: RepairStatus.RECEIVED, notes: "Equipo recibido en taller", visibleCliente: true },
       });
 
-      if (piezasLimpias.length > 0) {
-        await tx.repairItem.createMany({
-          data: piezasLimpias.map((p) => ({
-            repairId: nuevo.id,
-            productId: p.productId,
-            quantity: p.quantity,
-            price: preciosPiezas.get(p.productId)!,
-          })),
-        });
-      }
+      await tx.repairItem.createMany({
+        data: piezasLimpias.map((p) => ({
+          repairId: nuevo.id,
+          productId: p.productId,
+          quantity: p.quantity,
+          price: preciosPiezas.get(p.productId)!,
+        })),
+      });
 
       return nuevo;
     });
@@ -227,32 +249,51 @@ export async function asignarTecnicoAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true } });
+    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, publicToken: true } });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
     if (repair.status === RepairStatus.DELIVERED || repair.status === RepairStatus.CANCELLED) {
       return { ok: false, error: "No se puede reasignar técnico de una reparación ya cerrada" };
     }
 
     let staffIdValidado: string | null = null;
+    let nombrePuesto: string | null = null;
     if (staffId) {
       // Nunca se confía en que el cliente mandó un id de técnico válido —
       // mismo criterio que el resto del archivo (ver crearReparacionAction).
       const tecnico = await db.staff.findUnique({
         where: { id: staffId },
-        select: { id: true, isActive: true, role: { select: { permissions: { select: { permission: { select: { module: true } } } } } } },
+        select: {
+          id: true, isActive: true,
+          role: { select: { name: true, permissions: { select: { permission: { select: { module: true } } } } } },
+        },
       });
       const tieneTaller = tecnico?.role?.permissions.some((p) => p.permission.module === "taller") ?? false;
       if (!tecnico || !tecnico.isActive || !tieneTaller) {
         return { ok: false, error: "El técnico seleccionado no es válido" };
       }
       staffIdValidado = tecnico.id;
+      nombrePuesto = tecnico.role?.name ?? "Técnico";
     }
 
-    await db.repair.update({ where: { id: repairId }, data: { assignedToStaffId: staffIdValidado } });
+    await db.$transaction(async (tx: any) => {
+      await tx.repair.update({ where: { id: repairId }, data: { assignedToStaffId: staffIdValidado } });
+
+      // Checkpoint visible al cliente (2026-09-24, a petición de Carlos):
+      // "que diga 'Asignado a técnico reparador'" — SOLO el puesto (el
+      // nombre real del rol asignado), nunca el nombre de la persona. Solo
+      // se registra al asignar (no al quitar la asignación) — status queda
+      // igual al actual, esta fila no representa un cambio de estatus real.
+      if (staffIdValidado) {
+        await tx.repairHistory.create({
+          data: { repairId, status: repair.status, notes: `Asignado a ${nombrePuesto}`, visibleCliente: true },
+        });
+      }
+    });
 
     revalidatePath(`/${tenantSlug}/aduana`);
     revalidatePath(`/${tenantSlug}/taller`);
     revalidatePath(`/${tenantSlug}/reparaciones`);
+    if (staffIdValidado) revalidatePath(`/rep/${repair.publicToken}`);
     return { ok: true };
   } catch (err: any) {
     if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
@@ -490,7 +531,7 @@ export async function avanzarEstadoAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true } });
+    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, publicToken: true } });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
     // A propósito SIN puedeOperarSucursal — ver el comentario en
     // agregarPiezaReparacionAction (taller centralizado, varias sucursales).
@@ -521,14 +562,18 @@ export async function avanzarEstadoAction(params: {
           ...(nuevoEstado === "DELIVERED" ? { deliveredAt: new Date() } : {}),
         },
       });
+      // visibleCliente:true — todo cambio de estatus real es un checkpoint
+      // que ve el cliente en la página pública (ver RepairHistory.visibleCliente,
+      // schema.prisma).
       await tx.repairHistory.create({
-        data: { repairId, status: estadoEnum, notes: NOTA_POR_ESTADO[nuevoEstado] },
+        data: { repairId, status: estadoEnum, notes: NOTA_POR_ESTADO[nuevoEstado], visibleCliente: true },
       });
     });
 
     revalidatePath(`/${tenantSlug}/aduana`);
     revalidatePath(`/${tenantSlug}/reparaciones`);
     revalidatePath(`/${tenantSlug}/dashboard`);
+    revalidatePath(`/rep/${repair.publicToken}`);
     return { ok: true };
   } catch (err: any) {
     if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
@@ -591,7 +636,7 @@ export async function cobrarYEntregarAction(params: {
   try {
     const repair = await db.repair.findUnique({
       where: { id: repairId },
-      select: { id: true, status: true, branchId: true, folio: true },
+      select: { id: true, status: true, branchId: true, folio: true, publicToken: true },
     });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
 
@@ -618,6 +663,8 @@ export async function cobrarYEntregarAction(params: {
         where: { id: repairId },
         data: { finalCost: monto, status: RepairStatus.DELIVERED, deliveredAt: new Date() },
       });
+      // visibleCliente:true — es la confirmación de su propio cobro/entrega,
+      // no expone nada del negocio que no le corresponda ya conocer.
       await tx.repairHistory.create({
         data: {
           repairId,
@@ -626,6 +673,7 @@ export async function cobrarYEntregarAction(params: {
             style: "currency",
             currency: "MXN",
           })} (${METODO_PAGO_TEXTO[metodoPago]}) — equipo entregado al cliente`,
+          visibleCliente: true,
         },
       });
 
@@ -654,6 +702,7 @@ export async function cobrarYEntregarAction(params: {
     revalidatePath(`/${tenantSlug}/reparaciones`);
     revalidatePath(`/${tenantSlug}/caja`);
     revalidatePath(`/${tenantSlug}/dashboard`);
+    revalidatePath(`/rep/${repair.publicToken}`);
     return { ok: true, sinCajaAbierta };
   } catch (err: any) {
     if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
@@ -720,8 +769,16 @@ export async function enviarAlertaTallerAction(params: {
   tenantSlug: string;
   repairId: string;
   mensaje: string;
+  // 2026-09-24, a petición de Carlos: la página pública de seguimiento debe
+  // mostrar "un mensaje por parte del personal de taller en caso de que
+  // necesite retroalimentación del cliente". En vez de un mecanismo aparte,
+  // se reutiliza esta misma alerta — el técnico (o Aduana) puede marcar
+  // explícitamente que ESTA nota es para que la vea el cliente (ej. "nos
+  // falta tu autorización para cambiar la pantalla, contáctanos"). Default
+  // false = comportamiento de siempre (alerta interna, solo Aduana/Tienda).
+  paraCliente?: boolean;
 }): Promise<AccionSimpleResult> {
-  const { tenantSlug, repairId } = params;
+  const { tenantSlug, repairId, paraCliente } = params;
   const mensaje = params.mensaje.trim().slice(0, 300);
   if (!mensaje) return { ok: false, error: "Escribe un mensaje para la alerta" };
 
@@ -732,7 +789,7 @@ export async function enviarAlertaTallerAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, assignedToStaffId: true } });
+    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, assignedToStaffId: true, publicToken: true } });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
     // Un técnico solo puede alertar sobre SU propio folio asignado — mismo
     // criterio de aislamiento que el filtro por miStaffId en TallerClient,
@@ -748,12 +805,18 @@ export async function enviarAlertaTallerAction(params: {
     }
 
     await db.repairHistory.create({
-      data: { repairId, status: repair.status, notes: `Alerta del técnico: ${mensaje}` },
+      data: {
+        repairId,
+        status: repair.status,
+        notes: `Alerta del técnico: ${mensaje}`,
+        visibleCliente: paraCliente === true,
+      },
     });
 
     revalidatePath(`/${tenantSlug}/aduana`);
     revalidatePath(`/${tenantSlug}/reparaciones`);
     revalidatePath(`/${tenantSlug}/taller`);
+    if (paraCliente) revalidatePath(`/rep/${repair.publicToken}`);
     return { ok: true };
   } catch (err: any) {
     if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {

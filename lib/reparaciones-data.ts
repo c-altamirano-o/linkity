@@ -229,3 +229,148 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
 
   return { reparaciones, clientes, productos, tecnicos };
 }
+
+// ============================================
+// Página pública de seguimiento (/rep/[token])
+// ============================================
+//
+// 2026-09-24, a petición de Carlos: "la página pública sí debe existir...
+// cada cambio de estatus debe desencadenar un mensaje al cliente" — el envío
+// de WhatsApp queda pendiente (ver el hilo de esa conversación), pero la
+// página en sí se construye ahora y es el destino al que apuntará ese
+// mensaje el día que se conecte. Sin autenticación — Repair.publicToken (un
+// cuid, prácticamente imposible de adivinar) es la única "contraseña": quien
+// tiene el link, ve el seguimiento de ESE equipo y ningún otro.
+//
+// Deliberadamente NO se usa getTenantPrisma aquí — a esta altura todavía no
+// se sabe de qué tenant es el equipo (por eso existe el token, para no
+// necesitar tenantSlug en la URL) — se usa el cliente base `prisma`, igual
+// que app/(auth)/[tenant]/page.tsx resuelve el tenant antes de tener
+// contexto. RepairHistory/RepairItem no están en tenantModels (no tienen
+// tenantId propio, se llega a ellos vía Repair) así que no aplica de
+// cualquier forma.
+//
+// Solo información "relevante" para el cliente (a petición explícita de
+// Carlos, sin ejemplos de más): folio, primer nombre, estatus actual, costo
+// estimado/final, fecha estimada, la línea de tiempo de checkpoints ya
+// marcados visibleCliente:true (ver el comentario largo en
+// RepairHistory.visibleCliente, schema.prisma) y el mensaje más reciente que
+// el taller haya marcado explícitamente "para el cliente". NUNCA nombre del
+// técnico, NUNCA piezas/costos por separado, NUNCA datos de otras
+// sucursales/negocio.
+
+export const ESTADO_CLIENTE_TEXTO: Record<EstadoReparacion, string> = {
+  RECEIVED: "Recibimos tu equipo",
+  DIAGNOSING: "Tu equipo está en diagnóstico",
+  IN_REPAIR: "Tu equipo está en reparación",
+  WAITING_PARTS: "En espera de una refacción",
+  READY: "Tu equipo está listo",
+  WORKSHOP_READY: "¡Tu equipo ya quedó listo!",
+  WORKSHOP_RETURN: "Se acordó la devolución de tu equipo",
+  SHOP_READY: "Tu equipo está en tienda, listo para que lo recojas",
+  SHOP_RETURN: "Tu equipo está en tienda para devolución",
+  DELIVERED: "Equipo entregado",
+  CANCELLED: "Reparación cancelada",
+};
+
+// Paso (0-4) de la barra de progreso simple — colapsa los estatus "gemelos"
+// (taller/tienda, listo/devolución) en el mismo escalón visual.
+export const PASO_PROGRESO: Record<EstadoReparacion, number> = {
+  RECEIVED: 0,
+  DIAGNOSING: 1,
+  IN_REPAIR: 1,
+  WAITING_PARTS: 1,
+  READY: 2,
+  WORKSHOP_READY: 2,
+  WORKSHOP_RETURN: 2,
+  SHOP_READY: 3,
+  SHOP_RETURN: 3,
+  DELIVERED: 4,
+  CANCELLED: -1,
+};
+
+export const PASOS_PROGRESO_TEXTO = ["Recibido", "En reparación", "Listo", "En tienda", "Entregado"];
+
+export interface CheckpointPublico {
+  texto: string;
+  fecha: string; // ISO
+}
+
+export interface MensajeTallerPublico {
+  texto: string;
+  fecha: string; // ISO
+}
+
+export interface ReparacionPublicaUI {
+  folio: string;
+  negocio: string;
+  clientePrimerNombre: string;
+  marca: string;
+  modelo: string;
+  estado: EstadoReparacion;
+  estadoTexto: string;
+  paso: number;
+  costoEstimado: number | null;
+  costoFinal: number | null;
+  fechaEstimada: string | null;
+  fechaEntregado: string | null;
+  checkpoints: CheckpointPublico[];
+  mensajeTaller: MensajeTallerPublico | null;
+}
+
+const PREFIJO_ALERTA_CLIENTE = "Alerta del técnico: ";
+
+export async function getReparacionPublica(publicToken: string): Promise<ReparacionPublicaUI | null> {
+  const repair = await prisma.repair.findUnique({
+    where: { publicToken },
+    select: {
+      folio: true,
+      deviceBrand: true,
+      deviceModel: true,
+      status: true,
+      estimatedCost: true,
+      finalCost: true,
+      estimatedAt: true,
+      deliveredAt: true,
+      customer: { select: { name: true } },
+      tenant: { select: { name: true } },
+      history: {
+        where: { visibleCliente: true },
+        orderBy: { createdAt: "asc" },
+        select: { notes: true, createdAt: true },
+      },
+    },
+  });
+  if (!repair) return null;
+
+  const primerNombre = repair.customer.name.trim().split(/\s+/)[0] ?? repair.customer.name;
+
+  // El mensaje del taller (alerta marcada "para el cliente") se muestra
+  // aparte, destacado — no como un checkpoint más de la línea de tiempo.
+  // Se toma el más reciente; se le quita el prefijo interno al mostrarlo.
+  const alertasCliente = repair.history.filter((h) => h.notes?.startsWith(PREFIJO_ALERTA_CLIENTE));
+  const ultimaAlerta = alertasCliente[alertasCliente.length - 1] ?? null;
+
+  const checkpoints: CheckpointPublico[] = repair.history
+    .filter((h) => !h.notes?.startsWith(PREFIJO_ALERTA_CLIENTE))
+    .map((h) => ({ texto: h.notes ?? "", fecha: h.createdAt.toISOString() }));
+
+  return {
+    folio: repair.folio,
+    negocio: repair.tenant.name,
+    clientePrimerNombre: primerNombre,
+    marca: repair.deviceBrand,
+    modelo: repair.deviceModel,
+    estado: repair.status as EstadoReparacion,
+    estadoTexto: ESTADO_CLIENTE_TEXTO[repair.status as EstadoReparacion] ?? "En proceso",
+    paso: PASO_PROGRESO[repair.status as EstadoReparacion] ?? 0,
+    costoEstimado: repair.estimatedCost != null ? Number(repair.estimatedCost) : null,
+    costoFinal: repair.finalCost != null ? Number(repair.finalCost) : null,
+    fechaEstimada: repair.estimatedAt ? repair.estimatedAt.toISOString() : null,
+    fechaEntregado: repair.deliveredAt ? repair.deliveredAt.toISOString() : null,
+    checkpoints,
+    mensajeTaller: ultimaAlerta
+      ? { texto: (ultimaAlerta.notes ?? "").slice(PREFIJO_ALERTA_CLIENTE.length), fecha: ultimaAlerta.createdAt.toISOString() }
+      : null,
+  };
+}

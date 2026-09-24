@@ -542,7 +542,6 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   const [nuevaMarca, setNuevaMarca] = useState("");
   const [nuevaModelo, setNuevaModelo] = useState("");
   const [nuevaFalla, setNuevaFalla] = useState("");
-  const [nuevaCosto, setNuevaCosto] = useState("");
   const [nuevaFechaEstimada, setNuevaFechaEstimada] = useState("");
   const [nuevaPrioridad, setNuevaPrioridad] = useState<PrioridadReparacion>("NORMAL");
   const [nuevaError, setNuevaError] = useState<string | null>(null);
@@ -675,7 +674,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   };
 
   const resetModalNueva = () => {
-    setNuevaMarca(""); setNuevaModelo(""); setNuevaFalla(""); setNuevaCosto(""); setNuevaFechaEstimada("");
+    setNuevaMarca(""); setNuevaModelo(""); setNuevaFalla(""); setNuevaFechaEstimada("");
     setNuevaClienteId(null); setNuevaClienteQuery(""); setModoClienteNuevo(false);
     setNuevaClienteNuevoNombre(""); setNuevaClienteNuevoTelefono(""); setNuevaClienteNuevoCodigoPais(PAIS_TELEFONO_DEFAULT);
     setNuevaPrioridad("NORMAL"); setNuevaError(null);
@@ -693,6 +692,10 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     if (!nuevaFalla.trim()) { setNuevaError("Describe la falla reportada"); return; }
     if (!modoClienteNuevo && !nuevaClienteId) { setNuevaError("Selecciona un cliente o registra uno nuevo"); return; }
     if (modoClienteNuevo && !nuevaClienteNuevoNombre.trim()) { setNuevaError("Escribe el nombre del cliente"); return; }
+    // 2026-09-24, a petición de Carlos: "una reparación no puede ingresar
+    // sin costo estipulado" — ver el comentario largo en
+    // CrearReparacionParams.piezas (reparaciones-actions.ts).
+    if (nuevasPiezas.length === 0) { setNuevaError("Agrega al menos una pieza del catálogo o un servicio cotizado (ej. diagnóstico/mano de obra)"); return; }
     const branchId = branches.length > 1 ? nuevaBranchId : (branches[0]?.id ?? "");
     if (!branchId) { setNuevaError("No hay sucursales activas"); return; }
 
@@ -702,7 +705,10 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     const clienteExistente = !modoClienteNuevo && nuevaClienteId ? clientes.find((c) => c.id === nuevaClienteId) : null;
     const clienteNombreTicket = modoClienteNuevo ? nuevaClienteNuevoNombre.trim() : (clienteExistente?.name ?? nuevaClienteQuery);
     const clienteTelefonoTicket = modoClienteNuevo ? (nuevaClienteNuevoTelefono || null) : (clienteExistente?.phone ?? null);
-    const costoEstimadoTicket = nuevaCosto ? parseFloat(nuevaCosto) : null;
+    // El costo del ticket ya no se captura aparte — es la suma de las
+    // piezas/servicios cotizados, exactamente lo mismo que calcula el
+    // servidor (ver el comentario largo en CrearReparacionParams.piezas).
+    const costoEstimadoTicket = subtotalPiezasNueva;
 
     startCrear(async () => {
       const res = await crearReparacionAction({
@@ -715,7 +721,6 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
         marca: nuevaMarca,
         modelo: nuevaModelo,
         falla: nuevaFalla,
-        costoEstimado: costoEstimadoTicket,
         fechaEstimada: nuevaFechaEstimada || null,
         prioridad: nuevaPrioridad,
         piezas: nuevasPiezas.map((p) => ({ productId: p.productId, quantity: p.quantity })),
@@ -855,7 +860,11 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
               </div>
 
               <div>
-                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PIEZAS Y SERVICIOS (OPCIONAL)</label>
+                {/* 2026-09-24, a petición de Carlos: "una reparación no puede
+                    ingresar sin costo estipulado" — ya no dice "(opcional)":
+                    hace falta al menos una línea (pieza o servicio) para
+                    poder guardar. */}
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PIEZAS Y SERVICIOS COTIZADOS</label>
                 <div className="flex gap-2 mt-1">
                   <select value={piezaNuevaId} onChange={(e) => setPiezaNuevaId(e.target.value)}
                     className="flex-1 min-w-0 px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary">
@@ -901,35 +910,28 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                       </div>
                     ))}
                     <div className="flex items-center justify-between px-2.5 py-1.5 text-[12.5px] font-medium">
-                      <span>Subtotal piezas</span>
-                      <div className="flex items-center gap-2">
-                        <span>{formatMXN(subtotalPiezasNueva)}</span>
-                        <button type="button" onClick={() => setNuevaCosto(String(subtotalPiezasNueva))} className="text-[11.5px] text-primary">
-                          Usar como estimado
-                        </button>
-                      </div>
+                      <span>Costo estimado</span>
+                      <span>{formatMXN(subtotalPiezasNueva)}</span>
                     </div>
                   </div>
                 )}
+                {nuevasPiezas.length === 0 && (
+                  <p className="text-[11.5px] text-amber-600 mt-1.5">
+                    Agrega al menos una pieza o un servicio (ej. "Diagnóstico"/"Mano de obra" si no hay repuesto físico) — sin esto no se puede guardar la reparación.
+                  </p>
+                )}
+                <p className="text-[11.5px] text-muted-foreground mt-1">Este es el costo que verá el cliente en su ticket y en el aviso de WhatsApp.</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">COSTO ESTIMADO</label>
-                  <input type="number" value={nuevaCosto} onChange={(e) => setNuevaCosto(e.target.value)} placeholder="$0"
-                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
-                  <p className="text-[11.5px] text-muted-foreground mt-1">El cliente verá este monto en su ticket y en el aviso de WhatsApp.</p>
-                </div>
-                <div>
-                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PRIORIDAD</label>
-                  <select value={nuevaPrioridad} onChange={(e) => setNuevaPrioridad(e.target.value as PrioridadReparacion)}
-                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
-                    <option value="LOW">Baja</option>
-                    <option value="NORMAL">Normal</option>
-                    <option value="HIGH">Alta</option>
-                    <option value="URGENT">Urgente</option>
-                  </select>
-                </div>
+              <div>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PRIORIDAD</label>
+                <select value={nuevaPrioridad} onChange={(e) => setNuevaPrioridad(e.target.value as PrioridadReparacion)}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                  <option value="LOW">Baja</option>
+                  <option value="NORMAL">Normal</option>
+                  <option value="HIGH">Alta</option>
+                  <option value="URGENT">Urgente</option>
+                </select>
               </div>
 
               <div>

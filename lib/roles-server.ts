@@ -294,3 +294,74 @@ export async function guardarPermisosDeRol(roleId: string, modulos: ModuloKey[],
     }),
   ]);
 }
+
+/** Un rol con su módulo clave (aduana/taller) y si ya tiene al menos un empleado asignado. */
+export interface RolTallerEstado {
+  nombre: string;
+  tieneStaff: boolean;
+}
+
+export interface EstadoTallerChecklist {
+  /**
+   * false para rubros sin taller propio (ej. barbería, consultorio dental,
+   * spa) — ahí la tarjeta ni se muestra. Un tenant sin rubro elegido
+   * (businessType null) cae al catálogo genérico de 3 roles (Gerente/
+   * Cajero/Técnico, MATRIZ_ACCESO_BASE en lib/roles.ts) que sí incluye
+   * "aduana"/"taller" (pensado desde siempre para reparación de
+   * celulares) — ahí "aplica" es true.
+   */
+  aplica: boolean;
+  rolesAduana: RolTallerEstado[];
+  rolesTaller: RolTallerEstado[];
+}
+
+const CHECKLIST_TALLER_VACIO: EstadoTallerChecklist = { aplica: false, rolesAduana: [], rolesTaller: [] };
+
+/**
+ * Checklist de "¿tu taller ya está listo para operar?" (2026-09-24, a
+ * petición de Carlos: el ícono de escudo genérico de Taller no le decía
+ * nada al dueño — "quiero algo más visible y específico... que sea fácil
+ * de identificar para el dueño que ahí es donde debe crear un taller y
+ * configurarlo... a modo de checklist para guiarlo").
+ *
+ * El rol de Recepción/Aduana y el de Técnico/Taller YA se crean solos
+ * (asegurarRolesRubro/asegurarRolBase — la primera vez que se abre "Roles
+ * y permisos", o desde el alta del negocio) — el dueño nunca tiene que
+ * "crear un taller" a mano, ese paso ya no existe. Lo único que de verdad
+ * puede faltar, y lo único que bloquea operar el taller en la práctica, es
+ * que tenga PERSONAL asignado a esos roles: sin nadie con "aduana" nadie
+ * puede recibir un equipo/asignar técnico, y sin nadie con "taller" nadie
+ * puede marcarlo en reparación. Por eso este checklist mide dotación de
+ * personal, no existencia de rol — y por lo mismo vive en Configuración
+ * (más visible, "aquí es donde el dueño llega a configurar su negocio")
+ * pero apunta a Personal, que es donde en realidad se resuelve.
+ */
+export async function getEstadoTallerChecklist(tenantId: string, businessType: string | null | undefined): Promise<EstadoTallerChecklist> {
+  const sugeridos = rolesSugeridosRubro(businessType);
+  const catalogoPropio = sugeridos.length > 0;
+  const aplica = catalogoPropio ? sugeridos.some((r) => r.modulos.includes("aduana") || r.modulos.includes("taller")) : true;
+  if (!aplica) return CHECKLIST_TALLER_VACIO;
+
+  if (catalogoPropio) {
+    await asegurarRolesRubro(tenantId, businessType);
+  } else {
+    await Promise.all(ROLES_BASE.map((nombre) => asegurarRolBase(tenantId, nombre)));
+  }
+
+  const roles = await prisma.role.findMany({
+    where: { tenantId, name: { not: ROL_ADMINISTRADOR } },
+    select: { id: true, name: true, _count: { select: { staff: true } } },
+  });
+
+  const rolesAduana: RolTallerEstado[] = [];
+  const rolesTaller: RolTallerEstado[] = [];
+
+  for (const r of roles) {
+    const modulos = await modulosPermitidosParaRol(r.id);
+    const tieneStaff = r._count.staff > 0;
+    if (modulos.includes("aduana")) rolesAduana.push({ nombre: r.name, tieneStaff });
+    if (modulos.includes("taller")) rolesTaller.push({ nombre: r.name, tieneStaff });
+  }
+
+  return { aplica: true, rolesAduana, rolesTaller };
+}

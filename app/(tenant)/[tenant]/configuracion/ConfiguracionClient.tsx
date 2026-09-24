@@ -19,8 +19,9 @@ import ActivarNotificacionesPush from "@/components/tenant/ActivarNotificaciones
 import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
   LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock, Phone, Undo2,
-  Bell, RefreshCw, Smartphone, X,
+  Bell, RefreshCw, Smartphone, X, Wrench, Circle, ArrowRight,
 } from "lucide-react";
+import type { EstadoTallerChecklist } from "@/lib/roles-server";
 
 const TIPOS_LOGO_PERMITIDOS = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const TAMANO_MAXIMO_LOGO = 2 * 1024 * 1024; // 2 MB — mismo límite que valida logo-actions.ts en el servidor
@@ -90,6 +91,7 @@ interface ConfiguracionClientProps {
   weekStartDayInicial: number;
   supportPhoneInicial: string | null;
   cobrarEnDevolucionInicial: boolean;
+  checklistTaller: EstadoTallerChecklist;
 }
 
 export default function ConfiguracionClient({
@@ -105,6 +107,7 @@ export default function ConfiguracionClient({
   weekStartDayInicial,
   supportPhoneInicial,
   cobrarEnDevolucionInicial,
+  checklistTaller,
 }: ConfiguracionClientProps) {
   const router = useRouter();
 
@@ -709,6 +712,85 @@ export default function ConfiguracionClient({
           </div>
         </div>
       </div>
+
+      {/* ── Configura tu Taller (checklist) ────────────────────── */}
+      {/* 2026-09-24, a petición de Carlos: el escudo genérico de Taller no
+          le decía nada al dueño — esta tarjeta es deliberadamente más
+          vistosa (borde y fondo ámbar) y con un ícono específico (llave
+          inglesa) para que sea imposible no verla. Los roles de Recepción/
+          Aduana y Técnico/Taller ya se crean solos (ver el comentario largo
+          de getEstadoTallerChecklist, lib/roles-server.ts) — lo único que
+          puede faltar de verdad es personal asignado, así que el checklist
+          mide eso, no si el rol "existe". No se muestra en rubros sin
+          taller (ej. barbería, consultorio dental). */}
+      {checklistTaller.aplica && (() => {
+        const aduanaLista = checklistTaller.rolesAduana.some((r) => r.tieneStaff);
+        const tallerListo = checklistTaller.rolesTaller.some((r) => r.tieneStaff);
+        const todoListo = aduanaLista && tallerListo;
+        return (
+          <div className={`rounded-xl overflow-hidden shadow-sm mt-6 border ${todoListo ? "bg-card border-border" : "bg-amber-50 border-amber-300"}`}>
+            <div className={`flex items-center gap-2 px-5 py-4 border-b ${todoListo ? "border-border bg-muted/50" : "border-amber-200 bg-amber-100/60"}`}>
+              <Wrench className={`w-5 h-5 ${todoListo ? "text-primary" : "text-amber-700"}`} />
+              <h2 className="text-base font-semibold text-foreground">Configura tu Taller</h2>
+            </div>
+
+            <div className="p-5">
+              <p className="text-sm text-muted-foreground mb-5">
+                {todoListo
+                  ? "Tu taller ya tiene personal asignado en ambos puestos clave y está listo para operar."
+                  : "Antes de recibir equipos en taller, asigna al menos una persona a cada uno de estos puestos. Los roles ya están creados — solo falta darles personal desde Personal."}
+              </p>
+
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  {aduanaLista ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <Circle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <p className="text-sm text-foreground font-medium">Recepción / Aduana</p>
+                    <p className="text-xs text-muted-foreground">
+                      {checklistTaller.rolesAduana.length > 0
+                        ? `Recibe el equipo, asigna técnico y ajusta costo/piezas (${checklistTaller.rolesAduana.map((r) => r.nombre).join(", ")}).`
+                        : "Recibe el equipo, asigna técnico y ajusta costo/piezas."}
+                      {" "}
+                      {aduanaLista ? "Ya tiene personal asignado." : "Aún no tiene personal asignado."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  {tallerListo ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <Circle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <p className="text-sm text-foreground font-medium">Técnico / Taller</p>
+                    <p className="text-xs text-muted-foreground">
+                      {checklistTaller.rolesTaller.length > 0
+                        ? `Repara el equipo asignado y puede alertar a Recepción/Aduana (${checklistTaller.rolesTaller.map((r) => r.nombre).join(", ")}).`
+                        : "Repara el equipo asignado y puede alertar a Recepción/Aduana."}
+                      {" "}
+                      {tallerListo ? "Ya tiene personal asignado." : "Aún no tiene personal asignado."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {!todoListo && (
+                <Link
+                  href={`/${tenantSlug}/personal`}
+                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                >
+                  Ir a Personal a asignar roles <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Semana laboral ─────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
