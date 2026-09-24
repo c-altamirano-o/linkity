@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { getReportesData, getReportesClinicosData } from "@/lib/reportes-data";
+import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
 import { getTenantLabels } from "@/lib/labels-server";
 import { label } from "@/lib/labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,7 +62,13 @@ export default async function ReportesPage({ params }: PageProps) {
   // comentario largo en lib/reportes-data.ts). Un administrador no tiene
   // sesión de personal, así que sigue viendo el negocio completo.
   const sesionPersonal = await verificarSesionPersonalVigente();
-  const sucursalDeEmpleado = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal.branchId : null;
+  const sesionValida = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal : null;
+  // "Supervisor de Sucursales" (2026-09-24, a petición de Carlos: ver el
+  // comentario largo junto a Role.verTodoNegocio, schema.prisma) — un rol
+  // con este permiso ve el negocio completo aunque tenga sesión de
+  // personal, igual que un administrador.
+  const veTodoElNegocio = sesionValida ? await verTodoNegocioParaRolPorNombre(tenant.id, sesionValida.roleName) : false;
+  const sucursalDeEmpleado = sesionValida && !veTodoElNegocio ? sesionValida.branchId : null;
 
   const [reportes, reportesClinicos, labels] = await Promise.all([
     getReportesData(tenant.id, reparacionesActiva, sucursalDeEmpleado ?? undefined),

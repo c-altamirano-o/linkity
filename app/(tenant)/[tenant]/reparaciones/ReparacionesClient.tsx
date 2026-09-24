@@ -542,6 +542,10 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   const [nuevaMarca, setNuevaMarca] = useState("");
   const [nuevaModelo, setNuevaModelo] = useState("");
   const [nuevaFalla, setNuevaFalla] = useState("");
+  // Contraseña/patrón de desbloqueo del equipo (2026-09-24, a petición de
+  // Carlos — el Técnico de Reparación la necesita para poder trabajar el
+  // equipo). Opcional: no todo equipo trae bloqueo.
+  const [nuevoCodigoDesbloqueo, setNuevoCodigoDesbloqueo] = useState("");
   const [nuevaFechaEstimada, setNuevaFechaEstimada] = useState("");
   const [nuevaPrioridad, setNuevaPrioridad] = useState<PrioridadReparacion>("NORMAL");
   const [nuevaError, setNuevaError] = useState<string | null>(null);
@@ -674,7 +678,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   };
 
   const resetModalNueva = () => {
-    setNuevaMarca(""); setNuevaModelo(""); setNuevaFalla(""); setNuevaFechaEstimada("");
+    setNuevaMarca(""); setNuevaModelo(""); setNuevaFalla(""); setNuevoCodigoDesbloqueo(""); setNuevaFechaEstimada("");
     setNuevaClienteId(null); setNuevaClienteQuery(""); setModoClienteNuevo(false);
     setNuevaClienteNuevoNombre(""); setNuevaClienteNuevoTelefono(""); setNuevaClienteNuevoCodigoPais(PAIS_TELEFONO_DEFAULT);
     setNuevaPrioridad("NORMAL"); setNuevaError(null);
@@ -721,6 +725,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
         marca: nuevaMarca,
         modelo: nuevaModelo,
         falla: nuevaFalla,
+        codigoDesbloqueo: nuevoCodigoDesbloqueo || null,
         fechaEstimada: nuevaFechaEstimada || null,
         prioridad: nuevaPrioridad,
         piezas: nuevasPiezas.map((p) => ({ productId: p.productId, quantity: p.quantity })),
@@ -802,7 +807,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                       </div>
                     )}
                     <button type="button" onClick={() => { setModoClienteNuevo(true); setNuevaClienteId(null); setNuevaClienteQuery(""); }}
-                      className="text-[12.5px] text-primary mt-1">
+                      className="text-[12.5px] text-primary-text mt-1">
                       + Registrar cliente nuevo
                     </button>
                   </>
@@ -857,6 +862,17 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                 <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">FALLA REPORTADA</label>
                 <textarea value={nuevaFalla} onChange={(e) => setNuevaFalla(e.target.value)} rows={2}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary resize-none" />
+              </div>
+
+              <div>
+                {/* 2026-09-24, a petición de Carlos — el técnico la necesita
+                    para trabajar el equipo (ver Repair.deviceUnlockCode,
+                    schema.prisma). Opcional, nunca aparece en la página
+                    pública de seguimiento del cliente. */}
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">CONTRASEÑA DE DESBLOQUEO (OPCIONAL)</label>
+                <input type="text" value={nuevoCodigoDesbloqueo} onChange={(e) => setNuevoCodigoDesbloqueo(e.target.value)}
+                  placeholder="Ej. 1234 o el patrón que indicó el cliente"
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
               </div>
 
               <div>

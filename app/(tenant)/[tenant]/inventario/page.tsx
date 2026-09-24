@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { getInventarioData } from "@/lib/inventario-data";
+import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
 import { getTenantLabels } from "@/lib/labels-server";
 import InventarioClient from "./InventarioClient";
 
@@ -28,8 +29,13 @@ export default async function InventarioPage({
   // 2026-09-21, a petición de Carlos: un empleado de PIN solo ve/ajusta el
   // stock de SU sucursal — se recorta la lista de sucursales que arma el
   // desglose por sucursal en getInventarioData (mismo criterio que POS).
+  // 2026-09-24: salvo que su rol tenga Role.verTodoNegocio ("Supervisor de
+  // Sucursales" — ver el comentario largo en schema.prisma), que ve las 5
+  // igual que un administrador.
   const sesionPersonal = await verificarSesionPersonalVigente();
-  const sucursalDeEmpleado = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal.branchId : null;
+  const sesionValida = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal : null;
+  const veTodoElNegocio = sesionValida ? await verTodoNegocioParaRolPorNombre(tenant.id, sesionValida.roleName) : false;
+  const sucursalDeEmpleado = sesionValida && !veTodoElNegocio ? sesionValida.branchId : null;
   const branchesTenant = sucursalDeEmpleado
     ? tenant.branches.filter((b) => b.id === sucursalDeEmpleado)
     : tenant.branches;

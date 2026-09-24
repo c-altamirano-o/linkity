@@ -159,5 +159,9 @@ export interface RolTenantUI {
   // solo tiene efecto real cuando modulosPermitidos incluye "caja"; para
   // cualquier otro rol es un valor inerte.
   verMontosCaja: boolean;
+  // Ver el comentario largo junto a Role.verTodoNegocio (schema.prisma) —
+  // "Supervisor de Sucursales": deja de recortar por sucursal en Reportes/
+  // Inventario/Caja para este rol, sin importar qué módulos tenga.
+  verTodoNegocio: boolean;
   cantidadEmpleados: number;
 }

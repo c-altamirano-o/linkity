@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { getCajaData, redactarMontosCaja } from "@/lib/caja-data";
-import { verMontosCajaParaRolPorNombre } from "@/lib/roles-server";
+import { verMontosCajaParaRolPorNombre, verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
 import CajaClient from "./CajaClient";
 
 export default async function CajaPage({
@@ -37,6 +37,15 @@ export default async function CajaPage({
   // así que sigue eligiendo sucursal libremente, igual que siempre.
   const sesionPersonal = await verificarSesionPersonalVigente();
   const sucursalDeEmpleado = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal.branchId : null;
+  // "Supervisor de Sucursales" (2026-09-24, a petición de Carlos: ver el
+  // comentario largo junto a Role.verTodoNegocio, schema.prisma) — un rol
+  // con este permiso elige sucursal libremente igual que un administrador
+  // (no queda fijo en la suya), aunque siga siendo una sesión de PIN. Esto
+  // es independiente de "puede ver montos" (Role.verMontosCaja, más abajo).
+  const veTodoElNegocio = sucursalDeEmpleado
+    ? await verTodoNegocioParaRolPorNombre(tenant.id, sesionPersonal!.roleName)
+    : false;
+  const restriccionSucursal = veTodoElNegocio ? null : sucursalDeEmpleado;
 
   const supabase = await createClient();
   const {
@@ -54,11 +63,13 @@ export default async function CajaPage({
 
   // Para un empleado de PIN, "branches" también se recorta a solo la suya —
   // así el selector de sucursal del cliente ni siquiera ofrece las demás.
-  const branches = sucursalDeEmpleado
-    ? tenant.branches.filter((b) => b.id === sucursalDeEmpleado)
+  // Salvo con verTodoNegocio (restriccionSucursal ya viene null en ese
+  // caso): ve/elige cualquier sucursal, igual que un administrador.
+  const branches = restriccionSucursal
+    ? tenant.branches.filter((b) => b.id === restriccionSucursal)
     : tenant.branches;
 
-  const branchActual = sucursalDeEmpleado ??
+  const branchActual = restriccionSucursal ??
     (branches.find((b) => b.id === sucursal)?.id ??
     branches.find((b) => b.id === userBranchId)?.id ??
     branches[0]?.id ??

@@ -238,7 +238,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
                 <div className="bg-muted rounded-lg p-2.5">
                   <p className="text-[10.5px] text-muted-foreground mb-0.5">Cliente</p>
                   <div className="flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[9.5px] font-semibold flex items-center justify-center">
+                    <span className="w-5 h-5 rounded-full bg-primary/10 text-primary-text text-[9.5px] font-semibold flex items-center justify-center">
                       {iniciales(seleccionada.cliente)}
                     </span>
                     <p className="text-[13px] font-medium text-foreground truncate">{seleccionada.cliente}</p>
@@ -260,6 +260,16 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
                 <p className="text-[10.5px] text-muted-foreground mb-1">Falla reportada</p>
                 <p className="text-[12.5px] text-foreground/90 bg-muted rounded-lg p-2.5">{seleccionada.falla}</p>
               </div>
+
+              {/* Contraseña/patrón de desbloqueo (2026-09-24, a petición de
+                  Carlos) — solo se muestra si se capturó al recibir el
+                  equipo; nunca aparece en la página pública de seguimiento. */}
+              {seleccionada.codigoDesbloqueo && (
+                <div className="mt-3">
+                  <p className="text-[10.5px] text-muted-foreground mb-1">Contraseña de desbloqueo</p>
+                  <p className="text-[12.5px] font-medium text-foreground bg-muted rounded-lg p-2.5">{seleccionada.codigoDesbloqueo}</p>
+                </div>
+              )}
 
               <div className="flex items-center gap-4 mt-3 text-[11.5px] text-muted-foreground">
                 <span className="flex items-center gap-1">

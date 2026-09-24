@@ -43,6 +43,7 @@ export async function crearRolAction(params: {
   modulos: string[];
   verTodoTaller?: boolean;
   verMontosCaja?: boolean;
+  verTodoNegocio?: boolean;
 }): Promise<AccionRolResult> {
   const { tenantSlug, descripcion } = params;
   const nombre = params.nombre.trim();
@@ -59,7 +60,7 @@ export async function crearRolAction(params: {
       data: { tenantId: tenant.id, name: nombre, description: descripcion?.trim() || null, isSystem: false },
       select: { id: true },
     });
-    await guardarPermisosDeRol(rol.id, validarModulos(params.modulos), params.verTodoTaller, params.verMontosCaja);
+    await guardarPermisosDeRol(rol.id, validarModulos(params.modulos), params.verTodoTaller, params.verMontosCaja, params.verTodoNegocio);
 
     revalidatePath(`/${tenantSlug}/personal`);
     return { ok: true };
@@ -78,6 +79,7 @@ export async function actualizarRolAction(params: {
   modulos: string[];
   verTodoTaller?: boolean;
   verMontosCaja?: boolean;
+  verTodoNegocio?: boolean;
 }): Promise<AccionRolResult> {
   const { tenantSlug, roleId, descripcion } = params;
 
@@ -102,7 +104,7 @@ export async function actualizarRolAction(params: {
       await prisma.role.update({ where: { id: roleId }, data: { description: descripcion?.trim() || null } });
     }
 
-    await guardarPermisosDeRol(roleId, validarModulos(params.modulos), params.verTodoTaller, params.verMontosCaja);
+    await guardarPermisosDeRol(roleId, validarModulos(params.modulos), params.verTodoTaller, params.verMontosCaja, params.verTodoNegocio);
 
     revalidatePath(`/${tenantSlug}/personal`);
     return { ok: true };

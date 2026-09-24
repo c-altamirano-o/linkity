@@ -94,6 +94,17 @@ export interface RolSugeridoRubro {
   // a petición de Carlos, ejemplo "Fix Expres": "Ve todos los folios, pero
   // sin editar").
   verTodoTaller?: boolean;
+  // Solo tiene efecto cuando modulos incluye "caja" — ver el comentario
+  // largo junto a Role.verMontosCaja (schema.prisma). Usado por puestos de
+  // nivel supervisor (ej. "Supervisor de Sucursales", "Encargado de
+  // Tienda" del rubro reparación de celulares, 2026-09-24).
+  verMontosCaja?: boolean;
+  // Solo tiene efecto cuando el rol tiene módulos con datos por sucursal
+  // (reportes/inventario/caja) — ver el comentario largo junto a
+  // Role.verTodoNegocio (schema.prisma). Usado por "Supervisor de
+  // Sucursales" (2026-09-24, rediseño de puestos de reparación de
+  // celulares a petición de Carlos).
+  verTodoNegocio?: boolean;
 }
 
 export const ROLES_SUGERIDOS_RUBRO: Record<string, RolSugeridoRubro[]> = {
@@ -149,24 +160,101 @@ export const ROLES_SUGERIDOS_RUBRO: Record<string, RolSugeridoRubro[]> = {
     { name: "Cajero", description: "Cobra en Punto de Venta y Caja, ve la ficha de clientes.", modulos: ["pos", "caja", "clientes"] },
     { name: "Almacenista", description: "Controla inventario y compras, con acceso al catálogo.", modulos: ["inventario", "compras", "catalogo"] },
   ],
+  // Rediseño completo 2026-09-24, a petición explícita de Carlos: 6 puestos
+  // de PIN con jerarquía y funciones que NO se suplantan entre sí (el
+  // séptimo puesto que describió, "Director General/Dueño", NO es un Role
+  // de PIN — es la cuenta real del negocio, con acceso sin restricción por
+  // diseño desde siempre, ver resolverActor en lib/actor.ts).
+  //
+  // Topología organica que asumió este catálogo (un taller CENTRALIZADO,
+  // no un técnico por tienda — la que describe el propio Carlos con "Jefe
+  // de Taller" como puente único entre las 5 tiendas y los técnicos): por
+  // eso "aduana" vive SOLO en "Jefe de Taller" y ningún puesto de tienda
+  // (Encargado/Asesor/Cajero) lo tiene también — si algún negocio real
+  // tuviera en cambio un técnico dedicado POR tienda, sin taller central,
+  // el admin puede quitarle "aduana" a "Jefe de Taller" y dárselo desde
+  // "Roles y permisos" al Encargado de esa tienda en su lugar (Carlos lo
+  // planteó como una alternativa organica válida, no como un requisito
+  // fijo de este rubro). Esto también es la corrección de raíz del bug que
+  // Carlos reportó con capturas ("aparecen dos con el nombre de
+  // Reparaciones... esa no debería poder verla un cajero o recepcionista"):
+  // antes un script de un solo uso (prisma/enriquecer-taller-demo.ts) le
+  // había dado "aduana" también a "Encargado de sucursal"/"Recepcionista"
+  // del tenant demo — con este catálogo ya no hay ningún puesto de tienda
+  // con más de uno de "reparaciones"/"aduana"/"taller" a la vez (aunque,
+  // por robustez, TenantShell.tsx YA no depende de eso — ver el comentario
+  // largo junto a "module.workshop.name"/"module.reception.name" en lib/
+  // labels.ts).
+  //
+  // Dos límites del sistema que este catálogo no puede resolver del todo
+  // (documentados aquí para quien lea/edite este archivo después):
+  //   1. "reparaciones" es un solo módulo/permiso que cubre TANTO recibir
+  //      un equipo con folio COMO cobrar/entregarlo (cobrarYEntregarAction,
+  //      app/actions/reparaciones-actions.ts) — no hay forma hoy de darle a
+  //      "Asesor de Ventas" solo la mitad de "recibir" sin también poder
+  //      cobrar. Es una aproximación honesta a "Acceso para... registrar el
+  //      ingreso de equipos a reparación... No puede cobrar" — en la
+  //      práctica, quien de verdad cobra es "Cajero" (el único con
+  //      verMontosCaja disponible y la costumbre real del mostrador), pero
+  //      el sistema no se lo impide técnicamente al Asesor. Separar esto en
+  //      dos permisos sería un cambio de arquitectura más grande, fuera de
+  //      este rediseño.
+  //   2. El Técnico de Reparación sigue siendo de SOLO LECTURA + alerta
+  //      (módulo "taller") — a propósito NO se le devolvió la capacidad de
+  //      cambiar el estatus él mismo (ej. marcar "Terminado"), aunque
+  //      Carlos lo escribió así en su descripción de este puesto: eso
+  //      reabriría exactamente el hueco de fraude que el propio Carlos
+  //      señaló el 2026-09-22 ("Fix Expres": un técnico con edición de
+  //      estatus/piezas podía quitar una que sí reparó, cobrar completo por
+  //      fuera y quedarse con la diferencia). "Marcar Terminado" se resuelve
+  //      con la alerta que ya existe (enviarAlertaTallerAction): el técnico
+  //      avisa a Jefe de Taller que ya terminó, y es Jefe de Taller (con
+  //      "aduana") quien de verdad cambia el estatus a "Listo". Si Carlos
+  //      confirma que quiere revertir esa restricción específicamente para
+  //      "Terminado" (sin tocar costo/piezas), es un cambio aparte a
+  //      TRANSICIONES_VALIDAS/resolverActor en reparaciones-actions.ts.
   reparacion_celulares: [
-    { name: "Encargado de sucursal", description: "Recibe equipos con folio, clientes, catálogo, inventario, compras, caja y reportes de la sucursal — cobra y entrega cuando el taller lo marca listo.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },
-    // 2026-09-23, a petición de Carlos: el catálogo de este rubro no traía
-    // ningún puesto de "solo mostrador" — el más angosto que existía era
-    // "Encargado de sucursal", que de encargado no tiene solo el cobro: ve
-    // inventario, compras y reportes del negocio completo. Carlos fue
-    // explícito en que un cajero de mostrador "no debe saber de
-    // inventarios, existencias o métricas... es solo cobrar" — salvo
-    // Reparaciones, que SÍ debe ver (para saber qué hay listo para
-    // entregar hoy o consultar el estatus si el cliente pregunta), y ese
-    // módulo para el personal de tienda ya es de solo recibir/cobrar/
-    // entregar (nunca costo, piezas ni estatus — ver el comentario de
-    // "taller"/"aduana" en lib/roles.ts), así que no hace falta acotarlo
-    // más aquí. Mismo patrón que el Cajero de comercio_retail (arriba).
-    { name: "Cajero", description: "Cobra en Punto de Venta y Caja, ve la ficha de clientes y consulta/entrega reparaciones — sin inventario, compras, catálogo ni reportes del negocio.", modulos: ["pos", "caja", "clientes", "reparaciones"] },
-    { name: "Recepción/Aduana", description: "Asigna técnico, cambia el estatus del equipo y ajusta costo/piezas cotizadas — control exclusivo del taller central.", modulos: ["aduana", "clientes", "catalogo", "inventario"] },
-    { name: "Jefe de técnicos", description: "Ve todas las reparaciones asignadas del taller, sin poder editarlas.", modulos: ["taller", "clientes", "catalogo", "inventario"], verTodoTaller: true },
-    { name: "Técnico reparador", description: "Ve solo sus propias reparaciones asignadas (sin datos de contacto del cliente) y puede alertar a Recepción/Aduana.", modulos: ["taller", "clientes", "catalogo", "inventario"] },
+    {
+      name: "Supervisor de Sucursales",
+      description: "Audita inventarios, ventas y cortes de caja de las 5 tiendas, autoriza traslados de mercancía entre sucursales — sin gestión operativa del taller (solo consulta el estatus de equipos recibidos en tienda).",
+      modulos: ["reportes", "inventario", "catalogo", "compras", "caja", "sucursales", "reparaciones", "clientes"],
+      // "ve todas las sucursales" (no solo la suya) — ver el comentario
+      // largo junto a Role.verTodoNegocio (schema.prisma).
+      verTodoNegocio: true,
+      // Nivel supervisor: sí ve montos/totales de Caja de cualquier
+      // sucursal (cortes de caja, ver su descripción arriba).
+      verMontosCaja: true,
+    },
+    {
+      name: "Jefe de Taller",
+      description: "Puente entre las tiendas y los técnicos: recibe equipos derivados del taller central, asigna el trabajo según carga, agrega refacciones al costo y actualiza el estatus (en revisión/en reparación/reparado) — sin ver las ventas diarias de las tiendas.",
+      modulos: ["aduana", "clientes", "catalogo", "inventario"],
+    },
+    {
+      name: "Encargado de Tienda",
+      description: "A cargo de la sucursal en su turno: abre y cierra la tienda, inventario local, tickets de venta, recepción de equipos para enviar al taller, y anula ventas o registra mermas de su sucursal.",
+      modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "caja"],
+      // Autoriza devoluciones/descuentos y supervisa al personal de
+      // mostrador de SU sucursal — nivel supervisor de Caja, pero limitado
+      // a esa tienda (sin verTodoNegocio, a diferencia de Supervisor de
+      // Sucursales).
+      verMontosCaja: true,
+    },
+    {
+      name: "Cajero",
+      description: "Única persona autorizada para cobrar: procesa pagos y emite recibos en Punto de Venta y Caja, y entrega reparaciones ya listas — no modifica inventarios ni ve costos de proveedores.",
+      modulos: ["pos", "caja", "clientes", "reparaciones"],
+    },
+    {
+      name: "Asesor de Ventas",
+      description: "Atiende al cliente, vende accesorios, ve existencias del inventario local y documenta la recepción inicial de un equipo dañado (falla, datos del cliente) para generar la orden de servicio — no cobra ni ve reportes de ventas del negocio.",
+      modulos: ["clientes", "catalogo", "inventario", "reparaciones"],
+    },
+    {
+      name: "Técnico de Reparación",
+      description: "Ejecuta la reparación física según la orden de servicio: ve sus equipos asignados, la falla y la contraseña de desbloqueo, y puede alertar a Jefe de Taller para pedir piezas o avisar que terminó — sin ver costos, piezas cotizadas ni ventas de las tiendas.",
+      modulos: ["taller", "clientes", "catalogo", "inventario"],
+    },
   ],
   taller_autos: [
     { name: "Jefe de taller", description: "Recibe vehículos con folio, clientes, catálogo, inventario, compras, caja y reportes del taller — cobra y entrega cuando queda listo.", modulos: ["pos", "reparaciones", "clientes", "catalogo", "inventario", "compras", "caja", "reportes"] },

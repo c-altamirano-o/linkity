@@ -400,11 +400,39 @@ function construirPresetDesdeDef(
         "--sidebar-ring": hsl(h, 0.08, 0.6),
       };
 
+  // "--primary-text" (2026-09-24, corrigiendo un bug real que Carlos
+  // reportó con capturas: "al seleccionar el sub menú se coloca el texto
+  // blanco, sobre fondo blanco... lo había notado en otros botones y
+  // pestañas también"). Causa raíz: "--primary" son literalmente
+  // fondoVentana — el color de ventana/ficha que el dueño eligió para el
+  // POS (ver el comentario largo arriba de este archivo) — perfecto para
+  // un RELLENO sólido junto con "--primary-foreground" (que sí se calculó
+  // para contrastar con ÉL), pero varios componentes compartidos (el menú
+  // lateral activo en TenantShell.tsx, el botón "link" en
+  // components/ui/button.tsx, algunos íconos/enlaces sueltos) usan
+  // "text-primary" SOLO, como color de texto sobre un fondo neutro
+  // (sidebar/card) — si el dueño elige un tema claro (ej. "Windows 8
+  // Start", blanco), fondoVentana también es blanco y ese texto
+  // desaparece sobre el sidebar (también blanco). "--primary" y
+  // "--primary-foreground" se dejan TAL CUAL (nada de POS se ve afectado,
+  // sigue siendo exactamente el color que el dueño eligió) — se agrega
+  // este token nuevo, aparte, calculado como los "neutrales" de arriba: a
+  // partir del mismo matiz (h) pero con saturación/luminosidad FIJAS y
+  // pensadas para leerse siempre bien como texto, sin importar qué tan
+  // clara u oscura haya quedado fondoVentana. Los componentes que usan
+  // "text-primary" a secas (sin relleno "bg-primary" a juego) deben usar
+  // "text-primary-text" en su lugar — ver el fallback en app/globals.css
+  // (":root"/".dark") para negocios sin tema personalizado o con uno de
+  // los 5 presets oklch viejos, que no traen este token y no lo necesitan
+  // (su "--primary" ya es un acento propio, no el fondo de una ventana).
+  const primaryText = esOscuro ? hsl(h, 0.55, 0.7) : hsl(h, 0.6, 0.36);
+
   return {
     ...chipVars,
     "--tile-fg": tema.defaultIconColor,
     "--primary": fondoVentana,
     "--primary-foreground": tema.defaultIconColor,
+    "--primary-text": primaryText,
     "--ring": fondoVentana,
     "--sidebar-primary": fondoVentana,
     "--sidebar-primary-foreground": tema.defaultIconColor,

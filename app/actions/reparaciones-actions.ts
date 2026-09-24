@@ -36,6 +36,11 @@ export interface CrearReparacionParams {
   marca: string;
   modelo: string;
   falla: string;
+  // Contraseña/patrón de desbloqueo del equipo (2026-09-24, a petición de
+  // Carlos — el Técnico de Reparación necesita verla para poder trabajar:
+  // "solo puede ver... modelos y contraseñas de desbloqueo"). Opcional —
+  // ver el comentario largo en Repair.deviceUnlockCode, schema.prisma.
+  codigoDesbloqueo?: string | null;
   // Fecha estimada de entrega — se captura al recibir el equipo (a petición
   // de Carlos, 2026-09-21: "falta la fecha estimada de reparación, eso se
   // debe capturar al momento de ingresar el equipo, y debe aparecer en el
@@ -66,7 +71,7 @@ export type CrearReparacionResult =
   | { ok: false; error: string };
 
 export async function crearReparacionAction(params: CrearReparacionParams): Promise<CrearReparacionResult> {
-  const { tenantSlug, branchId, clienteId, clienteNuevo, marca, modelo, falla, fechaEstimada, prioridad, piezas } = params;
+  const { tenantSlug, branchId, clienteId, clienteNuevo, marca, modelo, falla, codigoDesbloqueo, fechaEstimada, prioridad, piezas } = params;
 
   if (!branchId) return { ok: false, error: "Selecciona una sucursal" };
   if (!marca.trim() || !modelo.trim()) return { ok: false, error: "Marca y modelo son obligatorios" };
@@ -183,6 +188,7 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
           deviceBrand: marca.trim(),
           deviceModel: modelo.trim(),
           issueDesc: falla.trim(),
+          deviceUnlockCode: codigoDesbloqueo?.trim() || null,
           status: RepairStatus.RECEIVED,
           priority: PRIORIDAD_A_ENUM[prioridad] ?? Priority.NORMAL,
           estimatedCost: costoEstimadoCalculado,

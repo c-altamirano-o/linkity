@@ -73,11 +73,16 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
   // schema.prisma) — solo aplica cuando el rol tiene "caja" entre sus
   // módulos.
   const [verMontosCajaEdit, setVerMontosCajaEdit] = useState(false);
+  // "Supervisor de Sucursales" (2026-09-24, a petición de Carlos) — solo
+  // aplica cuando el rol tiene reportes/inventario/caja entre sus módulos,
+  // ver Role.verTodoNegocio.
+  const [verTodoNegocioEdit, setVerTodoNegocioEdit] = useState(false);
   const [creando, setCreando] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [modulosNuevo, setModulosNuevo] = useState<Set<ModuloKey>>(new Set());
   const [verTodoTallerNuevo, setVerTodoTallerNuevo] = useState(false);
   const [verMontosCajaNuevo, setVerMontosCajaNuevo] = useState(false);
+  const [verTodoNegocioNuevo, setVerTodoNegocioNuevo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -108,6 +113,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     setModulosEdit(new Set(rol.modulosPermitidos));
     setVerTodoTallerEdit(rol.verTodoTaller);
     setVerMontosCajaEdit(rol.verMontosCaja);
+    setVerTodoNegocioEdit(rol.verTodoNegocio);
     setCreando(false);
     setError(null);
   };
@@ -124,7 +130,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     startTransition(async () => {
       const res = await actualizarRolAction({
         tenantSlug, roleId: editandoId, nombre: nombreEdit, modulos: Array.from(modulosEdit),
-        verTodoTaller: verTodoTallerEdit, verMontosCaja: verMontosCajaEdit,
+        verTodoTaller: verTodoTallerEdit, verMontosCaja: verMontosCajaEdit, verTodoNegocio: verTodoNegocioEdit,
       });
       if (res.ok) {
         setEditandoId(null);
@@ -141,7 +147,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     startTransition(async () => {
       const res = await crearRolAction({
         tenantSlug, nombre: nombreNuevo, modulos: Array.from(modulosNuevo), verTodoTaller: verTodoTallerNuevo,
-        verMontosCaja: verMontosCajaNuevo,
+        verMontosCaja: verMontosCajaNuevo, verTodoNegocio: verTodoNegocioNuevo,
       });
       if (res.ok) {
         setCreando(false);
@@ -149,6 +155,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
         setModulosNuevo(new Set());
         setVerTodoTallerNuevo(false);
         setVerMontosCajaNuevo(false);
+        setVerTodoNegocioNuevo(false);
         refrescar();
       } else {
         setError(res.error);
@@ -221,6 +228,12 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                       Nivel supervisor: puede ver montos y totales de Caja (ventas del día, efectivo esperado, reportes)
                     </label>
                   )}
+                  {(modulosEdit.has("reportes") || modulosEdit.has("inventario") || modulosEdit.has("caja")) && (
+                    <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
+                      <input type="checkbox" checked={verTodoNegocioEdit} onChange={(e) => setVerTodoNegocioEdit(e.target.checked)} />
+                      Supervisor de sucursales: ve Reportes/Inventario/Caja de TODAS las sucursales, no solo la suya
+                    </label>
+                  )}
                   <div className="flex justify-end gap-2">
                     <button onClick={() => setEditandoId(null)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
                     <button disabled={pending} onClick={guardarEdicion}
@@ -289,6 +302,12 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                 <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
                   <input type="checkbox" checked={verMontosCajaNuevo} onChange={(e) => setVerMontosCajaNuevo(e.target.checked)} />
                   Nivel supervisor: puede ver montos y totales de Caja (ventas del día, efectivo esperado, reportes)
+                </label>
+              )}
+              {(modulosNuevo.has("reportes") || modulosNuevo.has("inventario") || modulosNuevo.has("caja")) && (
+                <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
+                  <input type="checkbox" checked={verTodoNegocioNuevo} onChange={(e) => setVerTodoNegocioNuevo(e.target.checked)} />
+                  Supervisor de sucursales: ve Reportes/Inventario/Caja de TODAS las sucursales, no solo la suya
                 </label>
               )}
               <div className="flex justify-end gap-2">

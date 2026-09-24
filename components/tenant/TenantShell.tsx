@@ -60,18 +60,19 @@ const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloK
       { labelKey: "module.appointments.name", href: "citas", icon: CalendarDays },
       { labelKey: "module.repair.name", href: "reparaciones", icon: Wrench },
       // "taller" (2026-09-21) — la vista angosta de Reparaciones para el
-      // técnico (ver el comentario de "taller" en lib/roles.ts). Mismo
-      // labelKey que "reparaciones" a propósito: un rol nunca tiene los dos
-      // módulos a la vez en la práctica (el catálogo por rubro reparte uno u
-      // otro), así que desde la barra lateral se ve igual — "Reparaciones"
-      // (u "Órdenes de Servicio" para un taller automotriz) — apuntando a la
-      // página que le corresponde a cada quien.
-      { labelKey: "module.repair.name", href: "taller", icon: Wrench },
+      // técnico (ver el comentario de "taller" en lib/roles.ts). Label
+      // PROPIO ("module.workshop.name", 2026-09-24 — antes compartía
+      // "module.repair.name" con "reparaciones"/"aduana" asumiendo que "un
+      // rol nunca tiene los dos módulos a la vez"; un rol que sí los tiene
+      // ambos (ej. un puesto que recibe Y repara) mostraba dos pestañas
+      // IDÉNTICAS — ver el comentario largo junto a esas dos keys en
+      // lib/labels.ts).
+      { labelKey: "module.workshop.name", href: "taller", icon: Wrench },
       // "aduana" (2026-09-22, corrección explícita de Carlos) — Recepción/
       // Aduana del taller central: asigna técnico, cambia estatus y ajusta
-      // costo/piezas. Mismo labelKey que "reparaciones"/"taller" por el
-      // mismo motivo (un rol nunca tiene más de uno de los tres a la vez).
-      { labelKey: "module.repair.name", href: "aduana", icon: Wrench },
+      // costo/piezas. Label propio también ("module.reception.name"),
+      // mismo motivo que "taller" arriba.
+      { labelKey: "module.reception.name", href: "aduana", icon: Wrench },
     ]
   },
   {
@@ -389,13 +390,16 @@ export default function TenantShell({
   // pensadas para un rol de PIN específico (el técnico solo ve lo suyo en
   // "taller"; recepción asigna técnico/costo en "aduana") — nunca para el
   // dueño/gerente, que ya tiene todo eso y más en "Reparaciones" completo.
-  // Como comparten labelKey con "reparaciones" a propósito (ver
-  // NAV_STRUCTURE arriba), sin este filtro el modo "admin" (que no filtra
-  // por permisos, ve TODO lo que esté activo) terminaba mostrando 2-3
-  // enlaces "Reparaciones" idénticos apuntando a páginas distintas — bug
-  // que Carlos reportó ("existen 2 módulos llamado Reparaciones"). En modo
-  // "staff" no hace falta excluirlos aquí: modulosPermitidos ya garantiza
-  // que un rol nunca tiene más de uno de los tres a la vez.
+  // Se siguen ocultando en modo "admin" (que no filtra por permisos, ve
+  // TODO lo que esté activo): ahora que cada una tiene su propio label
+  // ("module.workshop.name"/"module.reception.name", 2026-09-24 — ver el
+  // comentario largo en lib/labels.ts) ya no se verían como duplicados
+  // idénticos de "Reparaciones", pero seguirían siendo dos pestañas de más
+  // sin ningún propósito para quien ya tiene acceso total. En modo "staff"
+  // no hace falta excluirlos aquí: modulosPermitidos ya decide qué ve cada
+  // rol, y si un puesto en particular sí tiene más de uno de los tres a la
+  // vez (ej. un Encargado que también asume Aduana), ahora se ven como
+  // pestañas distintas y claras — no duplicadas.
   const OCULTOS_PARA_ADMIN = new Set(["taller", "aduana"]);
 
   // Primero se resuelve el nombre visible de cada ítem contra el
@@ -568,12 +572,12 @@ export default function TenantShell({
                       flex items-center gap-2.5 px-2 py-2.5 rounded-lg mb-0.5 transition-colors text-sm
                       ${collapsed ? "justify-center" : ""}
                       ${active
-                        ? "bg-primary/10 text-primary font-medium"
+                        ? "bg-primary/10 text-primary-text font-medium"
                         : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                       }
                     `}
                   >
-                    <item.icon className={`w-4 h-4 flex-shrink-0 ${active ? "text-primary" : "text-sidebar-foreground/50"}`} />
+                    <item.icon className={`w-4 h-4 flex-shrink-0 ${active ? "text-primary-text" : "text-sidebar-foreground/50"}`} />
                     {!collapsed && <span>{item.label}</span>}
                   </Link>
                 );

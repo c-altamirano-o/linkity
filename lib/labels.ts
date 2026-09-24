@@ -31,6 +31,21 @@ export type LabelDictionary = Record<string, string>;
 export const DEFAULT_LABELS: LabelDictionary = {
   // Nombres de módulo (como aparecen en el menú/sidebar)
   "module.repair.name": "Reparaciones",
+  // "module.workshop.name"/"module.reception.name" (2026-09-24, corrigiendo
+  // un bug real que Carlos reportó con capturas: "aparecen dos con el
+  // nombre de Reparaciones" — una para el mostrador/tienda [módulo
+  // "reparaciones"], otra para el taller central [módulo "aduana", control
+  // total] y otra para el técnico [módulo "taller", solo lectura]).
+  // TenantShell.tsx compartía a propósito "module.repair.name" entre las
+  // tres, asumiendo que "un rol nunca tiene los dos módulos a la vez en la
+  // práctica" — un supuesto que un rol con más de uno de los tres (ej. el
+  // rediseño de puestos de reparación de celulares, 2026-09-24) rompe: se
+  // ven dos/tres pestañas IDÉNTICAS. La corrección real es que cada
+  // módulo tenga su propio nombre, no evitar el solape — así, si un puesto
+  // sí necesita más de uno, se ven como pestañas distintas y claras, nunca
+  // duplicadas.
+  "module.workshop.name": "Taller",
+  "module.reception.name": "Recepción / Aduana",
   "module.catalog.name": "Catálogo",
   "module.pos.name": "Punto de Venta",
   "module.cash.name": "Caja",

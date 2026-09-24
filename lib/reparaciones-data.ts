@@ -51,6 +51,11 @@ export interface ReparacionUI {
   marca: string;
   modelo: string;
   falla: string;
+  // Contraseña/patrón de desbloqueo del equipo (2026-09-24, a petición de
+  // Carlos: el Técnico de Reparación la necesita para trabajar el equipo).
+  // Deliberadamente NO existe en ReparacionPublicaUI (más abajo) — ver el
+  // comentario largo en Repair.deviceUnlockCode, schema.prisma.
+  codigoDesbloqueo: string | null;
   estado: EstadoReparacion;
   prioridad: PrioridadReparacion;
   costoEstimado: number | null;
@@ -187,6 +192,7 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
     marca: r.deviceBrand,
     modelo: r.deviceModel,
     falla: r.issueDesc,
+    codigoDesbloqueo: r.deviceUnlockCode,
     estado: r.status as EstadoReparacion,
     prioridad: r.priority as PrioridadReparacion,
     costoEstimado: r.estimatedCost != null ? Number(r.estimatedCost) : null,

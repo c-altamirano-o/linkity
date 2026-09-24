@@ -187,7 +187,7 @@ export default function ActivarNotificacionesPush({ tenantSlug }: { tenantSlug: 
 
         {estado === "ios-necesita-instalar" && (
           <div className="flex items-start gap-2">
-            <Smartphone className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+            <Smartphone className="w-4 h-4 text-primary-text flex-shrink-0 mt-0.5" />
             <p className="text-xs text-foreground">
               En iPhone/iPad, antes de activar las notificaciones necesitas agregar Linkity a tu pantalla de inicio:
               toca el botón de <strong>compartir</strong> en Safari y elige <strong>&quot;Agregar a pantalla de inicio&quot;</strong>.
@@ -233,7 +233,7 @@ export default function ActivarNotificacionesPush({ tenantSlug }: { tenantSlug: 
       <div className="grid sm:grid-cols-2 gap-3">
         <div className="rounded-lg border border-border p-3.5">
           <p className="text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
-            <BellRing className="w-3.5 h-3.5 text-primary" /> En Android
+            <BellRing className="w-3.5 h-3.5 text-primary-text" /> En Android
           </p>
           <p className="text-[11.5px] text-muted-foreground leading-relaxed">
             Abre este panel desde Chrome o Edge y toca &quot;Activar notificaciones en este dispositivo&quot; —
@@ -242,7 +242,7 @@ export default function ActivarNotificacionesPush({ tenantSlug }: { tenantSlug: 
         </div>
         <div className="rounded-lg border border-border p-3.5">
           <p className="text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
-            <Smartphone className="w-3.5 h-3.5 text-primary" /> En iPhone / iPad
+            <Smartphone className="w-3.5 h-3.5 text-primary-text" /> En iPhone / iPad
           </p>
           <p className="text-[11.5px] text-muted-foreground leading-relaxed">
             Primero agrega Linkity a tu pantalla de inicio desde Safari (botón compartir →

@@ -91,7 +91,7 @@ export default function FirmaCanvas({
           type="button"
           onClick={limpiar}
           disabled={vacio}
-          className="text-xs text-primary hover:underline disabled:opacity-40 disabled:no-underline"
+          className="text-xs text-primary-text hover:underline disabled:opacity-40 disabled:no-underline"
         >
           Borrar
         </button>

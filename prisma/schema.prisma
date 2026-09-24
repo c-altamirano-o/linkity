@@ -387,6 +387,27 @@ model Role {
   // roles (ej. "Encargada", "Supervisor") se lo vuelve a prender.
   verMontosCaja Boolean @default(false)
 
+  // 2026-09-24, a petición de Carlos (redisño de puestos de reparación de
+  // celulares: "Supervisor de Sucursales... audita inventarios... de las 5
+  // tiendas... autoriza traslados de mercancía entre las 5 tiendas").
+  // Mismo patrón que verTodoTaller/verMontosCaja: un booleano de rol
+  // aparte, no un módulo más. Sin este campo, un empleado de PIN (sin
+  // importar su rol) siempre queda limitado a los datos de SU PROPIA
+  // sucursal en Reportes/Inventario/Caja (ver el comentario largo junto a
+  // ActorResult.branchId, lib/actor.ts, y el "sucursalDeEmpleado" que cada
+  // page.tsx de esos tres módulos ya aplicaba) — correcto para un
+  // Encargado/Cajero de UNA tienda, pero rompe a un puesto de supervisión
+  // que de verdad necesita ver/comparar las 5 sucursales a la vez. Cuando
+  // es true, esos tres page.tsx (reportes, inventario, caja) dejan de
+  // recortar por la sucursal asignada de este empleado — ve/opera
+  // cualquier sucursal del negocio, igual que un administrador, pero SIN
+  // ganar ningún módulo nuevo (sigue sin Personal/Facturación/
+  // Configuración) ni el resto de sus restricciones (ej. sigue sin ver
+  // montos de Caja salvo que verMontosCaja también esté en true). Default
+  // false — ningún rol existente cambia de comportamiento al agregar este
+  // campo.
+  verTodoNegocio Boolean @default(false)
+
   userRoles   UserRole[]
   permissions RolePermission[]
   // Empleados de PIN (M11) que tienen este rol asignado — separado de
@@ -758,6 +779,17 @@ model Repair {
   publicToken   String       @unique @default(cuid())
   whatsappSent  Boolean      @default(false)
   notes         String?
+
+  // Contraseña/patrón de desbloqueo del equipo (2026-09-24, a petición
+  // explícita de Carlos: el Técnico de Reparación necesita verla para
+  // poder trabajar el equipo — "solo puede ver... modelos y contraseñas de
+  // desbloqueo"). Opcional (el cliente puede no traer bloqueo, o el
+  // mostrador puede no haberla capturado) y deliberadamente NUNCA se
+  // manda a la página pública de seguimiento (getReparacionPublica, lib/
+  // reparaciones-data.ts) — es información sensible de acceso al
+  // dispositivo, no algo que un tercero con el link público deba poder
+  // ver.
+  deviceUnlockCode String?
 
   // Técnico ASIGNADO para trabajar esta reparación (2026-09-21, a petición
   // de Carlos: "cuando se ingresa un equipo al terminar debe pasar esa
