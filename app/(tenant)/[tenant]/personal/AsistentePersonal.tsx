@@ -330,10 +330,10 @@ export default function AsistentePersonal({ tenantSlug, rolesIniciales, business
                             Puede ver montos y totales de Caja
                           </label>
                         )}
-                        {(p.modulos.has("reportes") || p.modulos.has("inventario") || p.modulos.has("caja")) && (
+                        {(p.modulos.has("reportes") || p.modulos.has("inventario") || p.modulos.has("caja") || p.modulos.has("sucursales")) && (
                           <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
                             <input type="checkbox" checked={p.verTodoNegocio} onChange={(e) => actualizarPuesto(idx, { verTodoNegocio: e.target.checked })} />
-                            Ve Reportes/Inventario/Caja de TODAS las sucursales, no solo la suya
+                            Ve Reportes/Inventario/Caja/Sucursales (y el Dashboard) de TODAS las sucursales, no solo la suya
                           </label>
                         )}
                       </div>

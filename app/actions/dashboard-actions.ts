@@ -2,6 +2,7 @@
 
 import { getVentasPorDia, hoyMx, type VentasPorDiaData } from "@/lib/dashboard-data";
 import { resolverActor } from "@/lib/actor";
+import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
 import { getTenantPrisma, prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
@@ -42,10 +43,24 @@ export async function obtenerVentasPorDiaAction(
   const fechaFinal = fecha > hoy ? hoy : fecha;
 
   try {
+    // 2026-09-24, corrigiendo el mismo hueco que dashboard/page.tsx (ver el
+    // comentario largo ahí): este Action confiaba en el branchId que
+    // mandara el cliente sin verificar que de verdad fuera el suyo — un
+    // empleado de PIN sin Role.verTodoNegocio podía, en teoría, pedir los
+    // datos de OTRA sucursal con solo cambiar este parámetro (la pantalla
+    // ya no se lo ofrece, pero el Action en sí no lo impedía). Mismo
+    // criterio que caja/page.tsx: para él, el servidor IGNORA el branchId
+    // que mande y siempre usa el suyo propio.
+    let branchIdPedido = branchId;
+    if (resuelto.actor === "staff") {
+      const veTodoElNegocio = await verTodoNegocioParaRolPorNombre(resuelto.tenant.id, resuelto.roleName);
+      branchIdPedido = veTodoElNegocio ? branchId : (resuelto.branchId ?? undefined);
+    }
+
     let branchIdValidado: string | undefined;
-    if (branchId) {
+    if (branchIdPedido) {
       const db = getTenantPrisma(resuelto.tenant.id);
-      const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true } });
+      const branch = await db.branch.findUnique({ where: { id: branchIdPedido }, select: { id: true } });
       branchIdValidado = branch?.id;
     }
 
@@ -77,6 +92,16 @@ export interface CategoriaDashboardConfigInput {
  * raíz, mismo criterio ya documentado en lib/prisma.ts para
  * updateThemePreset/updateBusinessType — no tiene sentido "escoparlo a sí
  * mismo", y resolverActor ya deja tenant.id validado/confiable.
+ *
+ * 2026-09-24, a petición de Carlos (revisión de permisos): esta config es
+ * COMPARTIDA por todo el negocio — un solo Tenant.dashboardCategoriasConfig,
+ * no una por empleado — así que aunque no expone dinero, dejar que
+ * CUALQUIER empleado con el módulo "dashboard" (que es prácticamente todos,
+ * ver modulosPermitidosParaRol en lib/roles-server.ts) la cambiara
+ * significaba que un empleado de mostrador podía alterar lo que ve el dueño
+ * y el resto del equipo. Ahora exige lo mismo que Reportes/Caja/
+ * Inventario/Sucursales para "ver todo el negocio": administrador, o
+ * empleado con Role.verTodoNegocio ("Supervisor de Sucursales").
  */
 export async function guardarConfigCategoriasDashboardAction(
   tenantSlug: string,
@@ -84,6 +109,13 @@ export async function guardarConfigCategoriasDashboardAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const resuelto = await resolverActor(tenantSlug, "dashboard");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
+
+  if (resuelto.actor === "staff") {
+    const veTodoElNegocio = await verTodoNegocioParaRolPorNombre(resuelto.tenant.id, resuelto.roleName);
+    if (!veTodoElNegocio) {
+      return { ok: false, error: "No tienes acceso a esta función" };
+    }
+  }
 
   if (!Array.isArray(config) || config.some((c) => typeof c?.name !== "string" || typeof c?.color !== "string" || typeof c?.visible !== "boolean")) {
     return { ok: false, error: "Configuración de categorías inválida" };

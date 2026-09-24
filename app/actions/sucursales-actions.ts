@@ -3,6 +3,7 @@
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { resolverActor, type ActorResult } from "@/lib/actor";
+import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
 import { horaValida } from "@/lib/horarios-sucursal";
 
 /**
@@ -22,6 +23,23 @@ type ResolverResult = ActorResult;
 // matriz de acceso (lib/roles.ts), Cajero y Técnico no.
 async function resolverTenantYUsuario(tenantSlug: string): Promise<ResolverResult> {
   return resolverActor(tenantSlug, "sucursales");
+}
+
+// 2026-09-24, corrigiendo el hueco más severo de la revisión de permisos que
+// pidió Carlos: crearSucursalAction/editarSucursalAction/
+// transferirInventarioAction solo exigían el módulo "sucursales"
+// (resolverActor), sin ningún candado de sucursal — un empleado de PIN
+// fijo en una sola sucursal (ver sucursales/page.tsx) podía, llamando estas
+// acciones directo, crear/editar CUALQUIER sucursal del negocio o
+// transferir inventario entre dos sucursales ajenas a la suya, aunque la
+// pantalla ya no le mostrara esa opción (nunca hay que confiar en que
+// ocultar un botón en el cliente sea suficiente, mismo criterio que
+// dashboard-actions.ts). Un administrador (branchId null) y un empleado con
+// Role.verTodoNegocio ("Supervisor de Sucursales") siguen sin restricción,
+// igual que siempre.
+async function veTodoElNegocio(resuelto: ActorResult & { ok: true }): Promise<boolean> {
+  if (resuelto.actor !== "staff") return true;
+  return verTodoNegocioParaRolPorNombre(resuelto.tenant.id, resuelto.roleName);
 }
 
 function manejarErrorAcceso(err: any, mensajeGenerico: string): { ok: false; error: string } {
@@ -98,6 +116,15 @@ export async function crearSucursalAction(
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
 
+  // Crear una sucursal nueva es una decisión del negocio COMPLETO, no algo
+  // que quepa dentro de "las tareas de mi propia sucursal" — un empleado de
+  // PIN sin Role.verTodoNegocio no tiene un branchId contra el cual
+  // comparar esto (no está editando SU sucursal, está agregando una que
+  // todavía no existe), así que aquí simplemente se le niega por completo.
+  if (!(await veTodoElNegocio(resuelto))) {
+    return { ok: false, error: "No tienes acceso a esta función" };
+  }
+
   const db = getTenantPrisma(tenant.id);
 
   try {
@@ -151,6 +178,16 @@ export async function editarSucursalAction(
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
+
+  // Un empleado sin Role.verTodoNegocio solo puede editar SU PROPIA
+  // sucursal (mismo criterio que puedeOperarSucursal, lib/actor.ts, pero
+  // resuelto a mano aquí porque ese helper trata branchId:null como "puede
+  // todo" — que es justo el caso admin, no el de un empleado de PIN
+  // ordinario, que sí trae un branchId propio pero no debe poder editar
+  // OTRA sucursal con solo cambiar este parámetro).
+  if (!(await veTodoElNegocio(resuelto)) && resuelto.branchId !== branchId) {
+    return { ok: false, error: "No tienes acceso a esta sucursal" };
+  }
 
   const db = getTenantPrisma(tenant.id);
 
@@ -228,6 +265,14 @@ export async function transferirInventarioAction(params: {
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
+
+  // Transferir SIEMPRE involucra dos sucursales — un empleado fijo en una
+  // sola no tiene forma legítima de operar esto (la pantalla ya no le
+  // ofrece el selector, ver sucursales/page.tsx, pero se repite aquí para
+  // no depender solo de que el cliente se haya comportado).
+  if (!(await veTodoElNegocio(resuelto))) {
+    return { ok: false, error: "No tienes acceso a esta función" };
+  }
 
   const db = getTenantPrisma(tenant.id);
 

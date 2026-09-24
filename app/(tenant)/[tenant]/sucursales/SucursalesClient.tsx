@@ -15,6 +15,23 @@ import {
 interface SucursalesClientProps {
   data: SucursalesData;
   tenantSlug: string;
+  // 2026-09-24, a petición de Carlos (revisión de permisos): true cuando
+  // quien ve esta pantalla es un empleado de PIN fijo en una sola sucursal
+  // (sin Role.verTodoNegocio, ver sucursales/page.tsx) — "Nueva sucursal" se
+  // oculta (crear una sucursal es una decisión del negocio completo, no de
+  // "mi propia tienda"; sucursales-actions.ts la rechaza igual del lado del
+  // servidor). El comparativo y "Transferir" no necesitan un flag aparte:
+  // con una sola sucursal en `data.sucursales` ya se ocultan/degradan solos
+  // (ver más abajo, sucursales.length >= 2).
+  soloUnaSucursal?: boolean;
+  // 2026-09-24, a petición de Carlos (revisión de permisos, seguridad
+  // anti-fraude) — false cuando el rol de este empleado no tiene
+  // Role.verMontosCaja (redactarMontosSucursales, lib/sucursales-data.ts, ya
+  // puso ventasHoy/cajaActual en 0/null server-side): se muestra "Oculto" en
+  // vez de esos ceros, para no dar a entender que la sucursal no vendió
+  // nada o no tiene efectivo cuando en realidad es que este rol no puede
+  // verlo. Default true (no rompe llamadas viejas ni el caso admin).
+  montosVisibles?: boolean;
 }
 
 const AVATAR_PALETTE = [
@@ -54,7 +71,7 @@ const DIAS_SEMANA_SELECTOR = [
 ];
 const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6];
 
-export default function SucursalesClient({ data, tenantSlug }: SucursalesClientProps) {
+export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, montosVisibles = true }: SucursalesClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -198,12 +215,14 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
             {sucursales.length} {sucursales.length === 1 ? "sucursal registrada" : "sucursales registradas"}
           </p>
         </div>
-        <button
-          onClick={abrirNueva}
-          className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-[12.5px] font-medium px-3 py-2 rounded-lg transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" /> Nueva sucursal
-        </button>
+        {!soloUnaSucursal && (
+          <button
+            onClick={abrirNueva}
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-[12.5px] font-medium px-3 py-2 rounded-lg transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Nueva sucursal
+          </button>
+        )}
       </div>
 
       {/* Tarjetas sucursales */}
@@ -259,13 +278,18 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
               {/* Métricas */}
               <div className="grid grid-cols-2 gap-2 p-3">
                 {[
-                  { icon: DollarSign, label: "Ventas hoy", value: formatMXN(suc.ventasHoy), color: "text-primary-text" },
+                  {
+                    icon: DollarSign,
+                    label: "Ventas hoy",
+                    value: montosVisibles ? formatMXN(suc.ventasHoy) : "Oculto",
+                    color: montosVisibles ? "text-primary-text" : "text-muted-foreground",
+                  },
                   { icon: Wrench, label: "Reparaciones activas", value: String(suc.reparacionesActivas), color: "text-cyan-600" },
                   {
                     icon: Package,
                     label: "Caja actual",
-                    value: suc.cajaAbierta ? formatMXN(suc.cajaActual ?? 0) : "Cerrada",
-                    color: suc.cajaAbierta ? "text-emerald-600" : "text-muted-foreground",
+                    value: !montosVisibles ? "Oculto" : suc.cajaAbierta ? formatMXN(suc.cajaActual ?? 0) : "Cerrada",
+                    color: !montosVisibles ? "text-muted-foreground" : suc.cajaAbierta ? "text-emerald-600" : "text-muted-foreground",
                   },
                   { icon: Package, label: "Stock total", value: String(suc.stockTotal), color: "text-amber-600" },
                 ].map((m) => (
@@ -439,14 +463,20 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-[12.5px] font-medium text-foreground whitespace-nowrap">{formatMXN(suc.ventasHoy)}</td>
+                      <td className="px-4 py-3 text-[12.5px] font-medium text-foreground whitespace-nowrap">
+                        {montosVisibles ? formatMXN(suc.ventasHoy) : <span className="text-muted-foreground">Oculto</span>}
+                      </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${BARRA_COLORES[i % BARRA_COLORES.length]}`} style={{ width: `${pct}%` }} />
+                        {montosVisibles ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${BARRA_COLORES[i % BARRA_COLORES.length]}`} style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-[11.5px] text-muted-foreground">{pct}%</span>
                           </div>
-                          <span className="text-[11.5px] text-muted-foreground">{pct}%</span>
-                        </div>
+                        ) : (
+                          <span className="text-[11.5px] text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-[12.5px] text-foreground/80">{suc.reparacionesActivas}</td>
                       <td className="px-4 py-3">

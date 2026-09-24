@@ -287,9 +287,21 @@ export async function verTodoNegocioParaRolPorNombre(tenantId: string, roleName:
  * el rol ya no tiene "caja" entre sus módulos. `verTodoNegocio` (2026-09-24,
  * mismo criterio, opcional) actualiza Role.verTodoNegocio ("Supervisor de
  * Sucursales": ve todas las sucursales, no solo la suya); se fuerza a false
- * si el rol no tiene NINGUNO de los tres módulos con datos por sucursal
- * (reportes/inventario/caja) — no tiene sentido dejarlo prendido para un
- * rol que no entra a ninguna de esas tres pantallas.
+ * si el rol no tiene NINGUNO de los módulos con datos por sucursal
+ * (reportes/inventario/caja/dashboard/sucursales) — no tiene sentido
+ * dejarlo prendido para un rol que no entra a ninguna de esas pantallas.
+ *
+ * 2026-09-24, ampliado tras la revisión de permisos que pidió Carlos:
+ * Dashboard y Sucursales se sumaron ese mismo día al recorte por sucursal
+ * (antes solo lo tenían reportes/inventario/caja, ver dashboard/page.tsx y
+ * sucursales/page.tsx) pero se quedaron fuera de este chequeo — un rol que
+ * SOLO tuviera esos dos módulos (sin ninguno de los otros tres) marcaba la
+ * casilla "Supervisor de Sucursales" en el editor, guardaba, y quedaba en
+ * false sin avisar nada (guardarPermisosDeRol la descartaba en silencio).
+ * Dashboard en la práctica ya es casi universal (se agrega solo a casi
+ * cualquier rol, ver conDashboard.add más abajo), así que en los hechos
+ * esto deja el candado con sentido para prácticamente cualquier rol excepto
+ * uno puramente "taller" sin ninguna otra pantalla con datos por sucursal.
  */
 export async function guardarPermisosDeRol(roleId: string, modulos: ModuloKey[], verTodoTaller?: boolean, verMontosCaja?: boolean, verTodoNegocio?: boolean): Promise<void> {
   const mapaPermisos = await asegurarCatalogoPermisos();
@@ -298,7 +310,12 @@ export async function guardarPermisosDeRol(roleId: string, modulos: ModuloKey[],
   // comentario) — un rol "Taller" no recibe Dashboard forzado.
   if (!conDashboard.has("taller")) conDashboard.add("dashboard");
 
-  const tieneModuloPorSucursal = conDashboard.has("reportes") || conDashboard.has("inventario") || conDashboard.has("caja");
+  const tieneModuloPorSucursal =
+    conDashboard.has("reportes") ||
+    conDashboard.has("inventario") ||
+    conDashboard.has("caja") ||
+    conDashboard.has("dashboard") ||
+    conDashboard.has("sucursales");
 
   await prisma.$transaction([
     prisma.rolePermission.deleteMany({ where: { roleId } }),

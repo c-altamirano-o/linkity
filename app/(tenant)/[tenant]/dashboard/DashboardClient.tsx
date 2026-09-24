@@ -133,6 +133,7 @@ export default function DashboardClient({
   ventasPorDiaInicial,
   branches,
   sucursalActualId,
+  puedeConfigurarCategorias = true,
 }: {
   data: DashboardData;
   labels: LabelDictionary;
@@ -147,6 +148,14 @@ export default function DashboardClient({
   // resetear nada a mano.
   branches: SucursalOption[];
   sucursalActualId: string | null;
+  // 2026-09-24, a petición de Carlos (revisión de permisos) — false para un
+  // empleado de PIN sin Role.verTodoNegocio: oculta el engrane de
+  // "Configurar categorías" (cambia Tenant.dashboardCategoriasConfig,
+  // compartido por TODO el negocio, no por empleado). Mismo candado ya
+  // aplicado del lado del servidor en guardarConfigCategoriasDashboardAction
+  // (dashboard-actions.ts) — esto es solo para no mostrar un botón que el
+  // servidor va a rechazar. Default true para no romper otros usos.
+  puedeConfigurarCategorias?: boolean;
 }) {
   const router = useRouter();
   const t = (key: string) => label(labels, key);
@@ -632,10 +641,12 @@ export default function DashboardClient({
         <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
           <div className="flex items-center justify-between mb-1">
             <p className="text-sm font-medium text-foreground">Ventas por categoría</p>
-            <button onClick={abrirConfig} disabled={categoriasConfig.length === 0}
-              className="w-6 h-6 rounded-lg bg-muted hover:bg-muted/70 flex items-center justify-center transition-colors disabled:opacity-40">
-              <Settings className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
+            {puedeConfigurarCategorias && (
+              <button onClick={abrirConfig} disabled={categoriasConfig.length === 0}
+                className="w-6 h-6 rounded-lg bg-muted hover:bg-muted/70 flex items-center justify-center transition-colors disabled:opacity-40">
+                <Settings className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            )}
           </div>
           <p className="text-xs text-muted-foreground mb-2">Este mes</p>
           {categoriasVisibles.length === 0 ? (

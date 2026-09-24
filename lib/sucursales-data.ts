@@ -69,7 +69,40 @@ function iniciales(nombre: string): string {
   return ini.toUpperCase() || "?";
 }
 
-export async function getSucursalesData(tenantId: string): Promise<SucursalesData> {
+/**
+ * 2026-09-24, a petición de Carlos (revisión de permisos, seguridad
+ * anti-fraude): "Caja actual" es EXACTAMENTE el mismo cálculo protegido que
+ * Role.verMontosCaja ya redacta en caja/page.tsx (mismo efectivoDeVenta(),
+ * ver el comentario de arriba) — sin esta función, un rol sin "puede ver
+ * montos de Caja" (ej. el "Gerente" base) vería aquí, en su propia tarjeta
+ * de Sucursales, el mismo efectivo real que Caja le oculta a propósito.
+ * "Ventas hoy" se redacta por el mismo motivo (equivalente a
+ * CajaData.totalVentasDia, que redactarMontosCaja también pone en cero).
+ * cajaAbierta/reparacionesActivas/stockTotal/personal NO son montos — se
+ * conservan tal cual, igual que sesionActual.branchId en redactarMontosCaja
+ * (lib/caja-data.ts).
+ */
+export function redactarMontosSucursales(data: SucursalesData): SucursalesData {
+  return {
+    ...data,
+    sucursales: data.sucursales.map((s) => ({ ...s, ventasHoy: 0, cajaActual: null })),
+  };
+}
+
+// 2026-09-24, corrigiendo el hueco más severo de la revisión de permisos que
+// pidió Carlos ("cada empleado solo lo que necesite... nunca un panorama
+// general de las finanzas"): esta pantalla mostraba TODAS las sucursales —
+// incluida "Caja actual" (el efectivo real que hay en cada caja en este
+// momento, el mismo dato que caja/page.tsx redacta con Role.verMontosCaja)
+// — a CUALQUIER empleado con el módulo "sucursales" (el rol base "Gerente"
+// lo trae, ver MATRIZ_ACCESO_BASE en lib/roles.ts), sin ningún recorte por
+// sucursal. Mismo criterio que Reportes/Caja/Inventario desde el 2026-09-21:
+// branchIdFiltro ausente = sin recorte (admin, o empleado con
+// Role.verTodoNegocio); presente = solo se consulta/regresa esa sucursal —
+// el recorte ocurre ANTES de la consulta a BD (branchIds), no después, para
+// que el efectivo/stock/personal de las demás sucursales ni siquiera se
+// traiga del servidor.
+export async function getSucursalesData(tenantId: string, branchIdFiltro?: string): Promise<SucursalesData> {
   // Branch, Sale, Repair, CashSession, Staff tienen tenantId propio →
   // getTenantPrisma lo inyecta solo. Inventory no tiene tenantId propio
   // (se llega a él vía branchId, que ya está escopado al tenant).
@@ -78,7 +111,15 @@ export async function getSucursalesData(tenantId: string): Promise<SucursalesDat
   const inicioHoy = new Date();
   inicioHoy.setHours(0, 0, 0, 0);
 
-  const branches = await db.branch.findMany({ orderBy: { createdAt: "asc" } });
+  // Se necesita la lista COMPLETA (sin recortar) para saber cuál es la
+  // sucursal "principal" (idx===0 de la más antigua, ver esPrincipal más
+  // abajo) incluso cuando el empleado está fijo en otra — si se calculara
+  // esa insignia sobre la lista ya recortada, la única sucursal que ve un
+  // empleado siempre parecería "principal" así no lo sea.
+  const todasLasSucursales = await db.branch.findMany({ orderBy: { createdAt: "asc" } });
+  const idSucursalPrincipal = todasLasSucursales[0]?.id ?? null;
+
+  const branches = branchIdFiltro ? todasLasSucursales.filter((b) => b.id === branchIdFiltro) : todasLasSucursales;
   const branchIds = branches.map((b) => b.id);
 
   const [ventasHoyRaw, reparacionesActivasRaw, sesionesAbiertas, staffRaw, inventoryRaw, productosRaw] =
@@ -147,7 +188,7 @@ export async function getSucursalesData(tenantId: string): Promise<SucursalesDat
     return Number(sesion.openingCash) + (ventasCajaPorBranch.get(sesion.branchId) ?? 0) + manual;
   }
 
-  const sucursales: SucursalUI[] = branches.map((b, idx) => {
+  const sucursales: SucursalUI[] = branches.map((b) => {
     const sesion = sesionPorBranch.get(b.id) ?? null;
     return {
       id: b.id,
@@ -159,7 +200,7 @@ export async function getSucursalesData(tenantId: string): Promise<SucursalesDat
       horaCierreEsperada: b.horaCierreEsperada,
       diasOperacion: b.diasOperacion,
       isActive: b.isActive,
-      esPrincipal: idx === 0,
+      esPrincipal: b.id === idSucursalPrincipal,
       ventasHoy: ventasHoyPorBranch.get(b.id) ?? 0,
       reparacionesActivas: reparacionesActivasPorBranch.get(b.id) ?? 0,
       cajaAbierta: !!sesion,

@@ -213,10 +213,10 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                       Nivel supervisor: puede ver montos y totales de Caja (ventas del día, efectivo esperado, reportes)
                     </label>
                   )}
-                  {(modulosEdit.has("reportes") || modulosEdit.has("inventario") || modulosEdit.has("caja")) && (
+                  {(modulosEdit.has("reportes") || modulosEdit.has("inventario") || modulosEdit.has("caja") || modulosEdit.has("sucursales")) && (
                     <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
                       <input type="checkbox" checked={verTodoNegocioEdit} onChange={(e) => setVerTodoNegocioEdit(e.target.checked)} />
-                      Supervisor de sucursales: ve Reportes/Inventario/Caja de TODAS las sucursales, no solo la suya
+                      Supervisor de sucursales: ve Reportes/Inventario/Caja/Sucursales (y el Dashboard) de TODAS las sucursales, no solo la suya
                     </label>
                   )}
                   <div className="flex justify-end gap-2">
@@ -289,10 +289,10 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                   Nivel supervisor: puede ver montos y totales de Caja (ventas del día, efectivo esperado, reportes)
                 </label>
               )}
-              {(modulosNuevo.has("reportes") || modulosNuevo.has("inventario") || modulosNuevo.has("caja")) && (
+              {(modulosNuevo.has("reportes") || modulosNuevo.has("inventario") || modulosNuevo.has("caja") || modulosNuevo.has("sucursales")) && (
                 <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
                   <input type="checkbox" checked={verTodoNegocioNuevo} onChange={(e) => setVerTodoNegocioNuevo(e.target.checked)} />
-                  Supervisor de sucursales: ve Reportes/Inventario/Caja de TODAS las sucursales, no solo la suya
+                  Supervisor de sucursales: ve Reportes/Inventario/Caja/Sucursales (y el Dashboard) de TODAS las sucursales, no solo la suya
                 </label>
               )}
               <div className="flex justify-end gap-2">

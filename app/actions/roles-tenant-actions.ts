@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { resolverActor } from "@/lib/actor";
-import { ROL_ADMINISTRADOR, MODULOS, type ModuloKey, type RolTenantUI } from "@/lib/roles";
+import { ROL_ADMINISTRADOR, MODULOS, MODULOS_BASE_EXCLUIDOS, type ModuloKey, type RolTenantUI } from "@/lib/roles";
 import { listarRolesTenant, guardarPermisosDeRol } from "@/lib/roles-server";
 
 /**
@@ -18,9 +18,23 @@ import { listarRolesTenant, guardarPermisosDeRol } from "@/lib/roles-server";
 export type AccionRolResult = { ok: true } | { ok: false; error: string };
 export type AccionListarRolesResult = { ok: true; roles: RolTenantUI[] } | { ok: false; error: string };
 
+// 2026-09-24, endurecimiento (defensa en profundidad) tras la revisión
+// completa de permisos que pidió Carlos: esta función solo revisaba que
+// cada módulo mandado fuera un ModuloKey válido — nunca excluía
+// "facturacion"/"personal"/"configuracion"/"asistencia" (MODULOS_BASE_EXCLUIDOS,
+// lib/roles.ts), esos cuatro son de acceso exclusivo del dueño con cuenta
+// real y JAMÁS deben quedar en un rol asignable a un empleado de PIN. En la
+// práctica esto no era explotable por un empleado (crearRolAction/
+// actualizarRolAction ya exigen resolverActor(tenantSlug, "personal"), que
+// ningún rol de empleado tiene nunca), pero dependía por completo de que
+// RolesManager.tsx/AsistentePersonal.tsx nunca ofrecieran esas casillas —
+// si algún día un bug en esa UI las llegara a mandar, esta función las
+// habría aceptado sin más. Ahora se filtran aquí también, en el servidor,
+// sin importar qué mande el cliente.
 function validarModulos(modulos: string[]): ModuloKey[] {
   const validos = new Set<string>(MODULOS);
-  return modulos.filter((m): m is ModuloKey => validos.has(m));
+  const excluidos = new Set<string>(MODULOS_BASE_EXCLUIDOS);
+  return modulos.filter((m): m is ModuloKey => validos.has(m) && !excluidos.has(m));
 }
 
 export async function listarRolesTenantAction(tenantSlug: string): Promise<AccionListarRolesResult> {

@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getDashboardData, getVentasPorDia, hoyMx } from "@/lib/dashboard-data";
 import { getTenantLabels } from "@/lib/labels-server";
+import { verificarSesionPersonalVigente } from "@/lib/asistencia";
+import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
 import DashboardClient from "./DashboardClient";
 
 export default async function DashboardPage({
@@ -51,14 +53,40 @@ export default async function DashboardPage({
   });
   const reparacionesActiva = !reparacionesInactiva;
 
+  // 2026-09-24, corrigiendo un hueco real que Carlos encontró probando el
+  // sistema como empleado (Andrea Zamora, rol "Asesor de Ventas" en el demo
+  // de reparación de celulares): esta pantalla nunca aplicaba el mismo
+  // recorte por sucursal que ya usan Reportes/Caja/Inventario desde el
+  // 2026-09-21 — CUALQUIER empleado con PIN, sin importar su rol, veía el
+  // Dashboard COMPLETO del negocio (las 5 sucursales, el switch "Vista
+  // global/Por sucursal", montos de ventas de tiendas ajenas a la suya).
+  // Mismo criterio que esos tres módulos: un administrador con cuenta real
+  // sigue viendo todo, sin cambios; un empleado de PIN queda FIJO en su
+  // propia sucursal salvo que su rol tenga Role.verTodoNegocio
+  // ("Supervisor de Sucursales", ver el comentario largo en schema.prisma).
+  const sesionPersonal = await verificarSesionPersonalVigente();
+  const sesionValida = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal : null;
+  const veTodoElNegocio = sesionValida ? await verTodoNegocioParaRolPorNombre(tenant.id, sesionValida.roleName) : false;
+  const sucursalDeEmpleado = sesionValida && !veTodoElNegocio ? sesionValida.branchId : null;
+
+  // Un empleado fijo en su sucursal nunca ve las demás — ni en el selector
+  // de "Por sucursal" ni en "Resumen por sucursal" (que se oculta solo con
+  // que `branches` traiga una sola, ver data.multiSucursal en
+  // lib/dashboard-data.ts). Se ignora por completo el ?sucursal= de la URL
+  // para él (mismo criterio que caja/page.tsx) — nunca puede ver otra
+  // sucursal solo cambiando el link.
+  const branchesVisibles = sucursalDeEmpleado
+    ? tenant.branches.filter((b) => b.id === sucursalDeEmpleado)
+    : tenant.branches;
+
   // Se valida que el ?sucursal= de la URL sea de verdad una sucursal activa
   // de ESTE tenant (nunca se confía en el id tal cual) — un valor que no
   // coincida con ninguna simplemente cae de vuelta a la vista global, en
   // vez de mostrar un error.
-  const branchIdFiltro = tenant.branches.find((b) => b.id === sucursal)?.id;
+  const branchIdFiltro = sucursalDeEmpleado ?? tenant.branches.find((b) => b.id === sucursal)?.id;
 
   const [data, labels, ventasPorDiaInicial] = await Promise.all([
-    getDashboardData(tenant.id, tenant.branches, tenant.weekStartDay, reparacionesActiva, branchIdFiltro, tenant.dashboardCategoriasConfig),
+    getDashboardData(tenant.id, branchesVisibles, tenant.weekStartDay, reparacionesActiva, branchIdFiltro, tenant.dashboardCategoriasConfig),
     getTenantLabels(tenant.id, tenant.businessType),
     getVentasPorDia(tenant.id, hoyMx(), branchIdFiltro),
   ]);
@@ -77,8 +105,18 @@ export default async function DashboardPage({
       labels={labels}
       tenantSlug={tenantSlug}
       ventasPorDiaInicial={ventasPorDiaInicial}
-      branches={tenant.branches}
+      branches={branchesVisibles}
       sucursalActualId={branchIdFiltro ?? null}
+      // 2026-09-24, a petición de Carlos (revisión de permisos): "Configurar
+      // categorías" cambia Tenant.dashboardCategoriasConfig, que es
+      // COMPARTIDO por todo el negocio, no por empleado — antes cualquier
+      // PIN con el módulo "dashboard" (prácticamente todos) podía alterar lo
+      // que ve el resto del equipo (ver el mismo candado ya aplicado del
+      // lado del servidor en guardarConfigCategoriasDashboardAction,
+      // dashboard-actions.ts). Un administrador (sin sesión de personal) o
+      // un Supervisor de Sucursales sí puede; un empleado normal ya ni ve el
+      // botón de engrane.
+      puedeConfigurarCategorias={!sesionValida || veTodoElNegocio}
     />
   );
 }
