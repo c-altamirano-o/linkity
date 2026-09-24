@@ -68,10 +68,16 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
   // "Jefe de técnicos" (2026-09-22, a petición de Carlos) — solo aplica
   // cuando el rol tiene "taller" entre sus módulos, ver Role.verTodoTaller.
   const [verTodoTallerEdit, setVerTodoTallerEdit] = useState(false);
+  // "Puede ver montos de Caja" (2026-09-24, a petición de Carlos: seguridad
+  // anti-fraude — ver el comentario largo en Role.verMontosCaja,
+  // schema.prisma) — solo aplica cuando el rol tiene "caja" entre sus
+  // módulos.
+  const [verMontosCajaEdit, setVerMontosCajaEdit] = useState(false);
   const [creando, setCreando] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [modulosNuevo, setModulosNuevo] = useState<Set<ModuloKey>>(new Set());
   const [verTodoTallerNuevo, setVerTodoTallerNuevo] = useState(false);
+  const [verMontosCajaNuevo, setVerMontosCajaNuevo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -101,6 +107,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     setNombreEdit(rol.name);
     setModulosEdit(new Set(rol.modulosPermitidos));
     setVerTodoTallerEdit(rol.verTodoTaller);
+    setVerMontosCajaEdit(rol.verMontosCaja);
     setCreando(false);
     setError(null);
   };
@@ -117,7 +124,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     startTransition(async () => {
       const res = await actualizarRolAction({
         tenantSlug, roleId: editandoId, nombre: nombreEdit, modulos: Array.from(modulosEdit),
-        verTodoTaller: verTodoTallerEdit,
+        verTodoTaller: verTodoTallerEdit, verMontosCaja: verMontosCajaEdit,
       });
       if (res.ok) {
         setEditandoId(null);
@@ -134,12 +141,14 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     startTransition(async () => {
       const res = await crearRolAction({
         tenantSlug, nombre: nombreNuevo, modulos: Array.from(modulosNuevo), verTodoTaller: verTodoTallerNuevo,
+        verMontosCaja: verMontosCajaNuevo,
       });
       if (res.ok) {
         setCreando(false);
         setNombreNuevo("");
         setModulosNuevo(new Set());
         setVerTodoTallerNuevo(false);
+        setVerMontosCajaNuevo(false);
         refrescar();
       } else {
         setError(res.error);
@@ -206,6 +215,12 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                       Jefe de técnicos: ve TODAS las reparaciones asignadas del taller (no solo las propias)
                     </label>
                   )}
+                  {modulosEdit.has("caja") && (
+                    <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
+                      <input type="checkbox" checked={verMontosCajaEdit} onChange={(e) => setVerMontosCajaEdit(e.target.checked)} />
+                      Nivel supervisor: puede ver montos y totales de Caja (ventas del día, efectivo esperado, reportes)
+                    </label>
+                  )}
                   <div className="flex justify-end gap-2">
                     <button onClick={() => setEditandoId(null)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
                     <button disabled={pending} onClick={guardarEdicion}
@@ -268,6 +283,12 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                 <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
                   <input type="checkbox" checked={verTodoTallerNuevo} onChange={(e) => setVerTodoTallerNuevo(e.target.checked)} />
                   Jefe de técnicos: ve TODAS las reparaciones asignadas del taller (no solo las propias)
+                </label>
+              )}
+              {modulosNuevo.has("caja") && (
+                <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
+                  <input type="checkbox" checked={verMontosCajaNuevo} onChange={(e) => setVerMontosCajaNuevo(e.target.checked)} />
+                  Nivel supervisor: puede ver montos y totales de Caja (ventas del día, efectivo esperado, reportes)
                 </label>
               )}
               <div className="flex justify-end gap-2">

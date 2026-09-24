@@ -53,6 +53,7 @@ export default async function AccesoNegocioPage({
       themePreset: true,
       themeIntensity: true,
       themeIntensityFondo: true,
+      themeCustomColors: true,
       branches: {
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
@@ -68,7 +69,7 @@ export default async function AccesoNegocioPage({
 
   if (!tenant) notFound();
 
-  const activePreset = resolverPresetTenant(tenant.themePreset, tenant.themeIntensity, tenant.themeIntensityFondo);
+  const activePreset = resolverPresetTenant(tenant.themePreset, tenant.themeIntensity, tenant.themeIntensityFondo, tenant.themeCustomColors);
 
   return (
     <div id={TENANT_THEME_ROOT_ID} style={activePreset as React.CSSProperties}>

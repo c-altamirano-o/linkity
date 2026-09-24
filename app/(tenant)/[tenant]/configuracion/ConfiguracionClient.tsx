@@ -12,6 +12,8 @@ import { createClient } from "@/lib/supabase/client";
 import {
   WINDOWS_THEMES, resolverPresetTenant, TENANT_THEME_ROOT_ID,
   INTENSIDAD_DEFAULT, INTENSIDAD_MIN, INTENSIDAD_MAX,
+  TEMA_PERSONALIZADO_ID, COLORES_PERSONALIZADOS_DEFAULT, parseColoresPersonalizados,
+  type ColoresPersonalizados,
 } from "@/lib/theme-presets";
 import ActivarNotificacionesPush from "@/components/tenant/ActivarNotificacionesPush";
 import {
@@ -35,9 +37,11 @@ const TAMANO_MAXIMO_LOGO = 2 * 1024 * 1024; // 2 MB — mismo límite que valida
 // pintar el tema real — con la terna (tema, intensidad de fichas,
 // intensidad de fondo) que el admin está eligiendo/arrastrando en este
 // momento, para que la vista previa nunca pueda desincronizarse de lo que
-// de verdad se va a guardar.
-function aplicarTemaEnVivo(themeId: string, intensidadFicha: number, intensidadFondo: number) {
-  const preset = resolverPresetTenant(themeId, intensidadFicha, intensidadFondo);
+// de verdad se va a guardar. `coloresPersonalizados` (2026-09-24) solo
+// importa cuando themeId === TEMA_PERSONALIZADO_ID — se ignora para
+// cualquier otro tema, igual que hace resolverPresetTenant.
+function aplicarTemaEnVivo(themeId: string, intensidadFicha: number, intensidadFondo: number, coloresPersonalizados?: ColoresPersonalizados) {
+  const preset = resolverPresetTenant(themeId, intensidadFicha, intensidadFondo, coloresPersonalizados);
   const nodo = document.getElementById(TENANT_THEME_ROOT_ID);
   if (!nodo) return;
   for (const [variable, valor] of Object.entries(preset)) {
@@ -54,6 +58,10 @@ const THEMES = Object.entries(WINDOWS_THEMES).map(([id, tema]) => ({
   name: tema.name,
   swatch: tema.backgroundColor,
 }));
+
+// Etiquetas de las 5 fichas del tema personalizado — mismo orden que
+// ColoresPersonalizados.tileColors/WINDOWS_THEMES[x].tileColors.
+const ETIQUETAS_FICHAS = ["Ficha 1", "Ficha 2", "Ficha 3", "Ficha 4", "Ficha 5"];
 
 const SIN_RUBRO = "";
 
@@ -72,6 +80,9 @@ interface ConfiguracionClientProps {
   themePresetInicial: string;
   themeIntensityInicial: number;
   themeIntensityFondoInicial: number;
+  // Json de Prisma — se recibe sin tipar (unknown de facto) y se valida con
+  // parseColoresPersonalizados antes de usarse, nunca se confía en su forma.
+  themeCustomColorsInicial?: unknown;
   businessTypeInicial: string | null;
   modulos: ModuloPersonalizable[];
   recomendadosOff: string[];
@@ -86,6 +97,7 @@ export default function ConfiguracionClient({
   themePresetInicial,
   themeIntensityInicial,
   themeIntensityFondoInicial,
+  themeCustomColorsInicial,
   businessTypeInicial,
   modulos,
   recomendadosOff,
@@ -103,45 +115,72 @@ export default function ConfiguracionClient({
   // segundo modulador, independiente del de arriba — ver el comentario
   // largo en construirPresetWindowsPhone, lib/theme-presets.ts).
   const [intensidadFondoSeleccionada, setIntensidadFondoSeleccionada] = useState(themeIntensityFondoInicial ?? INTENSIDAD_DEFAULT);
+  // Tema "Personalizado" (2026-09-24, a petición de Carlos: "hay que
+  // agregar un tema totalmente customizable. Elegir el color de fondo y
+  // los colores secundarios") — arranca con lo que ya tenía guardado el
+  // negocio (parseColoresPersonalizados filtra cualquier dato corrupto) o,
+  // si nunca lo ha configurado, el punto de partida por default.
+  const [coloresPersonalizados, setColoresPersonalizados] = useState<ColoresPersonalizados>(
+    () => parseColoresPersonalizados(themeCustomColorsInicial) ?? COLORES_PERSONALIZADOS_DEFAULT
+  );
   const [temaPending, startTemaTransition] = useTransition();
   const [temaMensaje, setTemaMensaje] = useState("");
 
-  // Guarda cuál es el tema/intensidades REALMENTE guardados en BD (no lo que
-  // se está previsualizando) — si el negocio sale de esta pantalla sin darle
-  // "Guardar cambios", el efecto de limpieza de abajo revierte la vista
-  // previa a estos valores, para que un color nunca confirmado no se quede
-  // "pegado" en el resto de la app.
+  // Guarda cuál es el tema/intensidades/colores REALMENTE guardados en BD
+  // (no lo que se está previsualizando) — si el negocio sale de esta
+  // pantalla sin darle "Guardar cambios", el efecto de limpieza de abajo
+  // revierte la vista previa a estos valores, para que un color nunca
+  // confirmado no se quede "pegado" en el resto de la app.
   const temaConfirmadoRef = useRef(themePresetInicial);
   const intensidadConfirmadaRef = useRef(themeIntensityInicial ?? INTENSIDAD_DEFAULT);
   const intensidadFondoConfirmadaRef = useRef(themeIntensityFondoInicial ?? INTENSIDAD_DEFAULT);
+  const coloresConfirmadosRef = useRef(coloresPersonalizados);
 
   const seleccionarTema = (themeId: string) => {
     setTemaSeleccionado(themeId);
-    aplicarTemaEnVivo(themeId, intensidadSeleccionada, intensidadFondoSeleccionada); // vista previa instantánea, sin esperar a guardar
+    aplicarTemaEnVivo(themeId, intensidadSeleccionada, intensidadFondoSeleccionada, coloresPersonalizados); // vista previa instantánea, sin esperar a guardar
   };
 
   const cambiarIntensidad = (valor: number) => {
     setIntensidadSeleccionada(valor);
-    aplicarTemaEnVivo(temaSeleccionado, valor, intensidadFondoSeleccionada); // vista previa instantánea, mientras se arrastra el slider
+    aplicarTemaEnVivo(temaSeleccionado, valor, intensidadFondoSeleccionada, coloresPersonalizados); // vista previa instantánea, mientras se arrastra el slider
   };
 
   const cambiarIntensidadFondo = (valor: number) => {
     setIntensidadFondoSeleccionada(valor);
-    aplicarTemaEnVivo(temaSeleccionado, intensidadSeleccionada, valor); // vista previa instantánea, mientras se arrastra el slider
+    aplicarTemaEnVivo(temaSeleccionado, intensidadSeleccionada, valor, coloresPersonalizados); // vista previa instantánea, mientras se arrastra el slider
+  };
+
+  // Cambia UN campo de los colores personalizados (fondo, ícono/texto, o
+  // una de las 5 fichas por índice) y refresca la vista previa en vivo —
+  // solo tiene efecto visible mientras temaSeleccionado === "CUSTOM".
+  const cambiarColorPersonalizado = (cambio: Partial<ColoresPersonalizados>) => {
+    const nuevo = { ...coloresPersonalizados, ...cambio };
+    setColoresPersonalizados(nuevo);
+    aplicarTemaEnVivo(temaSeleccionado, intensidadSeleccionada, intensidadFondoSeleccionada, nuevo);
+  };
+  const cambiarFichaPersonalizada = (indice: number, hex: string) => {
+    const tileColors = [...coloresPersonalizados.tileColors];
+    tileColors[indice] = hex;
+    cambiarColorPersonalizado({ tileColors });
   };
 
   useEffect(() => {
-    return () => aplicarTemaEnVivo(temaConfirmadoRef.current, intensidadConfirmadaRef.current, intensidadFondoConfirmadaRef.current);
+    return () => aplicarTemaEnVivo(temaConfirmadoRef.current, intensidadConfirmadaRef.current, intensidadFondoConfirmadaRef.current, coloresConfirmadosRef.current);
   }, []);
 
   const guardarTema = () => {
     startTemaTransition(async () => {
-      const result = await updateThemePreset(tenantSlug, temaSeleccionado, intensidadSeleccionada, intensidadFondoSeleccionada);
-      setTemaMensaje(result.success ? "Tema actualizado correctamente." : "Error al actualizar el tema.");
+      const result = await updateThemePreset(
+        tenantSlug, temaSeleccionado, intensidadSeleccionada, intensidadFondoSeleccionada,
+        temaSeleccionado === TEMA_PERSONALIZADO_ID ? coloresPersonalizados : undefined,
+      );
+      setTemaMensaje(result.success ? "Tema actualizado correctamente." : (result.error ?? "Error al actualizar el tema."));
       if (result.success) {
         temaConfirmadoRef.current = temaSeleccionado;
         intensidadConfirmadaRef.current = intensidadSeleccionada;
         intensidadFondoConfirmadaRef.current = intensidadFondoSeleccionada;
+        coloresConfirmadosRef.current = coloresPersonalizados;
         router.refresh();
         setTimeout(() => setTemaMensaje(""), 3000);
       }
@@ -488,7 +527,76 @@ export default function ConfiguracionClient({
                 <span className="text-xs font-medium text-foreground">{theme.name}</span>
               </button>
             ))}
+
+            {/* "Personalizado" (2026-09-24, a petición de Carlos: "hay que
+                agregar un tema totalmente customizable. Elegir el color de
+                fondo y los colores secundarios") — 11ª tarjeta, swatch en
+                degradado (en vez de un solo color) para distinguirla a
+                simple vista de los 10 temas fijos. */}
+            <button
+              onClick={() => seleccionarTema(TEMA_PERSONALIZADO_ID)}
+              className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                temaSeleccionado === TEMA_PERSONALIZADO_ID ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
+              }`}
+            >
+              <div
+                className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
+                style={{ background: "conic-gradient(from 0deg, #D80073, #F09609, #32CD32, #00A4A4, #001AC0, #D80073)" }}
+              >
+                {temaSeleccionado === TEMA_PERSONALIZADO_ID && <Check className="w-5 h-5 text-white drop-shadow" />}
+              </div>
+              <span className="text-xs font-medium text-foreground">Personalizado</span>
+            </button>
           </div>
+
+          {/* Selector de colores del tema "Personalizado" — solo se muestra
+              cuando ese es el tema elegido. 7 selectores: fondo, ícono/
+              texto y las 5 fichas (respuesta explícita de Carlos: control
+              total sobre los 7, sin calcular nada automático). */}
+          {temaSeleccionado === TEMA_PERSONALIZADO_ID && (
+            <div className="mt-5 border-t border-border pt-5">
+              <p className="text-xs font-medium text-muted-foreground mb-3">Colores del tema personalizado</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-muted-foreground">Fondo / color primario</span>
+                  <input
+                    type="color"
+                    value={coloresPersonalizados.backgroundColor}
+                    onChange={(e) => cambiarColorPersonalizado({ backgroundColor: e.target.value })}
+                    className="w-full h-9 rounded-lg border border-border cursor-pointer bg-card"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-muted-foreground">Ícono / texto de fichas</span>
+                  <input
+                    type="color"
+                    value={coloresPersonalizados.defaultIconColor}
+                    onChange={(e) => cambiarColorPersonalizado({ defaultIconColor: e.target.value })}
+                    className="w-full h-9 rounded-lg border border-border cursor-pointer bg-card"
+                  />
+                </label>
+                {coloresPersonalizados.tileColors.map((hex, i) => (
+                  <label key={i} className="flex flex-col gap-1">
+                    <span className="text-[11px] text-muted-foreground">{ETIQUETAS_FICHAS[i]}</span>
+                    <input
+                      type="color"
+                      value={hex}
+                      onChange={(e) => cambiarFichaPersonalizada(i, e.target.value)}
+                      className="w-full h-9 rounded-lg border border-border cursor-pointer bg-card"
+                    />
+                  </label>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 mt-4 text-xs text-foreground">
+                <input
+                  type="checkbox"
+                  checked={coloresPersonalizados.baseStyle === "Light"}
+                  onChange={(e) => cambiarColorPersonalizado({ baseStyle: e.target.checked ? "Light" : "Dark" })}
+                />
+                Interfaz clara (para fondos claros — igual que &quot;Windows 8 Start&quot;)
+              </label>
+            </div>
+          )}
 
           {/* Intensidad (2026-09-23, a petición de Carlos: "hazlas
               personalizables para subir o bajar la intensidad de los

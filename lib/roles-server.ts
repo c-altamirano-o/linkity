@@ -73,7 +73,14 @@ export async function asegurarRolBase(tenantId: string, roleName: RolBase): Prom
   return prisma.role.upsert({
     where: { tenantId_name: { tenantId, name: roleName } },
     update: {},
-    create: { tenantId, name: roleName, description: ROLES_DESCRIPCION_BASE[roleName], isSystem: true },
+    create: {
+      tenantId, name: roleName, description: ROLES_DESCRIPCION_BASE[roleName], isSystem: true,
+      // 2026-09-24: "Gerente" nace ya pudiendo ver montos de Caja (acceso a
+      // todo el negocio, ver su descripción arriba) — Cajero/Técnico nacen
+      // sin este permiso, mismo criterio que el resto de negocios ya
+      // existentes (ver Role.verMontosCaja, schema.prisma).
+      verMontosCaja: roleName === "Gerente",
+    },
     select: { id: true },
   });
 }
@@ -215,6 +222,7 @@ export async function listarRolesTenant(tenantId: string): Promise<RolTenantUI[]
     isSystem: r.isSystem,
     modulosPermitidos: modulosPorRol[i],
     verTodoTaller: r.verTodoTaller,
+    verMontosCaja: r.verMontosCaja,
     cantidadEmpleados: r._count.staff,
   }));
 }
@@ -233,6 +241,22 @@ export async function verTodoTallerParaRolPorNombre(tenantId: string, roleName: 
 }
 
 /**
+ * true si el ROL (por tenant+nombre) tiene marcado "puede ver montos y
+ * totales de Caja" (Role.verMontosCaja — 2026-09-24, a petición de Carlos,
+ * ver el comentario largo en schema.prisma). Mismo criterio de resolución
+ * por nombre que verTodoTallerParaRolPorNombre — usado por
+ * app/(tenant)/[tenant]/caja/page.tsx para decidir si redacta o no los
+ * montos que le manda a CajaClient.tsx para una sesión de PIN. Un
+ * administrador con cuenta real NUNCA pasa por aquí — ve montos siempre,
+ * sin excepción (ver caja/page.tsx).
+ */
+export async function verMontosCajaParaRolPorNombre(tenantId: string, roleName: string | null | undefined): Promise<boolean> {
+  if (!roleName) return false;
+  const role = await prisma.role.findUnique({ where: { tenantId_name: { tenantId, name: roleName } }, select: { verMontosCaja: true } });
+  return role?.verMontosCaja ?? false;
+}
+
+/**
  * Reemplaza por completo el conjunto de módulos permitidos de un rol (borra
  * y vuelve a insertar) — siempre une "dashboard" para evitar un rol sin
  * ningún módulo permitido (ver comentario del archivo). `verTodoTaller`
@@ -240,9 +264,12 @@ export async function verTodoTallerParaRolPorNombre(tenantId: string, roleName: 
  * Role.verTodoTaller ("Jefe de técnicos" ve todo el taller sin editar, ver
  * el comentario largo en schema.prisma); si el rol ya no tiene "taller"
  * entre sus módulos, se fuerza a false — no tiene sentido dejarlo prendido
- * para un rol que ni siquiera entra a esa pantalla.
+ * para un rol que ni siquiera entra a esa pantalla. `verMontosCaja`
+ * (2026-09-24, mismo criterio, opcional) actualiza Role.verMontosCaja
+ * ("supervisor+": ve montos y totales de Caja); igual se fuerza a false si
+ * el rol ya no tiene "caja" entre sus módulos.
  */
-export async function guardarPermisosDeRol(roleId: string, modulos: ModuloKey[], verTodoTaller?: boolean): Promise<void> {
+export async function guardarPermisosDeRol(roleId: string, modulos: ModuloKey[], verTodoTaller?: boolean, verMontosCaja?: boolean): Promise<void> {
   const mapaPermisos = await asegurarCatalogoPermisos();
   const conDashboard = new Set<ModuloKey>(modulos);
   // 2026-09-21: misma excepción que modulosPermitidosParaRol (ver ese
@@ -260,7 +287,10 @@ export async function guardarPermisosDeRol(roleId: string, modulos: ModuloKey[],
     }),
     prisma.role.update({
       where: { id: roleId },
-      data: { verTodoTaller: conDashboard.has("taller") ? (verTodoTaller ?? undefined) : false },
+      data: {
+        verTodoTaller: conDashboard.has("taller") ? (verTodoTaller ?? undefined) : false,
+        verMontosCaja: conDashboard.has("caja") ? (verMontosCaja ?? undefined) : false,
+      },
     }),
   ]);
 }

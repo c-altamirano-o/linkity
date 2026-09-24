@@ -146,5 +146,9 @@ export interface RolTenantUI {
   // solo tiene efecto real cuando modulosPermitidos incluye "taller"; para
   // cualquier otro rol es un valor inerte.
   verTodoTaller: boolean;
+  // Ver el comentario largo junto a Role.verMontosCaja (schema.prisma) —
+  // solo tiene efecto real cuando modulosPermitidos incluye "caja"; para
+  // cualquier otro rol es un valor inerte.
+  verMontosCaja: boolean;
   cantidadEmpleados: number;
 }

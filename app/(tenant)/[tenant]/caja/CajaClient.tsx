@@ -20,6 +20,12 @@ interface CajaClientProps {
   branchActual: string;
   tenantSlug: string;
   tenantName: string;
+  // 2026-09-24, a petición de Carlos (seguridad anti-fraude — ver el
+  // comentario largo en Role.verMontosCaja, schema.prisma): false para un
+  // empleado de PIN sin el permiso "supervisor" — `data` ya llega redactada
+  // desde el servidor (ver redactarMontosCaja en lib/caja-data.ts), este
+  // flag es lo que decide qué tanto de la UI se oculta/reemplaza.
+  puedeVerMontos: boolean;
 }
 
 const tipoBadge: Record<string, string> = {
@@ -77,9 +83,16 @@ function finDelDia(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 }
 
-export default function CajaClient({ data, branches, branchActual, tenantSlug, tenantName }: CajaClientProps) {
+export default function CajaClient({ data, branches, branchActual, tenantSlug, tenantName, puedeVerMontos }: CajaClientProps) {
   const router = useRouter();
   const { sesionActual, movimientos } = data;
+
+  // Sustituye cualquier monto por un candado cuando este empleado no tiene
+  // nivel supervisor — 2026-09-24, a petición de Carlos. Los valores que
+  // recibe ya vienen en 0 desde el servidor en ese caso (ver
+  // redactarMontosCaja), así que esto es solo la parte de presentación:
+  // nunca mostrar "$0" como si fuera el monto real.
+  const verMonto = (n: number) => (puedeVerMontos ? formatMXN(n) : "🔒 Oculto");
 
   const hoy = new Date();
   const hoyStr = hoy.toISOString().slice(0, 10);
@@ -700,10 +713,13 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
   return (
     <div className="flex flex-col h-full">
       {/* ── Tabs móvil ─────────────────────────────────────── */}
+      {/* "Detalle de Ventas" no se ofrece como pestaña si este empleado no
+          tiene nivel supervisor (2026-09-24) — ese panel es justo el que
+          muestra montos y totales que Carlos pidió ocultar. */}
       <div className="md:hidden flex border-b border-border bg-card flex-shrink-0">
         {[
           { key: "caja", label: "💰 Control de Caja" },
-          { key: "detalle", label: "📋 Detalle de Ventas" },
+          ...(puedeVerMontos ? [{ key: "detalle", label: "📋 Detalle de Ventas" }] : []),
         ].map((tab) => (
           <button
             key={tab.key}
@@ -761,16 +777,16 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
               <div className="mx-3 my-3 bg-primary rounded-xl p-4">
                 <p className="text-[11.5px] text-primary-foreground/60 mb-1">Efectivo actual en caja</p>
                 <p className="text-[26px] font-bold text-primary-foreground leading-none mb-1">
-                  {formatMXN(sesionActual.efectivoEsperado)}
+                  {verMonto(sesionActual.efectivoEsperado)}
                 </p>
                 <p className="text-[11.5px] text-primary-foreground/50">
-                  Apertura: {formatMXN(sesionActual.aperturaMonto)} · {sesionActual.abiertaPor}
+                  Apertura: {verMonto(sesionActual.aperturaMonto)} · {sesionActual.abiertaPor}
                 </p>
                 <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-primary-foreground/15">
                   {[
-                    { label: "Ventas", value: formatMXN(sesionActual.totalVentasDia) },
-                    { label: "Egresos", value: formatMXN(sesionActual.egresosManual) },
-                    { label: "Esperado", value: formatMXN(sesionActual.efectivoEsperado) },
+                    { label: "Ventas", value: verMonto(sesionActual.totalVentasDia) },
+                    { label: "Egresos", value: verMonto(sesionActual.egresosManual) },
+                    { label: "Esperado", value: verMonto(sesionActual.efectivoEsperado) },
                   ].map((i) => (
                     <div key={i.label}>
                       <p className="text-[10.5px] text-primary-foreground/50 mb-0.5">{i.label}</p>
@@ -784,12 +800,12 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                 <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-2">RESUMEN DE LA SESIÓN</p>
                 <div className="space-y-1">
                   {[
-                    { label: "Apertura", value: formatMXN(sesionActual.aperturaMonto), dot: "bg-emerald-500" },
-                    { label: "Ventas en efectivo", value: formatMXN(sesionActual.ventasEfectivo), dot: "bg-primary" },
-                    { label: "Otros ingresos", value: formatMXN(sesionActual.ingresosManual), dot: "bg-cyan-500" },
+                    { label: "Apertura", value: verMonto(sesionActual.aperturaMonto), dot: "bg-emerald-500" },
+                    { label: "Ventas en efectivo", value: verMonto(sesionActual.ventasEfectivo), dot: "bg-primary" },
+                    { label: "Otros ingresos", value: verMonto(sesionActual.ingresosManual), dot: "bg-cyan-500" },
                     {
                       label: "Egresos / Gastos",
-                      value: `-${formatMXN(sesionActual.egresosManual)}`,
+                      value: puedeVerMontos ? `-${formatMXN(sesionActual.egresosManual)}` : verMonto(0),
                       dot: "bg-red-500",
                       neg: true,
                     },
@@ -805,7 +821,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                   <div className="h-px bg-border my-1" />
                   <div className="flex items-center justify-between py-1.5">
                     <span className="text-xs font-semibold text-foreground">Total esperado</span>
-                    <span className="text-sm font-bold text-primary">{formatMXN(sesionActual.efectivoEsperado)}</span>
+                    <span className="text-sm font-bold text-primary">{verMonto(sesionActual.efectivoEsperado)}</span>
                   </div>
                 </div>
               </div>
@@ -850,12 +866,29 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
         </div>
 
         {/* ── Panel derecho (Detalle) ──────────────────────── */}
+        {/* 2026-09-24, a petición de Carlos: este panel completo (KPIs,
+            tabla de movimientos, exportar) es justo donde vive "el total
+            de la venta" que un empleado sin nivel supervisor no debe
+            conocer — en vez de tapar cada cifra una por una aquí, se
+            reemplaza TODO el panel por un aviso. Los datos reales ni
+            siquiera llegan hasta acá (movimientos ya viene vacío desde el
+            servidor, ver redactarMontosCaja), esto es solo la parte visual. */}
         <div
           className={`
           ${tabMovil === "detalle" ? "flex" : "hidden"} md:flex
           flex-1 flex-col overflow-hidden
         `}
         >
+          {!puedeVerMontos ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-2">
+              <Lock className="w-6 h-6 text-muted-foreground" />
+              <p className="text-sm font-medium text-foreground">Sección restringida</p>
+              <p className="text-xs text-muted-foreground max-w-xs">
+                Los montos y totales de Caja solo los puede ver un supervisor o el administrador del negocio.
+              </p>
+            </div>
+          ) : (
+          <>
           {/* Topbar filtros */}
           <div className="bg-card border-b border-border px-3 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3 flex-wrap">
             <span className="text-sm font-medium text-foreground whitespace-nowrap hidden sm:block">Detalle de movimientos</span>
@@ -1078,6 +1111,8 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
               </tbody>
             </table>
           </div>
+          </>
+          )}
         </div>
       </div>
 
@@ -1201,9 +1236,17 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
         >
           <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-sm font-semibold text-foreground mb-1">Cerrar caja</h2>
-            <p className="text-[12.5px] text-muted-foreground mb-4">
-              Efectivo esperado: <span className="font-semibold text-foreground">{formatMXN(sesionActual.efectivoEsperado)}</span>
-            </p>
+            {/* 2026-09-24, a petición de Carlos (conteo "a ciegas" — ver el
+                comentario largo en Role.verMontosCaja, schema.prisma): un
+                empleado sin nivel supervisor NUNCA ve "Efectivo esperado"
+                antes de contar, para que cuente el efectivo físico de
+                verdad en vez de solo escribir lo que ya vio en pantalla —
+                un faltante real así sí se nota al revisarlo un supervisor. */}
+            {puedeVerMontos && (
+              <p className="text-[12.5px] text-muted-foreground mb-4">
+                Efectivo esperado: <span className="font-semibold text-foreground">{formatMXN(sesionActual.efectivoEsperado)}</span>
+              </p>
+            )}
             <div className="space-y-3 mb-4">
               <div>
                 <label className="block text-[12.5px] font-medium text-muted-foreground mb-1">Efectivo contado</label>
@@ -1226,7 +1269,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                   className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
               </div>
-              {efectivoContado && Number.isFinite(parseFloat(efectivoContado)) && (
+              {puedeVerMontos && efectivoContado && Number.isFinite(parseFloat(efectivoContado)) && (
                 <p
                   className={`text-[12.5px] font-medium ${
                     parseFloat(efectivoContado) - sesionActual.efectivoEsperado === 0

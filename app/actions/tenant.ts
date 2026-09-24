@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { resolverActor } from "@/lib/actor";
+import { parseColoresPersonalizados, TEMA_PERSONALIZADO_ID } from "@/lib/theme-presets";
 
 // intensity: 0–200 (100 = paleta original, ver INTENSIDAD_DEFAULT en
 // lib/theme-presets.ts). Se guarda junto con el preset porque ambos valores
@@ -15,11 +16,20 @@ import { resolverActor } from "@/lib/actor";
 // construirPresetWindowsPhone): opcional para no romper ninguna llamada
 // vieja — si se omite, se guarda igual a `intensity` (mismo comportamiento
 // de antes de que existiera este control).
+//
+// customColors (2026-09-24, tema "Personalizado"): solo se guarda cuando
+// preset === TEMA_PERSONALIZADO_ID Y logra pasar parseColoresPersonalizados
+// (nunca se confía en lo que manda el cliente para un campo Json). Si el
+// tema elegido NO es el personalizado, este campo simplemente no se toca
+// (undefined = Prisma lo deja igual) — así un negocio que configuró sus
+// colores, cambió a otro tema y luego regresa a "Personalizado" no pierde
+// lo que ya había elegido.
 export async function updateThemePreset(
   tenantSlug: string,
   preset: any,
   intensity: number,
   intensityFondo?: number,
+  customColors?: unknown,
 ) {
   const intensidadValida = Number.isFinite(intensity)
     ? Math.max(0, Math.min(200, Math.round(intensity)))
@@ -28,6 +38,11 @@ export async function updateThemePreset(
     ? Math.max(0, Math.min(200, Math.round(intensityFondo as number)))
     : intensidadValida;
 
+  if (preset === TEMA_PERSONALIZADO_ID && parseColoresPersonalizados(customColors) === null) {
+    return { success: false, error: "Los colores del tema personalizado no son válidos" };
+  }
+  const coloresValidados = preset === TEMA_PERSONALIZADO_ID ? parseColoresPersonalizados(customColors) : undefined;
+
   try {
     await prisma.tenant.update({
       where: { slug: tenantSlug },
@@ -35,6 +50,7 @@ export async function updateThemePreset(
         themePreset: preset,
         themeIntensity: intensidadValida,
         themeIntensityFondo: intensidadFondoValida,
+        ...(coloresValidados !== undefined ? { themeCustomColors: coloresValidados as any } : {}),
       },
     });
 

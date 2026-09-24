@@ -14,7 +14,7 @@ export default async function ConfiguracionPage({
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
     select: {
-      id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, businessType: true, logo: true, weekStartDay: true, phone: true,
+      id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, logo: true, weekStartDay: true, phone: true,
       cobrarEnDevolucion: true,
     },
   });
@@ -42,6 +42,7 @@ export default async function ConfiguracionPage({
       themePresetInicial={tenant.themePreset}
       themeIntensityInicial={tenant.themeIntensity}
       themeIntensityFondoInicial={tenant.themeIntensityFondo}
+      themeCustomColorsInicial={tenant.themeCustomColors}
       businessTypeInicial={tenant.businessType}
       modulos={modulosPersonalizables}
       recomendadosOff={recomendadosOff}

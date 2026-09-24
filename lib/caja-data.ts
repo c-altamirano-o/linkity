@@ -55,6 +55,42 @@ export interface CajaData {
   movimientos: MovimientoCaja[];
 }
 
+/**
+ * Redacta los montos de una CajaData ya calculada — 2026-09-24, a petición
+ * de Carlos ("revisando el módulo Caja por seguridad y evitar fraudes o
+ * posibles robos... ni empleado de mostrador, cajera o técnico, debe
+ * conocer el monto de las ventas del día"). Usado por caja/page.tsx cuando
+ * el rol del empleado de PIN no tiene Role.verMontosCaja — a propósito NO
+ * es un simple "ocultar en la UI": esta función corre en el servidor, así
+ * que los montos reales nunca viajan al navegador de ese empleado (ni en
+ * el HTML ni en la respuesta de un Server Component), no solo se esconden
+ * con CSS. `movimientos` se vacía por completo (el panel de Detalle —
+ * KPIs, tabla, exportar — no se le muestra a este nivel, así que tampoco
+ * hace falta mandarle 400 días de ventas/movimientos reales). Los campos
+ * NO monetarios de sesionActual (id, branchId, abiertaPor, abiertaEn) se
+ * conservan — siguen operando caja (abrir/cerrar/registrar movimiento)
+ * con normalidad, ver CajaClient.tsx.
+ */
+export function redactarMontosCaja(data: CajaData): CajaData {
+  return {
+    sesionActual: data.sesionActual
+      ? {
+          id: data.sesionActual.id,
+          branchId: data.sesionActual.branchId,
+          aperturaMonto: 0,
+          abiertaPor: data.sesionActual.abiertaPor,
+          abiertaEn: data.sesionActual.abiertaEn,
+          ventasEfectivo: 0,
+          totalVentasDia: 0,
+          ingresosManual: 0,
+          egresosManual: 0,
+          efectivoEsperado: 0,
+        }
+      : null,
+    movimientos: [],
+  };
+}
+
 const METODO_LABEL: Record<PaymentMethod, string> = {
   CASH: "Efectivo",
   CARD: "Tarjeta",

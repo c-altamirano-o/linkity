@@ -259,7 +259,89 @@ export function construirPresetWindowsPhone(
   intensidadFicha: number = INTENSIDAD_DEFAULT,
   intensidadFondo: number = intensidadFicha,
 ): Record<string, string> {
-  const tema = WINDOWS_THEMES[id];
+  return construirPresetDesdeDef(WINDOWS_THEMES[id], intensidadFicha, intensidadFondo);
+}
+
+// 2026-09-24, a petición de Carlos: forma que necesita un tema "Personalizado"
+// (ver CUSTOM_THEME_ID más abajo) — mismas 4 piezas que un WindowsThemeDef
+// menos "name" (el personalizado no tiene nombre fijo, es "Personalizado" a
+// secas en la UI). Vive aparte de WindowsThemeDef (en vez de reusarlo con
+// "name" opcional) para que construirPresetPersonalizado nunca reciba por
+// accidente uno de los 10 temas fijos con su name intacto.
+export interface ColoresPersonalizados {
+  baseStyle: "Dark" | "Light";
+  backgroundColor: string;
+  defaultIconColor: string;
+  tileColors: string[];
+}
+
+// Validación defensiva de lo que viene de Tenant.themeCustomColors (columna
+// Json — Prisma la tipa como `unknown`/`JsonValue`, nunca se puede confiar en
+// su forma sin revisarla): un negocio que nunca ha usado "Personalizado"
+// tiene este campo en null, y un dato corrupto/manual en la BD no debe
+// tumbar el layout — en cualquiera de esos casos resolverPresetTenant cae al
+// tema por defecto en vez de lanzar una excepción a medio render.
+const HEX_VALIDO = /^#[0-9a-fA-F]{6}$/;
+export function parseColoresPersonalizados(raw: unknown): ColoresPersonalizados | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (obj.baseStyle !== "Dark" && obj.baseStyle !== "Light") return null;
+  if (typeof obj.backgroundColor !== "string" || !HEX_VALIDO.test(obj.backgroundColor)) return null;
+  if (typeof obj.defaultIconColor !== "string" || !HEX_VALIDO.test(obj.defaultIconColor)) return null;
+  if (!Array.isArray(obj.tileColors) || obj.tileColors.length !== CANTIDAD_CHIPS_CATEGORIA) return null;
+  if (!obj.tileColors.every((c) => typeof c === "string" && HEX_VALIDO.test(c))) return null;
+  return {
+    baseStyle: obj.baseStyle,
+    backgroundColor: obj.backgroundColor,
+    defaultIconColor: obj.defaultIconColor,
+    tileColors: obj.tileColors as string[],
+  };
+}
+
+// Id especial de tema (no vive en WindowsThemeId/WINDOWS_THEMES a propósito
+// — esos son los 10 fijos que Carlos definió; "Personalizado" no tiene una
+// entrada fija que buscar en ese diccionario, sus colores vienen de
+// Tenant.themeCustomColors en vez de WINDOWS_THEMES). Punto de partida al
+// elegir "Personalizado" por primera vez (mismos hex que LUMIA_COBALT, el
+// default general del sistema) — el negocio los cambia de ahí en adelante
+// con los 7 selectores de color de Configuración.
+export const TEMA_PERSONALIZADO_ID = "CUSTOM";
+export const COLORES_PERSONALIZADOS_DEFAULT: ColoresPersonalizados = {
+  baseStyle: "Dark",
+  backgroundColor: "#004E8A",
+  defaultIconColor: "#FFFFFF",
+  tileColors: ["#00A4A4", "#32CD32", "#D80073", "#F09609", "#001AC0"],
+};
+
+/**
+ * Misma derivación que construirPresetWindowsPhone, pero a partir de los
+ * colores que el propio negocio eligió (Tenant.themeCustomColors) en vez de
+ * uno de los 10 temas fijos — a petición de Carlos: "hay que agregar un
+ * tema totalmente customizable. Elegir el color de fondo y los colores
+ * secundarios". Los 2 sliders de intensidad (fichas/fondo) siguen
+ * aplicando igual que en cualquier otro tema (respuesta explícita de
+ * Carlos: si el negocio elige un fondo blanco o gris, el slider de fondo
+ * seguirá sin efecto visible sobre ÉL — mismo comportamiento que
+ * "Windows 8 Start" — pero sí tiene efecto en cuanto elija un color con
+ * algo de saturación).
+ */
+export function construirPresetPersonalizado(
+  colores: ColoresPersonalizados,
+  intensidadFicha: number = INTENSIDAD_DEFAULT,
+  intensidadFondo: number = intensidadFicha,
+): Record<string, string> {
+  return construirPresetDesdeDef(
+    { name: "Personalizado", baseStyle: colores.baseStyle, backgroundColor: colores.backgroundColor, defaultIconColor: colores.defaultIconColor, tileColors: colores.tileColors },
+    intensidadFicha,
+    intensidadFondo,
+  );
+}
+
+function construirPresetDesdeDef(
+  tema: WindowsThemeDef,
+  intensidadFicha: number = INTENSIDAD_DEFAULT,
+  intensidadFondo: number = intensidadFicha,
+): Record<string, string> {
   const factorFicha = Math.max(INTENSIDAD_MIN, Math.min(INTENSIDAD_MAX, intensidadFicha)) / 100;
   const factorFondo = Math.max(INTENSIDAD_MIN, Math.min(INTENSIDAD_MAX, intensidadFondo)) / 100;
 
@@ -474,7 +556,7 @@ export const THEME_PRESETS = {
 } as const;
 
 export type LegacyThemePresetId = keyof typeof THEME_PRESETS;
-export type ThemePresetId = WindowsThemeId | LegacyThemePresetId;
+export type ThemePresetId = WindowsThemeId | LegacyThemePresetId | typeof TEMA_PERSONALIZADO_ID;
 
 /**
  * Punto de entrada ÚNICO para resolver el tema real de un tenant — lo usa
@@ -488,14 +570,27 @@ export type ThemePresetId = WindowsThemeId | LegacyThemePresetId;
  * `themeIntensityFondo` es opcional (2026-09-24): si se omite, toma el
  * valor de `themeIntensity` — así una llamada vieja que solo mandaba la
  * intensidad de fichas sigue viéndose exactamente igual que antes.
+ *
+ * `themeCustomColors` (2026-09-24, tema "Personalizado"): solo se usa
+ * cuando themePreset === TEMA_PERSONALIZADO_ID — puede venir tal cual del
+ * campo Json de Prisma (sin validar) o ya como ColoresPersonalizados desde
+ * la vista previa en vivo de ConfiguracionClient.tsx; parseColoresPersonalizados
+ * hace de filtro en ambos casos. Si viene null/inválido (negocio que nunca
+ * configuró sus colores, o un dato corrupto) cae a
+ * COLORES_PERSONALIZADOS_DEFAULT en vez de tronar a medio render.
  */
 export function resolverPresetTenant(
   themePreset: string,
   themeIntensity: number | null | undefined,
   themeIntensityFondo?: number | null,
+  themeCustomColors?: unknown,
 ): Record<string, string> {
   const intensidadFicha = themeIntensity ?? INTENSIDAD_DEFAULT;
   const intensidadFondo = themeIntensityFondo ?? intensidadFicha;
+  if (themePreset === TEMA_PERSONALIZADO_ID) {
+    const colores = parseColoresPersonalizados(themeCustomColors) ?? COLORES_PERSONALIZADOS_DEFAULT;
+    return construirPresetPersonalizado(colores, intensidadFicha, intensidadFondo);
+  }
   if (themePreset in WINDOWS_THEMES) {
     return construirPresetWindowsPhone(themePreset as WindowsThemeId, intensidadFicha, intensidadFondo);
   }

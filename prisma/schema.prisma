@@ -46,6 +46,23 @@ model Tenant {
   // UI en vez de 5%. Default 100 = ningún negocio existente cambia de
   // apariencia al agregar esta columna.
   themeIntensityFondo Int  @default(100)
+
+  // Colores del tema "Personalizado" (2026-09-24, a petición de Carlos: "hay
+  // que agregar un tema totalmente customizable. Elegir el color de fondo y
+  // los colores secundarios" — reportó que el slider de intensidad de fondo
+  // no hace nada visible en temas de fondo blanco/gris como "Windows 8
+  // Start", porque escalar la saturación de un color sin saturación (blanco,
+  // negro, gris) no cambia nada; un selector de color de verdad no tiene ese
+  // problema). Solo tiene valor cuando themePreset = CUSTOM (ver el enum
+  // abajo) — Json en vez de columnas sueltas por color para no tener que
+  // agregar una migración cada vez que se ajusta la forma (ver
+  // ColoresPersonalizados en lib/theme-presets.ts, que es quien de verdad
+  // valida su forma antes de usarlo — nunca se confía en el contenido de un
+  // campo Json tal cual). null = el negocio nunca ha configurado sus propios
+  // colores (cae a COLORES_PERSONALIZADOS_DEFAULT si de todos modos elige
+  // CUSTOM). Los 2 sliders de intensidad de arriba siguen aplicando sobre
+  // estos colores igual que sobre cualquier otro tema.
+  themeCustomColors Json?
   isActive     Boolean     @default(true)
 
   // Día en que abre la "semana laboral" de ESTE negocio (2026-09-18, a
@@ -173,6 +190,13 @@ enum ThemePreset {
   LAWN_LIME
   DEEP_PLUM
   CRIMSON_START
+
+  // "Personalizado" (2026-09-24, a petición de Carlos): en vez de una
+  // paleta fija de WINDOWS_THEMES, el negocio elige sus propios 7 colores
+  // (fondo, ícono/texto, 5 fichas), guardados en Tenant.themeCustomColors —
+  // ver ColoresPersonalizados/construirPresetPersonalizado en
+  // lib/theme-presets.ts.
+  CUSTOM
 }
 
 model Branch {
@@ -343,6 +367,25 @@ model Role {
   // ("taller") y la misma ruta — la única diferencia es CUÁNTO ve dentro de
   // esa misma pantalla de solo lectura, no A QUÉ pantalla puede entrar.
   verTodoTaller Boolean @default(false)
+
+  // 2026-09-24, a petición de Carlos ("revisar la lógica del módulo Caja
+  // por seguridad y evitar fraudes o posibles robos... ni empleado de
+  // mostrador, cajera o técnico, debe conocer el monto de las ventas del
+  // día"): un rol solo ve los montos/totales de Caja (efectivo esperado,
+  // ventas del día, el panel de Detalle de movimientos, exportar reportes)
+  // si tiene esto en true — sin él, puede seguir abriendo/cerrando caja y
+  // registrando movimientos (conteo "a ciegas" al cerrar: cuenta el
+  // efectivo físico sin ver antes cuánto "debería" haber, así un faltante
+  // real sí se nota en vez de poder ajustarse para cuadrar con lo que ya
+  // vio en pantalla), solo no ve las cifras agregadas. Mismo patrón que
+  // verTodoTaller: un booleano de rol aparte, no un módulo más — "caja"
+  // sigue siendo el mismo módulo para ambos niveles, la diferencia es
+  // cuánto se le muestra dentro de esa misma pantalla. Default false — al
+  // migrar, todo rol existente queda SIN ver montos salvo el rol semilla
+  // "Gerente" (backfill aparte, ver prisma/migrar-permiso-montos-caja.ts);
+  // cada negocio decide desde Personal → Roles y permisos a qué otros
+  // roles (ej. "Encargada", "Supervisor") se lo vuelve a prender.
+  verMontosCaja Boolean @default(false)
 
   userRoles   UserRole[]
   permissions RolePermission[]

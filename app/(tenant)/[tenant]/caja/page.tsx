@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
-import { getCajaData } from "@/lib/caja-data";
+import { getCajaData, redactarMontosCaja } from "@/lib/caja-data";
+import { verMontosCajaParaRolPorNombre } from "@/lib/roles-server";
 import CajaClient from "./CajaClient";
 
 export default async function CajaPage({
@@ -71,7 +72,20 @@ export default async function CajaPage({
     );
   }
 
-  const data = await getCajaData(tenant.id, branchActual);
+  // 2026-09-24, a petición de Carlos (seguridad anti-fraude, ver el
+  // comentario largo en Role.verMontosCaja, schema.prisma): un
+  // administrador con cuenta real ve montos siempre, sin excepción — un
+  // empleado de PIN solo si su rol tiene marcado "puede ver montos de
+  // Caja". Se decide y se redacta AQUÍ, en el servidor, antes de que
+  // CajaData llegue al cliente — CajaClient.tsx nunca recibe los montos
+  // reales si este empleado no debe verlos, no es un simple "ocultar en
+  // pantalla".
+  const puedeVerMontos = sucursalDeEmpleado
+    ? await verMontosCajaParaRolPorNombre(tenant.id, sesionPersonal!.roleName)
+    : true;
+
+  const dataCompleta = await getCajaData(tenant.id, branchActual);
+  const data = puedeVerMontos ? dataCompleta : redactarMontosCaja(dataCompleta);
 
   return (
     <CajaClient
@@ -80,6 +94,7 @@ export default async function CajaPage({
       branchActual={branchActual}
       tenantSlug={tenantSlug}
       tenantName={tenant.name}
+      puedeVerMontos={puedeVerMontos}
     />
   );
 }
