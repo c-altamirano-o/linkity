@@ -42,9 +42,21 @@ const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  // Role no tiene una relación `tenant` navegable (solo el campo suelto
+  // tenantId, ver prisma/schema.prisma) — el build de Vercel SÍ genera el
+  // Prisma Client real y typecheckea este script (vive bajo prisma/, pero
+  // `next build` igual corre `tsc` sobre TODO **/*.ts del proyecto), así que
+  // el `select: { tenant: {...} }` que tenía antes rompió el deploy
+  // (2026-09-24: "Object literal may only specify known properties... Did
+  // you mean to write 'tenantId'?"). En este entorno de nube no se pudo
+  // detectar antes porque aquí `prisma generate` falla (proxy bloquea
+  // binaries.prisma.sh) y por eso CUALQUIER código con tipos de Prisma ya
+  // marcaba error de por sí — hacía falta el build real de Vercel para
+  // notarlo. Corregido con una segunda consulta a Tenant en vez de una
+  // relación que no existe.
   const roles = await prisma.role.findMany({
     where: { name: "Gerente", isSystem: true, verMontosCaja: false },
-    select: { id: true, tenantId: true, tenant: { select: { slug: true, name: true } } },
+    select: { id: true, tenantId: true },
   });
 
   if (roles.length === 0) {
@@ -52,9 +64,16 @@ async function main() {
     return;
   }
 
+  const tenants = await prisma.tenant.findMany({
+    where: { id: { in: roles.map((r) => r.tenantId) } },
+    select: { id: true, slug: true, name: true },
+  });
+  const tenantPorId = new Map(tenants.map((t) => [t.id, t]));
+
   for (const rol of roles) {
     await prisma.role.update({ where: { id: rol.id }, data: { verMontosCaja: true } });
-    console.log(`✅ ${rol.tenant.name} (${rol.tenant.slug}): rol "Gerente" ahora puede ver montos de Caja.`);
+    const t = tenantPorId.get(rol.tenantId);
+    console.log(`✅ ${t?.name ?? rol.tenantId} (${t?.slug ?? "?"}): rol "Gerente" ahora puede ver montos de Caja.`);
   }
 
   console.log(`\nListo — ${roles.length} rol(es) "Gerente" migrado(s).`);
