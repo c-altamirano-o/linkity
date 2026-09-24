@@ -88,26 +88,6 @@ const HISTORIAL_ICONOS: Record<EstadoReparacion, { icon: React.ElementType; bg: 
   SHOP_RETURN: { icon: ArrowRight, bg: "bg-red-50", color: "text-red-600" },
 };
 
-const flujoSteps = [
-  { key: "recibido", label: "Recibido", icon: Package },
-  { key: "taller", label: "Taller", icon: Wrench },
-  { key: "tienda", label: "Tienda", icon: Store },
-  { key: "entregado", label: "Entregado", icon: Check },
-];
-
-function getStepIndex(estado: EstadoReparacion) {
-  if (estado === "RECEIVED") return 0;
-  if (estado === "DIAGNOSING" || estado === "WAITING_PARTS" || estado === "IN_REPAIR") return 1;
-  if (estado === "WORKSHOP_READY" || estado === "WORKSHOP_RETURN") return 2;
-  if (estado === "SHOP_READY" || estado === "SHOP_RETURN") return 3;
-  if (estado === "DELIVERED" || estado === "READY") return 4;
-  return 0;
-}
-
-function esDevolucion(estado: EstadoReparacion) {
-  return estado === "WORKSHOP_RETURN" || estado === "SHOP_RETURN";
-}
-
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
@@ -365,7 +345,15 @@ function VistaTienda({
                   <p className="text-[11.5px] text-muted-foreground truncate">{rep.modelo} · {rep.falla}</p>
                 </div>
                 <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${ESTADO_BADGE[rep.estado]}`}>
-                  {rep.estado === "SHOP_READY" ? "Listo" : rep.estado === "SHOP_RETURN" ? "Devolución" : "Entregado"}
+                  {/* 2026-09-24, corrigiendo el mismo bug (otra línea de
+                      código, misma categoría) que la franja "Equipo listo
+                      para entregar" de arriba: este ternario solo cubría
+                      SHOP_READY/SHOP_RETURN y mandaba CUALQUIER otro estado
+                      (incluyendo un folio recién creado en RECEIVED) a la
+                      etiqueta "Entregado". Se reemplaza por el mismo
+                      diccionario de labels que ya usa el Historial más abajo
+                      (repair.status.*), que sí cubre los 11 estados. */}
+                  {label(labels, `repair.status.${rep.estado}`)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
