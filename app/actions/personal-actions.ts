@@ -242,34 +242,52 @@ export async function editarEmpleadoAction(
     const errorRol = await validarRolDeTenant(tenant.id, datos.roleId);
     if (errorRol) return { ok: false, error: errorRol };
 
-    await db.staff.update({
-      where: { id: staffId },
-      data: {
-        branchId: datos.branchId,
-        name: datos.name.trim(),
-        phone: datos.phone?.trim() || null,
-        phoneCountryCode: datos.phoneCountryCode || PAIS_TELEFONO_DEFAULT,
-        position: datos.position?.trim() || null,
-        roleId: datos.roleId,
-        paymentScheme: datos.paymentScheme,
-        baseSalary: datos.baseSalary,
-        commissionRate: datos.commissionRate,
-        commissionBase: datos.commissionBase,
-        paymentFrequency: datos.paymentFrequency,
-        commissionFrequency: datos.commissionFrequency,
-        pieceRate: datos.pieceRate,
-        teamCommissionRate: datos.teamCommissionRate,
-        teamCommissionBase: datos.teamCommissionBase,
-        staffPaymentMethod: datos.staffPaymentMethod,
-        clabe: datos.staffPaymentMethod === StaffPaymentMethod.TRANSFERENCIA ? (datos.clabe ?? "").replace(/\D/g, "") : datos.clabe?.trim() || null,
-      },
-    });
+    const datosStaff = {
+      branchId: datos.branchId,
+      name: datos.name.trim(),
+      phone: datos.phone?.trim() || null,
+      phoneCountryCode: datos.phoneCountryCode || PAIS_TELEFONO_DEFAULT,
+      position: datos.position?.trim() || null,
+      roleId: datos.roleId,
+      paymentScheme: datos.paymentScheme,
+      baseSalary: datos.baseSalary,
+      commissionRate: datos.commissionRate,
+      commissionBase: datos.commissionBase,
+      paymentFrequency: datos.paymentFrequency,
+      commissionFrequency: datos.commissionFrequency,
+      pieceRate: datos.pieceRate,
+      teamCommissionRate: datos.teamCommissionRate,
+      teamCommissionBase: datos.teamCommissionBase,
+      staffPaymentMethod: datos.staffPaymentMethod,
+      clabe: datos.staffPaymentMethod === StaffPaymentMethod.TRANSFERENCIA ? (datos.clabe ?? "").replace(/\D/g, "") : datos.clabe?.trim() || null,
+    };
 
-    // Mantiene el nombre de la cuenta de atribución oculta sincronizado —
-    // no se muestra en ningún lado, pero evita que quede con un nombre
-    // viejo si algún reporte futuro llega a exponerlo.
     if (existente.userId) {
+      await db.staff.update({ where: { id: staffId }, data: datosStaff });
+
+      // Mantiene el nombre de la cuenta de atribución oculta sincronizado —
+      // no se muestra en ningún lado, pero evita que quede con un nombre
+      // viejo si algún reporte futuro llega a exponerlo.
       await db.user.update({ where: { id: existente.userId }, data: { name: datos.name.trim() } }).catch(() => {});
+    } else {
+      // Empleado creado ANTES de que existieran los módulos de Roles (M4) y
+      // PIN (M11) — nunca tuvo cuenta de atribución oculta (Staff.userId).
+      // Carlos preguntó (2026-09-24, tenant "movilmart", empleado "juan
+      // perez"): "el usuario se creó antes de la creación del módulo, cómo
+      // puedo actualizar para que usuarios viejos tengan acceso a todas las
+      // funciones añadidas". La respuesta es que esta misma pantalla los
+      // pone al día: la creamos aquí, la primera vez que alguien edita su
+      // ficha y le asigna un rol, para que "Editar" (rol) + "Restablecer
+      // PIN" (ya idempotente sobre pinHash null, ver restablecerPinAction)
+      // basten para dejar a CUALQUIER empleado viejo con acceso completo,
+      // sin necesitar ningún script aparte por negocio.
+      const { email, supabaseId } = credencialesInternas(tenantSlug);
+      await prisma.$transaction(async (tx) => {
+        const usuarioOculto = await tx.user.create({
+          data: { tenantId: tenant.id, branchId: datos.branchId, email, name: datos.name.trim(), supabaseId },
+        });
+        await tx.staff.update({ where: { id: staffId }, data: { ...datosStaff, userId: usuarioOculto.id } });
+      });
     }
 
     revalidatePath(`/${tenantSlug}/personal`);
