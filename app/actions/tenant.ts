@@ -9,15 +9,33 @@ import { resolverActor } from "@/lib/actor";
 // viajan siempre juntos desde el slider de Configuración — ver el comentario
 // largo en resolverPresetTenant sobre por qué esa función es el único punto
 // que debe interpretar la combinación de los dos.
-export async function updateThemePreset(tenantSlug: string, preset: any, intensity: number) {
+//
+// intensityFondo (2026-09-24, a petición de Carlos: segundo modulador
+// independiente para el fondo/color primario, ver el comentario largo en
+// construirPresetWindowsPhone): opcional para no romper ninguna llamada
+// vieja — si se omite, se guarda igual a `intensity` (mismo comportamiento
+// de antes de que existiera este control).
+export async function updateThemePreset(
+  tenantSlug: string,
+  preset: any,
+  intensity: number,
+  intensityFondo?: number,
+) {
   const intensidadValida = Number.isFinite(intensity)
     ? Math.max(0, Math.min(200, Math.round(intensity)))
     : 100;
+  const intensidadFondoValida = Number.isFinite(intensityFondo)
+    ? Math.max(0, Math.min(200, Math.round(intensityFondo as number)))
+    : intensidadValida;
 
   try {
     await prisma.tenant.update({
       where: { slug: tenantSlug },
-      data: { themePreset: preset, themeIntensity: intensidadValida },
+      data: {
+        themePreset: preset,
+        themeIntensity: intensidadValida,
+        themeIntensityFondo: intensidadFondoValida,
+      },
     });
 
     // Purga el caché de Next.js para que el layout aplique el nuevo color al instante

@@ -94,7 +94,7 @@ export default async function TenantLayout({
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
-    select: { id: true, themePreset: true, themeIntensity: true, businessType: true, logo: true, subscription: { select: { status: true, endDate: true } } },
+    select: { id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, businessType: true, logo: true, subscription: { select: { status: true, endDate: true } } },
   });
 
   // Bloqueo por ciclo de vida de suscripción (2026-09-22, a petición de
@@ -113,7 +113,7 @@ export default async function TenantLayout({
   }
 
   if (dbTenant?.themePreset) {
-    activePreset = resolverPresetTenant(dbTenant.themePreset, dbTenant.themeIntensity);
+    activePreset = resolverPresetTenant(dbTenant.themePreset, dbTenant.themeIntensity, dbTenant.themeIntensityFondo);
   }
 
   // Personalización por rubro (2026-09-17): labels ya resueltos (rubro +

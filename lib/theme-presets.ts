@@ -52,6 +52,18 @@
  * Tenant.themeIntensity (schema.prisma) y se aplica tanto en el layout
  * real (server) como en la vista previa en vivo de Configuración
  * (cliente) llamando a la MISMA función, para que nunca se desincronicen.
+ *
+ * INTENSIDAD DEL FONDO (2026-09-24, a petición de Carlos — "estoy
+ * complacido con el modulador de intensidad para las fichas, pero
+ * también falta uno para el fondo o color primario"): un SEGUNDO
+ * modulador, independiente del de arriba, que escala solo la saturación
+ * de backgroundColor (nunca la de los tileColors) — así el dueño puede
+ * mover el fondo/color primario sin que eso mueva las fichas, y viceversa.
+ * Mismo mecanismo (HSL, solo canal de Saturación), pero Carlos pidió que
+ * este vaya en pasos de 10% ("aplicar variaciones de 10% progresivos") en
+ * vez de los pasos de 5% del de fichas. Vive en Tenant.themeIntensityFondo
+ * (schema.prisma, default 100 = mismo comportamiento que antes de existir
+ * este segundo control).
  * ──────────────────────────────────────────────────────────────────── */
 
 export type WindowsThemeId =
@@ -225,7 +237,14 @@ function hsl(h: number, s: number, l: number): string {
 
 /**
  * Deriva el set COMPLETO de tokens del sistema a partir de uno de los 10
- * temas de WINDOWS_THEMES y una intensidad (0–200, 100 = original).
+ * temas de WINDOWS_THEMES y DOS intensidades independientes (0–200,
+ * 100 = original cada una): `intensidadFicha` escala solo los 5
+ * tileColors (fichas del POS); `intensidadFondo` escala solo
+ * backgroundColor (fondo de ventana / color primario del resto de la
+ * app). Por defecto `intensidadFondo` toma el mismo valor que
+ * `intensidadFicha` — así cualquier llamada vieja que solo mandaba un
+ * número sigue funcionando igual que antes de que existiera el segundo
+ * control.
  *
  * Carlos solo definió 3 piezas por tema (fondo de ventana, color de
  * ícono/texto, 5 colores de ficha) — el resto de la app (Dashboard, Caja,
@@ -235,12 +254,17 @@ function hsl(h: number, s: number, l: number): string {
  * si el tema es Dark o Light, para que cualquier tema de la lista se
  * sienta como una paleta terminada, no solo como el POS coloreado.
  */
-export function construirPresetWindowsPhone(id: WindowsThemeId, intensidad: number = INTENSIDAD_DEFAULT): Record<string, string> {
+export function construirPresetWindowsPhone(
+  id: WindowsThemeId,
+  intensidadFicha: number = INTENSIDAD_DEFAULT,
+  intensidadFondo: number = intensidadFicha,
+): Record<string, string> {
   const tema = WINDOWS_THEMES[id];
-  const factor = Math.max(INTENSIDAD_MIN, Math.min(INTENSIDAD_MAX, intensidad)) / 100;
+  const factorFicha = Math.max(INTENSIDAD_MIN, Math.min(INTENSIDAD_MAX, intensidadFicha)) / 100;
+  const factorFondo = Math.max(INTENSIDAD_MIN, Math.min(INTENSIDAD_MAX, intensidadFondo)) / 100;
 
-  const fondoVentana = escalarSaturacion(tema.backgroundColor, factor);
-  const chips = tema.tileColors.map((c) => escalarSaturacion(c, factor));
+  const fondoVentana = escalarSaturacion(tema.backgroundColor, factorFondo);
+  const chips = tema.tileColors.map((c) => escalarSaturacion(c, factorFicha));
   const [h] = hexToHsl(tema.backgroundColor); // el matiz no cambia con la intensidad, solo la saturación
 
   const chipVars: Record<string, string> = {};
@@ -455,19 +479,30 @@ export type ThemePresetId = WindowsThemeId | LegacyThemePresetId;
 /**
  * Punto de entrada ÚNICO para resolver el tema real de un tenant — lo usa
  * tanto app/(tenant)/[tenant]/layout.tsx y app/(auth)/[tenant]/page.tsx
- * (con la intensidad real guardada en BD) como ConfiguracionClient.tsx
- * (con la intensidad que el admin está arrastrando en el slider, antes de
- * guardar) — misma función en los dos lados, para que la vista previa y
- * el resultado guardado sean SIEMPRE idénticos.
+ * (con las intensidades reales guardadas en BD) como
+ * ConfiguracionClient.tsx (con las intensidades que el admin está
+ * arrastrando en los sliders, antes de guardar) — misma función en los
+ * dos lados, para que la vista previa y el resultado guardado sean
+ * SIEMPRE idénticos.
+ *
+ * `themeIntensityFondo` es opcional (2026-09-24): si se omite, toma el
+ * valor de `themeIntensity` — así una llamada vieja que solo mandaba la
+ * intensidad de fichas sigue viéndose exactamente igual que antes.
  */
-export function resolverPresetTenant(themePreset: string, themeIntensity: number | null | undefined): Record<string, string> {
+export function resolverPresetTenant(
+  themePreset: string,
+  themeIntensity: number | null | undefined,
+  themeIntensityFondo?: number | null,
+): Record<string, string> {
+  const intensidadFicha = themeIntensity ?? INTENSIDAD_DEFAULT;
+  const intensidadFondo = themeIntensityFondo ?? intensidadFicha;
   if (themePreset in WINDOWS_THEMES) {
-    return construirPresetWindowsPhone(themePreset as WindowsThemeId, themeIntensity ?? INTENSIDAD_DEFAULT);
+    return construirPresetWindowsPhone(themePreset as WindowsThemeId, intensidadFicha, intensidadFondo);
   }
   if (themePreset in THEME_PRESETS) {
     return { ...THEME_PRESETS[themePreset as LegacyThemePresetId] };
   }
-  return construirPresetWindowsPhone("LUMIA_COBALT", INTENSIDAD_DEFAULT);
+  return construirPresetWindowsPhone("LUMIA_COBALT", INTENSIDAD_DEFAULT, INTENSIDAD_DEFAULT);
 }
 
 // Id del elemento que envuelve TenantShell en app/(tenant)/[tenant]/layout.tsx

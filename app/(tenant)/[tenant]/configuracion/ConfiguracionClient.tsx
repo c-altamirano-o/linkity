@@ -32,11 +32,12 @@ const TAMANO_MAXIMO_LOGO = 2 * 1024 * 1024; // 2 MB — mismo límite que valida
 // ya lo habrá pintado con el valor real de la BD de cualquier forma.
 //
 // Llama a resolverPresetTenant — la MISMA función que usa el servidor para
-// pintar el tema real — con el par (tema, intensidad) que el admin está
-// eligiendo/arrastrando en este momento, para que la vista previa nunca
-// pueda desincronizarse de lo que de verdad se va a guardar.
-function aplicarTemaEnVivo(themeId: string, intensidad: number) {
-  const preset = resolverPresetTenant(themeId, intensidad);
+// pintar el tema real — con la terna (tema, intensidad de fichas,
+// intensidad de fondo) que el admin está eligiendo/arrastrando en este
+// momento, para que la vista previa nunca pueda desincronizarse de lo que
+// de verdad se va a guardar.
+function aplicarTemaEnVivo(themeId: string, intensidadFicha: number, intensidadFondo: number) {
+  const preset = resolverPresetTenant(themeId, intensidadFicha, intensidadFondo);
   const nodo = document.getElementById(TENANT_THEME_ROOT_ID);
   if (!nodo) return;
   for (const [variable, valor] of Object.entries(preset)) {
@@ -70,6 +71,7 @@ interface ConfiguracionClientProps {
   tenantSlug: string;
   themePresetInicial: string;
   themeIntensityInicial: number;
+  themeIntensityFondoInicial: number;
   businessTypeInicial: string | null;
   modulos: ModuloPersonalizable[];
   recomendadosOff: string[];
@@ -83,6 +85,7 @@ export default function ConfiguracionClient({
   tenantSlug,
   themePresetInicial,
   themeIntensityInicial,
+  themeIntensityFondoInicial,
   businessTypeInicial,
   modulos,
   recomendadosOff,
@@ -96,38 +99,49 @@ export default function ConfiguracionClient({
   // ── Tema ──────────────────────────────────────────────────
   const [temaSeleccionado, setTemaSeleccionado] = useState(themePresetInicial);
   const [intensidadSeleccionada, setIntensidadSeleccionada] = useState(themeIntensityInicial ?? INTENSIDAD_DEFAULT);
+  // Intensidad del FONDO/color primario (2026-09-24, a petición de Carlos:
+  // segundo modulador, independiente del de arriba — ver el comentario
+  // largo en construirPresetWindowsPhone, lib/theme-presets.ts).
+  const [intensidadFondoSeleccionada, setIntensidadFondoSeleccionada] = useState(themeIntensityFondoInicial ?? INTENSIDAD_DEFAULT);
   const [temaPending, startTemaTransition] = useTransition();
   const [temaMensaje, setTemaMensaje] = useState("");
 
-  // Guarda cuál es el tema/intensidad REALMENTE guardados en BD (no lo que
+  // Guarda cuál es el tema/intensidades REALMENTE guardados en BD (no lo que
   // se está previsualizando) — si el negocio sale de esta pantalla sin darle
   // "Guardar cambios", el efecto de limpieza de abajo revierte la vista
   // previa a estos valores, para que un color nunca confirmado no se quede
   // "pegado" en el resto de la app.
   const temaConfirmadoRef = useRef(themePresetInicial);
   const intensidadConfirmadaRef = useRef(themeIntensityInicial ?? INTENSIDAD_DEFAULT);
+  const intensidadFondoConfirmadaRef = useRef(themeIntensityFondoInicial ?? INTENSIDAD_DEFAULT);
 
   const seleccionarTema = (themeId: string) => {
     setTemaSeleccionado(themeId);
-    aplicarTemaEnVivo(themeId, intensidadSeleccionada); // vista previa instantánea, sin esperar a guardar
+    aplicarTemaEnVivo(themeId, intensidadSeleccionada, intensidadFondoSeleccionada); // vista previa instantánea, sin esperar a guardar
   };
 
   const cambiarIntensidad = (valor: number) => {
     setIntensidadSeleccionada(valor);
-    aplicarTemaEnVivo(temaSeleccionado, valor); // vista previa instantánea, mientras se arrastra el slider
+    aplicarTemaEnVivo(temaSeleccionado, valor, intensidadFondoSeleccionada); // vista previa instantánea, mientras se arrastra el slider
+  };
+
+  const cambiarIntensidadFondo = (valor: number) => {
+    setIntensidadFondoSeleccionada(valor);
+    aplicarTemaEnVivo(temaSeleccionado, intensidadSeleccionada, valor); // vista previa instantánea, mientras se arrastra el slider
   };
 
   useEffect(() => {
-    return () => aplicarTemaEnVivo(temaConfirmadoRef.current, intensidadConfirmadaRef.current);
+    return () => aplicarTemaEnVivo(temaConfirmadoRef.current, intensidadConfirmadaRef.current, intensidadFondoConfirmadaRef.current);
   }, []);
 
   const guardarTema = () => {
     startTemaTransition(async () => {
-      const result = await updateThemePreset(tenantSlug, temaSeleccionado, intensidadSeleccionada);
+      const result = await updateThemePreset(tenantSlug, temaSeleccionado, intensidadSeleccionada, intensidadFondoSeleccionada);
       setTemaMensaje(result.success ? "Tema actualizado correctamente." : "Error al actualizar el tema.");
       if (result.success) {
         temaConfirmadoRef.current = temaSeleccionado;
         intensidadConfirmadaRef.current = intensidadSeleccionada;
+        intensidadFondoConfirmadaRef.current = intensidadFondoSeleccionada;
         router.refresh();
         setTimeout(() => setTemaMensaje(""), 3000);
       }
@@ -493,6 +507,35 @@ export default function ConfiguracionClient({
               step={5}
               value={intensidadSeleccionada}
               onChange={(e) => cambiarIntensidad(Number(e.target.value))}
+              className="w-full accent-primary"
+            />
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[11px] text-muted-foreground">Apagado</span>
+              <span className="text-[11px] text-muted-foreground">Original</span>
+              <span className="text-[11px] text-muted-foreground">Vivo</span>
+            </div>
+          </div>
+
+          {/* Intensidad del fondo (2026-09-24, a petición de Carlos: "estoy
+              complacido con el modulador de intensidad para las fichas,
+              pero también falta uno para el fondo o color primario") —
+              segundo modulador, INDEPENDIENTE del de arriba: este solo
+              escala backgroundColor (ventana/color primario), nunca las
+              fichas. Pasos de 10% (a diferencia del de arriba, de 5%), tal
+              como Carlos pidió explícitamente ("aplicar variaciones de
+              10% progresivos"). */}
+          <div className="mt-6 border-t border-border pt-5">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-muted-foreground">Intensidad del fondo</label>
+              <span className="text-xs font-semibold text-foreground tabular-nums">{intensidadFondoSeleccionada}%</span>
+            </div>
+            <input
+              type="range"
+              min={INTENSIDAD_MIN}
+              max={INTENSIDAD_MAX}
+              step={10}
+              value={intensidadFondoSeleccionada}
+              onChange={(e) => cambiarIntensidadFondo(Number(e.target.value))}
               className="w-full accent-primary"
             />
             <div className="flex items-center justify-between mt-1">

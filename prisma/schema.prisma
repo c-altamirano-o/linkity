@@ -34,6 +34,18 @@ model Tenant {
   // el tema es una decisión de marca de todo el negocio, no de una tienda en
   // particular.
   themeIntensity Int       @default(100)
+
+  // Intensidad del FONDO / color primario (2026-09-24, a petición de Carlos:
+  // "estoy complacido con el modulador de intensidad para las fichas, pero
+  // también falta uno para el fondo o color primario ... podemos usar la
+  // paleta RGB y según la selección, aplicar variaciones de 10% progresivos")
+  // — segundo control, independiente de themeIntensity de arriba: ese solo
+  // escala los 5 colores de ficha del POS, este solo escala backgroundColor
+  // (ver construirPresetWindowsPhone en lib/theme-presets.ts). Mismo rango
+  // 0–200 y mismo mecanismo (saturación en HSL), pero en pasos de 10% en la
+  // UI en vez de 5%. Default 100 = ningún negocio existente cambia de
+  // apariencia al agregar esta columna.
+  themeIntensityFondo Int  @default(100)
   isActive     Boolean     @default(true)
 
   // Día en que abre la "semana laboral" de ESTE negocio (2026-09-18, a
