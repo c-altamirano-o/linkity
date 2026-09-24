@@ -115,6 +115,75 @@ export async function actualizarRolAction(params: {
   }
 }
 
+/**
+ * Server Action del "Asistente de puestos" (2026-09-24, a petición de
+ * Carlos: que tanto un negocio nuevo como uno que ya tiene puestos armados
+ * a medias pueda usar la misma guía paso a paso para dejarlos bien —
+ * lib/asistente-roles.ts + AsistentePersonal.tsx). A diferencia de
+ * crearRolAction/actualizarRolAction (una llamada por rol, pensadas para el
+ * editor manual de RolesManager.tsx), esta aplica TODO el resultado del
+ * wizard en una sola llamada — el wizard ya revisó duplicados/conflictos y
+ * el admin ya confirmó, así que aquí no hay nada que preguntar, solo
+ * ejecutar: por cada "cambio", si trae `roleId` es una edición de un puesto
+ * que YA EXISTÍA (el wizard nunca borra ni crea roles nuevos con nombre
+ * repetido, ver AsistentePersonal.tsx), si no lo trae es un puesto nuevo
+ * (ej. "Dueño / Encargado único" del modo "una persona hace de todo", o un
+ * puesto personalizado que el admin agregó a mano en el wizard).
+ * resolverActor se resuelve UNA sola vez para todo el lote, no por cambio.
+ */
+export async function aplicarAsistenteRolesAction(params: {
+  tenantSlug: string;
+  cambios: {
+    roleId?: string | null;
+    nombre: string;
+    modulos: string[];
+    verTodoTaller?: boolean;
+    verMontosCaja?: boolean;
+    verTodoNegocio?: boolean;
+  }[];
+}): Promise<AccionRolResult> {
+  const { tenantSlug, cambios } = params;
+  if (cambios.length === 0) return { ok: true };
+
+  const resuelto = await resolverActor(tenantSlug, "personal");
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  try {
+    for (const cambio of cambios) {
+      const nombre = cambio.nombre.trim();
+      if (!nombre || nombre === ROL_ADMINISTRADOR) continue;
+
+      if (cambio.roleId) {
+        const rol = await prisma.role.findUnique({
+          where: { id: cambio.roleId },
+          select: { tenantId: true, isSystem: true, name: true },
+        });
+        if (!rol || rol.tenantId !== tenant.id || rol.name === ROL_ADMINISTRADOR) continue;
+        // Mismo candado que actualizarRolAction: un rol de catálogo
+        // (isSystem) no cambia de nombre — roles-server.ts lo reconoce por
+        // nombre exacto para autorreparar sus permisos.
+        if (!rol.isSystem && nombre !== rol.name) {
+          await prisma.role.update({ where: { id: cambio.roleId }, data: { name: nombre } });
+        }
+        await guardarPermisosDeRol(cambio.roleId, validarModulos(cambio.modulos), cambio.verTodoTaller, cambio.verMontosCaja, cambio.verTodoNegocio);
+      } else {
+        const yaExiste = await prisma.role.findUnique({ where: { tenantId_name: { tenantId: tenant.id, name: nombre } }, select: { id: true } });
+        const rolId = yaExiste
+          ? yaExiste.id
+          : (await prisma.role.create({ data: { tenantId: tenant.id, name: nombre, isSystem: false }, select: { id: true } })).id;
+        await guardarPermisosDeRol(rolId, validarModulos(cambio.modulos), cambio.verTodoTaller, cambio.verMontosCaja, cambio.verTodoNegocio);
+      }
+    }
+
+    revalidatePath(`/${tenantSlug}/personal`);
+    return { ok: true };
+  } catch (err) {
+    console.error("Error al aplicar el asistente de puestos:", err);
+    return { ok: false, error: "No se pudieron guardar todos los cambios" };
+  }
+}
+
 export async function eliminarRolAction(params: { tenantSlug: string; roleId: string }): Promise<AccionRolResult> {
   const { tenantSlug, roleId } = params;
 

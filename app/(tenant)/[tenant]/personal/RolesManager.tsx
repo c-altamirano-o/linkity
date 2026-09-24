@@ -2,8 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { X, Plus, Trash2, Pencil, Check, Shield } from "lucide-react";
-import { MODULOS, type ModuloKey, type RolTenantUI } from "@/lib/roles";
-import { MODULE_CATALOG } from "@/lib/modules-catalog";
+import { MODULOS, MODULOS_BASE_EXCLUIDOS, nombreModulo, type ModuloKey, type RolTenantUI } from "@/lib/roles";
 import {
   listarRolesTenantAction, crearRolAction, actualizarRolAction, eliminarRolAction,
 } from "@/app/actions/roles-tenant-actions";
@@ -33,8 +32,6 @@ import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confi
  * lo que este negocio en particular tiene activo (modulosInactivos, mismo
  * prop/criterio que ya usa TenantShell.tsx para el menú lateral).
  */
-
-const MODULOS_BASE_EXCLUIDOS: ModuloKey[] = ["dashboard", "personal", "asistencia", "facturacion", "configuracion"];
 
 interface RolesManagerProps {
   tenantSlug: string;
@@ -172,18 +169,6 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
       else setError(res.error);
     });
   };
-
-  // "taller" (2026-09-21) a propósito NO vive en MODULE_CATALOG — ese
-  // catálogo es para módulos que el NEGOCIO prende/apaga desde Configuración
-  // (ver lib/modules-catalog.ts), y "taller" no es una capacidad de negocio
-  // aparte: es la versión angosta de "Reparaciones" para el técnico, un
-  // permiso de rol nada más (ver el comentario de "taller" en lib/roles.ts).
-  // Necesita su propio nombre aquí para que en este selector de casillas se
-  // distinga claramente de "Reparaciones" (control total).
-  const nombreModulo = (m: ModuloKey) =>
-    m === "taller" ? "Taller (solo ve lo asignado, sin editar)"
-    : m === "aduana" ? "Recepción / Aduana de taller (asigna técnico, estatus y costo)"
-    : MODULE_CATALOG[m]?.name ?? m;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40"

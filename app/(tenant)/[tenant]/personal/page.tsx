@@ -15,7 +15,9 @@ export default async function PersonalPage({
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
-    include: {
+    select: {
+      id: true,
+      businessType: true,
       branches: {
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
@@ -65,6 +67,7 @@ export default async function PersonalPage({
       roles={roles}
       puestosSugeridos={puestos}
       modulosInactivos={modulosInactivos}
+      businessType={tenant.businessType}
     />
   );
 }

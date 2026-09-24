@@ -29,6 +29,8 @@
 // autorreparar tenants que ya tenían Gerente/Cajero/Técnico asignados antes
 // de este cambio (ver el comentario largo en roles-server.ts).
 
+import { MODULE_CATALOG } from "@/lib/modules-catalog";
+
 export const ROL_ADMINISTRADOR = "Administrador";
 
 // Claves de módulo — coinciden 1:1 con el segmento de ruta bajo /[tenant]/
@@ -109,6 +111,18 @@ export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
   Técnico: "Taller (solo ve sus reparaciones asignadas y puede alertar), Citas, Clientes y Expediente Clínico.",
 };
 
+// Nombre para mostrar de un módulo en un selector de permisos (RolesManager.tsx,
+// AsistentePersonal.tsx) — "taller"/"aduana" necesitan su propio texto aquí
+// (no viven en MODULE_CATALOG, ver el comentario de "taller" arriba) para
+// distinguirse claramente de "Reparaciones" en ese selector. Vive en este
+// archivo (en vez de repetida en cada componente) por el mismo motivo que
+// MODULOS_BASE_EXCLUIDOS: un solo texto para los dos editores de roles.
+export function nombreModulo(m: ModuloKey): string {
+  if (m === "taller") return "Taller (solo ve lo asignado, sin editar)";
+  if (m === "aduana") return "Recepción / Aduana de taller (asigna técnico, estatus y costo)";
+  return MODULE_CATALOG[m]?.name ?? m;
+}
+
 // dashboard siempre incluido — es la pantalla de aterrizaje, no tiene
 // sentido dejar a nadie sin ella (roles-server.ts además la agrega siempre
 // a cualquier rol personalizado, por si un admin la destilda por error).
@@ -139,6 +153,16 @@ export const MATRIZ_ACCESO_BASE: Record<RolBase, ModuloKey[]> = {
 export function esRolBase(valor: string): valor is RolBase {
   return (ROLES_BASE as readonly string[]).includes(valor);
 }
+
+// Módulos que NUNCA se ofrecen como casilla al armar/editar un rol asignable
+// (RolesManager.tsx, AsistentePersonal.tsx) — "dashboard" porque siempre está
+// incluido de por sí (ver guardarPermisosDeRol en lib/roles-server.ts), y los
+// otros cuatro porque son de acceso exclusivo del dueño con cuenta real,
+// nunca de un empleado con PIN (ver el comentario largo en
+// MATRIZ_ACCESO_BASE arriba). Vive aquí (en vez de repetido en cada
+// componente) para que ambos editores de roles usen exactamente la misma
+// lista sin poder desincronizarse.
+export const MODULOS_BASE_EXCLUIDOS: ModuloKey[] = ["dashboard", "personal", "asistencia", "facturacion", "configuracion"];
 
 // Forma "para UI" de un Role de tenant (base o personalizado) con sus
 // módulos ya resueltos — lib/roles-server.ts es quien la calcula

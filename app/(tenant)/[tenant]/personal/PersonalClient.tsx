@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useTransition, useMemo, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Search, Plus, Users, UserCheck, Clock, Wallet, LogIn, LogOut, Pencil,
-  Banknote, X, Check, Ban, KeyRound, Shield,
+  Banknote, X, Check, Ban, KeyRound, Shield, Sparkles,
 } from "lucide-react";
 import type { PersonalData, EmpleadoUI, EsquemaPago, BaseComision, Frecuencia, EstadoPago, MetodoPago } from "@/lib/personal-data";
 import { label, type LabelDictionary } from "@/lib/labels";
@@ -16,6 +16,7 @@ import {
   obtenerSugerenciaComisionAction, restablecerPinAction, type DatosEmpleado,
 } from "@/app/actions/personal-actions";
 import RolesManager from "./RolesManager";
+import AsistentePersonal from "./AsistentePersonal";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 
 interface BranchOption {
@@ -39,6 +40,11 @@ interface PersonalClientProps {
   // RolesManager para que el selector de casillas al crear/editar un rol
   // solo ofrezca lo que este negocio realmente usa.
   modulosInactivos?: string[];
+  // Rubro del negocio (Tenant.businessType) — 2026-09-24, solo para el
+  // Asistente de puestos (lib/asistente-roles.ts): decide qué catálogo de
+  // puestos sugeridos usar como punto de comparación. No tiene ningún otro
+  // efecto en este componente.
+  businessType: string | null;
 }
 
 const ESQUEMA_TEXTO: Record<EsquemaPago, string> = {
@@ -125,10 +131,26 @@ function formDeEmpleado(e: EmpleadoUI): FormEmpleado {
   };
 }
 
-export default function PersonalClient({ data, labels, branches, tenantSlug, roles, puestosSugeridos, modulosInactivos = [] }: PersonalClientProps) {
+export default function PersonalClient({ data, labels, branches, tenantSlug, roles, puestosSugeridos, modulosInactivos = [], businessType }: PersonalClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { empleados } = data;
   const [modalRoles, setModalRoles] = useState(false);
+  const [modalAsistente, setModalAsistente] = useState(false);
+
+  // Permite enlazar directo al asistente con /[tenant]/personal?asistente=1
+  // (2026-09-24) — pensado para engancharlo después desde otros puntos de
+  // entrada (ej. el checklist de bienvenida de un negocio nuevo, o el alta
+  // de una sucursal) sin tener que tocar este componente otra vez. Se
+  // limpia el parámetro de la URL al abrir para que un refresh no lo vuelva
+  // a abrir solo.
+  useEffect(() => {
+    if (searchParams.get("asistente") === "1") {
+      setModalAsistente(true);
+      router.replace(`/${tenantSlug}/personal`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [busqueda, setBusqueda] = useState("");
   const [filtroSucursal, setFiltroSucursal] = useState("todas");
@@ -456,6 +478,10 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               <button onClick={() => setModalRoles(true)} title="Roles y permisos"
                 className="flex items-center justify-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted text-xs font-medium rounded-lg text-foreground">
                 <Shield className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => setModalAsistente(true)} title="Asistente de puestos"
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted text-xs font-medium rounded-lg text-foreground">
+                <Sparkles className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -1030,6 +1056,17 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
           sugerenciasRoles={puestosSugeridos}
           modulosInactivos={modulosInactivos}
           onCerrar={() => setModalRoles(false)}
+          onCambio={() => router.refresh()}
+        />
+      )}
+
+      {modalAsistente && (
+        <AsistentePersonal
+          tenantSlug={tenantSlug}
+          rolesIniciales={roles}
+          businessType={businessType}
+          modulosInactivos={modulosInactivos}
+          onCerrar={() => setModalAsistente(false)}
           onCambio={() => router.refresh()}
         />
       )}
