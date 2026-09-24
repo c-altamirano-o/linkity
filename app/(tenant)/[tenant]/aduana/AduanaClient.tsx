@@ -200,7 +200,7 @@ export default function AduanaClient({ data, labels, tenantSlug }: AduanaClientP
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
           <h1 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
-            <ClipboardList className="w-4 h-4 text-primary" /> Recepción / Aduana
+            <ClipboardList className="w-4 h-4 text-primary-text" /> Recepción / Aduana
           </h1>
           <p className="text-[12.5px] text-muted-foreground mt-0.5">
             Asigna técnico, cambia el estatus y ajusta costo/piezas — todas las {entidadPlural.toLowerCase()} del taller, de cualquier sucursal.
@@ -433,7 +433,7 @@ export default function AduanaClient({ data, labels, tenantSlug }: AduanaClientP
                     <button
                       onClick={handleAgregarPieza}
                       disabled={pending || !piezaNuevaId}
-                      className="px-2.5 py-2 bg-muted hover:bg-accent disabled:opacity-40 rounded-lg text-primary"
+                      className="px-2.5 py-2 bg-muted hover:bg-accent disabled:opacity-40 rounded-lg text-primary-text"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>

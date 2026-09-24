@@ -125,7 +125,7 @@ export default function AsistenciaClient({ registros, branches, tenantSlug, week
     <div className="p-3 sm:p-4 flex flex-col gap-4">
       <div>
         <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <CalendarCheck className="w-5 h-5 text-primary" /> Asistencia
+          <CalendarCheck className="w-5 h-5 text-primary-text" /> Asistencia
         </h1>
         <p className="text-sm text-muted-foreground">
           A qué hora entró y salió cada empleado de verdad, según su inicio de sesión con PIN — aparte del registro manual de nómina en Personal.
@@ -133,7 +133,7 @@ export default function AsistenciaClient({ registros, branches, tenantSlug, week
       </div>
 
       <div className="flex items-start gap-2 px-3 py-2.5 bg-primary/5 border border-primary/20 rounded-xl">
-        <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+        <Info className="w-4 h-4 text-primary-text flex-shrink-0 mt-0.5" />
         <p className="text-[12.5px] text-muted-foreground">
           Cada sesión se cierra sola en cuanto cambia el día, así nadie puede quedar marcado como &quot;adentro&quot; de un día para otro sin volver a teclear su PIN. Si ves un registro sin salida el mismo día, puedes cerrarlo a mano con &quot;Cerrar ahora&quot;.
         </p>

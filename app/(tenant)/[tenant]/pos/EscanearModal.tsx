@@ -89,7 +89,7 @@ export default function EscanearModal({ onCerrar, onCodigoDetectado, error }: Es
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="text-sm font-medium text-foreground flex items-center gap-2">
-            <Camera className="w-4 h-4 text-primary" /> Escanear código
+            <Camera className="w-4 h-4 text-primary-text" /> Escanear código
           </span>
           <button onClick={onCerrar} className="text-muted-foreground hover:text-foreground">
             <X className="w-4 h-4" />

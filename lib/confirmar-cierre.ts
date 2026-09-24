@@ -28,9 +28,22 @@ import { useEffect } from "react";
  * se cierra con un solo click accidental, que es justo el comportamiento
  * que Carlos reportó como el problema.
  */
+// 2026-09-24, a petición de Carlos ("es confuso que diga Aceptar o
+// Cancelar, lo correcto debe ser Si o No"): confirm() es un diálogo del
+// NAVEGADOR, no de esta app — el texto de sus dos botones ("Aceptar"/
+// "Cancelar" en español) lo decide el propio navegador según el idioma
+// del sistema, y ningún código web puede cambiarlo por "Sí"/"No" (es una
+// restricción de seguridad, la misma razón por la que tampoco se puede
+// personalizar el mensaje del aviso de useAdvertirCierrePestaña más
+// abajo). Lo que sí se puede corregir es la AMBIGÜEDAD: la pregunta
+// original ("¿Salir sin guardar los cambios?") no dejaba claro qué
+// significaba cada botón fijo. Ahora el mensaje mismo se lo dice al
+// usuario, así "Aceptar"/"Cancelar" dejan de depender de que adivine.
 export function confirmarSalirSinGuardar(): boolean {
   if (typeof window === "undefined") return true;
-  return window.confirm("¿Salir sin guardar los cambios?");
+  return window.confirm(
+    "Tienes cambios sin guardar.\n\nAceptar = salir y perderlos.\nCancelar = seguir editando."
+  );
 }
 
 /**

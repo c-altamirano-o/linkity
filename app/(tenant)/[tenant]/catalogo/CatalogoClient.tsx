@@ -86,7 +86,7 @@ const humanizarIcono = (clave: string) => clave.replace(/([a-z0-9])([A-Z])/g, "$
 // lib/theme-presets.ts), este es un caso donde Carlos pidió expresamente lo
 // contrario: que sí cedan al tema.
 const tipoConfig: Record<TipoCatalogo, { label: string; icon: typeof Smartphone; color: string; bg: string }> = {
-  PRODUCT: { label: TIPO_LABELS.PRODUCT, icon: Smartphone, color: "text-primary", bg: "bg-primary/10" },
+  PRODUCT: { label: TIPO_LABELS.PRODUCT, icon: Smartphone, color: "text-primary-text", bg: "bg-primary/10" },
   PART:    { label: TIPO_LABELS.PART,    icon: Cpu,        color: "text-accent-foreground", bg: "bg-accent" },
   SERVICE: { label: TIPO_LABELS.SERVICE, icon: Wrench,     color: "text-secondary-foreground", bg: "bg-secondary" },
 };
@@ -597,14 +597,14 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 onClick={() => seleccionarTipo(tipo)}
                 className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                   tabActivo === "catalogo" && tipoActivo === tipo
-                    ? "text-primary border-primary"
+                    ? "text-primary-text border-primary"
                     : "text-muted-foreground border-transparent hover:text-foreground"
                 }`}>
                 <Icono className="w-3 h-3" />
                 {cfg.label}
                 <span className={`text-[10.5px] px-1.5 py-0.5 rounded-full ${
                   tabActivo === "catalogo" && tipoActivo === tipo
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-primary/10 text-primary-text"
                     : "bg-muted text-muted-foreground"
                 }`}>
                   {conteo(tipo)}
@@ -702,7 +702,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                       <p className="text-xs font-medium text-foreground leading-tight mb-1 line-clamp-2">{p.name}</p>
                       <p className="text-[10.5px] text-muted-foreground mb-2 truncate">{p.sku ?? "Sin SKU"}</p>
                       <div className="flex items-center justify-between flex-wrap gap-1">
-                        <span className="text-xs font-bold text-primary">{formatMXN(p.price)}</span>
+                        <span className="text-xs font-bold text-primary-text">{formatMXN(p.price)}</span>
                         {stockBadge(p.isService, p.stock)}
                       </div>
                       {!p.isService && p.cost > 0 && (
@@ -815,7 +815,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                             <p className="text-xs font-medium text-foreground truncate">{item.nombre}</p>
                             <p className="text-[11.5px] text-muted-foreground">{item.categoria} · {item.unidades} unidades</p>
                           </div>
-                          <span className="text-xs font-semibold text-primary flex-shrink-0">{formatMXN(item.total)}</span>
+                          <span className="text-xs font-semibold text-primary-text flex-shrink-0">{formatMXN(item.total)}</span>
                         </div>
                       ))}
                     </div>
@@ -893,7 +893,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   <button
                     type="button"
                     onClick={alternarModoIcono}
-                    className="text-[11.5px] text-primary font-medium hover:underline"
+                    className="text-[11.5px] text-primary-text font-medium hover:underline"
                   >
                     {modoIcono === "icono" ? "Escribir mi propio emoji" : "Elegir de la galería"}
                   </button>
@@ -907,7 +907,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                       className={`w-7 h-7 flex items-center justify-center rounded-md text-[10.5px] font-medium transition-colors ${
                         form.emoji === ""
                           ? "bg-primary text-primary-foreground"
-                          : "bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                          : "bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary-text"
                       }`}
                     >
                       —
@@ -924,7 +924,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                           className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors ${
                             seleccionado
                               ? "bg-primary text-primary-foreground"
-                              : "bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                              : "bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary-text"
                           }`}
                         >
                           <Icono className="w-4 h-4" weight="regular" />
@@ -980,7 +980,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   <button
                     type="button"
                     onClick={() => setNuevaCategoria((v) => !v)}
-                    className="text-[11.5px] text-primary font-medium hover:underline"
+                    className="text-[11.5px] text-primary-text font-medium hover:underline"
                   >
                     {nuevaCategoria ? "Elegir existente" : "+ Nueva categoría"}
                   </button>

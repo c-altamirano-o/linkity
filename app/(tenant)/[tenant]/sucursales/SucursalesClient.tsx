@@ -239,7 +239,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                         </span>
                       )}
                       {suc.esPrincipal && (
-                        <span className="text-[10.5px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                        <span className="text-[10.5px] bg-primary/10 text-primary-text px-1.5 py-0.5 rounded-full font-medium">
                           Principal
                         </span>
                       )}
@@ -259,7 +259,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
               {/* Métricas */}
               <div className="grid grid-cols-2 gap-2 p-3">
                 {[
-                  { icon: DollarSign, label: "Ventas hoy", value: formatMXN(suc.ventasHoy), color: "text-primary" },
+                  { icon: DollarSign, label: "Ventas hoy", value: formatMXN(suc.ventasHoy), color: "text-primary-text" },
                   { icon: Wrench, label: "Reparaciones activas", value: String(suc.reparacionesActivas), color: "text-cyan-600" },
                   {
                     icon: Package,
@@ -321,7 +321,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                   </button>
                   <button
                     onClick={() => abrirEditar(suc)}
-                    className="flex items-center gap-1 text-[11.5px] text-primary font-medium hover:underline"
+                    className="flex items-center gap-1 text-[11.5px] text-primary-text font-medium hover:underline"
                   >
                     <Pencil className="w-3 h-3" /> Editar
                   </button>
@@ -336,7 +336,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
       {sucursales.length >= 2 && (
         <div className="bg-card border border-border rounded-xl p-4">
           <div className="flex items-center gap-2 mb-4">
-            <ArrowRight className="w-4 h-4 text-primary" />
+            <ArrowRight className="w-4 h-4 text-primary-text" />
             <h2 className="text-[13.5px] font-semibold text-foreground">Transferir inventario entre sucursales</h2>
           </div>
           <div className="flex items-end gap-3 flex-wrap">
@@ -435,7 +435,7 @@ export default function SucursalesClient({ data, tenantSlug }: SucursalesClientP
                         <div className="flex items-center gap-2">
                           <span className="text-[12.5px] font-medium text-foreground">{suc.name}</span>
                           {suc.esPrincipal && (
-                            <span className="text-[10.5px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Principal</span>
+                            <span className="text-[10.5px] bg-primary/10 text-primary-text px-1.5 py-0.5 rounded-full">Principal</span>
                           )}
                         </div>
                       </td>

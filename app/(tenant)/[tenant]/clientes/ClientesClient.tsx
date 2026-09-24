@@ -968,7 +968,7 @@ export default function ClientesClient({
         <div className="flex h-full items-center justify-center p-6">
           <div className="text-center max-w-sm">
             <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <Users className="w-7 h-7 text-primary" />
+              <Users className="w-7 h-7 text-primary-text" />
             </div>
             <p className="text-sm font-semibold text-foreground mb-1">Aún no tienes clientes registrados</p>
             <p className="text-xs text-muted-foreground mb-5">
@@ -1075,7 +1075,7 @@ export default function ClientesClient({
             <div className="bg-card border-b border-border px-4 sm:px-5 py-4">
               <button
                 onClick={() => setMostrarDetalle(false)}
-                className="md:hidden flex items-center gap-1 text-primary text-xs font-medium mb-3"
+                className="md:hidden flex items-center gap-1 text-primary-text text-xs font-medium mb-3"
               >
                 <ChevronLeft className="w-4 h-4" /> Volver a clientes
               </button>
@@ -1159,7 +1159,7 @@ export default function ClientesClient({
                     onClick={() => setVistaDetalle(v)}
                     className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
                       vistaDetalle === v
-                        ? "border-primary text-primary"
+                        ? "border-primary text-primary-text"
                         : "border-transparent text-muted-foreground hover:text-foreground"
                     }`}
                   >
@@ -1775,7 +1775,7 @@ export default function ClientesClient({
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Fases del plan *</label>
-                  <button onClick={agregarFilaItem} className="text-xs text-primary hover:underline flex items-center gap-0.5">
+                  <button onClick={agregarFilaItem} className="text-xs text-primary-text hover:underline flex items-center gap-0.5">
                     <Plus className="w-3 h-3" /> Agregar fase
                   </button>
                 </div>

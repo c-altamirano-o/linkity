@@ -774,7 +774,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
             key={tab.key}
             onClick={() => setTabMovil(tab.key as any)}
             className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
-              tabMovil === tab.key ? "border-b-2 border-primary text-primary" : "text-muted-foreground"
+              tabMovil === tab.key ? "border-b-2 border-primary text-primary-text" : "text-muted-foreground"
             }`}
           >
             {tab.label}
@@ -870,7 +870,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                   <div className="h-px bg-border my-1" />
                   <div className="flex items-center justify-between py-1.5">
                     <span className="text-xs font-semibold text-foreground">Total esperado</span>
-                    <span className="text-sm font-bold text-primary">{verMonto(sesionActual.efectivoEsperado)}</span>
+                    <span className="text-sm font-bold text-primary-text">{verMonto(sesionActual.efectivoEsperado)}</span>
                   </div>
                 </div>
               </div>
@@ -1019,7 +1019,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                       </div>
                     </div>
                     {filtrosActivos && (
-                      <button onClick={limpiarFiltros} className="text-[11.5px] text-primary hover:underline">
+                      <button onClick={limpiarFiltros} className="text-[11.5px] text-primary-text hover:underline">
                         Limpiar filtros
                       </button>
                     )}
@@ -1064,7 +1064,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
           {/* Métricas período */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 px-3 sm:px-4 py-3 bg-card border-b border-border">
             {[
-              { label: "Total ingresos", value: formatMXN(ingresos), sub: periodoLabel[periodo], color: "text-primary", icon: TrendingUp },
+              { label: "Total ingresos", value: formatMXN(ingresos), sub: periodoLabel[periodo], color: "text-primary-text", icon: TrendingUp },
               { label: "Tickets de venta", value: String(ticketsVenta), sub: "Transacciones", color: "text-foreground", icon: ShoppingCart },
               { label: "Ticket promedio", value: formatMXN(ticketProm), sub: "Por venta", color: "text-foreground", icon: Calculator },
               { label: "Total egresos", value: formatMXN(egresos), sub: "Gastos del período", color: "text-red-500", icon: TrendingDown },
@@ -1107,7 +1107,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                 {movsFiltrados.map((mov) => (
                   <tr key={mov.id} className="border-b border-border/60 hover:bg-muted transition-colors">
                     <td className="px-3 sm:px-4 py-2.5">
-                      <p className="text-[11.5px] font-semibold text-primary">{mov.folio}</p>
+                      <p className="text-[11.5px] font-semibold text-primary-text">{mov.folio}</p>
                       <p className="text-[10.5px] text-muted-foreground">
                         {new Date(mov.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })} ·{" "}
                         <span className="hidden sm:inline">{mov.fecha.slice(0, 10)}</span>

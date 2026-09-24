@@ -293,7 +293,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                 </select>
                 {filtrosActivos > 0 && (
                   <button onClick={() => setCategoriaFiltro(TODAS_CATEGORIAS)}
-                    className="mt-2 text-[11.5px] text-primary font-medium hover:underline">
+                    className="mt-2 text-[11.5px] text-primary-text font-medium hover:underline">
                     Limpiar filtro
                   </button>
                 )}
@@ -388,7 +388,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                     <td className="px-3 sm:px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 bg-muted rounded-lg flex items-center justify-center text-sm flex-shrink-0">
-                          <ProductoIcono value={p.emoji} className="w-4 h-4 text-primary" />
+                          <ProductoIcono value={p.emoji} className="w-4 h-4 text-primary-text" />
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-foreground truncate max-w-[140px]">{p.name}</p>

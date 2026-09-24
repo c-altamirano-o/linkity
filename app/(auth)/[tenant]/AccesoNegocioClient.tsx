@@ -234,7 +234,7 @@ export default function AccesoNegocioClient({
           {estadoEspera === "pendiente" && (
             <>
               <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <Clock className="w-5 h-5 text-primary" />
+                <Clock className="w-5 h-5 text-primary-text" />
               </div>
               <h1 className="text-lg font-semibold text-foreground">Esperando autorización</h1>
               <p className="text-sm text-muted-foreground mt-2">
@@ -363,7 +363,7 @@ export default function AccesoNegocioClient({
                 className="flex items-center gap-3 bg-card border border-border rounded-xl p-4 hover:border-primary hover:bg-primary/5 transition-colors text-left"
               >
                 <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Building2 className="w-4 h-4 text-primary" />
+                  <Building2 className="w-4 h-4 text-primary-text" />
                 </div>
                 <p className="text-sm font-medium text-foreground">{b.name}</p>
               </button>

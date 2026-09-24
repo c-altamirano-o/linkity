@@ -505,7 +505,7 @@ export default function ConfiguracionClient({
       {/* ── Apariencia y Tema ─────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mb-6">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Palette className="w-5 h-5 text-primary" />
+          <Palette className="w-5 h-5 text-primary-text" />
           <h2 className="text-base font-semibold text-foreground">Apariencia y Tema</h2>
         </div>
 
@@ -673,7 +673,7 @@ export default function ConfiguracionClient({
       {/* ── Giro del negocio ──────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Briefcase className="w-5 h-5 text-primary" />
+          <Briefcase className="w-5 h-5 text-primary-text" />
           <h2 className="text-base font-semibold text-foreground">Giro del negocio</h2>
         </div>
 
@@ -730,7 +730,7 @@ export default function ConfiguracionClient({
         return (
           <div className={`rounded-xl overflow-hidden shadow-sm mt-6 border ${todoListo ? "bg-card border-border" : "bg-amber-50 border-amber-300"}`}>
             <div className={`flex items-center gap-2 px-5 py-4 border-b ${todoListo ? "border-border bg-muted/50" : "border-amber-200 bg-amber-100/60"}`}>
-              <Wrench className={`w-5 h-5 ${todoListo ? "text-primary" : "text-amber-700"}`} />
+              <Wrench className={`w-5 h-5 ${todoListo ? "text-primary-text" : "text-amber-700"}`} />
               <h2 className="text-base font-semibold text-foreground">Configura tu Taller</h2>
             </div>
 
@@ -782,7 +782,7 @@ export default function ConfiguracionClient({
               {!todoListo && (
                 <Link
                   href={`/${tenantSlug}/personal`}
-                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-primary-text hover:underline"
                 >
                   Ir a Personal a asignar roles <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
@@ -795,7 +795,7 @@ export default function ConfiguracionClient({
       {/* ── Semana laboral ─────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <CalendarClock className="w-5 h-5 text-primary" />
+          <CalendarClock className="w-5 h-5 text-primary-text" />
           <h2 className="text-base font-semibold text-foreground">Semana laboral</h2>
         </div>
 
@@ -837,7 +837,7 @@ export default function ConfiguracionClient({
       {/* ── Teléfono de soporte ────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Phone className="w-5 h-5 text-primary" />
+          <Phone className="w-5 h-5 text-primary-text" />
           <h2 className="text-base font-semibold text-foreground">Teléfono de soporte</h2>
         </div>
 
@@ -875,7 +875,7 @@ export default function ConfiguracionClient({
       {/* ── Cobro en devoluciones ──────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Undo2 className="w-5 h-5 text-primary" />
+          <Undo2 className="w-5 h-5 text-primary-text" />
           <h2 className="text-base font-semibold text-foreground">Cobro en devoluciones</h2>
         </div>
 
@@ -915,7 +915,7 @@ export default function ConfiguracionClient({
       {/* ── Módulos de tu negocio ──────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <LayoutGrid className="w-5 h-5 text-primary" />
+          <LayoutGrid className="w-5 h-5 text-primary-text" />
           <h2 className="text-base font-semibold text-foreground">Módulos de tu negocio</h2>
         </div>
 
@@ -927,7 +927,7 @@ export default function ConfiguracionClient({
 
           {recomendadosOff.length > 0 && (
             <div className="mb-5 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3.5">
-              <Sparkles className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+              <Sparkles className="w-4 h-4 text-primary-text flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-xs text-foreground">
                   Para el rubro que elegiste, recomendamos apagar:{" "}
@@ -936,7 +936,7 @@ export default function ConfiguracionClient({
                 <button
                   onClick={aplicarRecomendado}
                   disabled={aplicandoRecomendado}
-                  className="mt-2 text-xs font-medium text-primary hover:underline disabled:opacity-50 flex items-center gap-1.5"
+                  className="mt-2 text-xs font-medium text-primary-text hover:underline disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {aplicandoRecomendado && <Loader2 className="w-3 h-3 animate-spin" />}
                   Aplicar recomendado para tu rubro
@@ -982,7 +982,7 @@ export default function ConfiguracionClient({
       {/* ── Logo de tu negocio ─────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <ImageIcon className="w-5 h-5 text-primary" />
+          <ImageIcon className="w-5 h-5 text-primary-text" />
           <h2 className="text-base font-semibold text-foreground">Logo de tu negocio</h2>
         </div>
 
@@ -1012,7 +1012,7 @@ export default function ConfiguracionClient({
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/svg+xml"
                 onChange={seleccionarLogo}
-                className="block w-full text-xs text-muted-foreground file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20 file:cursor-pointer cursor-pointer"
+                className="block w-full text-xs text-muted-foreground file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-primary/10 file:text-primary-text hover:file:bg-primary/20 file:cursor-pointer cursor-pointer"
               />
 
               <div className="mt-4 flex items-center gap-3 flex-wrap">
@@ -1059,7 +1059,7 @@ export default function ConfiguracionClient({
           push (arriba) y este listado de respaldo (abajo). */}
       <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Bell className="w-5 h-5 text-primary" />
+          <Bell className="w-5 h-5 text-primary-text" />
           <h2 className="text-base font-semibold text-foreground">Notificaciones y dispositivos</h2>
         </div>
 
@@ -1089,7 +1089,7 @@ export default function ConfiguracionClient({
                 {solicitudes.map((s) => (
                   <div key={s.id} className="flex items-center justify-between gap-3 px-3.5 py-3 flex-wrap">
                     <div className="flex items-start gap-2.5 min-w-0">
-                      <Smartphone className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                      <Smartphone className="w-4 h-4 text-primary-text flex-shrink-0 mt-0.5" />
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-foreground">Sucursal: {s.branchName}</p>
                         <p className="text-[10.5px] text-muted-foreground mt-0.5 truncate max-w-[220px]">
@@ -1127,7 +1127,7 @@ export default function ConfiguracionClient({
       {/* ── Seguridad: cambiar contraseña ─────────────────────── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Lock className="w-5 h-5 text-primary" />
+          <Lock className="w-5 h-5 text-primary-text" />
           <h2 className="text-base font-semibold text-foreground">Seguridad</h2>
         </div>
 

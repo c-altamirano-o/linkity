@@ -374,7 +374,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         ) : (
           <button
             onClick={() => setClientePickerAbierto((v) => !v)}
-            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary-text transition-colors"
           >
             <User className="w-4 h-4" />
             <span>Agregar cliente</span>
@@ -497,7 +497,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           <div className="h-px bg-border my-1" />
           <div className="flex justify-between items-baseline">
             <span className="text-base font-bold text-foreground">Total</span>
-            <span className="text-2xl font-extrabold text-primary">{formatMXN(total)}</span>
+            <span className="text-2xl font-extrabold text-primary-text">{formatMXN(total)}</span>
           </div>
           <p className="text-xs text-muted-foreground text-right">Los precios ya incluyen IVA</p>
         </div>
@@ -551,7 +551,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                     el usuario debe tocar deja claro que es una acción, no un
                     valor ya capturado. */}
                 <button type="button" onClick={() => setMontoRecibido(String(total))}
-                  className="px-2.5 py-2 border border-primary/30 hover:bg-primary/10 text-primary rounded-lg text-sm font-semibold whitespace-nowrap">
+                  className="px-2.5 py-2 border border-primary/30 hover:bg-primary/10 text-primary-text rounded-lg text-sm font-semibold whitespace-nowrap">
                   Exacto
                 </button>
                 <input
@@ -742,7 +742,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             <button key={cat.id ?? "todos"} onClick={() => setCategoriaActiva(cat.id)}
               className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
                 categoriaActiva === cat.id
-                  ? "bg-card text-primary shadow-[0_2px_6px_rgba(0,0,0,0.18)]"
+                  ? "bg-card text-primary-text shadow-[0_2px_6px_rgba(0,0,0,0.18)]"
                   : "bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25"
               }`}>
               {cat.name}
@@ -828,7 +828,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           {totalItems > 0 ? (
             <>
               <span className="text-base font-bold">{formatMXN(total)}</span>
-              <span className="bg-primary-foreground text-primary text-xs font-bold px-2 py-0.5 rounded-full">{totalItems}</span>
+              <span className="bg-primary-foreground text-primary-text text-xs font-bold px-2 py-0.5 rounded-full">{totalItems}</span>
             </>
           ) : (
             <span className="text-base font-semibold">Carrito</span>

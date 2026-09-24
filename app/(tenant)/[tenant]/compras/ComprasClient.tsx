@@ -311,7 +311,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
           <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
             <Package className="w-8 h-8 text-muted-foreground/40 mb-2" />
             <p className="text-sm text-muted-foreground">No hay compras registradas todavía.</p>
-            <button onClick={abrirModalNueva} className="text-xs text-primary mt-1">+ Registrar la primera</button>
+            <button onClick={abrirModalNueva} className="text-xs text-primary-text mt-1">+ Registrar la primera</button>
           </div>
         ) : (
           <>
@@ -361,7 +361,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                 {[
                   { label: "Proveedor", value: seleccionada.supplierName, small: true },
                   { label: "Productos", value: String(seleccionada.items.length), small: false },
-                  { label: "Total", value: formatMXN(seleccionada.total), color: "text-primary" },
+                  { label: "Total", value: formatMXN(seleccionada.total), color: "text-primary-text" },
                 ].map((s) => (
                   <div key={s.label} className="bg-muted rounded-lg p-3">
                     <p className="text-[10.5px] text-muted-foreground mb-1">{s.label}</p>
@@ -434,7 +434,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                   <div className="h-px bg-border" />
                   <div className="flex justify-between items-baseline">
                     <span className="text-[14.5px] font-semibold text-foreground">Total</span>
-                    <span className="text-[16px] font-bold text-primary">{formatMXN(seleccionada.total)}</span>
+                    <span className="text-[16px] font-bold text-primary-text">{formatMXN(seleccionada.total)}</span>
                   </div>
                   {seleccionada.notes && (
                     <p className="text-[11.5px] text-muted-foreground pt-1">Nota: {seleccionada.notes}</p>
@@ -484,7 +484,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                   <button
                     type="button"
                     onClick={() => setNvProveedorNuevo((v) => !v)}
-                    className="text-[11.5px] text-primary"
+                    className="text-[11.5px] text-primary-text"
                   >
                     {nvProveedorNuevo ? "Elegir existente" : "+ Nuevo proveedor"}
                   </button>
@@ -529,7 +529,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PRODUCTOS</label>
-                  <button type="button" onClick={handleAgregarRenglon} className="text-[11.5px] text-primary">
+                  <button type="button" onClick={handleAgregarRenglon} className="text-[11.5px] text-primary-text">
                     + Agregar producto
                   </button>
                 </div>
@@ -588,7 +588,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
 
               <div className="flex justify-between items-baseline bg-muted rounded-lg px-3 py-2">
                 <span className="text-[12.5px] text-muted-foreground">Total estimado</span>
-                <span className="text-[14px] font-bold text-primary">{formatMXN(totalNueva)}</span>
+                <span className="text-[14px] font-bold text-primary-text">{formatMXN(totalNueva)}</span>
               </div>
 
               {formError && <p className="text-[12.5px] text-red-600">{formError}</p>}

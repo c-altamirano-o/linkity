@@ -263,7 +263,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                   <span className="text-[11.5px] text-muted-foreground mr-1">Sugeridos para tu rubro:</span>
                   {sugerenciasRoles.filter((s) => !roles.some((r) => r.name === s)).map((s) => (
                     <button key={s} type="button" onClick={() => setNombreNuevo(s)}
-                      className="px-2 py-0.5 rounded-full bg-muted hover:bg-primary/10 hover:text-primary text-[11.5px] text-foreground">
+                      className="px-2 py-0.5 rounded-full bg-muted hover:bg-primary/10 hover:text-primary-text text-[11.5px] text-foreground">
                       {s}
                     </button>
                   ))}

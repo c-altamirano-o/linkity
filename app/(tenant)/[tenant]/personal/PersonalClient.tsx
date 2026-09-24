@@ -421,7 +421,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-4 sm:px-6 pb-3">
         {[
-          { label: "Total empleados", value: String(totalActivos), sub: "Activos", icon: Users, color: "text-primary" },
+          { label: "Total empleados", value: String(totalActivos), sub: "Activos", icon: Users, color: "text-primary-text" },
           { label: "Activos hoy", value: String(activosHoy), sub: "Con entrada registrada", icon: UserCheck, color: "text-emerald-600" },
           { label: "Horas registradas", value: String(horasSemana), sub: "Últimos 8 días", icon: Clock, color: "text-foreground" },
           { label: "Nómina pendiente", value: nominaPendiente === 0 ? "Al día" : formatMXN(nominaPendiente), sub: "Pagos por procesar", icon: Wallet, color: nominaPendiente === 0 ? "text-emerald-600" : "text-amber-600" },
@@ -475,13 +475,22 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium rounded-lg">
                 <Plus className="w-3.5 h-3.5" /> Nuevo empleado
               </button>
-              <button onClick={() => setModalRoles(true)} title="Roles y permisos"
-                className="flex items-center justify-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted text-xs font-medium rounded-lg text-foreground">
-                <Shield className="w-3.5 h-3.5" />
+            </div>
+            {/* 2026-09-24, a petición de Carlos: antes estos dos eran
+                botones de solo ícono ("casi imperceptibles... como una
+                herramienta oculta") — ahora llevan su nombre visible y,
+                para el Asistente (la guía paso a paso, el punto de entrada
+                que más le conviene a quien no sabe por dónde empezar),
+                además un acento de color para que resalte a simple vista
+                junto al de "Roles y permisos". */}
+            <div className="flex gap-1.5">
+              <button onClick={() => setModalRoles(true)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 border border-border hover:bg-muted text-xs font-medium rounded-lg text-foreground">
+                <Shield className="w-3.5 h-3.5" /> Roles y permisos
               </button>
-              <button onClick={() => setModalAsistente(true)} title="Asistente de puestos"
-                className="flex items-center justify-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted text-xs font-medium rounded-lg text-foreground">
-                <Sparkles className="w-3.5 h-3.5" />
+              <button onClick={() => setModalAsistente(true)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 border border-primary/40 bg-primary/5 hover:bg-primary/10 text-xs font-medium rounded-lg text-primary-text">
+                <Sparkles className="w-3.5 h-3.5" /> Asistente de puestos
               </button>
             </div>
           </div>
@@ -496,7 +505,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 }`}>
                 <div className="flex items-center gap-2">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11.5px] font-semibold flex-shrink-0 ${
-                    e.isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                    e.isActive ? "bg-primary/10 text-primary-text" : "bg-muted text-muted-foreground"
                   }`}>
                     {iniciales(e.name)}
                   </div>
@@ -517,7 +526,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
             <div className="flex flex-col items-center justify-center h-full p-10 text-center">
               <Users className="w-8 h-8 text-muted-foreground/40 mb-2" />
               <p className="text-sm font-medium text-foreground mb-1">Sin empleados registrados</p>
-              <button onClick={abrirNuevoEmpleado} className="text-xs text-primary mt-1">+ Registrar el primero</button>
+              <button onClick={abrirNuevoEmpleado} className="text-xs text-primary-text mt-1">+ Registrar el primero</button>
             </div>
           ) : (
             <>
@@ -525,7 +534,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 <div className="flex items-start justify-between mb-2 flex-wrap gap-2">
                   <div className="flex items-center gap-3">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-semibold flex-shrink-0 ${
-                      seleccionado.isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      seleccionado.isActive ? "bg-primary/10 text-primary-text" : "bg-muted text-muted-foreground"
                     }`}>
                       {iniciales(seleccionado.name)}
                     </div>
@@ -583,7 +592,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                     {[
                       { label: "Teléfono", value: seleccionado.phone ? `${seleccionado.phoneCountryCode} ${seleccionado.phone}` : "Sin registrar" },
                       { label: "Esquema de pago", value: ESQUEMA_TEXTO[seleccionado.esquemaPago] },
-                      { label: "Sueldo base", value: formatMXN(seleccionado.sueldoBase), color: "text-primary" },
+                      { label: "Sueldo base", value: formatMXN(seleccionado.sueldoBase), color: "text-primary-text" },
                       ...(seleccionado.esquemaPago === "DESTAJO"
                         ? [{ label: "Destajo", value: `${formatMXN(seleccionado.montoDestajo)} por ${COMISION_BASE_TEXTO[seleccionado.comisionBase].toLowerCase()}` }]
                         : seleccionado.esquemaPago !== "FIJO"
@@ -755,7 +764,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               <div>
                 <div className="flex items-center justify-between">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ROL — DETERMINA SU ACCESO AL SISTEMA</label>
-                  <button type="button" onClick={() => setModalRoles(true)} className="text-[11.5px] text-primary hover:underline">Roles y permisos</button>
+                  <button type="button" onClick={() => setModalRoles(true)} className="text-[11.5px] text-primary-text hover:underline">Roles y permisos</button>
                 </div>
                 <select value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
@@ -1033,7 +1042,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
               <div className="bg-muted rounded-lg px-3 py-2 flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Total a pagar</span>
-                <span className="text-sm font-semibold text-primary">
+                <span className="text-sm font-semibold text-primary-text">
                   {formatMXN((parseFloat(pagoBase || "0") || 0) + (parseFloat(pagoComision || "0") || 0))}
                 </span>
               </div>

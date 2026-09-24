@@ -288,7 +288,7 @@ export default function AsistentePersonal({ tenantSlug, rolesIniciales, business
                             <span>
                               Difiere del sugerido:{faltantes.length > 0 && <> le falta {faltantes.map(nombreModulo).join(", ")}.</>}{sobrantes.length > 0 && <> tiene de más {sobrantes.map(nombreModulo).join(", ")}.</>}
                             </span>
-                            <button onClick={() => restaurarSugerido(idx)} className="flex items-center gap-1 text-primary hover:underline whitespace-nowrap flex-shrink-0">
+                            <button onClick={() => restaurarSugerido(idx)} className="flex items-center gap-1 text-primary-text hover:underline whitespace-nowrap flex-shrink-0">
                               <RotateCcw className="w-3 h-3" /> Restaurar
                             </button>
                           </div>

@@ -129,7 +129,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
           <h1 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
-            <Wrench className="w-4 h-4 text-primary" /> Taller
+            <Wrench className="w-4 h-4 text-primary-text" /> Taller
           </h1>
           <p className="text-[12.5px] text-muted-foreground mt-0.5">
             {verTodoTaller
@@ -156,7 +156,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
       </div>
 
       {verTodoTaller && (
-        <div className="mx-4 mb-2 flex items-center gap-2 bg-primary/5 text-primary text-[12px] px-3 py-1.5 rounded-lg">
+        <div className="mx-4 mb-2 flex items-center gap-2 bg-primary/5 text-primary-text text-[12px] px-3 py-1.5 rounded-lg">
           <Users className="w-3.5 h-3.5 flex-shrink-0" /> Vista de Jefe de técnicos — ves todas las reparaciones del taller, sin poder editarlas.
         </div>
       )}

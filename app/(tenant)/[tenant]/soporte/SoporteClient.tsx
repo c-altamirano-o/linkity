@@ -119,7 +119,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
           <p className="text-[13.5px] text-muted-foreground mb-4">Si tienes una duda o algo no está funcionando, cuéntanos.</p>
           <button
             onClick={abrirModal}
-            className="text-[13.5px] font-medium text-primary hover:underline"
+            className="text-[13.5px] font-medium text-primary-text hover:underline"
           >
             Abrir tu primer ticket
           </button>

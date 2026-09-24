@@ -269,7 +269,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
             <FileText className="w-8 h-8 text-muted-foreground/40 mb-2" />
             <p className="text-sm text-muted-foreground">No hay facturas generadas todavía.</p>
             {ventasSinFacturar.length > 0 && (
-              <button onClick={abrirModalNueva} className="text-xs text-primary mt-1">+ Generar la primera</button>
+              <button onClick={abrirModalNueva} className="text-xs text-primary-text mt-1">+ Generar la primera</button>
             )}
           </div>
         ) : (
@@ -342,7 +342,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                 {[
                   { label: "Subtotal", value: seleccionada.saleSubtotal != null ? formatMXN(seleccionada.saleSubtotal) : "—" },
                   { label: "IVA", value: seleccionada.saleTax != null ? formatMXN(seleccionada.saleTax) : "—" },
-                  { label: "Total", value: formatMXN(seleccionada.total), color: "text-primary" },
+                  { label: "Total", value: formatMXN(seleccionada.total), color: "text-primary-text" },
                   { label: "Tipo", value: "Ingreso" },
                 ].map((s) => (
                   <div key={s.label} className="bg-muted rounded-lg p-3">
@@ -473,7 +473,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                     <div className="flex items-center justify-between">
                       <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">RECEPTOR DEL CFDI</label>
                       {ventaSeleccionadaNueva?.customerId && (
-                        <button type="button" onClick={() => setNvClienteNuevo((v) => !v)} className="text-[11.5px] text-primary">
+                        <button type="button" onClick={() => setNvClienteNuevo((v) => !v)} className="text-[11.5px] text-primary-text">
                           {nvClienteNuevo ? "Usar cliente de la venta" : "Facturar a otro receptor"}
                         </button>
                       )}

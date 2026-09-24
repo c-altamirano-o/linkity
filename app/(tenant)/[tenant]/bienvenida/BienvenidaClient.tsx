@@ -145,14 +145,14 @@ export default function BienvenidaClient({
     <div className="max-w-2xl mx-auto px-4 py-10">
       <div className="text-center mb-8">
         <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-          <PartyPopper className="w-7 h-7 text-primary" />
+          <PartyPopper className="w-7 h-7 text-primary-text" />
         </div>
         <h1 className="text-2xl font-bold text-foreground">¡Bienvenido, {businessName}!</h1>
         <p className="text-muted-foreground text-sm mt-1.5">
           Completa estos pasos para dejar tu negocio listo para vender. Puedes saltarte cualquiera y volver
           después desde el menú.
         </p>
-        <p className="text-xs font-medium text-primary mt-2">{completados} de {totalPasos} completados</p>
+        <p className="text-xs font-medium text-primary-text mt-2">{completados} de {totalPasos} completados</p>
       </div>
 
       <div className="space-y-3 mb-8">
@@ -170,7 +170,7 @@ export default function BienvenidaClient({
         >
           <Link
             href={`/${tenantSlug}/configuracion`}
-            className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline flex-shrink-0"
+            className="flex items-center gap-1.5 text-xs font-medium text-primary-text hover:underline flex-shrink-0"
           >
             Ir a Configuración <ArrowRight className="w-3.5 h-3.5" />
           </Link>
@@ -201,7 +201,7 @@ export default function BienvenidaClient({
               )}
               <Link
                 href={`/${tenantSlug}/catalogo`}
-                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                className="flex items-center gap-1.5 text-xs font-medium text-primary-text hover:underline"
               >
                 Ir a Catálogo <ArrowRight className="w-3.5 h-3.5" />
               </Link>
@@ -223,7 +223,7 @@ export default function BienvenidaClient({
         >
           <button
             onClick={() => setFormEquipoAbierto((v) => !v)}
-            className="flex items-center gap-1 text-xs font-medium text-primary hover:underline flex-shrink-0"
+            className="flex items-center gap-1 text-xs font-medium text-primary-text hover:underline flex-shrink-0"
           >
             Invitar ahora {formEquipoAbierto ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
@@ -246,7 +246,7 @@ export default function BienvenidaClient({
                 <div className="flex items-center gap-2 mt-2">
                   <button
                     onClick={copiarCredenciales}
-                    className="flex items-center gap-1 text-[12.5px] font-medium text-primary hover:underline"
+                    className="flex items-center gap-1 text-[12.5px] font-medium text-primary-text hover:underline"
                   >
                     {copiado ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                     {copiado ? "Copiado" : "Copiar"}
@@ -325,7 +325,7 @@ export default function BienvenidaClient({
         >
           <Link
             href={`/${tenantSlug}/caja`}
-            className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline flex-shrink-0"
+            className="flex items-center gap-1.5 text-xs font-medium text-primary-text hover:underline flex-shrink-0"
           >
             Ir a Caja <ArrowRight className="w-3.5 h-3.5" />
           </Link>
@@ -344,7 +344,7 @@ export default function BienvenidaClient({
         >
           <Link
             href={`/${tenantSlug}/pos`}
-            className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline flex-shrink-0"
+            className="flex items-center gap-1.5 text-xs font-medium text-primary-text hover:underline flex-shrink-0"
           >
             Ir a Punto de Venta <ArrowRight className="w-3.5 h-3.5" />
           </Link>
@@ -405,7 +405,7 @@ function PasoShell({
       }`}
     >
       <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${done ? "bg-emerald-100" : "bg-primary/10"}`}>
-        {done ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <Icono className="w-5 h-5 text-primary" />}
+        {done ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <Icono className="w-5 h-5 text-primary-text" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">

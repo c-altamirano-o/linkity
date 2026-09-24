@@ -244,7 +244,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, usarClienteNuevo: !form.usarClienteNuevo })}
-                  className="text-[12.5px] text-primary font-medium"
+                  className="text-[12.5px] text-primary-text font-medium"
                 >
                   {form.usarClienteNuevo ? "Elegir cliente existente" : "+ Cliente nuevo"}
                 </button>
@@ -398,7 +398,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
         <div className="flex h-full items-center justify-center p-6">
           <div className="text-center max-w-sm">
             <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <CalendarCheck className="w-7 h-7 text-primary" />
+              <CalendarCheck className="w-7 h-7 text-primary-text" />
             </div>
             <p className="text-sm font-semibold text-foreground mb-1">Aún no tienes {etiquetaEntidad.toLowerCase()} agendadas</p>
             <p className="text-xs text-muted-foreground mb-5">
@@ -483,7 +483,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
               </div>
 
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary-text flex items-center justify-center text-xs font-semibold flex-shrink-0">
                   {c.iniciales}
                 </div>
                 <div className="min-w-0">

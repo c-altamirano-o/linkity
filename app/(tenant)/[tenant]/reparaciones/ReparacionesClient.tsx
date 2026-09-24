@@ -373,7 +373,7 @@ function VistaTienda({
                   <Clock className="w-2.5 h-2.5" /> {rep.folio}
                 </span>
                 {rep.telefono && (
-                  <span className="text-[11.5px] text-primary flex items-center gap-1">
+                  <span className="text-[11.5px] text-primary-text flex items-center gap-1">
                     <Phone className="w-2.5 h-2.5" /> {rep.telefono}
                   </span>
                 )}
@@ -385,7 +385,7 @@ function VistaTienda({
 
       <div className={`${mostrarDetalle ? "flex" : "hidden md:flex"} flex-1 flex-col bg-muted overflow-hidden`}>
         <div className="bg-card border-b border-border px-4 sm:px-5 py-3">
-          <button onClick={() => setMostrarDetalle(false)} className="md:hidden flex items-center gap-1 text-primary text-xs font-medium mb-3">
+          <button onClick={() => setMostrarDetalle(false)} className="md:hidden flex items-center gap-1 text-primary-text text-xs font-medium mb-3">
             <ChevronLeft className="w-4 h-4" /> Volver a la lista
           </button>
 
@@ -441,7 +441,18 @@ function VistaTienda({
             </div>
           </div>
 
-          {seleccionada.estado !== "DELIVERED" && (
+          {/* 2026-09-24, corrigiendo un bug real que Carlos reportó con
+              capturas: esta franja decía "Equipo listo para entregar/
+              Reparación completada" (o "para devolver") para CUALQUIER
+              estado que no fuera DELIVERED — incluyendo un folio recién
+              creado (RECEIVED), que ni siquiera ha pasado por el taller.
+              La condición correcta es la misma que ya usan los botones de
+              "Cobrar y entregar"/"Entregar" un poco más arriba: solo
+              cuando el taller (o el propio "aduana", ver lib/roles.ts) ya
+              marcó el equipo como listo para tienda (SHOP_READY) o como
+              devolución sin reparar (SHOP_RETURN) — nunca mientras sigue
+              en RECEIVED/DIAGNOSING/WAITING_PARTS/IN_REPAIR. */}
+          {(seleccionada.estado === "SHOP_READY" || seleccionada.estado === "SHOP_RETURN") && (
             <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${isDev ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"}`}>
               {isDev ? <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" /> : <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />}
               <div>
@@ -466,7 +477,7 @@ function VistaTienda({
                 { label: "Falla", value: seleccionada.falla },
                 { label: "Sucursal", value: seleccionada.sucursalNombre },
                 { label: "Fecha prometida", value: seleccionada.fechaEstimada ? formatFecha(seleccionada.fechaEstimada) : "Sin definir" },
-                { label: "Costo final", value: seleccionada.costoFinal ? formatMXN(seleccionada.costoFinal) : isDev ? "Sin cargo" : "Por definir", color: isDev ? "text-amber-600" : "text-primary" },
+                { label: "Costo final", value: seleccionada.costoFinal ? formatMXN(seleccionada.costoFinal) : isDev ? "Sin cargo" : "Por definir", color: isDev ? "text-amber-600" : "text-primary-text" },
                 // "Técnico" (seleccionada.tecnico) en realidad es quien REGISTRÓ
                 // la reparación (Repair.userId — encargado/recepción), nunca
                 // el técnico que la trabajó; se relabela para no confundir con
@@ -910,7 +921,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                   <input type="number" min={1} value={piezaNuevaCantidad} onChange={(e) => setPiezaNuevaCantidad(e.target.value)}
                     className="w-14 px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary" />
                   <button type="button" onClick={agregarPiezaNueva} disabled={!piezaNuevaId}
-                    className="px-2.5 py-2 bg-muted hover:bg-accent disabled:opacity-40 rounded-lg text-primary">
+                    className="px-2.5 py-2 bg-muted hover:bg-accent disabled:opacity-40 rounded-lg text-primary-text">
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>

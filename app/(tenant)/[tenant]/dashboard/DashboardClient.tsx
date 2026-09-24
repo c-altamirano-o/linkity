@@ -269,7 +269,7 @@ export default function DashboardClient({
         {data.ventasHoy.map((v) => (
           <div key={v.id} className="grid grid-cols-[70px_1fr_80px_65px] sm:grid-cols-[80px_1fr_90px_75px] px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-center">
             <div>
-              <p className="text-xs font-semibold text-primary">{v.folio}</p>
+              <p className="text-xs font-semibold text-primary-text">{v.folio}</p>
               <p className="text-[11.5px] text-muted-foreground">{v.hora}</p>
             </div>
             <div>
@@ -296,7 +296,7 @@ export default function DashboardClient({
         {rows.map((r) => (
           <div key={r.id} className="grid grid-cols-[80px_1fr_90px_75px] px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-center">
             <div>
-              <p className="text-xs font-semibold text-primary">{r.folio}</p>
+              <p className="text-xs font-semibold text-primary-text">{r.folio}</p>
               <div className={`w-1.5 h-1.5 rounded-full mt-1 ${prioridadDot[r.prioridad]}`} />
             </div>
             <div>
@@ -325,13 +325,13 @@ export default function DashboardClient({
         {rows.map((e) => (
           <div key={e.id} className="grid grid-cols-[80px_1fr_90px_70px] px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-center">
             <div>
-              <p className="text-xs font-semibold text-primary">{e.folio}</p>
+              <p className="text-xs font-semibold text-primary-text">{e.folio}</p>
               <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Listo</span>
             </div>
             <div>
               <p className="text-xs font-medium text-foreground">{e.cliente}</p>
               <p className="text-[11.5px] text-muted-foreground">{e.equipo} · {e.falla ?? "Sin detalle"}</p>
-              <p className="text-[11.5px] text-primary flex items-center gap-1 mt-0.5">
+              <p className="text-[11.5px] text-primary-text flex items-center gap-1 mt-0.5">
                 <Phone className="w-2.5 h-2.5" /> {e.telefono}
               </p>
             </div>
@@ -355,13 +355,13 @@ export default function DashboardClient({
         {rows.map((e) => (
           <div key={e.id} className="grid grid-cols-[80px_1fr_1fr] px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-start">
             <div>
-              <p className="text-xs font-semibold text-primary">{e.folio}</p>
+              <p className="text-xs font-semibold text-primary-text">{e.folio}</p>
               <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-full bg-red-50 text-red-600">Devolución</span>
             </div>
             <div>
               <p className="text-xs font-medium text-foreground">{e.cliente}</p>
               <p className="text-[11.5px] text-muted-foreground">{e.equipo}</p>
-              <p className="text-[11.5px] text-primary flex items-center gap-1 mt-0.5">
+              <p className="text-[11.5px] text-primary-text flex items-center gap-1 mt-0.5">
                 <Phone className="w-2.5 h-2.5" /> {e.telefono}
               </p>
             </div>
@@ -385,9 +385,9 @@ export default function DashboardClient({
       content: React.ReactNode;
     }> = {
       ventas: {
-        titulo: "Ventas del día", iconBg: "bg-primary/10", iconColor: "text-primary", icon: ShoppingCart,
+        titulo: "Ventas del día", iconBg: "bg-primary/10", iconColor: "text-primary-text", icon: ShoppingCart,
         stats: [
-          { label: "Total ventas", value: formatMXN(data.totalVentasHoy), color: "text-primary" },
+          { label: "Total ventas", value: formatMXN(data.totalVentasHoy), color: "text-primary-text" },
           { label: "Num. de ventas", value: String(data.numVentasHoy), color: "text-foreground" },
           { label: "Ticket promedio", value: formatMXN(data.ticketPromedio), color: "text-foreground" },
         ],
@@ -397,7 +397,7 @@ export default function DashboardClient({
         titulo: "Total de tickets", iconBg: "bg-cyan-50", iconColor: "text-cyan-600", icon: Receipt,
         stats: [
           { label: "Tickets hoy", value: String(data.numVentasHoy), color: "text-cyan-600" },
-          { label: "Monto total", value: formatMXN(data.totalVentasHoy), color: "text-primary" },
+          { label: "Monto total", value: formatMXN(data.totalVentasHoy), color: "text-primary-text" },
           { label: "Ticket promedio", value: formatMXN(data.ticketPromedio), color: "text-foreground" },
         ],
         content: <TablaVentas />,
@@ -415,7 +415,7 @@ export default function DashboardClient({
         titulo: "Equipos listos para entregar", iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: CheckCircle,
         stats: [
           { label: "Equipos listos", value: String(data.equiposListos.length), color: "text-emerald-600" },
-          { label: "Total a cobrar", value: formatMXN(data.equiposListos.reduce((s, e) => s + (e.costo ?? 0), 0)), color: "text-primary" },
+          { label: "Total a cobrar", value: formatMXN(data.equiposListos.reduce((s, e) => s + (e.costo ?? 0), 0)), color: "text-primary-text" },
           { label: "Con espera > 1 día", value: String(data.equiposListos.filter((e) => e.espera.includes("día")).length), color: "text-amber-600" },
         ],
         content: <TablaListos rows={data.equiposListos} />,
@@ -473,7 +473,7 @@ export default function DashboardClient({
   // Reparaciones activas, dispositivos listos y devolución... Es una
   // barbería, eso no aplica ahí" — reporte de Carlos en producción).
   const metricas = [
-    { label: "Ventas del día", value: formatMXN(data.totalVentasHoy), sub: data.numVentasHoy > 0 ? `${data.numVentasHoy} ${data.numVentasHoy === 1 ? "venta" : "ventas"} hoy` : "Sin ventas aún", positive: true, icon: ShoppingCart, iconBg: "bg-primary/10", iconColor: "text-primary", modal: "ventas" as ModalType, btnColor: "text-primary bg-primary/10" },
+    { label: "Ventas del día", value: formatMXN(data.totalVentasHoy), sub: data.numVentasHoy > 0 ? `${data.numVentasHoy} ${data.numVentasHoy === 1 ? "venta" : "ventas"} hoy` : "Sin ventas aún", positive: true, icon: ShoppingCart, iconBg: "bg-primary/10", iconColor: "text-primary-text", modal: "ventas" as ModalType, btnColor: "text-primary-text bg-primary/10" },
     { label: "Total de tickets", value: String(data.numVentasHoy), sub: "Transacciones hoy", positive: true, icon: Receipt, iconBg: "bg-cyan-50", iconColor: "text-cyan-600", modal: "tickets" as ModalType, btnColor: "text-cyan-600 bg-cyan-50" },
     ...(data.reparacionesActiva
       ? [
@@ -672,7 +672,7 @@ export default function DashboardClient({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3">
           <div>
             <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-primary" /> Ventas por día y hora
+              <Calendar className="w-3.5 h-3.5 text-primary-text" /> Ventas por día y hora
             </p>
             <p className="text-xs text-muted-foreground capitalize">{formatFechaLarga(fechaSel)}</p>
           </div>
@@ -695,7 +695,7 @@ export default function DashboardClient({
             </button>
             {!esHoySeleccionado && (
               <button onClick={() => cambiarFechaVentas(hoyStr)} disabled={cargandoFecha}
-                className="text-[11.5px] font-medium px-2 py-1.5 rounded-lg text-primary bg-primary/10 hover:opacity-80 flex-shrink-0">
+                className="text-[11.5px] font-medium px-2 py-1.5 rounded-lg text-primary-text bg-primary/10 hover:opacity-80 flex-shrink-0">
                 Hoy
               </button>
             )}
@@ -742,7 +742,7 @@ export default function DashboardClient({
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <p className="text-sm font-medium text-foreground">{t("entity.repair.plural")} activas</p>
-              <button onClick={() => setModalAbierto("reparaciones")} className="text-xs text-primary hover:underline">Ver todas</button>
+              <button onClick={() => setModalAbierto("reparaciones")} className="text-xs text-primary-text hover:underline">Ver todas</button>
             </div>
             <div className="divide-y divide-border/60">
               {data.reparacionesActivas.length === 0 ? (
@@ -842,7 +842,7 @@ export default function DashboardClient({
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-primary" />
+              <Building2 className="w-4 h-4 text-primary-text" />
               <p className="text-sm font-medium text-foreground">Resumen por sucursal</p>
             </div>
             <span className="text-xs text-muted-foreground hidden sm:block capitalize">Hoy · {fechaHoy}</span>
@@ -860,7 +860,7 @@ export default function DashboardClient({
                   </div>
                   <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-2 divide-x divide-y divide-border">
                     {[
-                      { label: "Ventas del día", value: formatMXN(suc.ventasDia), color: "text-primary", sub: suc.vsAyer != null ? `${suc.vsAyer >= 0 ? "↑" : "↓"} ${Math.abs(suc.vsAyer)}% vs ayer` : "Sin datos de ayer" },
+                      { label: "Ventas del día", value: formatMXN(suc.ventasDia), color: "text-primary-text", sub: suc.vsAyer != null ? `${suc.vsAyer >= 0 ? "↑" : "↓"} ${Math.abs(suc.vsAyer)}% vs ayer` : "Sin datos de ayer" },
                       ...(data.reparacionesActiva
                         ? [
                             { label: "Equipos recibidos", value: String(suc.equiposRecibidos), color: "text-foreground", sub: "Hoy" },
@@ -869,7 +869,7 @@ export default function DashboardClient({
                             { label: "Rep. activas", value: String(suc.repActivas), color: "text-foreground", sub: "En proceso" },
                           ]
                         : []),
-                      { label: "Ticket promedio", value: formatMXN(suc.ticketsVenta > 0 ? Math.round(suc.ventasDia / suc.ticketsVenta) : 0), color: "text-primary", sub: "Por venta" },
+                      { label: "Ticket promedio", value: formatMXN(suc.ticketsVenta > 0 ? Math.round(suc.ventasDia / suc.ticketsVenta) : 0), color: "text-primary-text", sub: "Por venta" },
                     ].map((m) => (
                       <div key={m.label} className="px-3 py-2.5">
                         <p className="text-[10.5px] text-muted-foreground mb-0.5">{m.label}</p>
@@ -905,7 +905,7 @@ export default function DashboardClient({
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
               <div className="flex items-center gap-2">
-                <Settings className="w-4 h-4 text-primary" />
+                <Settings className="w-4 h-4 text-primary-text" />
                 <p className="text-sm font-semibold text-foreground">Configurar categorías</p>
               </div>
               <button onClick={() => setConfigurandoCategorias(false)}
