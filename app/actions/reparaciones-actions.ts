@@ -167,14 +167,30 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
     // reparación de la misma sucursal compartan el mismo prefijo de origen.
     const prefijo = branch.code ? `REP-${branch.code}-` : "REP-";
     const patron = branch.code ? new RegExp(`^REP-${branch.code}-(\\d+)$`) : /^REP-(\d+)$/;
-    const ultima = await db.repair.findFirst({
+    // 2026-09-24, corrigiendo un bug real que Carlos encontró probando el
+    // sistema como Cajero (la reparación fallaba con "No se pudo crear la
+    // reparación" sin ninguna causa visible en pantalla — el log del
+    // servidor mostraba "Unique constraint failed on
+    // Repair_tenantId_folio_key"): esto tomaba el folio de "el repair más
+    // reciente por receivedAt" y le sumaba 1 — pero receivedAt es la fecha
+    // en que se recibió el equipo, que el mostrador puede capturar
+    // libremente (o que datos de ejemplo/import pueden traer fuera de
+    // orden) — "el más reciente por fecha" NO es lo mismo que "el de folio
+    // más alto". En el tenant demo, por ejemplo, REP-CEN-0008 quedó con una
+    // fecha de recepción ANTERIOR a REP-CEN-0007 — así que esto calculaba
+    // "0008" de nuevo (ya existente) en vez de "0009", y Prisma tronaba
+    // antes de crear nada. Ahora se revisan TODOS los folios de este mismo
+    // prefijo (misma sucursal, o la secuencia global si no tiene código) y
+    // se toma el número más alto entre todos, sin importar su fecha.
+    const existentes = await db.repair.findMany({
       where: branch.code ? { branchId } : { branch: { code: null } },
-      orderBy: { receivedAt: "desc" },
       select: { folio: true },
     });
     let siguienteNum = 1;
-    const m = ultima?.folio.match(patron);
-    if (m) siguienteNum = parseInt(m[1], 10) + 1;
+    for (const { folio: f } of existentes) {
+      const m = f.match(patron);
+      if (m) siguienteNum = Math.max(siguienteNum, parseInt(m[1], 10) + 1);
+    }
     const folio = `${prefijo}${String(siguienteNum).padStart(4, "0")}`;
 
     const repair = await db.$transaction(async (tx: any) => {

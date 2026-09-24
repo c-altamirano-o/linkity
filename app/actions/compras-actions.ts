@@ -113,13 +113,21 @@ export async function crearCompraAction(params: CrearCompraParams): Promise<Crea
     // Folio secuencial simple OC-0012, OC-0013, ... — mismo patrón (y misma
     // limitación de concurrencia, ya documentada) que el folio de
     // reparaciones y ventas.
-    const ultima = await db.purchase.findFirst({
-      orderBy: { createdAt: "desc" },
-      select: { folio: true },
-    });
+    //
+    // 2026-09-24, mismo bug real (y misma corrección) que crearReparacionAction
+    // en reparaciones-actions.ts: tomar "la compra más reciente por
+    // createdAt" y sumarle 1 falla si algún folio ya existente quedó con una
+    // fecha fuera de orden respecto a su número — "más reciente por fecha"
+    // no es lo mismo que "de folio más alto", y calcular un folio que ya
+    // existe truena con Prisma ("Unique constraint failed") antes de
+    // registrar la compra. Ahora se revisan TODOS los folios OC- y se toma
+    // el número más alto entre todos, sin importar su fecha.
+    const comprasExistentes = await db.purchase.findMany({ select: { folio: true } });
     let siguienteNum = 1;
-    const m = ultima?.folio.match(/^OC-(\d+)$/);
-    if (m) siguienteNum = parseInt(m[1], 10) + 1;
+    for (const { folio: f } of comprasExistentes) {
+      const m = f.match(/^OC-(\d+)$/);
+      if (m) siguienteNum = Math.max(siguienteNum, parseInt(m[1], 10) + 1);
+    }
     const folio = `OC-${String(siguienteNum).padStart(4, "0")}`;
 
     // Subtotales y total SIEMPRE recalculados aquí, nunca confiando en lo

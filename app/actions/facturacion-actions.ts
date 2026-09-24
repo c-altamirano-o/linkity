@@ -102,13 +102,21 @@ export async function crearFacturaAction(params: CrearFacturaParams): Promise<Cr
     // Folio secuencial F-0001, F-0002, ... — mismo prefijo que ya usó
     // prisma/seed.ts para la factura de ejemplo, en vez del "FAC-" solo
     // cosmético que traía el mockup.
-    const ultima = await db.invoice.findFirst({
-      orderBy: { createdAt: "desc" },
-      select: { folio: true },
-    });
+    //
+    // 2026-09-24, mismo bug real (y misma corrección) que crearReparacionAction
+    // en reparaciones-actions.ts: tomar "la factura más reciente por
+    // createdAt" y sumarle 1 falla si algún folio ya existente quedó con una
+    // fecha fuera de orden respecto a su número — "más reciente por fecha"
+    // no es lo mismo que "de folio más alto", y calcular un folio que ya
+    // existe truena con Prisma ("Unique constraint failed") antes de emitir
+    // el CFDI. Ahora se revisan TODOS los folios F- y se toma el número más
+    // alto entre todos, sin importar su fecha.
+    const facturasExistentes = await db.invoice.findMany({ select: { folio: true } });
     let siguienteNum = 1;
-    const m = ultima?.folio.match(/^F-(\d+)$/);
-    if (m) siguienteNum = parseInt(m[1], 10) + 1;
+    for (const { folio: f } of facturasExistentes) {
+      const m = f.match(/^F-(\d+)$/);
+      if (m) siguienteNum = Math.max(siguienteNum, parseInt(m[1], 10) + 1);
+    }
     const folio = `F-${String(siguienteNum).padStart(4, "0")}`;
 
     const factura = await db.invoice.create({

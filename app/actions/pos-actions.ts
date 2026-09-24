@@ -185,14 +185,24 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     // mantiene la secuencia global V-1001, V-1002... de siempre.
     const prefijo = branch.code ? `V-${branch.code}-` : "V-";
     const patron = branch.code ? new RegExp(`^V-${branch.code}-(\\d+)$`) : /^V-(\d+)$/;
-    const ultimaVenta = await db.sale.findFirst({
+    // 2026-09-24, mismo bug real (y misma corrección) que crearReparacionAction
+    // en reparaciones-actions.ts: tomar "la venta más reciente por createdAt"
+    // y sumarle 1 falla si algún folio ya existente quedó con una fecha fuera
+    // de orden respecto a su número (datos de ejemplo, importaciones,
+    // correcciones manuales) — "más reciente por fecha" no es lo mismo que
+    // "de folio más alto", y calcular un folio que ya existe truena con
+    // Prisma ("Unique constraint failed") antes de registrar la venta. Ahora
+    // se revisan TODOS los folios de este mismo prefijo y se toma el número
+    // más alto entre todos, sin importar su fecha.
+    const ventasExistentes = await db.sale.findMany({
       where: branch.code ? { branchId } : { branch: { code: null } },
-      orderBy: { createdAt: "desc" },
       select: { folio: true },
     });
     let siguienteNum = 1001;
-    const m = ultimaVenta?.folio.match(patron);
-    if (m) siguienteNum = parseInt(m[1], 10) + 1;
+    for (const { folio: f } of ventasExistentes) {
+      const m = f.match(patron);
+      if (m) siguienteNum = Math.max(siguienteNum, parseInt(m[1], 10) + 1);
+    }
     const folio = `${prefijo}${siguienteNum}`;
 
     await db.$transaction(async (tx: any) => {

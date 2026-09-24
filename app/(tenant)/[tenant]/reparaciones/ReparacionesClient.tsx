@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, Check, Clock,
@@ -550,6 +550,23 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   const [nuevaError, setNuevaError] = useState<string | null>(null);
   const [creando, startCrear] = useTransition();
 
+  // 2026-09-24, corrigiendo un bug real que Carlos reportó probando el
+  // sistema como Cajero: el error de "Crear" (nuevaError) aparece hasta
+  // ARRIBA del modal, pero el modal completo (encabezado incluido) es el
+  // contenedor con scroll — si el empleado ya llenó todo el formulario
+  // hasta el último campo (donde está el botón "Crear"), su scroll queda
+  // hasta abajo, y el error le queda oculto arriba sin ningún aviso;
+  // Carlos tuvo que descubrir por su cuenta que debía subir el scroll a
+  // mano. Este ref + efecto sube el scroll del modal al aparecer un error
+  // nuevo, para que se vea de inmediato sin que el empleado tenga que
+  // buscarlo.
+  const modalNuevaScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (nuevaError) {
+      modalNuevaScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [nuevaError]);
+
   // Piezas/refacciones capturadas ya desde el alta — ver el comentario en
   // CrearReparacionParams.piezas (reparaciones-actions.ts). El precio que
   // se ve aquí es solo de referencia (viene del catálogo cargado en la
@@ -773,7 +790,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
       {modalNuevaAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
           onClick={cancelarModalNueva}>
-          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div ref={modalNuevaScrollRef} className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <span className="text-sm font-medium text-foreground">Nueva {label(labels, "entity.repair.singular").toLowerCase()}</span>
               <button onClick={cancelarModalNueva} className="text-muted-foreground hover:text-foreground">
