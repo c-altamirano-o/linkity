@@ -32,6 +32,12 @@ interface POSClientProps {
   // ?repairId; { ok:false } cuando el repairId no era válido/cobrable
   // (ver getRepairParaCobro, lib/reparaciones-data.ts).
   repairParaCobro?: RepairParaCobro | null;
+  // Precarga del cliente desde el botón "Nueva venta" de su ficha en
+  // /clientes (2026-09-25, atajo para el operador único, a petición de
+  // Carlos) — id "en crudo" del cliente, sin revalidar en el servidor (ver
+  // el comentario en pos/page.tsx); si no coincide con ningún cliente de
+  // este tenant simplemente no preselecciona nada.
+  clienteInicialId?: string | null;
 }
 
 type CartItem = {
@@ -53,7 +59,7 @@ const SIN_CATEGORIA_ID = "__sin_categoria__";
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
-export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, repairParaCobro }: POSClientProps) {
+export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, repairParaCobro, clienteInicialId }: POSClientProps) {
   const { categorias, productos, clientes, cajaAbiertaPorSucursal } = data;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -71,7 +77,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   // camino solo llevaría a un error al cobrar.
   const sucursalBloqueadaPorReparacion = carrito.some((i) => i.repairId);
 
-  const [clienteId, setClienteId] = useState<string | null>(null);
+  const [clienteId, setClienteId] = useState<string | null>(clienteInicialId ?? null);
   const [clientePickerAbierto, setClientePickerAbierto] = useState(false);
   const [clienteQuery, setClienteQuery] = useState("");
 

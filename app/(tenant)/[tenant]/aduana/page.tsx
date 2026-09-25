@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getReparacionesData } from "@/lib/reparaciones-data";
 import { getTenantLabels } from "@/lib/labels-server";
+import { puedeAccederModulo } from "@/lib/actor";
 import AduanaClient from "./AduanaClient";
 
 /**
@@ -34,10 +35,20 @@ export default async function AduanaPage({
 
   if (!tenant) notFound();
 
-  const [data, labels] = await Promise.all([
+  const [data, labels, puedeCobrar] = await Promise.all([
     getReparacionesData(tenant.id, undefined),
     getTenantLabels(tenant.id, tenant.businessType),
+    // 2026-09-25, a petición de Carlos: "atajo" para el usuario que hace
+    // todo (dueño único) — si quien está en Aduana TAMBIÉN tiene acceso al
+    // módulo "pos" (un dueño con cuenta real siempre lo tiene; un
+    // recepcionista de PIN sin ese módulo, no), se le ofrece aquí mismo el
+    // botón "Cobrar y entregar" hacia POS en vez de obligarlo a ir a buscar
+    // el mismo folio otra vez en /reparaciones. Ver el comentario largo en
+    // puedeAccederModulo (lib/actor.ts) — esto solo decide qué botón se
+    // muestra, la Server Action de destino (crearVentaAction) sigue
+    // validando el permiso por su cuenta.
+    puedeAccederModulo(tenant.id, "pos"),
   ]);
 
-  return <AduanaClient data={data} labels={labels} tenantSlug={tenantSlug} />;
+  return <AduanaClient data={data} labels={labels} tenantSlug={tenantSlug} puedeCobrar={puedeCobrar} />;
 }

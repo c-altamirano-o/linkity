@@ -1121,8 +1121,31 @@ export default function ClientesClient({
                       <span className="hidden sm:inline">WhatsApp</span>
                     </a>
                   )}
+                  {reparacionesActiva && (
+                    <Link
+                      // 2026-09-25, a petición de Carlos: mismo atajo que
+                      // "Nueva venta" de aquí abajo, pero hacia Reparaciones
+                      // — abre el modal de "Nueva reparación" con este
+                      // cliente ya preseleccionado (ver clienteInicialId,
+                      // reparaciones/page.tsx y ReparacionesClient.tsx).
+                      // Gateado por reparacionesActiva porque no todo
+                      // rubro/negocio tiene ese módulo activo — mismo criterio
+                      // que ya usa esta pantalla para la ficha/tab de
+                      // reparaciones del propio cliente.
+                      href={`/${tenantSlug}/reparaciones?clienteId=${seleccionado.id}`}
+                      className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted"
+                    >
+                      <Wrench className="w-3 h-3" />
+                      <span className="hidden sm:inline">Nueva reparación</span>
+                    </Link>
+                  )}
                   <Link
-                    href={`/${tenantSlug}/pos`}
+                    // 2026-09-25, a petición de Carlos: atajo para el
+                    // operador único — manda a POS con este cliente ya
+                    // preseleccionado (ver clienteInicialId, pos/page.tsx y
+                    // POSClient.tsx) en vez de obligar a buscarlo otra vez
+                    // ahí adentro.
+                    href={`/${tenantSlug}/pos?clienteId=${seleccionado.id}`}
                     className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-xs font-medium transition-colors"
                   >
                     <ShoppingCart className="w-3 h-3" />

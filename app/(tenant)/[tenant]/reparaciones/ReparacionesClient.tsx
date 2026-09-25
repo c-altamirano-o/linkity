@@ -54,6 +54,14 @@ interface ReparacionesClientProps {
   // (avanzarEstadoAction ya lo validaba, pero la UI nunca ofrecía la
   // alternativa). Se aprovecha este cambio para corregirlo también.
   cobrarEnDevolucion: boolean;
+  // 2026-09-25, a petición de Carlos: atajo para el operador único — cuando
+  // se llega aquí desde el botón "Nueva reparación" de la ficha de un
+  // cliente en /clientes, abre el modal de "Nueva reparación" ya con ese
+  // cliente preseleccionado en vez de obligar a buscarlo otra vez. null
+  // cuando se llegó a /reparaciones sin ese atajo (comportamiento de
+  // siempre); si el id no coincide con ningún cliente de este tenant no
+  // preselecciona nada (ver el efecto de seed más abajo).
+  clienteInicialId?: string | null;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -544,7 +552,7 @@ function VistaTienda({
    NINGÚN rol — se movió por completo a /aduana, ver AduanaClient.tsx. Esta
    pantalla ahora es SIEMPRE la vista de tienda: recibir con folio, ver el
    detalle de solo lectura, y cobrar/entregar/avisar.) ── */
-export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, cobrarEnDevolucion }: ReparacionesClientProps) {
+export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, cobrarEnDevolucion, clienteInicialId }: ReparacionesClientProps) {
   const { reparaciones, clientes, productos } = data;
   const router = useRouter();
   const negocio = nombreNegocio(tenantSlug);
@@ -587,6 +595,24 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
       modalNuevaScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [nuevaError]);
+
+  // 2026-09-25, a petición de Carlos: seed de "Nueva reparación" desde el
+  // botón de la ficha de un cliente en /clientes (?clienteId=...) — mismo
+  // patrón que repairSeedAplicada en POSClient.tsx (useRef en vez de
+  // depender de clienteInicialId en el arreglo de dependencias, para que
+  // corra UNA sola vez al montar y nunca se repita si el modal se cierra y
+  // el usuario decide luego crear otra reparación distinta desde cero).
+  const clienteSeedAplicado = useRef(false);
+  useEffect(() => {
+    if (clienteSeedAplicado.current || !clienteInicialId) return;
+    clienteSeedAplicado.current = true;
+    const cliente = clientes.find((c) => c.id === clienteInicialId);
+    if (!cliente) return;
+    setNuevaClienteId(cliente.id);
+    setNuevaClienteQuery(cliente.name);
+    setModalNuevaAbierto(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteInicialId]);
 
   // Piezas/refacciones capturadas ya desde el alta — ver el comentario en
   // CrearReparacionParams.piezas (reparaciones-actions.ts). El precio que

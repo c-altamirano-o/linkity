@@ -7,10 +7,20 @@ import ReparacionesClient from "./ReparacionesClient";
 
 export default async function ReparacionesPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tenant: string }>;
+  // ?clienteId=... (2026-09-25, atajo para el operador único, a petición de
+  // Carlos) — el botón "Nueva reparación" de la ficha de un cliente en
+  // /clientes manda aquí con este parámetro para abrir el modal de "Nueva
+  // reparación" con ese cliente ya preseleccionado (ver clienteInicialId,
+  // ReparacionesClient.tsx). Igual que clienteId en /pos, no se revalida
+  // aquí contra la base — si no coincide con ningún cliente del tenant
+  // simplemente no preselecciona nada.
+  searchParams: Promise<{ clienteId?: string }>;
 }) {
   const { tenant: tenantSlug } = await params;
+  const { clienteId } = await searchParams;
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
@@ -54,6 +64,7 @@ export default async function ReparacionesPage({
       tenantSlug={tenantSlug}
       telefonoNegocio={tenant.phone}
       cobrarEnDevolucion={tenant.cobrarEnDevolucion}
+      clienteInicialId={clienteId ?? null}
     />
   );
 }

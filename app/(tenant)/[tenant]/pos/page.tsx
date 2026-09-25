@@ -12,14 +12,22 @@ export default async function POSPage({
   searchParams,
 }: {
   params: Promise<{ tenant: string }>;
-  // ?repairId=... (2026-09-25) — "Cobrar y entregar" en Reparaciones ahora
-  // manda aquí en vez de cobrar aparte (ver el comentario largo en
+  // ?repairId=... (2026-09-25) — "Cobrar y entregar" en Reparaciones/Aduana
+  // ahora manda aquí en vez de cobrar aparte (ver el comentario largo en
   // pos-actions.ts). Se resuelve más abajo, junto a getPosData, para
   // precargar el carrito con esa reparación.
-  searchParams: Promise<{ repairId?: string }>;
+  // ?clienteId=... (2026-09-25, atajo para el operador único, a petición de
+  // Carlos) — el botón "Nueva venta" de la ficha de un cliente en /clientes
+  // ahora manda aquí con este parámetro para no obligar a buscar otra vez al
+  // mismo cliente dentro de POS. A propósito NO se revalida contra la base
+  // (a diferencia de repairId, que sí cambia el estatus de algo): si el id
+  // no existe entre los clientes de este tenant, POSClient simplemente no
+  // encuentra coincidencia y el carrito queda sin cliente preseleccionado,
+  // sin ningún efecto secundario que valga la pena bloquear aquí.
+  searchParams: Promise<{ repairId?: string; clienteId?: string }>;
 }) {
   const { tenant: tenantSlug } = await params;
-  const { repairId } = await searchParams;
+  const { repairId, clienteId } = await searchParams;
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
@@ -97,6 +105,7 @@ export default async function POSPage({
       branchInicial={branchInicial}
       tenantSlug={tenantSlug}
       repairParaCobro={repairParaCobro}
+      clienteInicialId={clienteId ?? null}
     />
   );
 }

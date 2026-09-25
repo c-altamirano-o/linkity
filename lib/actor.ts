@@ -83,6 +83,36 @@ export function puedeOperarSucursal(actor: { branchId: string | null }, branchId
   return actor.branchId === null || actor.branchId === branchId;
 }
 
+/**
+ * true si el actor de ESTA sesión (dueño con cuenta real, o empleado de PIN)
+ * también tiene acceso al módulo indicado — 2026-09-25, a petición de Carlos
+ * ("no podemos excluir a un usuario que hace todo, pero tampoco vulnerar la
+ * seguridad de quien sí necesita jerarquías"). Se usa desde un page.tsx (NO
+ * desde un Server Action — para eso ya existe resolverActor, que además
+ * bloquea la acción) para decidir si mostrar un ATAJO de navegación hacia
+ * otro módulo (ej. el botón "Cobrar y entregar" en Aduana, que en realidad
+ * manda a /pos): un dueño con cuenta real siempre tiene todos los módulos
+ * (mismo criterio que resolverActor/modulosPermitidosParaNav en el layout,
+ * ver el comentario largo ahí) y por lo tanto siempre ve el atajo; un
+ * empleado de PIN cuyo rol no incluye ese módulo no lo ve — para él la
+ * pantalla queda exactamente igual que antes, sin exponer un botón que de
+ * todos modos el servidor le rechazaría al intentar usarlo. IMPORTANTE: esto
+ * es solo para decidir qué mostrar — la Server Action del lado de destino
+ * (ej. crearVentaAction) sigue validando el módulo por su cuenta vía
+ * resolverActor, así que ocultar o no este botón nunca es lo que de verdad
+ * protege esa acción.
+ */
+export async function puedeAccederModulo(tenantId: string, modulo: ModuloKey): Promise<boolean> {
+  const sesion = await verificarSesionPersonalVigente();
+  if (sesion && sesion.tenantId === tenantId) {
+    const modulosPermitidos = await modulosPermitidosParaRolPorNombre(tenantId, sesion.roleName);
+    return modulosPermitidos.includes(modulo);
+  }
+  // Sin sesión de personal para este tenant → dueño/gerente con cuenta real,
+  // sin restricción de módulo (igual que resolverActor y el layout).
+  return true;
+}
+
 // 2026-09-21, a petición de Carlos: algunas acciones (agregar pieza/avanzar
 // estatus de una reparación) deben poder correr tanto con "reparaciones"
 // (Encargado/Recepción, control total) como con "taller" (el técnico, acceso

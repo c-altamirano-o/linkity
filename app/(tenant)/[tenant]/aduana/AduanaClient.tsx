@@ -37,6 +37,12 @@ interface AduanaClientProps {
   data: ReparacionesData;
   labels: LabelDictionary;
   tenantSlug: string;
+  // 2026-09-25, a petición de Carlos: true si quien ve esta pantalla TAMBIÉN
+  // tiene acceso al módulo "pos" — ver el comentario largo en
+  // puedeAccederModulo (lib/actor.ts). Solo decide si se muestra el atajo
+  // "Cobrar y entregar" hacia POS; nunca reemplaza la validación real, que
+  // sigue pasando por crearVentaAction del lado del servidor.
+  puedeCobrar: boolean;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -125,7 +131,7 @@ const formatFecha = (iso: string) =>
 const formatFechaHora = (iso: string) =>
   new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true });
 
-export default function AduanaClient({ data, labels, tenantSlug }: AduanaClientProps) {
+export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar }: AduanaClientProps) {
   const { reparaciones, productos, tecnicos } = data;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -198,6 +204,15 @@ export default function AduanaClient({ data, labels, tenantSlug }: AduanaClientP
   const handleAvanzar = (nuevoEstado: NuevoEstadoReparacion) => {
     if (!seleccionada) return;
     ejecutar(() => avanzarEstadoAction({ tenantSlug, repairId: seleccionada.id, nuevoEstado }));
+  };
+
+  // 2026-09-25, a petición de Carlos: atajo para el dueño/único operador —
+  // manda directo a POS con esta reparación precargada (mismo camino que ya
+  // usa "Cobrar y entregar" en /reparaciones, ver getRepairParaCobro y
+  // crearVentaAction). Nunca cobra aquí mismo: solo navega.
+  const handleCobrar = () => {
+    if (!seleccionada) return;
+    router.push(`/${tenantSlug}/pos?repairId=${seleccionada.id}`);
   };
 
   const entidadPlural = label(labels, "entity.repair.plural");
@@ -468,6 +483,28 @@ export default function AduanaClient({ data, labels, tenantSlug }: AduanaClientP
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Atajo "Cobrar y entregar" (2026-09-25, a petición de
+                  Carlos: simplificar el proceso para el operador único, sin
+                  quitarle la separación de funciones a quien sí la necesita
+                  por jerarquía) — solo aparece cuando el equipo ya está listo
+                  en tienda Y quien ve esta pantalla también tiene acceso al
+                  módulo POS (puedeCobrar, ver el comentario en page.tsx). Un
+                  recepcionista sin ese módulo nunca ve este botón; para él la
+                  pantalla queda igual que siempre. Nunca cobra aquí mismo —
+                  solo manda a /pos con la reparación precargada, el mismo
+                  camino que ya usa este botón en /reparaciones. */}
+              {puedeCobrar && (seleccionada.estado === "SHOP_READY" || seleccionada.estado === "SHOP_RETURN") && (
+                <div className="mt-4">
+                  <button
+                    onClick={handleCobrar}
+                    disabled={pending}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-[12.5px] font-medium transition-colors"
+                  >
+                    <Store className="w-3.5 h-3.5" /> Cobrar y entregar
+                  </button>
                 </div>
               )}
 
