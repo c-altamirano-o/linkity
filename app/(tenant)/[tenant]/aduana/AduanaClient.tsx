@@ -81,12 +81,14 @@ const HISTORIAL_ICONOS: Record<EstadoReparacion, { icon: React.ElementType; bg: 
 // Botones de avance de estatus ofrecidos aquí — mismo mapa de transiciones
 // válidas que TRANSICIONES_VALIDAS en reparaciones-actions.ts (el servidor
 // vuelve a validar todo, esto solo decide qué botones mostrar). SHOP_READY
-// no aparece a propósito: ese salto a DELIVERED exige un cobro y vive
-// exclusivamente en /reparaciones (cobrarYEntregarAction, tienda). El botón
-// de SHOP_RETURN -> DELIVERED sí se ofrece aquí (una devolución no siempre
-// tiene cargo), pero el servidor lo rechaza si el negocio activó "cobrar en
-// devolución" en Configuración — en ese caso el mensaje de error le indica
-// al usuario que use "Cobrar y entregar" desde tienda.
+// no ofrece un botón hacia DELIVERED a propósito: ese salto exige un cobro y
+// vive exclusivamente en /reparaciones (cobrarYEntregarAction, tienda) — lo
+// que SHOP_READY sí ofrece aquí es "Regresar a taller (corregir)", ver más
+// abajo. El botón de SHOP_RETURN -> DELIVERED sí se ofrece aquí (una
+// devolución no siempre tiene cargo), pero el servidor lo rechaza si el
+// negocio activó "cobrar en devolución" en Configuración — en ese caso el
+// mensaje de error le indica al usuario que use "Cobrar y entregar" desde
+// tienda.
 const SIGUIENTES_ESTADOS: Partial<Record<EstadoReparacion, { estado: NuevoEstadoReparacion; texto: string }[]>> = {
   RECEIVED: [{ estado: "IN_REPAIR", texto: "Iniciar reparación" }],
   IN_REPAIR: [
@@ -97,7 +99,15 @@ const SIGUIENTES_ESTADOS: Partial<Record<EstadoReparacion, { estado: NuevoEstado
   WAITING_PARTS: [{ estado: "IN_REPAIR", texto: "Reanudar reparación" }],
   WORKSHOP_READY: [{ estado: "SHOP_READY", texto: "Enviar a tienda (listo)" }],
   WORKSHOP_RETURN: [{ estado: "SHOP_RETURN", texto: "Enviar a tienda (devolución)" }],
-  SHOP_RETURN: [{ estado: "DELIVERED", texto: "Entregar (sin cobro)" }],
+  // SHOP_READY/SHOP_RETURN también ofrecen un botón de "regresar" al taller
+  // (2026-09-25, a petición de Carlos: corregir un "Enviar a tienda" hecho
+  // por error de dedo — antes no había forma de deshacerlo desde la UI, ver
+  // el comentario largo en TRANSICIONES_VALIDAS, reparaciones-actions.ts).
+  SHOP_READY: [{ estado: "WORKSHOP_READY", texto: "Regresar a taller (corregir)" }],
+  SHOP_RETURN: [
+    { estado: "DELIVERED", texto: "Entregar (sin cobro)" },
+    { estado: "WORKSHOP_RETURN", texto: "Regresar a taller (corregir)" },
+  ],
 };
 
 function agruparProductosParaSelector(productos: ProductoParaReparacion[]) {

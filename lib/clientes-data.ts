@@ -70,7 +70,13 @@ export async function getClientesData(tenantId: string): Promise<ClienteUI[]> {
           total: true,
           status: true,
           createdAt: true,
-          items: { select: { product: { select: { name: true } } } },
+          // repairId/subtotal — 2026-09-25: un renglón de venta ahora puede
+          // ser el cobro de una reparación en vez de un producto (ver el
+          // comentario largo en SaleItem, prisma/schema.prisma). Hacen
+          // falta para no contar ese dinero DOS VECES en este cliente: la
+          // misma reparación ya aparece abajo en `repairs`/reparacionesHist
+          // — ver el filtro en ventasHist.
+          items: { select: { product: { select: { name: true } }, repairId: true, subtotal: true } },
         },
       },
       repairs: {
@@ -90,21 +96,42 @@ export async function getClientesData(tenantId: string): Promise<ClienteUI[]> {
   });
 
   return customers.map((c) => {
-    const ventasHist: HistorialClienteItem[] = c.sales.map((s) => {
-      const nombres = s.items.map((it) => it.product.name);
+    // 2026-09-25: una venta de POS que cobra una reparación (ver el
+    // comentario largo arriba, en el `select` de `sales`) NO se cuenta aquí
+    // como una "venta" aparte — esa misma reparación ya aparece más abajo
+    // en `reparacionesHist` (viene de `c.repairs`, con el mismo
+    // Repair.finalCost). Contar ambas sumaría el mismo cobro dos veces en
+    // `totalGastado`. Una venta MIXTA (productos + el cobro de una
+    // reparación en el mismo carrito, posible pero infrecuente) sí se
+    // conserva, pero solo por la parte de producto — el renglón de
+    // reparación se resta, ya cubierto aparte.
+    const ventasHist: HistorialClienteItem[] = c.sales.flatMap((s) => {
+      const itemsProducto = s.items.filter((it) => !it.repairId);
+      const itemsReparacion = s.items.filter((it) => it.repairId);
+      if (itemsProducto.length === 0 && itemsReparacion.length > 0) return [];
+
+      const nombres = itemsProducto.map((it) => it.product?.name ?? "Producto");
       const titulo =
         nombres.length <= 2
           ? nombres.join(" + ") || "Venta"
           : `${nombres.slice(0, 2).join(" + ")} +${nombres.length - 2}`;
-      return {
-        tipo: "venta",
+      // Sin renglones de reparación de por medio: el total de la venta tal
+      // cual (igual que siempre). Mixta: solo la suma de los renglones de
+      // producto — el descuento (Sale.discount) siempre es 0 hoy en
+      // crearVentaAction, así que restar por subtotal de renglón no
+      // introduce ningún desfase.
+      const monto = itemsReparacion.length > 0
+        ? itemsProducto.reduce((sum, it) => sum + Number(it.subtotal), 0)
+        : Number(s.total);
+      return [{
+        tipo: "venta" as const,
         id: s.id,
         folio: s.folio,
         titulo,
         fecha: s.createdAt.toISOString(),
         estado: s.status as EstadoVentaCliente,
-        monto: Number(s.total),
-      };
+        monto,
+      }];
     });
 
     const reparacionesHist: HistorialClienteItem[] = c.repairs.map((r) => ({
@@ -128,6 +155,13 @@ export async function getClientesData(tenantId: string): Promise<ClienteUI[]> {
     const fechas = [...c.sales.map((s) => s.createdAt.getTime()), ...c.repairs.map((r) => r.receivedAt.getTime())];
     const ultimaVisita = fechas.length ? new Date(Math.max(...fechas)).toISOString() : null;
 
+    // 2026-09-25: mismo criterio que ventasHist arriba — una venta que fue
+    // 100% el cobro de una reparación no cuenta como una visita aparte, ya
+    // la representa esa reparación en `c.repairs`. Sin este filtro,
+    // "visitas" contaría dos veces la misma visita del cliente (recoger su
+    // equipo) para cualquier reparación cobrada por POS.
+    const ventasComoVisita = c.sales.filter((s) => s.items.some((it) => !it.repairId) || s.items.length === 0).length;
+
     return {
       id: c.id,
       name: c.name,
@@ -137,7 +171,7 @@ export async function getClientesData(tenantId: string): Promise<ClienteUI[]> {
       rfc: c.rfc,
       address: c.address,
       createdAt: c.createdAt.toISOString(),
-      visitas: c.sales.length + c.repairs.length,
+      visitas: ventasComoVisita + c.repairs.length,
       totalGastado,
       reparaciones: c.repairs.length,
       reparacionesActivas,

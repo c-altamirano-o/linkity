@@ -13,11 +13,10 @@ import type {
 } from "@/lib/reparaciones-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import {
-  crearReparacionAction, avanzarEstadoAction, marcarWhatsappEnviadoAction, cobrarYEntregarAction,
-  type NuevoEstadoReparacion, type MetodoPagoReparacion,
+  crearReparacionAction, avanzarEstadoAction, marcarWhatsappEnviadoAction,
+  type NuevoEstadoReparacion,
 } from "@/app/actions/reparaciones-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp } from "@/lib/paises";
-import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 
 // Agrupa el catálogo de "agregar pieza" por tipo — piezas/productos primero,
@@ -47,6 +46,14 @@ interface ReparacionesClientProps {
   // ticket ("el ticket debe venir el teléfono de soporte del taller o del
   // negocio"). Se captura en Configuración → Teléfono de soporte.
   telefonoNegocio: string | null;
+  // Tenant.cobrarEnDevolucion — 2026-09-25, junto con el cambio de "Cobrar y
+  // entregar" hacia POS (ver el comentario largo en handleCobrarClick más
+  // abajo): antes NINGÚN botón de esta pantalla permitía cobrar una
+  // devolución (SHOP_RETURN) cuando el negocio tiene esta regla activa — solo
+  // existía "Entregar" (sin cobro), que el servidor rechaza en ese caso
+  // (avanzarEstadoAction ya lo validaba, pero la UI nunca ofrecía la
+  // alternativa). Se aprovecha este cambio para corregirlo también.
+  cobrarEnDevolucion: boolean;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -240,17 +247,18 @@ function abrirTicketImprimible(t: TicketData, negocio: string) {
    control de piezas/costo/estatus/técnico vive en /aduana. ── */
 function VistaTienda({
   reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, pending, onNuevaClick,
-  negocio, telefonoNegocio,
+  negocio, telefonoNegocio, cobrarEnDevolucion,
 }: {
   reparaciones: ReparacionUI[];
   labels: LabelDictionary;
   onAvanzar: (repairId: string, nuevoEstado: NuevoEstadoReparacion) => void;
   onWhatsapp: (repairId: string) => void;
-  onCobrarClick: (repairId: string, costoEstimado: number | null) => void;
+  onCobrarClick: (repairId: string) => void;
   pending: boolean;
   onNuevaClick: () => void;
   negocio: string;
   telefonoNegocio: string | null;
+  cobrarEnDevolucion: boolean;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("Pendientes");
@@ -415,12 +423,25 @@ function VistaTienda({
                 <Phone className="w-3 h-3" /> Avisar
               </button>
               {seleccionada.estado === "SHOP_READY" && (
-                <button disabled={pending} onClick={() => onCobrarClick(seleccionada.id, seleccionada.costoEstimado)}
+                <button disabled={pending} onClick={() => onCobrarClick(seleccionada.id)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
                   <CheckCircle className="w-3 h-3" /> Cobrar y entregar
                 </button>
               )}
-              {seleccionada.estado === "SHOP_RETURN" && (
+              {/* SHOP_RETURN — 2026-09-25, corrigiendo un hueco real: cuando
+                  el negocio tiene Tenant.cobrarEnDevolucion activo, el
+                  servidor (avanzarEstadoAction) YA rechazaba "Entregar" en
+                  este estado, pero esta pantalla nunca ofrecía la
+                  alternativa ("Cobrar y entregar") — no había ningún botón
+                  con el que de verdad se pudiera entregar una devolución con
+                  cargo. Mismo camino a POS que SHOP_READY. */}
+              {seleccionada.estado === "SHOP_RETURN" && cobrarEnDevolucion && (
+                <button disabled={pending} onClick={() => onCobrarClick(seleccionada.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
+                  <CheckCircle className="w-3 h-3" /> Cobrar y entregar
+                </button>
+              )}
+              {seleccionada.estado === "SHOP_RETURN" && !cobrarEnDevolucion && (
                 <button disabled={pending} onClick={() => onAvanzar(seleccionada.id, "DELIVERED")}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
                   <CheckCircle className="w-3 h-3" /> Entregar
@@ -523,7 +544,7 @@ function VistaTienda({
    NINGÚN rol — se movió por completo a /aduana, ver AduanaClient.tsx. Esta
    pantalla ahora es SIEMPRE la vista de tienda: recibir con folio, ver el
    detalle de solo lectura, y cobrar/entregar/avisar.) ── */
-export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio }: ReparacionesClientProps) {
+export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, cobrarEnDevolucion }: ReparacionesClientProps) {
   const { reparaciones, clientes, productos } = data;
   const router = useRouter();
   const negocio = nombreNegocio(tenantSlug);
@@ -594,16 +615,12 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
   const quitarPiezaNueva = (productId: string) => setNuevasPiezas((prev) => prev.filter((p) => p.productId !== productId));
 
-  const [cobroRepairId, setCobroRepairId] = useState<string | null>(null);
-  const [cobroMonto, setCobroMonto] = useState("");
-  const [cobroMetodo, setCobroMetodo] = useState<MetodoPagoReparacion>("EFECTIVO");
-  const [cobroError, setCobroError] = useState<string | null>(null);
-  const [cobrando, startCobrar] = useTransition();
-  const reparacionCobro = reparaciones.find((r) => r.id === cobroRepairId) ?? null;
-
-  // Aviso al cerrar/recargar la pestaña mientras cualquiera de los 2 modales
-  // de captura de esta pantalla esté abierto — ver lib/confirmar-cierre.ts.
-  useAdvertirCierrePestaña(modalNuevaAbierto || reparacionCobro !== null);
+  // Aviso al cerrar/recargar la pestaña mientras el modal de captura de esta
+  // pantalla esté abierto — ver lib/confirmar-cierre.ts. Antes también
+  // cubría el modal de "Cobrar y entregar" (ver el comentario largo en
+  // handleCobrarClick, abajo) — ese modal ya no existe, el cobro se hace en
+  // POS, que tiene su propia protección.
+  useAdvertirCierrePestaña(modalNuevaAbierto);
 
   const clientesFiltrados = clientes
     .filter((c) => c.name.toLowerCase().includes(nuevaClienteQuery.toLowerCase()))
@@ -627,70 +644,29 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     });
   };
 
-  const abrirModalCobro = (repairId: string, costoEstimado: number | null) => {
-    setCobroRepairId(repairId);
-    setCobroMonto(costoEstimado != null ? String(costoEstimado) : "");
-    setCobroMetodo("EFECTIVO");
-    setCobroError(null);
-  };
-
-  const cancelarModalCobro = () => {
-    if (!confirmarSalirSinGuardar()) return;
-    setCobroRepairId(null);
-  };
-
-  const METODO_PAGO_REPARACION_TEXTO: Record<MetodoPagoReparacion, string> = {
-    EFECTIVO: "Efectivo", TARJETA: "Tarjeta", TRANSFERENCIA: "Transferencia",
-  };
-
-  const handleCobrarYEntregar = () => {
-    if (!cobroRepairId || !reparacionCobro) return;
-    const valor = parseFloat(cobroMonto);
-    if (!Number.isFinite(valor) || valor < 0) {
-      setCobroError("Ingresa un monto válido");
-      return;
-    }
-    setCobroError(null);
-
-    // Snapshot antes de cerrar el modal — igual que en POSClient, el ticket
-    // necesita estos datos tal como estaban al momento de cobrar.
-    const reciboBase: ReciboData = {
-      tipoDocumento: "Reparación",
-      folio: reparacionCobro.folio,
-      cliente: reparacionCobro.cliente,
-      telefono: reparacionCobro.telefono,
-      renglones: reparacionCobro.piezas.map((p) => ({ nombre: p.productName, cantidad: p.quantity, precioUnitario: p.price })),
-      subtotal: valor,
-      iva: 0,
-      total: valor,
-      metodoPago: METODO_PAGO_REPARACION_TEXTO[cobroMetodo],
-      notaPie: `${reparacionCobro.marca} ${reparacionCobro.modelo}`.trim(),
-    };
-
-    startCobrar(async () => {
-      const res = await cobrarYEntregarAction({
-        tenantSlug,
-        repairId: cobroRepairId,
-        monto: valor,
-        metodoPago: cobroMetodo,
-      });
-      if (res.ok) {
-        setCobroRepairId(null);
-        setCobroMonto("");
-        router.refresh();
-        if (res.sinCajaAbierta) {
-          setAccionError("Cobro registrado, pero no hay una caja abierta en esta sucursal — no se reflejó en el efectivo esperado de Caja.");
-        }
-        // "Al cobrar en el punto de venta, solo guarda la venta, no genera
-        // un ticket... ya sea de una reparación, articulo o servicio"
-        // (Carlos, 2026-09-21) — el cobro final de una reparación entregada
-        // es exactamente ese caso, antes solo quedaba el ticket de
-        // RECEPCIÓN (con el costo estimado), nunca uno del pago real.
-        abrirReciboImprimible(reciboBase, nombreNegocioDeSlug(tenantSlug));
-      } else {
-        setCobroError(res.error);
-      }
-    });
+  // 2026-09-25, a petición explícita de Carlos: "en Recepción/Aduana el
+  // botón de cobrar y entregar hace ahí mismo la operación, el error está en
+  // que lo debe mandar al POS para su cobro e impresión del ticket
+  // correspondiente". Antes, este botón abría un modal propio de esta
+  // pantalla (ver el historial de este archivo) que llamaba a
+  // cobrarYEntregarAction directo: guardaba Repair.finalCost y, si el pago
+  // era en efectivo Y había caja abierta, un CashMovement — pero NUNCA
+  // generaba una Sale real de POS. El "ticket" que sí imprimía
+  // (abrirReciboImprimible) era solo un HTML armado en el momento con los
+  // datos capturados, sin folio de venta ni renglón en ningún reporte de
+  // POS/Dashboard — un cobro de reparación vivía en una isla aparte del
+  // resto de la contabilidad del negocio.
+  //
+  // Ahora el botón navega a /pos con la reparación precargada como partida
+  // (?repairId=...) — POSClient.tsx la agrega sola al carrito, bloquea la
+  // sucursal a la de la reparación, y el cajero cobra e imprime el ticket
+  // ahí mismo, con el mismo flujo (y las mismas protecciones: caja abierta
+  // obligatoria) que cualquier venta de POS. crearVentaAction (pos-actions.ts)
+  // es quien ahora marca la reparación como DELIVERED y guarda finalCost,
+  // dentro de la misma transacción que crea la Sale real — reemplaza por
+  // completo a cobrarYEntregarAction, que se eliminó.
+  const handleCobrarClick = (repairId: string) => {
+    router.push(`/${tenantSlug}/pos?repairId=${repairId}`);
   };
 
   const resetModalNueva = () => {
@@ -783,8 +759,8 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
       )}
 
       <div className="flex-1 overflow-hidden">
-        <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={abrirModalCobro} pending={pendingAccion}
-          onNuevaClick={() => setModalNuevaAbierto(true)} negocio={negocio} telefonoNegocio={telefonoNegocio} />
+        <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={handleCobrarClick} pending={pendingAccion}
+          onNuevaClick={() => setModalNuevaAbierto(true)} negocio={negocio} telefonoNegocio={telefonoNegocio} cobrarEnDevolucion={cobrarEnDevolucion} />
       </div>
 
       {modalNuevaAbierto && (
@@ -986,54 +962,6 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
         </div>
       )}
 
-      {reparacionCobro && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          onClick={cancelarModalCobro}>
-          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <span className="text-sm font-medium text-foreground">Cobrar y entregar</span>
-              <button onClick={cancelarModalCobro} className="text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                {reparacionCobro.folio} · {reparacionCobro.cliente} · {reparacionCobro.marca} {reparacionCobro.modelo}
-              </p>
-              {cobroError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{cobroError}</div>}
-
-              <div>
-                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MONTO A COBRAR</label>
-                <input type="number" value={cobroMonto} onChange={(e) => setCobroMonto(e.target.value)} placeholder="$0" autoFocus
-                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
-              </div>
-
-              <div>
-                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MÉTODO DE PAGO</label>
-                <div className="grid grid-cols-3 gap-2 mt-1">
-                  {(["EFECTIVO", "TARJETA", "TRANSFERENCIA"] as MetodoPagoReparacion[]).map((m) => (
-                    <button key={m} type="button" onClick={() => setCobroMetodo(m)}
-                      className={`py-2 rounded-lg text-[12.5px] font-medium capitalize transition-colors ${
-                        cobroMetodo === m ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                      }`}>
-                      {m === "EFECTIVO" ? "Efectivo" : m === "TARJETA" ? "Tarjeta" : "Transferencia"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
-              <button onClick={cancelarModalCobro} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
-                Cancelar
-              </button>
-              <button disabled={cobrando} onClick={handleCobrarYEntregar}
-                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
-                {cobrando ? "Guardando..." : "Cobrar y entregar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

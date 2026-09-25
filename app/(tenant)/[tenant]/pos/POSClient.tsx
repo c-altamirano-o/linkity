@@ -1,13 +1,14 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, ShoppingCart, Barcode, Plus, Minus, X, Check,
-  User, ChevronDown, Building2, AlertTriangle, Printer,
+  User, ChevronDown, Building2, AlertTriangle, Printer, Wrench,
 } from "lucide-react";
 import type { PosData, ProductoPOS } from "@/lib/pos-data";
+import type { RepairParaCobro } from "@/lib/reparaciones-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearVentaAction, type MetodoPago } from "@/app/actions/pos-actions";
 import { ProductoIcono } from "@/lib/catalogo-iconos";
@@ -26,6 +27,11 @@ interface POSClientProps {
   branches: BranchOption[];
   branchInicial: string | null;
   tenantSlug: string;
+  // Precarga de "Cobrar y entregar" desde Reparaciones (2026-09-25) — ver el
+  // comentario largo en pos-actions.ts. null cuando se llegó a /pos sin
+  // ?repairId; { ok:false } cuando el repairId no era válido/cobrable
+  // (ver getRepairParaCobro, lib/reparaciones-data.ts).
+  repairParaCobro?: RepairParaCobro | null;
 }
 
 type CartItem = {
@@ -35,6 +41,11 @@ type CartItem = {
   taxRate: number;
   cantidad: number;
   isService: boolean;
+  // Presente únicamente en el renglón sintético que representa el cobro de
+  // una reparación (nunca en un producto real del catálogo) — controla el
+  // render distinto (sin +/-, precio editable) y cómo se manda el renglón a
+  // crearVentaAction (repairId + monto en vez de productId + cantidad).
+  repairId?: string;
 };
 
 const SIN_CATEGORIA_ID = "__sin_categoria__";
@@ -42,7 +53,7 @@ const SIN_CATEGORIA_ID = "__sin_categoria__";
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
-export default function POSClient({ data, labels, branches, branchInicial, tenantSlug }: POSClientProps) {
+export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, repairParaCobro }: POSClientProps) {
   const { categorias, productos, clientes, cajaAbiertaPorSucursal } = data;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -54,6 +65,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("efectivo");
   const [carritoAbierto, setCarritoAbierto] = useState(false);
 
+  // Mientras haya un renglón de reparación en el carrito, la sucursal queda
+  // fija a la de esa reparación — crearVentaAction la exige igual
+  // (branchId de la venta == Repair.branchId), así que cambiarla a mitad de
+  // camino solo llevaría a un error al cobrar.
+  const sucursalBloqueadaPorReparacion = carrito.some((i) => i.repairId);
+
   const [clienteId, setClienteId] = useState<string | null>(null);
   const [clientePickerAbierto, setClientePickerAbierto] = useState(false);
   const [clienteQuery, setClienteQuery] = useState("");
@@ -62,6 +79,45 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const [mixtoEfectivo, setMixtoEfectivo] = useState("");
   const [mixtoTarjeta, setMixtoTarjeta] = useState("");
   const [mixtoTransferencia, setMixtoTransferencia] = useState("");
+
+  // Precarga de "Cobrar y entregar" (2026-09-25) — ver el comentario largo
+  // en pos-actions.ts y en POSClientProps.repairParaCobro arriba. Se aplica
+  // UNA sola vez con este ref (no en cada render ni cuando router.refresh()
+  // vuelve a pasar por aquí tras cobrar) — después de cobrar, la reparación
+  // ya no está en estatus cobrable, así que un refresh que reconsultara
+  // repairParaCobro ya vendría con {ok:false}, pero el ref evita de todos
+  // modos reabrir el carrito con un renglón ya cobrado si el cajero navegó
+  // de ida y vuelta con el mismo ?repairId en la URL.
+  const repairSeedAplicada = useRef(false);
+  const [errorRepairSeed, setErrorRepairSeed] = useState<string | null>(null);
+  useEffect(() => {
+    if (repairSeedAplicada.current || !repairParaCobro) return;
+    repairSeedAplicada.current = true;
+    if (!repairParaCobro.ok) {
+      setErrorRepairSeed(repairParaCobro.error);
+      return;
+    }
+    const r = repairParaCobro;
+    setCarrito((prev) =>
+      prev.some((i) => i.repairId === r.id)
+        ? prev
+        : [
+            ...prev,
+            {
+              productId: r.id,
+              repairId: r.id,
+              nombre: `Reparación ${r.folio} — ${r.deviceBrand} ${r.deviceModel}`.trim(),
+              precio: r.montoSugerido,
+              taxRate: 0,
+              cantidad: 1,
+              isService: true,
+            },
+          ]
+    );
+    if (r.customerId) setClienteId(r.customerId);
+    setCarritoAbierto(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repairParaCobro]);
 
   const [ultimaVenta, setUltimaVenta] = useState<{ folio: string; total: number; cambio: number } | null>(null);
   // Snapshot completo para poder reimprimir el ticket sin depender del
@@ -236,6 +292,22 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     setMixtoEfectivo(""); setMixtoTarjeta(""); setMixtoTransferencia("");
   };
 
+  // Solo para el renglón de una reparación (2026-09-25) — no tiene +/- de
+  // cantidad (siempre es 1), así que se quita completo con este botón. Quitar
+  // el renglón no le hace nada a la reparación en sí (nada se guardó todavía):
+  // solo significa que el cajero decidió no cobrarla ahora mismo.
+  const quitarDelCarrito = (productId: string) => setCarrito((prev) => prev.filter((i) => i.productId !== productId));
+
+  // El monto de una reparación es negociado, no un precio de catálogo —
+  // editable directo aquí, mismo criterio de confianza que ya tenía el
+  // modal de "Cobrar y entregar" que este flujo reemplaza (el servidor solo
+  // valida que la reparación siga en un estatus cobrable, no un precio
+  // fijo contra el que comparar).
+  const editarMontoReparacion = (productId: string, valor: string) => {
+    const monto = Math.max(0, parseFloat(valor) || 0);
+    setCarrito((prev) => prev.map((i) => (i.productId === productId ? { ...i, precio: monto } : i)));
+  };
+
   const handleMetodo = (m: MetodoPago) => {
     setMetodoPago(m);
     setMontoRecibido("");
@@ -263,13 +335,23 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     const metodoPagoAlCobrar = metodoPago;
     const subtotalTicket = subtotal;
     const ivaTicket = iva;
+    // Si esta venta incluyó el cobro de una reparación, se limpia el
+    // ?repairId de la URL de una vez (router.replace, no solo refresh) —
+    // sin esto, recargar la página o volver a esta pestaña re-consultaría
+    // la misma reparación (ya DELIVERED) sin necesidad, y un back/forward
+    // del navegador podría confundir con un ?repairId que ya no aplica.
+    const carritoTeniaReparacion = carrito.some((i) => i.repairId);
 
     startTransition(async () => {
       const res = await crearVentaAction({
         tenantSlug,
         branchId,
         customerId: clienteId,
-        items: carrito.map((i) => ({ productId: i.productId, cantidad: i.cantidad })),
+        items: carrito.map((i) =>
+          i.repairId
+            ? { repairId: i.repairId, monto: i.precio, cantidad: 1 }
+            : { productId: i.productId, cantidad: i.cantidad }
+        ),
         metodoPago,
         montoRecibido: metodoPago === "efectivo" ? montoNum : undefined,
         mixto: metodoPago === "mixto" ? { efectivo: mEfec, tarjeta: mTarj, transferencia: mTrans } : undefined,
@@ -304,7 +386,11 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         setClienteId(null);
         setClienteQuery("");
         setCarritoAbierto(false);
-        router.refresh();
+        if (carritoTeniaReparacion) {
+          router.replace(`/${tenantSlug}/pos`);
+        } else {
+          router.refresh();
+        }
       } else {
         setErrorVenta(res.error);
       }
@@ -415,6 +501,29 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         )}
       </div>
 
+      {/* Aviso de "Cobrar y entregar" precargado desde Reparaciones
+          (2026-09-25) — ok:false (repairId inválido/ya cobrado) o el
+          carrito ya trae el renglón de la reparación. */}
+      {errorRepairSeed && (
+        <div className="mx-5 mt-2 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-sm text-red-600">{errorRepairSeed}</p>
+            <Link href={`/${tenantSlug}/reparaciones`} className="text-xs font-medium text-red-700 underline">
+              Volver a Reparaciones
+            </Link>
+          </div>
+        </div>
+      )}
+      {carrito.some((i) => i.repairId) && (
+        <div className="mx-5 mt-2 flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+          <Wrench className="w-4 h-4 text-primary-text flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-foreground">
+            Cobrando una reparación — la sucursal queda fija y el monto se puede ajustar en el renglón de abajo.
+          </p>
+        </div>
+      )}
+
       {/* Items */}
       <div className="flex-1 overflow-y-auto px-5 py-2">
         {carrito.length === 0 ? (
@@ -425,28 +534,54 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           </div>
         ) : (
           <div className="space-y-2">
-            {carrito.map((item) => (
-              <div key={item.productId} className="flex items-center gap-2 py-2.5 border-b border-border/60 last:border-0">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{item.nombre}</p>
-                  <p className="text-xs text-muted-foreground">{formatMXN(item.precio)} c/u</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => cambiarCantidad(item.productId, -1)}
-                    className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center hover:bg-accent">
-                    <Minus className="w-3.5 h-3.5 text-foreground" />
+            {carrito.map((item) =>
+              item.repairId ? (
+                // Renglón de una reparación — sin +/- (cantidad siempre 1):
+                // el monto es editable directo y se puede quitar del carrito
+                // (ver quitarDelCarrito/editarMontoReparacion arriba).
+                <div key={item.productId} className="flex items-center gap-2 py-2.5 border-b border-border/60 last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{item.nombre}</p>
+                    <p className="text-xs text-muted-foreground">Cobro de reparación</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">$</span>
+                    <input
+                      type="number"
+                      value={item.precio}
+                      onChange={(e) => editarMontoReparacion(item.productId, e.target.value)}
+                      className="w-24 text-right px-2 py-1.5 border border-border rounded-lg text-sm font-semibold bg-muted focus:outline-none focus:border-primary text-foreground"
+                    />
+                  </div>
+                  <button onClick={() => quitarDelCarrito(item.productId)}
+                    title="Quitar del carrito"
+                    className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center hover:bg-accent flex-shrink-0">
+                    <X className="w-3.5 h-3.5 text-foreground" />
                   </button>
-                  <span className="text-sm font-bold text-foreground w-6 text-center">{item.cantidad}</span>
-                  <button onClick={() => cambiarCantidad(item.productId, 1)}
-                    className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center hover:bg-accent">
-                    <Plus className="w-3.5 h-3.5 text-foreground" />
-                  </button>
                 </div>
-                <span className="text-sm font-bold text-foreground min-w-[56px] text-right">
-                  {formatMXN(item.precio * item.cantidad)}
-                </span>
-              </div>
-            ))}
+              ) : (
+                <div key={item.productId} className="flex items-center gap-2 py-2.5 border-b border-border/60 last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{item.nombre}</p>
+                    <p className="text-xs text-muted-foreground">{formatMXN(item.precio)} c/u</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => cambiarCantidad(item.productId, -1)}
+                      className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center hover:bg-accent">
+                      <Minus className="w-3.5 h-3.5 text-foreground" />
+                    </button>
+                    <span className="text-sm font-bold text-foreground w-6 text-center">{item.cantidad}</span>
+                    <button onClick={() => cambiarCantidad(item.productId, 1)}
+                      className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center hover:bg-accent">
+                      <Plus className="w-3.5 h-3.5 text-foreground" />
+                    </button>
+                  </div>
+                  <span className="text-sm font-bold text-foreground min-w-[56px] text-right">
+                    {formatMXN(item.precio * item.cantidad)}
+                  </span>
+                </div>
+              )
+            )}
           </div>
         )}
       </div>
@@ -706,7 +841,9 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             <div className="flex items-center gap-1.5">
               <Building2 className="w-4 h-4 text-primary-foreground/70 flex-shrink-0" />
               <select value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)}
-                className="px-2.5 py-2 rounded-lg text-sm font-medium bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-card/50">
+                disabled={sucursalBloqueadaPorReparacion}
+                title={sucursalBloqueadaPorReparacion ? "Fija a la sucursal de la reparación que se está cobrando" : undefined}
+                className="px-2.5 py-2 rounded-lg text-sm font-medium bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-card/50 disabled:opacity-60 disabled:cursor-not-allowed">
                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>

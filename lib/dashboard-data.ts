@@ -344,7 +344,14 @@ export async function getDashboardData(
         createdAt: { gte: today.start, lt: today.end },
         ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
       },
-      include: { items: { include: { product: true } } },
+      // repair — 2026-09-25: un SaleItem ahora puede representar el cobro
+      // de una reparación (repairId, product null) en vez de un producto —
+      // ver el comentario largo en SaleItem, prisma/schema.prisma. A
+      // propósito SÍ aparece aquí (a diferencia de categorySaleItems más
+      // abajo): "ventas de hoy" debe reflejar TODO el dinero que entró hoy,
+      // reparaciones incluidas — antes (cobrarYEntregarAction) ni siquiera
+      // generaba una Sale, así que este número quedaba incompleto.
+      include: { items: { include: { product: true, repair: { select: { folio: true } } } } },
       orderBy: { createdAt: "desc" },
     }),
     db.sale.findMany({
@@ -403,6 +410,11 @@ export async function getDashboardData(
           createdAt: { gte: month.start, lt: month.end },
           ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
         },
+        // 2026-09-25: excluye el cobro de reparaciones (productId null,
+        // repairId sí) — esta gráfica es "ventas por categoría de
+        // catálogo" y una reparación no tiene una; su ingreso ya se cuenta
+        // aparte (ver reparacionesDia, "Ventas de la semana" más abajo).
+        productId: { not: null },
       },
       include: { product: { include: { category: true } } },
     }),
@@ -413,7 +425,7 @@ export async function getDashboardData(
     id: v.id,
     folio: v.folio,
     hora: formatHoraMx(v.createdAt),
-    articulos: v.items.map((it) => it.product.name).join(", ") || "Sin artículos",
+    articulos: v.items.map((it) => it.product?.name ?? (it.repair ? `Reparación ${it.repair.folio}` : "Producto")).join(", ") || "Sin artículos",
     count: v.items.reduce((s, it) => s + it.quantity, 0),
     metodo: METODO_LABEL[v.paymentMethod] ?? "Efectivo",
     total: Number(v.total),
@@ -466,6 +478,10 @@ export async function getDashboardData(
   const catTotals = new Map<string, { name: string; color: string | null; total: number }>();
   let totalMes = 0;
   for (const item of categorySaleItems) {
+    // Defensivo — el where de arriba ya filtra productId: { not: null },
+    // pero product sigue siendo opcional en el tipo (SaleItem.product
+    // puede ser null para un renglón de reparación).
+    if (!item.product) continue;
     const subtotal = Number(item.subtotal);
     totalMes += subtotal;
     const cat = item.product.category;

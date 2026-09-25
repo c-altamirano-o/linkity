@@ -226,18 +226,27 @@ export async function calcularComisionSugerida(
   // SaleItem no tiene tenantId propio, así que el filtro por tenant se hace
   // a mano vía la relación con Sale (mismo criterio documentado en
   // lib/prisma.ts para modelos sin tenantId directo).
+  //
+  // 2026-09-25: un renglón de venta ahora puede ser el cobro de una
+  // reparación (product null, ver el comentario largo en SaleItem,
+  // prisma/schema.prisma) — se excluye aquí a propósito (no solo por el
+  // null): no tiene un "costo de producto" comparable con el que calcular
+  // utilidad, y ya existe la base "REPARACIONES" arriba (finalCost del
+  // técnico que la entregó) para comisionar exactamente ese dinero. Contarlo
+  // aquí también, como si fuera 100% utilidad de producto, sobreestimaría la
+  // comisión de UTILIDAD además de duplicar lo que ya paga REPARACIONES.
   const items = await db.sale
     .findMany({
       where: { userId: staff.userId, createdAt: rango },
       select: { items: { select: { subtotal: true, quantity: true, product: { select: { cost: true } } } } },
     })
-    .then((sales) => sales.flatMap((s) => s.items));
+    .then((sales) => sales.flatMap((s) => s.items).filter((it) => it.product !== null));
 
   const base = items.reduce((s, it) => {
-    const costoUnitario = it.product.cost != null ? Number(it.product.cost) : 0;
+    const costoUnitario = it.product!.cost != null ? Number(it.product!.cost) : 0;
     return s + (Number(it.subtotal) - costoUnitario * it.quantity);
   }, 0);
-  const advertencia = items.some((it) => it.product.cost == null)
+  const advertencia = items.some((it) => it.product!.cost == null)
     ? "Algunos productos vendidos en este período no tienen costo capturado en el catálogo — se contaron como utilidad completa, lo que puede sobreestimar la comisión."
     : null;
 
@@ -281,18 +290,21 @@ export async function calcularComisionEquipoSugerida(
     return { monto: Math.round(base * rate * 100) / 100, advertencia: null };
   }
 
+  // 2026-09-25: mismo criterio que calcularComisionSugerida arriba — se
+  // excluyen los renglones de cobro de reparación (product null), ya
+  // cubiertos por la base "REPARACIONES" de arriba.
   const items = await db.sale
     .findMany({
       where: { branchId, createdAt: rango },
       select: { items: { select: { subtotal: true, quantity: true, product: { select: { cost: true } } } } },
     })
-    .then((sales) => sales.flatMap((s) => s.items));
+    .then((sales) => sales.flatMap((s) => s.items).filter((it) => it.product !== null));
 
   const base = items.reduce((s, it) => {
-    const costoUnitario = it.product.cost != null ? Number(it.product.cost) : 0;
+    const costoUnitario = it.product!.cost != null ? Number(it.product!.cost) : 0;
     return s + (Number(it.subtotal) - costoUnitario * it.quantity);
   }, 0);
-  const advertencia = items.some((it) => it.product.cost == null)
+  const advertencia = items.some((it) => it.product!.cost == null)
     ? "Algunos productos vendidos en este período no tienen costo capturado en el catálogo — se contaron como utilidad completa, lo que puede sobreestimar la comisión."
     : null;
 

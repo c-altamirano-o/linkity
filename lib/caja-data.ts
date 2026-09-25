@@ -162,7 +162,12 @@ export async function getCajaData(tenantId: string, branchId: string): Promise<C
     db.sale.findMany({
       where: { branchId, createdAt: { gte: desde } },
       include: {
-        items: { include: { product: { select: { name: true } } } },
+        // product/repair — 2026-09-25: un SaleItem ahora puede representar
+        // el cobro de una reparación (repairId) en vez de un producto del
+        // catálogo (productId) — ver el comentario largo en SaleItem,
+        // prisma/schema.prisma. Se incluye repair.folio para el "concepto"
+        // de abajo cuando product viene null.
+        items: { include: { product: { select: { name: true } }, repair: { select: { folio: true } } } },
         mixedPayments: true,
       },
       orderBy: { createdAt: "desc" },
@@ -222,7 +227,11 @@ export async function getCajaData(tenantId: string, branchId: string): Promise<C
   });
 
   for (const venta of ventasRaw) {
-    const primerItem = venta.items[0]?.product.name ?? "Producto";
+    // 2026-09-25: el primer renglón puede ser el cobro de una reparación
+    // (product null, repair no) en vez de un producto — ver el include de
+    // arriba.
+    const primer = venta.items[0];
+    const primerItem = primer?.product?.name ?? (primer?.repair ? `Reparación ${primer.repair.folio}` : "Producto");
     const concepto = venta.items.length > 1 ? `${primerItem} + ${venta.items.length - 1} más` : primerItem;
     movimientos.push({
       id: venta.id,

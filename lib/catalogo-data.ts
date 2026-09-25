@@ -114,6 +114,10 @@ export async function getCatalogoData(
     db.saleItem.findMany({
       where: {
         sale: { tenantId, status: "COMPLETED", createdAt: { gte: ventasDesde } },
+        // 2026-09-25: excluye el cobro de reparaciones (productId null,
+        // repairId sí) — "Top ventas" es de productos del catálogo; el
+        // cobro de una reparación no es uno y ya se refleja en Reparaciones.
+        productId: { not: null },
       },
       select: {
         quantity: true,
@@ -150,15 +154,20 @@ export async function getCatalogoData(
     };
   });
 
-  const ventasDetalle: VentaDetalleItem[] = saleItemsRaw.map((it) => ({
-    productId: it.product.id,
-    productName: it.product.name,
-    categoryName: it.product.category?.name ?? "Sin categoría",
-    branchId: it.sale.branchId,
-    quantity: it.quantity,
-    subtotal: Number(it.subtotal),
-    fecha: it.sale.createdAt.toISOString(),
-  }));
+  const ventasDetalle: VentaDetalleItem[] = saleItemsRaw
+    // Defensivo — el where de arriba ya filtra productId: { not: null },
+    // pero product sigue siendo opcional en el tipo (ver el comentario
+    // largo en SaleItem, prisma/schema.prisma).
+    .filter((it) => it.product !== null)
+    .map((it) => ({
+      productId: it.product!.id,
+      productName: it.product!.name,
+      categoryName: it.product!.category?.name ?? "Sin categoría",
+      branchId: it.sale.branchId,
+      quantity: it.quantity,
+      subtotal: Number(it.subtotal),
+      fecha: it.sale.createdAt.toISOString(),
+    }));
 
   return { categorias, productos, ventasDetalle };
 }

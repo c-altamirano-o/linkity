@@ -713,14 +713,30 @@ model Sale {
 model SaleItem {
   id        String  @id @default(cuid())
   saleId    String
-  productId String
+  // productId ahora es opcional (2026-09-25, "Cobrar y entregar" de
+  // Reparaciones ahora manda al cajero a POS en vez de cobrar aparte — a
+  // petición explícita de Carlos: "lo debe mandar al POS para su cobro e
+  // impresión del ticket correspondiente"). Antes, TODO renglón de una venta
+  // era necesariamente un Product del catálogo — no existía forma de que una
+  // venta de POS representara el cobro de una reparación (un monto
+  // negociado, sin precio de lista ni control de stock). Un SaleItem ahora
+  // es UNO de dos casos, nunca ambos ni ninguno (crearVentaAction, no la
+  // base de datos, es quien valida "exactamente uno de productId/repairId"):
+  // un producto/refacción/servicio del catálogo (productId, como siempre), o
+  // el cobro de una reparación lista para entrega (repairId) — en ese caso
+  // `price`/`subtotal` guardan el monto que el cajero cobró, validado contra
+  // Repair.finalCost/estimatedCost en el servidor, nunca contra un precio de
+  // catálogo.
+  productId String?
   quantity  Int
   price     Decimal @db.Decimal(10, 2)
   discount  Decimal @default(0) @db.Decimal(10, 2)
   subtotal  Decimal @db.Decimal(10, 2)
+  repairId  String?
 
-  sale    Sale    @relation(fields: [saleId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  sale    Sale     @relation(fields: [saleId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+  repair  Repair?  @relation(fields: [repairId], references: [id])
 }
 
 // Desglose de una venta con método de pago "Mixto": un renglón por cada
@@ -812,6 +828,12 @@ model Repair {
   user     User            @relation(fields: [userId], references: [id])
   items    RepairItem[]
   history  RepairHistory[]
+  // Renglón de una venta de POS que representa el cobro de ESTA reparación
+  // (2026-09-25, ver el comentario largo en SaleItem.repairId) — en la
+  // práctica cada reparación tiene a lo más uno (el cobro final, único), no
+  // una lista real, pero Prisma exige el lado inverso del arreglo para poder
+  // declarar la relación desde SaleItem.
+  saleItems SaleItem[]
 
   @@unique([tenantId, folio])
 }

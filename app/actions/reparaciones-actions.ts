@@ -2,7 +2,7 @@
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { RepairStatus, Priority, CashSessionStatus, MovementType } from "@prisma/client";
+import { RepairStatus, Priority } from "@prisma/client";
 import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
 import { PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
 
@@ -512,14 +512,29 @@ const TRANSICIONES_VALIDAS: Record<string, NuevoEstadoReparacion[]> = {
   WORKSHOP_READY: ["SHOP_READY"],
   WORKSHOP_RETURN: ["SHOP_RETURN"],
   // SHOP_READY -> DELIVERED ya NO pasa por aquí a propósito: ese salto
-  // requiere cobrarYEntregarAction (abajo), para que la entrega de un
-  // equipo reparado SIEMPRE quede con un cobro y un método de pago
-  // registrados. SHOP_RETURN -> DELIVERED se queda en esta tabla genérica
-  // (una devolución no tiene cargo por default) PERO avanzarEstadoAction,
-  // más abajo, la bloquea en tiempo real si Tenant.cobrarEnDevolucion está
-  // activo para este negocio — en ese caso la entrega de una devolución
-  // también debe pasar por cobrarYEntregarAction.
-  SHOP_RETURN: ["DELIVERED"],
+  // requiere cobrar la reparación en POS (crearVentaAction, pos-actions.ts —
+  // 2026-09-25, reemplaza a la extinta cobrarYEntregarAction, que vivía
+  // aquí), para que la entrega de un equipo reparado SIEMPRE quede con una
+  // venta real y un método de pago registrados. SHOP_RETURN -> DELIVERED se
+  // queda en esta tabla genérica (una devolución no tiene cargo por
+  // default) PERO avanzarEstadoAction, más abajo, la bloquea en tiempo real
+  // si Tenant.cobrarEnDevolucion está activo para este negocio — en ese caso
+  // la entrega de una devolución también debe pasar por POS.
+  //
+  // SHOP_READY -> WORKSHOP_READY y SHOP_RETURN -> WORKSHOP_RETURN
+  // (2026-09-25, a petición de Carlos: "si por error presionan el botón de
+  // enviar a tienda, no hay forma de editarlo para regresar al estatus...
+  // puede haber error de dedo") — antes de este cambio, una vez que Aduana
+  // presionaba "Enviar a tienda (listo)" o "Enviar a tienda (devolución)",
+  // el equipo quedaba varado ahí: ninguna transición de esta tabla permitía
+  // regresarlo al taller, así que un clic equivocado solo se podía corregir
+  // editando la base de datos directo. Se agrega el camino de vuelta
+  // exclusivamente hacia el estatus INMEDIATO anterior (no se salta a
+  // RECEIVED/IN_REPAIR) — sigue pasando por avanzarEstadoAction, así que
+  // solo Aduana puede corregirlo, igual que solo Aduana pudo haberlo enviado
+  // a tienda por error.
+  SHOP_READY: ["WORKSHOP_READY"],
+  SHOP_RETURN: ["DELIVERED", "WORKSHOP_RETURN"],
 };
 
 const NOTA_POR_ESTADO: Record<NuevoEstadoReparacion, string> = {
@@ -531,6 +546,14 @@ const NOTA_POR_ESTADO: Record<NuevoEstadoReparacion, string> = {
   SHOP_RETURN: "Equipo trasladado a tienda — devolución al cliente",
   DELIVERED: "Equipo entregado al cliente",
 };
+
+// Nota específica para la corrección SHOP_READY/SHOP_RETURN -> WORKSHOP_*
+// de arriba — si se usara NOTA_POR_ESTADO tal cual, el historial diría
+// "Reparación completada — listo en taller" de nuevo, como si el técnico
+// acabara de terminarla, en vez de dejar claro que fue una corrección de un
+// envío a tienda hecho por error.
+const NOTA_CORRECCION_REGRESO_A_TALLER =
+  "Regresado a taller — corrección de \"Enviar a tienda\" (posible error de captura)";
 
 export type AccionSimpleResult = { ok: true } | { ok: false; error: string };
 
@@ -545,7 +568,8 @@ export async function avanzarEstadoAction(params: {
   // su corrección explícita: "solo la encargada de recepción puede cambiar
   // el estastus de un equipo" — antes "reparaciones" Y "taller" también
   // podían, ninguno de los dos debería). Cobrar y entregar (SHOP_READY ->
-  // DELIVERED) sigue sin pasar por aquí, vive en cobrarYEntregarAction.
+  // DELIVERED) sigue sin pasar por aquí, se cobra en POS (crearVentaAction,
+  // pos-actions.ts, 2026-09-25).
   const resuelto = await resolverActor(tenantSlug, "aduana");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
@@ -576,6 +600,19 @@ export async function avanzarEstadoAction(params: {
 
     const estadoEnum = RepairStatus[nuevoEstado];
 
+    // 2026-09-25, mismo cambio que arriba (corrección de "Enviar a tienda"
+    // por error de dedo): se detecta específicamente el regreso
+    // SHOP_READY/SHOP_RETURN -> WORKSHOP_* para usar una nota distinta y,
+    // a diferencia de cualquier otro cambio de estatus real, NO marcarlo
+    // visible para el cliente en su página pública de seguimiento — es una
+    // corrección interna de un clic equivocado, no un avance real de su
+    // equipo, y mostrárselo ("tu equipo volvió al taller" segundos después
+    // de "tu equipo ya está en tienda") solo generaría confusión/alarma sin
+    // aportarle nada.
+    const esCorreccionRegresoATaller =
+      (repair.status === RepairStatus.SHOP_READY && nuevoEstado === "WORKSHOP_READY") ||
+      (repair.status === RepairStatus.SHOP_RETURN && nuevoEstado === "WORKSHOP_RETURN");
+
     await db.$transaction(async (tx: any) => {
       await tx.repair.update({
         where: { id: repairId },
@@ -584,11 +621,17 @@ export async function avanzarEstadoAction(params: {
           ...(nuevoEstado === "DELIVERED" ? { deliveredAt: new Date() } : {}),
         },
       });
-      // visibleCliente:true — todo cambio de estatus real es un checkpoint
-      // que ve el cliente en la página pública (ver RepairHistory.visibleCliente,
-      // schema.prisma).
       await tx.repairHistory.create({
-        data: { repairId, status: estadoEnum, notes: NOTA_POR_ESTADO[nuevoEstado], visibleCliente: true },
+        data: {
+          repairId,
+          status: estadoEnum,
+          notes: esCorreccionRegresoATaller ? NOTA_CORRECCION_REGRESO_A_TALLER : NOTA_POR_ESTADO[nuevoEstado],
+          // visibleCliente:true — todo cambio de estatus real es un checkpoint
+          // que ve el cliente en la página pública (ver
+          // RepairHistory.visibleCliente, schema.prisma) — excepto la
+          // corrección de un envío a tienda por error, ver comentario arriba.
+          visibleCliente: !esCorreccionRegresoATaller,
+        },
       });
     });
 
@@ -606,134 +649,14 @@ export async function avanzarEstadoAction(params: {
   }
 }
 
-export type MetodoPagoReparacion = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA";
-
-const METODO_PAGO_TEXTO: Record<MetodoPagoReparacion, string> = {
-  EFECTIVO: "efectivo",
-  TARJETA: "tarjeta",
-  TRANSFERENCIA: "transferencia",
-};
-
-export type CobrarYEntregarResult =
-  | { ok: true; sinCajaAbierta: boolean }
-  | { ok: false; error: string };
-
-/**
- * Cobra una reparación lista en tienda (SHOP_READY) y la marca como
- * entregada en un solo paso — antes esto solo avanzaba el estatus sin dejar
- * ningún registro de cuánto se cobró ni cómo. Repair.finalCost queda
- * guardado siempre; además, si el pago fue en efectivo Y hay una caja
- * abierta en la sucursal de la reparación, se registra un CashMovement de
- * ingreso ahí mismo (mismo criterio que Caja: solo el efectivo físico
- * afecta el conteo de la caja, tarjeta/transferencia no). Si no hay caja
- * abierta, el cobro se guarda igual en la reparación pero se avisa al
- * cliente (sinCajaAbierta) para que la UI lo informe.
- *
- * También acepta SHOP_RETURN (devolución) cuando Tenant.cobrarEnDevolucion
- * está activo (2026-09-22, a petición de Carlos) — mismo flujo de cobro,
- * para que un negocio que sí cobra por diagnosticar/intentar la reparación
- * no reparada deje ese cargo con el mismo registro (monto, método, caja)
- * que cualquier otro cobro, en vez de un camino aparte.
- */
-export async function cobrarYEntregarAction(params: {
-  tenantSlug: string;
-  repairId: string;
-  monto: number;
-  metodoPago: MetodoPagoReparacion;
-}): Promise<CobrarYEntregarResult> {
-  const { tenantSlug, repairId, monto, metodoPago } = params;
-
-  if (!Number.isFinite(monto) || monto < 0) {
-    return { ok: false, error: "El monto a cobrar no es válido" };
-  }
-
-  // 2026-09-21, a petición de Carlos: a propósito SOLO "reparaciones" (nunca
-  // "taller" ni "aduana") — cobrar dinero es tarea de tienda/mostrador.
-  const resuelto = await resolverActor(tenantSlug, "reparaciones");
-  if (!resuelto.ok) return { ok: false, error: resuelto.error };
-  const { tenant } = resuelto;
-
-  const db = getTenantPrisma(tenant.id);
-
-  try {
-    const repair = await db.repair.findUnique({
-      where: { id: repairId },
-      select: { id: true, status: true, branchId: true, folio: true, publicToken: true },
-    });
-    if (!repair) return { ok: false, error: "Reparación no encontrada" };
-
-    let esDevolucionConCargo = false;
-    if (repair.status === RepairStatus.SHOP_RETURN) {
-      const t = await prisma.tenant.findUnique({ where: { id: tenant.id }, select: { cobrarEnDevolucion: true } });
-      if (!t?.cobrarEnDevolucion) {
-        return { ok: false, error: "Este negocio no cobra en devoluciones — usa \"Entregar\" directo" };
-      }
-      esDevolucionConCargo = true;
-    } else if (repair.status !== RepairStatus.SHOP_READY) {
-      return { ok: false, error: "Esta reparación no está lista para cobro y entrega" };
-    }
-    // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
-    // cobrar/entregar reparaciones de SU sucursal.
-    if (!puedeOperarSucursal(resuelto, repair.branchId)) {
-      return { ok: false, error: "No tienes acceso a esa sucursal" };
-    }
-
-    let sinCajaAbierta = false;
-
-    await db.$transaction(async (tx: any) => {
-      await tx.repair.update({
-        where: { id: repairId },
-        data: { finalCost: monto, status: RepairStatus.DELIVERED, deliveredAt: new Date() },
-      });
-      // visibleCliente:true — es la confirmación de su propio cobro/entrega,
-      // no expone nada del negocio que no le corresponda ya conocer.
-      await tx.repairHistory.create({
-        data: {
-          repairId,
-          status: RepairStatus.DELIVERED,
-          notes: `Cobro${esDevolucionConCargo ? " de devolución" : ""} registrado: ${monto.toLocaleString("es-MX", {
-            style: "currency",
-            currency: "MXN",
-          })} (${METODO_PAGO_TEXTO[metodoPago]}) — equipo entregado al cliente`,
-          visibleCliente: true,
-        },
-      });
-
-      if (metodoPago === "EFECTIVO" && monto > 0) {
-        // Filtro por tenantId explícito (no se confía en que la extensión
-        // de getTenantPrisma se propague dentro de $transaction).
-        const sesion = await tx.cashSession.findFirst({
-          where: { tenantId: tenant.id, branchId: repair.branchId, status: CashSessionStatus.OPEN },
-          select: { id: true },
-        });
-        if (sesion) {
-          await tx.cashMovement.create({
-            data: {
-              cashSessionId: sesion.id,
-              type: MovementType.INCOME,
-              amount: monto,
-              concept: `Cobro reparación ${repair.folio}`,
-            },
-          });
-        } else {
-          sinCajaAbierta = true;
-        }
-      }
-    });
-
-    revalidatePath(`/${tenantSlug}/reparaciones`);
-    revalidatePath(`/${tenantSlug}/caja`);
-    revalidatePath(`/${tenantSlug}/dashboard`);
-    revalidatePath(`/rep/${repair.publicToken}`);
-    return { ok: true, sinCajaAbierta };
-  } catch (err: any) {
-    if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
-      return { ok: false, error: "No tienes acceso a este recurso" };
-    }
-    console.error("Error al cobrar y entregar reparación:", err);
-    return { ok: false, error: "No se pudo registrar el cobro" };
-  }
-}
+// cobrarYEntregarAction vivía aquí — ELIMINADA 2026-09-25, reemplazada por
+// completo por crearVentaAction (app/actions/pos-actions.ts): a petición
+// explícita de Carlos, el cobro de una reparación lista para entrega ahora
+// SIEMPRE pasa por POS (genera una Sale real, con folio y ticket de
+// verdad), en vez de este camino aparte que guardaba el cobro directo en
+// Repair.finalCost + un CashMovement suelto, sin dejar ningún registro de
+// venta. Ver el comentario largo al inicio de pos-actions.ts y en
+// SaleItem.repairId (prisma/schema.prisma) para el reemplazo completo.
 
 export async function marcarWhatsappEnviadoAction(params: {
   tenantSlug: string;

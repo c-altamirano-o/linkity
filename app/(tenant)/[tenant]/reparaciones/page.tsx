@@ -21,6 +21,10 @@ export default async function ReparacionesPage({
         select: { id: true, name: true },
       },
     },
+    // cobrarEnDevolucion (2026-09-25) — hace falta aquí para decidir si el
+    // botón de una devolución (SHOP_RETURN) en tienda es "Entregar" (sin
+    // cargo) o "Cobrar y entregar" (mismo camino a POS que un equipo
+    // reparado) — ver el comentario largo en ReparacionesClient.tsx.
   });
 
   if (!tenant) notFound();
@@ -49,6 +53,7 @@ export default async function ReparacionesPage({
       branches={branches}
       tenantSlug={tenantSlug}
       telefonoNegocio={tenant.phone}
+      cobrarEnDevolucion={tenant.cobrarEnDevolucion}
     />
   );
 }

@@ -380,3 +380,75 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
       : null,
   };
 }
+
+export type RepairParaCobro =
+  | {
+      ok: true;
+      id: string;
+      folio: string;
+      deviceBrand: string;
+      deviceModel: string;
+      branchId: string;
+      customerId: string | null;
+      customerName: string;
+      // Punto de partida para el monto en POS — el cajero puede ajustarlo
+      // ahí antes de cobrar, igual que ya podía en el modal que este flujo
+      // reemplaza (ver el comentario largo en pos-actions.ts).
+      montoSugerido: number;
+      esDevolucion: boolean;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Datos mínimos para precargar el carrito de POS con el cobro de una
+ * reparación (2026-09-25, "Cobrar y entregar" ahora manda a POS — ver el
+ * comentario largo en app/actions/pos-actions.ts). Vuelve a validar el mismo
+ * estatus que crearVentaAction exige al cobrar de verdad (SHOP_READY, o
+ * SHOP_RETURN si Tenant.cobrarEnDevolucion está activo) — si no, POSClient no
+ * agrega nada al carrito y muestra el motivo, en vez de dejar que el cajero
+ * llegue hasta el botón "Cobrar" para enterarse hasta el final.
+ */
+export async function getRepairParaCobro(tenantId: string, repairId: string): Promise<RepairParaCobro> {
+  const db = getTenantPrisma(tenantId);
+
+  const repair = await db.repair.findUnique({
+    where: { id: repairId },
+    select: {
+      id: true,
+      folio: true,
+      status: true,
+      branchId: true,
+      customerId: true,
+      deviceBrand: true,
+      deviceModel: true,
+      estimatedCost: true,
+      finalCost: true,
+      customer: { select: { name: true } },
+    },
+  });
+  if (!repair) return { ok: false, error: "Reparación no encontrada" };
+
+  let esDevolucion = false;
+  if (repair.status === "SHOP_RETURN") {
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { cobrarEnDevolucion: true } });
+    if (!tenant?.cobrarEnDevolucion) {
+      return { ok: false, error: "Este negocio no cobra en devoluciones — entrégala directo desde Reparaciones" };
+    }
+    esDevolucion = true;
+  } else if (repair.status !== "SHOP_READY") {
+    return { ok: false, error: "Esta reparación ya fue cobrada o no está lista para cobro" };
+  }
+
+  return {
+    ok: true,
+    id: repair.id,
+    folio: repair.folio,
+    deviceBrand: repair.deviceBrand,
+    deviceModel: repair.deviceModel,
+    branchId: repair.branchId,
+    customerId: repair.customerId,
+    customerName: repair.customer.name,
+    montoSugerido: repair.finalCost != null ? Number(repair.finalCost) : repair.estimatedCost != null ? Number(repair.estimatedCost) : 0,
+    esDevolucion,
+  };
+}
