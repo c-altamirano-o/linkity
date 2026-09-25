@@ -811,17 +811,20 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   return (
     <div className="flex flex-col lg:flex-row h-full bg-muted">
 
-      {/* Panel izquierdo — Catálogo. Fondo = --primary del tema del negocio
-          en TODA la ventana del catálogo (2026-09-24, corrección de Carlos
-          tras ver el primer intento: "el enfoque fue incorrecto. Fondo de
-          toda la ventana color primario, fondo de la ficha color
-          secundario (varios), fondo de contenedor de iconos según el
-          tema, y los iconos el complementario al principal" — referencia
-          directa a las pantallas de inicio de Windows Phone/Metro que
-          compartió). El panel del carrito (a la derecha) se queda con
-          fondo neutral --card a propósito: es una lista de números
-          (totales, cambio) que debe seguir siendo legible como una
-          pantalla de trabajo, no como el "launcher" de tiles. */}
+      {/* Panel izquierdo — Catálogo.
+          2026-09-25 — rediseño visual completo del sistema: Carlos compartió
+          capturas de terminales POS "tipo Toshiba" (ventanas limpias, texto
+          grande, solo la información necesaria, alertas y llamadas a la
+          acción emergentes) y pidió reemplazar el lenguaje "launcher de
+          Windows Phone/Metro" de abajo — probado en un mockup aparte que
+          aprobó explícitamente — por tarjetas blancas sobre un fondo neutro.
+          ESTO REEMPLAZA la decisión de 2026-09-24 de pintar TODA la ventana
+          con --primary: ahora el fondo de este panel es neutro (hereda
+          bg-muted del contenedor) y --primary/--chip-N/--tile-fg se usan de
+          forma puntual (botón Cobrar, ficha activa, insignia de ícono por
+          categoría), no como color de ventana completa. Los tokens de tema
+          en sí (los 10 temas + Personalizado de Configuración) NO cambiaron
+          — solo dónde se aplican. */}
       {/* min-w-0 es necesario aquí (2026-09-24, a petición de Carlos: vio que
           la pantalla completa se corría/recortaba horizontalmente en vez de
           acomodar el contenido): sin esto, un flex item por default NUNCA se
@@ -836,20 +839,20 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           categorías ya trae su propio overflow-x-auto, la cuadrícula de
           productos ya se ajusta con sus columnas responsivas) se acomoda
           dentro de ese espacio en vez de forzar el desbordamiento global. */}
-      <div className="flex-1 flex flex-col bg-primary lg:shadow-[1px_0_0_rgba(0,0,0,0.045)] min-h-0 min-w-0">
+      <div className="flex-1 flex flex-col lg:border-r lg:border-border min-h-0 min-w-0">
 
         <div className="flex items-center gap-2.5 px-5 py-4 flex-wrap">
-          <span className="text-lg font-bold text-primary-foreground w-full sm:w-auto sm:mr-2">
+          <span className="text-lg font-bold text-foreground w-full sm:w-auto sm:mr-2">
             {label(labels, "module.pos.name")}
           </span>
 
           {branches.length > 1 && (
             <div className="flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-primary-foreground/70 flex-shrink-0" />
+              <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
               <select value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)}
                 disabled={sucursalBloqueadaPorReparacion}
                 title={sucursalBloqueadaPorReparacion ? "Fija a la sucursal de la reparación que se está cobrando" : undefined}
-                className="px-2.5 py-2 rounded-lg text-sm font-medium bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-card/50 disabled:opacity-60 disabled:cursor-not-allowed">
+                className="px-2.5 py-2 rounded-lg text-sm font-medium bg-card border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-60 disabled:cursor-not-allowed">
                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
@@ -862,31 +865,29 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Buscar producto o servicio"
-              className="w-full pl-11 pr-4 py-3 rounded-full text-base bg-card text-foreground placeholder:text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] focus:outline-none focus:ring-2 focus:ring-card/50"
+              className="w-full pl-11 pr-4 py-3 rounded-full text-base bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
             />
           </div>
           <button
             onClick={() => { setErrorEscaner(null); setMostrarEscaner(true); }}
             aria-label="Escanear código de barras"
-            className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-card hover:brightness-95 rounded-full text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-colors"
+            className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-card border border-border hover:bg-muted rounded-full text-foreground transition-colors"
           >
             <Barcode className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Píldoras de categoría — invertidas respecto al resto de la app
-            (2026-09-24): sobre un fondo ya saturado por --primary, la
-            píldora ACTIVA se marca con el color de tarjeta (clara sobre
-            oscuro, o al revés) para que resalte; las inactivas son un
-            overlay translúcido del primary-foreground, como un segmento
-            "encendido/apagado" de un tile launcher. */}
+        {/* Píldoras de categoría — mismo patrón "activo = relleno con
+            --primary" que el resto de la app (2026-09-25; antes iban
+            invertidas para resaltar sobre la ventana a color sólido que ya
+            no existe, ver el comentario de arriba). */}
         <div className="flex gap-2 px-5 py-1.5 overflow-x-auto">
           {categoriasOpciones.map((cat) => (
             <button key={cat.id ?? "todos"} onClick={() => setCategoriaActiva(cat.id)}
               className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
                 categoriaActiva === cat.id
-                  ? "bg-card text-primary-text shadow-[0_2px_6px_rgba(0,0,0,0.18)]"
-                  : "bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25"
+                  ? "bg-primary text-primary-foreground shadow-[0_2px_6px_rgba(0,0,0,0.14)]"
+                  : "bg-card border border-border text-muted-foreground hover:border-primary/40"
               }`}>
               {cat.name}
             </button>
@@ -895,9 +896,9 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
 
         {productosFiltrados.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-            <Search className="w-9 h-9 text-primary-foreground/40 mb-2" />
-            <p className="text-base font-semibold text-primary-foreground mb-1">Sin resultados</p>
-            <p className="text-sm text-primary-foreground/70">
+            <Search className="w-9 h-9 text-muted-foreground/40 mb-2" />
+            <p className="text-base font-semibold text-foreground mb-1">Sin resultados</p>
+            <p className="text-sm text-muted-foreground">
               {productos.length === 0 ? "Aún no hay productos en el catálogo." : "Prueba con otra búsqueda o categoría."}
             </p>
           </div>
@@ -916,40 +917,42 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               const enCarrito = carrito.find((i) => i.productId === producto.id);
               const cantidadEnCarrito = enCarrito?.cantidad ?? 0;
               const chip = producto.categoryId ? chipPorCategoria.get(producto.categoryId) ?? null : null;
-              // Variables de la ficha completa (2026-09-24, corrección de
-              // Carlos sobre el primer intento — ver el comentario largo
-              // junto al fondo del panel, arriba): la FICHA entera toma el
-              // color de categoría (antes solo se coloreaba un cuadrito de
-              // ícono); sin categoría, cae al --primary del tema, igual que
-              // antes. El color de texto/ícono es SIEMPRE --tile-fg — un
-              // solo color fijo por tema (blanco o negro), igual en las 5
-              // fichas, NUNCA un color calculado por ficha — Carlos rechazó
-              // dos veces cualquier intento de "acomodar" el color del ícono
-              // por ficha o de encerrarlo en un contenedor aparte ("sigues
-              // cometiendo el error de encerrar el icono en un contenedor de
-              // un color diferente... haces que se vea feo"). El ícono se
-              // dibuja DIRECTO sobre la ficha, sin nada detrás.
+              // Insignia de ícono por categoría (2026-09-25, reemplaza la
+              // FICHA COMPLETA a color de 2026-09-24 — ver el comentario
+              // largo junto al panel, arriba). El color de categoría
+              // (--chip-N, o --primary sin categoría) ahora solo pinta el
+              // cuadrito del ícono, no la tarjeta entera; el color de
+              // ícono se mantiene --tile-fg (un solo color fijo por tema,
+              // igual en las 5 categorías) para no perder ese acuerdo con
+              // Carlos, solo que ahora dibujado sobre un cuadrito, no sobre
+              // toda la ficha.
               const fichaBg = chip ? `var(--chip-${chip})` : "var(--primary)";
               return (
                 <button key={producto.id} onClick={() => agregarAlCarrito(producto)} disabled={agotado}
-                  style={{ backgroundColor: fichaBg, color: "var(--tile-fg)" }}
-                  className={`relative flex flex-col items-start gap-3 p-4 rounded-2xl transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] shadow-[0_2px_10px_rgba(0,0,0,0.12)] hover:brightness-105 ${
-                    cantidadEnCarrito > 0 ? "ring-[3px] ring-white/85" : ""
+                  className={`relative flex flex-col items-start gap-3 p-4 rounded-2xl bg-card border transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)] ${
+                    cantidadEnCarrito > 0 ? "border-primary ring-2 ring-primary/25" : "border-border hover:border-primary/40"
                   }`}>
                   {cantidadEnCarrito > 0 && (
-                    <span className="absolute -top-2 -right-2 min-w-[24px] h-6 px-1.5 rounded-full bg-white text-neutral-900 text-xs font-bold flex items-center justify-center leading-none shadow-sm">
+                    <span className="absolute -top-2 -right-2 min-w-[24px] h-6 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center leading-none shadow-sm">
                       {cantidadEnCarrito}
                     </span>
                   )}
-                  <ProductoIcono value={producto.emoji} className="w-8 h-8" />
+                  <div className="w-full h-[72px] rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: fichaBg, color: "var(--tile-fg)" }}>
+                    <ProductoIcono value={producto.emoji} className="w-8 h-8" />
+                  </div>
                   <div className="w-full">
-                    <p className="text-[15px] font-semibold leading-snug mb-1 line-clamp-2">{producto.name}</p>
-                    <p className="text-lg font-extrabold">{formatMXN(producto.price)}</p>
-                    {!producto.isService && (
-                      <p className="text-xs opacity-70 mt-0.5">
-                        {agotado ? "Agotado" : `Stock: ${stock}`}
-                      </p>
-                    )}
+                    <p className="text-[15px] font-semibold leading-snug mb-1 line-clamp-2 text-foreground">{producto.name}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-lg font-extrabold text-foreground">{formatMXN(producto.price)}</p>
+                      {!producto.isService && (
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
+                          agotado ? "text-red-600 bg-red-50" : "text-emerald-700 bg-emerald-50"
+                        }`}>
+                          {agotado ? "Agotado" : `Stock: ${stock}`}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );
