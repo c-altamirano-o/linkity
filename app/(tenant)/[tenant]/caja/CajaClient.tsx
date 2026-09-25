@@ -87,13 +87,6 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
   const router = useRouter();
   const { sesionActual, movimientos } = data;
 
-  // Sustituye cualquier monto por un candado cuando este empleado no tiene
-  // nivel supervisor — 2026-09-24, a petición de Carlos. Los valores que
-  // recibe ya vienen en 0 desde el servidor en ese caso (ver
-  // redactarMontosCaja), así que esto es solo la parte de presentación:
-  // nunca mostrar "$0" como si fuera el monto real.
-  const verMonto = (n: number) => (puedeVerMontos ? formatMXN(n) : "🔒 Oculto");
-
   const hoy = new Date();
   const hoyStr = hoy.toISOString().slice(0, 10);
   const hace30Str = new Date(hoy.getTime() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -724,10 +717,9 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
   // dirija al punto de venta" — para Cajera/Empleado de mostrador/Encargado
   // de tienda (cualquiera sin nivel supervisor, ver Role.verMontosCaja) con
   // la caja de su sucursal todavía cerrada, esta pantalla reemplaza por
-  // completo la vista normal de Caja (que para ellos vendría llena de
-  // "🔒 Oculto" y el panel "Sección restringida") — no hay nada que
-  // ocultar/candar si no hay nada que mostrar todavía. Un supervisor con
-  // caja cerrada sigue viendo la pantalla completa de siempre (con el botón
+  // completo la vista normal de Caja — no hay nada que contar/mostrar
+  // todavía si la caja ni siquiera está abierta. Un supervisor con caja
+  // cerrada sigue viendo la pantalla completa de siempre (con el botón
   // "Abrir caja" de la barra lateral), porque a él nada le está oculto.
   if (!sesionActual && !puedeVerMontos) {
     return (
@@ -762,13 +754,15 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
   return (
     <div className="flex flex-col h-full">
       {/* ── Tabs móvil ─────────────────────────────────────── */}
-      {/* "Detalle de Ventas" no se ofrece como pestaña si este empleado no
-          tiene nivel supervisor (2026-09-24) — ese panel es justo el que
-          muestra montos y totales que Carlos pidió ocultar. */}
+      {/* "Detalle de Ventas" se ofrece a todos (2026-09-24, rediseño): antes
+          se ocultaba entera para un empleado sin nivel supervisor porque el
+          panel completo era montos. Ahora ese panel muestra un conteo de
+          operaciones sin pesos, así que ya no hay razón para quitarle la
+          pestaña — ver el comentario grande más abajo, junto al panel. */}
       <div className="md:hidden flex border-b border-border bg-card flex-shrink-0">
         {[
           { key: "caja", label: "💰 Control de Caja" },
-          ...(puedeVerMontos ? [{ key: "detalle", label: "📋 Detalle de Ventas" }] : []),
+          { key: "detalle", label: "📋 Detalle de Ventas" },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -823,56 +817,111 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
 
           {sesionActual ? (
             <>
-              <div className="mx-3 my-3 bg-primary rounded-xl p-4">
-                <p className="text-[11.5px] text-primary-foreground/60 mb-1">Efectivo actual en caja</p>
-                <p className="text-[26px] font-bold text-primary-foreground leading-none mb-1">
-                  {verMonto(sesionActual.efectivoEsperado)}
-                </p>
-                <p className="text-[11.5px] text-primary-foreground/50">
-                  Apertura: {verMonto(sesionActual.aperturaMonto)} · {sesionActual.abiertaPor}
-                </p>
-                <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-primary-foreground/15">
-                  {[
-                    { label: "Ventas", value: verMonto(sesionActual.totalVentasDia) },
-                    { label: "Egresos", value: verMonto(sesionActual.egresosManual) },
-                    { label: "Esperado", value: verMonto(sesionActual.efectivoEsperado) },
-                  ].map((i) => (
-                    <div key={i.label}>
-                      <p className="text-[10.5px] text-primary-foreground/50 mb-0.5">{i.label}</p>
-                      <p className="text-[12.5px] font-medium text-primary-foreground">{i.value}</p>
-                    </div>
-                  ))}
+              {/* 2026-09-24, rediseño a petición de Carlos ("solo muestre el
+                  total de operaciones realizadas, sin montos de dinero...
+                  solo un administrador los pueda ver"): para un empleado sin
+                  Role.verMontosCaja este bloque ya no muestra ningún peso
+                  (ni con candado, ni en $0) — muestra en su lugar cuántas
+                  operaciones lleva la sesión. Los conteos (numVentas/
+                  numIngresosManual/numEgresosManual) nunca se redactan (ver
+                  lib/caja-data.ts), así que son reales incluso para ella. */}
+              {puedeVerMontos ? (
+                <div className="mx-3 my-3 bg-primary rounded-xl p-4">
+                  <p className="text-[11.5px] text-primary-foreground/60 mb-1">Efectivo actual en caja</p>
+                  <p className="text-[26px] font-bold text-primary-foreground leading-none mb-1">
+                    {formatMXN(sesionActual.efectivoEsperado)}
+                  </p>
+                  <p className="text-[11.5px] text-primary-foreground/50">
+                    Apertura: {formatMXN(sesionActual.aperturaMonto)} · {sesionActual.abiertaPor}
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-primary-foreground/15">
+                    {[
+                      { label: "Ventas", value: formatMXN(sesionActual.totalVentasDia) },
+                      { label: "Egresos", value: formatMXN(sesionActual.egresosManual) },
+                      { label: "Esperado", value: formatMXN(sesionActual.efectivoEsperado) },
+                    ].map((i) => (
+                      <div key={i.label}>
+                        <p className="text-[10.5px] text-primary-foreground/50 mb-0.5">{i.label}</p>
+                        <p className="text-[12.5px] font-medium text-primary-foreground">{i.value}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mx-3 my-3 bg-primary rounded-xl p-4">
+                  <p className="text-[11.5px] text-primary-foreground/60 mb-1">Operaciones de la sesión</p>
+                  <p className="text-[26px] font-bold text-primary-foreground leading-none mb-1">
+                    {sesionActual.numVentas + sesionActual.numIngresosManual + sesionActual.numEgresosManual}
+                  </p>
+                  <p className="text-[11.5px] text-primary-foreground/50">Abierta por: {sesionActual.abiertaPor}</p>
+                  <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-primary-foreground/15">
+                    {[
+                      { label: "Ventas", value: String(sesionActual.numVentas) },
+                      { label: "Ingresos", value: String(sesionActual.numIngresosManual) },
+                      { label: "Egresos", value: String(sesionActual.numEgresosManual) },
+                    ].map((i) => (
+                      <div key={i.label}>
+                        <p className="text-[10.5px] text-primary-foreground/50 mb-0.5">{i.label}</p>
+                        <p className="text-[12.5px] font-medium text-primary-foreground">{i.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex-1 overflow-y-auto px-4 py-2">
                 <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-2">RESUMEN DE LA SESIÓN</p>
-                <div className="space-y-1">
-                  {[
-                    { label: "Apertura", value: verMonto(sesionActual.aperturaMonto), dot: "bg-emerald-500" },
-                    { label: "Ventas en efectivo", value: verMonto(sesionActual.ventasEfectivo), dot: "bg-primary" },
-                    { label: "Otros ingresos", value: verMonto(sesionActual.ingresosManual), dot: "bg-cyan-500" },
-                    {
-                      label: "Egresos / Gastos",
-                      value: puedeVerMontos ? `-${formatMXN(sesionActual.egresosManual)}` : verMonto(0),
-                      dot: "bg-red-500",
-                      neg: true,
-                    },
-                  ].map((row) => (
-                    <div key={row.label} className="flex items-center justify-between py-1.5 border-b border-border/60">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-1.5 h-1.5 rounded-full ${row.dot}`} />
-                        <span className="text-xs text-muted-foreground">{row.label}</span>
+                {puedeVerMontos ? (
+                  <div className="space-y-1">
+                    {[
+                      { label: "Apertura", value: formatMXN(sesionActual.aperturaMonto), dot: "bg-emerald-500" },
+                      { label: "Ventas en efectivo", value: formatMXN(sesionActual.ventasEfectivo), dot: "bg-primary" },
+                      { label: "Otros ingresos", value: formatMXN(sesionActual.ingresosManual), dot: "bg-cyan-500" },
+                      {
+                        label: "Egresos / Gastos",
+                        value: `-${formatMXN(sesionActual.egresosManual)}`,
+                        dot: "bg-red-500",
+                        neg: true,
+                      },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-center justify-between py-1.5 border-b border-border/60">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-1.5 h-1.5 rounded-full ${row.dot}`} />
+                          <span className="text-xs text-muted-foreground">{row.label}</span>
+                        </div>
+                        <span className={`text-xs font-medium ${row.neg ? "text-red-500" : "text-foreground"}`}>{row.value}</span>
                       </div>
-                      <span className={`text-xs font-medium ${row.neg ? "text-red-500" : "text-foreground"}`}>{row.value}</span>
+                    ))}
+                    <div className="h-px bg-border my-1" />
+                    <div className="flex items-center justify-between py-1.5">
+                      <span className="text-xs font-semibold text-foreground">Total esperado</span>
+                      <span className="text-sm font-bold text-primary-text">{formatMXN(sesionActual.efectivoEsperado)}</span>
                     </div>
-                  ))}
-                  <div className="h-px bg-border my-1" />
-                  <div className="flex items-center justify-between py-1.5">
-                    <span className="text-xs font-semibold text-foreground">Total esperado</span>
-                    <span className="text-sm font-bold text-primary-text">{verMonto(sesionActual.efectivoEsperado)}</span>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-1">
+                    {[
+                      { label: "Ventas registradas", value: String(sesionActual.numVentas), dot: "bg-primary" },
+                      { label: "Ingresos manuales", value: String(sesionActual.numIngresosManual), dot: "bg-cyan-500" },
+                      { label: "Egresos manuales", value: String(sesionActual.numEgresosManual), dot: "bg-red-500" },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-center justify-between py-1.5 border-b border-border/60">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-1.5 h-1.5 rounded-full ${row.dot}`} />
+                          <span className="text-xs text-muted-foreground">{row.label}</span>
+                        </div>
+                        <span className="text-xs font-medium text-foreground">{row.value}</span>
+                      </div>
+                    ))}
+                    <div className="h-px bg-border my-1" />
+                    <div className="flex items-center justify-between py-1.5">
+                      <span className="text-xs font-semibold text-foreground">Total de operaciones</span>
+                      <span className="text-sm font-bold text-primary-text">
+                        {sesionActual.numVentas + sesionActual.numIngresosManual + sesionActual.numEgresosManual}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="p-3 space-y-2">
@@ -915,29 +964,26 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
         </div>
 
         {/* ── Panel derecho (Detalle) ──────────────────────── */}
-        {/* 2026-09-24, a petición de Carlos: este panel completo (KPIs,
-            tabla de movimientos, exportar) es justo donde vive "el total
-            de la venta" que un empleado sin nivel supervisor no debe
-            conocer — en vez de tapar cada cifra una por una aquí, se
-            reemplaza TODO el panel por un aviso. Los datos reales ni
-            siquiera llegan hasta acá (movimientos ya viene vacío desde el
-            servidor, ver redactarMontosCaja), esto es solo la parte visual. */}
+        {/* 2026-09-24, rediseño a petición de Carlos ("solo muestre el total
+            de operaciones realizadas, sin montos de dinero... solo un
+            administrador los pueda ver"): antes este panel completo se
+            reemplazaba por un aviso de "Sección restringida" para un
+            empleado sin nivel supervisor. Ahora se muestra siempre — la
+            tabla de movimientos y el KPI de "Tickets de venta" son solo
+            conteos, nunca dinero. Lo que SÍ sigue sin mostrársele (no con
+            candado — de plano no está en el DOM) es cualquier cosa que sea
+            un peso: la columna "Monto" de la tabla, los 3 KPIs de dinero, y
+            el botón "Exportar" completo (un reporte de caja para conciliar
+            es, por definición, un reporte de dinero). Los valores de
+            `monto` en `movimientos` ya vienen en 0 desde el servidor para
+            este rol (ver redactarMontosCaja) — este `puedeVerMontos` es
+            solo la parte visual, no la que decide si el dato viajó o no. */}
         <div
           className={`
           ${tabMovil === "detalle" ? "flex" : "hidden"} md:flex
           flex-1 flex-col overflow-hidden
         `}
         >
-          {!puedeVerMontos ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-2">
-              <Lock className="w-6 h-6 text-muted-foreground" />
-              <p className="text-sm font-medium text-foreground">Sección restringida</p>
-              <p className="text-xs text-muted-foreground max-w-xs">
-                Los montos y totales de Caja solo los puede ver un supervisor o el administrador del negocio.
-              </p>
-            </div>
-          ) : (
-          <>
           {/* Topbar filtros */}
           <div className="bg-card border-b border-border px-3 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3 flex-wrap">
             <span className="text-sm font-medium text-foreground whitespace-nowrap hidden sm:block">Detalle de movimientos</span>
@@ -1026,48 +1072,64 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                   </div>
                 )}
               </div>
-              <div className="relative" ref={exportMenuRef}>
-                <button
-                  onClick={() => setMostrarExportMenu(!mostrarExportMenu)}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-xs font-medium transition-colors"
-                >
-                  <FileDown className="w-3 h-3" />
-                  <span className="hidden sm:inline">Exportar</span>
-                  <ChevronDown className={`w-3 h-3 transition-transform ${mostrarExportMenu ? "rotate-180" : ""}`} />
-                </button>
-                {mostrarExportMenu && (
-                  <div className="absolute right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-lg z-30 overflow-hidden w-52">
-                    {[
-                      { icon: "📄", label: "CSV", desc: "Compatible con cualquier sistema", fn: exportarCSV },
-                      { icon: "📊", label: "Excel (XLSX)", desc: "Con formato y colores", fn: exportarXLSX },
-                      { icon: "🖼️", label: "PNG", desc: "Imagen para compartir", fn: exportarPNG },
-                      { icon: "📑", label: "PDF", desc: "Documento formal", fn: exportarPDF },
-                    ].map((opt) => (
-                      <button
-                        key={opt.label}
-                        onClick={opt.fn}
-                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left border-b border-border/60 last:border-0"
-                      >
-                        <span className="text-base">{opt.icon}</span>
-                        <div>
-                          <p className="text-xs font-medium text-foreground">{opt.label}</p>
-                          <p className="text-[11.5px] text-muted-foreground">{opt.desc}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* 2026-09-24: un reporte de caja exportable es, por
+                  definición, un reporte de dinero — se omite el botón
+                  entero (no un candado) para quien no tiene Role.
+                  verMontosCaja, en vez de dejarlo exportar puros ceros. */}
+              {puedeVerMontos && (
+                <div className="relative" ref={exportMenuRef}>
+                  <button
+                    onClick={() => setMostrarExportMenu(!mostrarExportMenu)}
+                    className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-xs font-medium transition-colors"
+                  >
+                    <FileDown className="w-3 h-3" />
+                    <span className="hidden sm:inline">Exportar</span>
+                    <ChevronDown className={`w-3 h-3 transition-transform ${mostrarExportMenu ? "rotate-180" : ""}`} />
+                  </button>
+                  {mostrarExportMenu && (
+                    <div className="absolute right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-lg z-30 overflow-hidden w-52">
+                      {[
+                        { icon: "📄", label: "CSV", desc: "Compatible con cualquier sistema", fn: exportarCSV },
+                        { icon: "📊", label: "Excel (XLSX)", desc: "Con formato y colores", fn: exportarXLSX },
+                        { icon: "🖼️", label: "PNG", desc: "Imagen para compartir", fn: exportarPNG },
+                        { icon: "📑", label: "PDF", desc: "Documento formal", fn: exportarPDF },
+                      ].map((opt) => (
+                        <button
+                          key={opt.label}
+                          onClick={opt.fn}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left border-b border-border/60 last:border-0"
+                        >
+                          <span className="text-base">{opt.icon}</span>
+                          <div>
+                            <p className="text-xs font-medium text-foreground">{opt.label}</p>
+                            <p className="text-[11.5px] text-muted-foreground">{opt.desc}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Métricas período */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 px-3 sm:px-4 py-3 bg-card border-b border-border">
+          {/* Métricas período — 2026-09-24: "Tickets de venta" es un conteo
+              (no un peso), así que se queda siempre visible; las otras 3
+              fichas SÍ son dinero y se omiten enteras (no en $0) para quien
+              no tiene Role.verMontosCaja, mismo patrón que Dashboard/
+              Sucursales/Reportes (ver lib/dashboard-data.ts). */}
+          <div className={`grid gap-2 sm:gap-3 px-3 sm:px-4 py-3 bg-card border-b border-border ${puedeVerMontos ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-1"}`}>
             {[
-              { label: "Total ingresos", value: formatMXN(ingresos), sub: periodoLabel[periodo], color: "text-primary-text", icon: TrendingUp },
+              ...(puedeVerMontos
+                ? [{ label: "Total ingresos", value: formatMXN(ingresos), sub: periodoLabel[periodo], color: "text-primary-text", icon: TrendingUp }]
+                : []),
               { label: "Tickets de venta", value: String(ticketsVenta), sub: "Transacciones", color: "text-foreground", icon: ShoppingCart },
-              { label: "Ticket promedio", value: formatMXN(ticketProm), sub: "Por venta", color: "text-foreground", icon: Calculator },
-              { label: "Total egresos", value: formatMXN(egresos), sub: "Gastos del período", color: "text-red-500", icon: TrendingDown },
+              ...(puedeVerMontos
+                ? [
+                    { label: "Ticket promedio", value: formatMXN(ticketProm), sub: "Por venta", color: "text-foreground", icon: Calculator },
+                    { label: "Total egresos", value: formatMXN(egresos), sub: "Gastos del período", color: "text-red-500", icon: TrendingDown },
+                  ]
+                : []),
             ].map((m) => (
               <div key={m.label} className="bg-muted rounded-lg p-2.5 sm:p-3">
                 <div className="flex items-center justify-between mb-1">
@@ -1090,7 +1152,10 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                     { label: "Concepto", right: false, hide: false },
                     { label: "Método", right: false, hide: true },
                     { label: "Tipo", right: false, hide: true },
-                    { label: "Monto", right: true, hide: false },
+                    // 2026-09-24: la columna "Monto" es dinero puro — se
+                    // omite la columna entera (no una celda con candado)
+                    // para quien no tiene Role.verMontosCaja.
+                    ...(puedeVerMontos ? [{ label: "Monto", right: true, hide: false }] : []),
                   ].map((h) => (
                     <th
                       key={h.label}
@@ -1124,35 +1189,37 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                     <td className="px-3 sm:px-4 py-2.5 hidden sm:table-cell">
                       <span className={`text-[10.5px] font-medium px-2 py-0.5 rounded-full ${tipoBadge[mov.tipo]}`}>{tipoLabel[mov.tipo]}</span>
                     </td>
-                    <td className="px-3 sm:px-4 py-2.5 text-right">
-                      {/* "cierre" (2026-09-22): monto es la diferencia del
-                          corte, no un ingreso/egreso — un $0 ahí es la caja
-                          cuadrando perfecto, no debería verse en rojo como
-                          si fuera un egreso, así que aquí sí cuenta como
-                          "bien" (mismo criterio que el modal de cerrar
-                          caja: 0 = verde, sobrante = cyan, faltante = rojo). */}
-                      <span
-                        className={`text-xs font-semibold ${
-                          mov.tipo === "cierre"
-                            ? mov.monto === 0
-                              ? "text-emerald-600"
+                    {puedeVerMontos && (
+                      <td className="px-3 sm:px-4 py-2.5 text-right">
+                        {/* "cierre" (2026-09-22): monto es la diferencia del
+                            corte, no un ingreso/egreso — un $0 ahí es la caja
+                            cuadrando perfecto, no debería verse en rojo como
+                            si fuera un egreso, así que aquí sí cuenta como
+                            "bien" (mismo criterio que el modal de cerrar
+                            caja: 0 = verde, sobrante = cyan, faltante = rojo). */}
+                        <span
+                          className={`text-xs font-semibold ${
+                            mov.tipo === "cierre"
+                              ? mov.monto === 0
+                                ? "text-emerald-600"
+                                : mov.monto > 0
+                                ? "text-cyan-600"
+                                : "text-red-500"
                               : mov.monto > 0
-                              ? "text-cyan-600"
+                              ? "text-emerald-600"
                               : "text-red-500"
-                            : mov.monto > 0
-                            ? "text-emerald-600"
-                            : "text-red-500"
-                        }`}
-                      >
-                        {mov.monto > 0 ? "+" : ""}
-                        {formatMXN(mov.monto)}
-                      </span>
-                    </td>
+                          }`}
+                        >
+                          {mov.monto > 0 ? "+" : ""}
+                          {formatMXN(mov.monto)}
+                        </span>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {movsFiltrados.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                    <td colSpan={puedeVerMontos ? 5 : 4} className="px-4 py-8 text-center text-xs text-muted-foreground">
                       Sin movimientos en este período
                     </td>
                   </tr>
@@ -1160,8 +1227,6 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
               </tbody>
             </table>
           </div>
-          </>
-          )}
         </div>
       </div>
 

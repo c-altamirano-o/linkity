@@ -1,8 +1,8 @@
 "use server";
 
-import { getVentasPorDia, hoyMx, type VentasPorDiaData } from "@/lib/dashboard-data";
+import { getVentasPorDia, hoyMx, redactarMontosVentasPorDia, type VentasPorDiaData } from "@/lib/dashboard-data";
 import { resolverActor } from "@/lib/actor";
-import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
+import { verTodoNegocioParaRolPorNombre, verMontosCajaParaRolPorNombre } from "@/lib/roles-server";
 import { getTenantPrisma, prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
@@ -65,7 +65,20 @@ export async function obtenerVentasPorDiaAction(
     }
 
     const data = await getVentasPorDia(resuelto.tenant.id, fechaFinal, branchIdValidado);
-    return { ok: true, data };
+
+    // 2026-09-24, a petición de Carlos (revisión de permisos, mismo hueco
+    // que dashboard/page.tsx — ver redactarMontosVentasPorDia,
+    // lib/dashboard-data.ts): este Action recalcula el mismo bloque de
+    // datos que la carga inicial de la página cada vez que el dueño cambia
+    // de fecha, así que necesita el mismo candado anti-fraude aquí, no
+    // solo en la carga inicial — sin esto, un empleado sin
+    // Role.verMontosCaja podía saltarse la redacción del servidor con solo
+    // mover el selector de fecha.
+    const puedeVerMontos = resuelto.actor === "staff"
+      ? await verMontosCajaParaRolPorNombre(resuelto.tenant.id, resuelto.roleName)
+      : true;
+
+    return { ok: true, data: puedeVerMontos ? data : redactarMontosVentasPorDia(data) };
   } catch (err) {
     console.error("obtenerVentasPorDiaAction", err);
     return { ok: false, error: "No se pudo obtener la información de ese día" };

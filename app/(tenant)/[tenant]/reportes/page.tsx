@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { getReportesData, getReportesClinicosData } from "@/lib/reportes-data";
-import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
+import { verTodoNegocioParaRolPorNombre, verMontosCajaParaRolPorNombre } from "@/lib/roles-server";
 import { getTenantLabels } from "@/lib/labels-server";
 import { label } from "@/lib/labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,6 +70,22 @@ export default async function ReportesPage({ params }: PageProps) {
   const veTodoElNegocio = sesionValida ? await verTodoNegocioParaRolPorNombre(tenant.id, sesionValida.roleName) : false;
   const sucursalDeEmpleado = sesionValida && !veTodoElNegocio ? sesionValida.branchId : null;
 
+  // 2026-09-24, a petición de Carlos (revisión de permisos) — hueco real:
+  // esta pantalla ya recortaba por sucursal desde el 2026-09-21, pero
+  // nunca tuvo el mismo candado anti-fraude de Role.verMontosCaja que ya
+  // protegen Caja/Sucursales/Dashboard — cualquier empleado con el módulo
+  // "reportes" veía "Ventas del mes", el desglose por método de pago y la
+  // producción en pesos de cada doctor, sin importar su rol. A diferencia
+  // de Caja/Sucursales (que redactan con un candado/"Oculto"), aquí Carlos
+  // pidió NO hacer eso — cada tarjeta que es puramente dinero se omite por
+  // completo cuando puedeVerMontos es false, en vez de mostrarla con un
+  // valor redactado. Esta página es un Server Component puro (sin ningún
+  // Client Component que reciba estos montos como prop), así que con solo
+  // no incluir esa tarjeta en el árbol, el monto real ni siquiera llega al
+  // navegador — no hace falta una función de redacción aparte como en
+  // Dashboard.
+  const puedeVerMontos = sesionValida ? await verMontosCajaParaRolPorNombre(tenant.id, sesionValida.roleName) : true;
+
   const [reportes, reportesClinicos, labels] = await Promise.all([
     getReportesData(tenant.id, reparacionesActiva, sucursalDeEmpleado ?? undefined),
     getReportesClinicosData(tenant.id, expedienteActiva, sucursalDeEmpleado ?? undefined),
@@ -123,26 +139,29 @@ export default async function ReportesPage({ params }: PageProps) {
           </Card>
         )}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ventas del mes</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatMXN(reportes.ventasMes)}</div>
-            {reportes.crecimientoVentasPct === null ? (
-              <p className="text-xs text-muted-foreground">Sin datos del mes anterior para comparar</p>
-            ) : (
-              <p className={`text-xs flex items-center gap-1 ${reportes.crecimientoVentasPct >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                {reportes.crecimientoVentasPct >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                {reportes.crecimientoVentasPct >= 0 ? "+" : ""}{reportes.crecimientoVentasPct}% vs. mes anterior
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        {puedeVerMontos && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Ventas del mes</CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatMXN(reportes.ventasMes)}</div>
+              {reportes.crecimientoVentasPct === null ? (
+                <p className="text-xs text-muted-foreground">Sin datos del mes anterior para comparar</p>
+              ) : (
+                <p className={`text-xs flex items-center gap-1 ${reportes.crecimientoVentasPct >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                  {reportes.crecimientoVentasPct >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                  {reportes.crecimientoVentasPct >= 0 ? "+" : ""}{reportes.crecimientoVentasPct}% vs. mes anterior
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      <div className={`grid gap-4 ${reportes.reparacionesActiva ? "md:grid-cols-2" : ""}`}>
+      {(reportes.reparacionesActiva || puedeVerMontos) && (
+      <div className={`grid gap-4 ${reportes.reparacionesActiva && puedeVerMontos ? "md:grid-cols-2" : ""}`}>
         {reportes.reparacionesActiva && (
           <Card>
             <CardHeader>
@@ -167,26 +186,29 @@ export default async function ReportesPage({ params }: PageProps) {
           </Card>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Ventas del mes por método de pago</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {reportes.ventasPorMetodo.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Todavía no hay ventas completadas este mes.</p>
-            ) : (
-              <div className="space-y-2">
-                {reportes.ventasPorMetodo.map((v) => (
-                  <div key={v.metodo} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{METODO_TEXTO[v.metodo] ?? v.metodo}</span>
-                    <span className="font-medium">{formatMXN(v.total)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {puedeVerMontos && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Ventas del mes por método de pago</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {reportes.ventasPorMetodo.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Todavía no hay ventas completadas este mes.</p>
+              ) : (
+                <div className="space-y-2">
+                  {reportes.ventasPorMetodo.map((v) => (
+                    <div key={v.metodo} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">{METODO_TEXTO[v.metodo] ?? v.metodo}</span>
+                      <span className="font-medium">{formatMXN(v.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
+      )}
 
       {/* Reportes clínicos — M17, Fase 2, Tarea #42, 2026-09-21. Solo para
           rubros con expediente-clinico activo (dental/médico/veterinaria).
@@ -200,33 +222,35 @@ export default async function ReportesPage({ params }: PageProps) {
             <p className="text-sm text-muted-foreground">Producción, presupuestos y agenda del mes en curso.</p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Stethoscope className="h-4 w-4 text-muted-foreground" /> Producción por doctor este mes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {reportesClinicos.produccionPorDoctor.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Todavía no hay ventas ni fases de tratamiento pagadas este mes.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {reportesClinicos.produccionPorDoctor.map((p) => (
-                      <div key={p.doctorUserId} className="flex items-center justify-between text-sm">
-                        <div>
-                          <p className="font-medium">{p.doctor}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatMXN(p.ventas)} en ventas · {formatMXN(p.tratamientos)} en tratamientos
-                          </p>
+          <div className={`grid gap-4 ${puedeVerMontos ? "md:grid-cols-2" : ""}`}>
+            {puedeVerMontos && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4 text-muted-foreground" /> Producción por doctor este mes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {reportesClinicos.produccionPorDoctor.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Todavía no hay ventas ni fases de tratamiento pagadas este mes.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {reportesClinicos.produccionPorDoctor.map((p) => (
+                        <div key={p.doctorUserId} className="flex items-center justify-between text-sm">
+                          <div>
+                            <p className="font-medium">{p.doctor}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatMXN(p.ventas)} en ventas · {formatMXN(p.tratamientos)} en tratamientos
+                            </p>
+                          </div>
+                          <span className="font-semibold">{formatMXN(p.total)}</span>
                         </div>
-                        <span className="font-semibold">{formatMXN(p.total)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>

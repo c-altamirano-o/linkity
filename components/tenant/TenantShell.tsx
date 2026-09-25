@@ -386,21 +386,28 @@ export default function TenantShell({
 
   const modulosInactivosSet = new Set(modulosInactivos);
 
-  // "taller" y "aduana" (2026-09-21/22) son vistas angostas de Reparaciones
-  // pensadas para un rol de PIN específico (el técnico solo ve lo suyo en
-  // "taller"; recepción asigna técnico/costo en "aduana") — nunca para el
-  // dueño/gerente, que ya tiene todo eso y más en "Reparaciones" completo.
-  // Se siguen ocultando en modo "admin" (que no filtra por permisos, ve
-  // TODO lo que esté activo): ahora que cada una tiene su propio label
-  // ("module.workshop.name"/"module.reception.name", 2026-09-24 — ver el
-  // comentario largo en lib/labels.ts) ya no se verían como duplicados
-  // idénticos de "Reparaciones", pero seguirían siendo dos pestañas de más
-  // sin ningún propósito para quien ya tiene acceso total. En modo "staff"
-  // no hace falta excluirlos aquí: modulosPermitidos ya decide qué ve cada
-  // rol, y si un puesto en particular sí tiene más de uno de los tres a la
-  // vez (ej. un Encargado que también asume Aduana), ahora se ven como
-  // pestañas distintas y claras — no duplicadas.
-  const OCULTOS_PARA_ADMIN = new Set(["taller", "aduana"]);
+  // "taller" (2026-09-21) es la vista angosta de Reparaciones pensada para
+  // un rol de PIN específico (el técnico solo ve lo suyo, sin poder editar
+  // nada) — nunca hace falta para el dueño/gerente, que ya tiene todo eso y
+  // más en "Reparaciones" completo. Se sigue ocultando en modo "admin" (que
+  // no filtra por permisos, ve TODO lo que esté activo): no aporta nada a
+  // quien ya tiene acceso total, solo sería una pestaña de solo-lectura de
+  // más.
+  //
+  // "aduana" SÍ se le mostraba a admin hasta 2026-09-25 bajo el mismo
+  // razonamiento ("ya tiene todo eso en Reparaciones") — pero ese supuesto
+  // quedó desactualizado el 2026-09-22, cuando asignar técnico/cambiar
+  // estatus/ajustar costo se sacaron de "reparaciones" y se volvieron
+  // EXCLUSIVOS de "aduana" (ver el comentario largo de "aduana" en
+  // lib/roles.ts). Desde entonces "Reparaciones" ya NO trae esos controles
+  // para nadie, admin incluido — ocultar "Aduana" del menú dejaba al
+  // dueño/administrador con el permiso de servidor (resolverActor ya lo
+  // deja sin restricción) pero SIN ninguna forma de llegar ahí desde la UI,
+  // salvo escribiendo /aduana a mano en la URL. Carlos lo reportó
+  // explícitamente ("un administrador no puede cambiar el estatus de los
+  // equipos... también debería poder hacerlo por default") — corregido
+  // quitando "aduana" de este set.
+  const OCULTOS_PARA_ADMIN = new Set(["taller"]);
 
   // Primero se resuelve el nombre visible de cada ítem contra el
   // diccionario de labels (rubro + overrides del tenant), luego se filtra
@@ -409,9 +416,10 @@ export default function TenantShell({
   // staff), (2) en modo "staff", el rol de ese empleado no tiene permitido
   // ese módulo (lib/roles.ts) — se descarta el grupo completo si queda
   // vacío (ej. Cajero no ve nada de "GESTIÓN" — ese encabezado tampoco debe
-  // aparecer) — y (3) en modo "admin", las vistas angostas de Reparaciones
-  // (ver OCULTOS_PARA_ADMIN arriba) nunca aparecen duplicadas junto al
-  // "Reparaciones" completo.
+  // aparecer) — y (3) en modo "admin", la vista de solo lectura del técnico
+  // ("taller", ver OCULTOS_PARA_ADMIN arriba) no aparece de más; "Aduana" en
+  // cambio sí se muestra siempre a admin (2026-09-25) porque es la única
+  // forma de asignar técnico/cambiar estatus/ajustar costo, incluso para él.
   const gruposVisibles = NAV_STRUCTURE
     .map((grupo) => ({
       section: grupo.section,

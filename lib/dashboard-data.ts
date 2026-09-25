@@ -151,6 +151,47 @@ export interface DashboardData {
   reparacionesActiva: boolean;
 }
 
+/**
+ * 2026-09-24, a petición de Carlos (revisión de permisos) — hueco real que
+ * él mismo encontró probando el sistema como "Jefe de Taller" (Role con
+ * verMontosCaja=false): Caja y Sucursales ya redactan montos para un rol
+ * sin ese permiso desde antes ese mismo día (ver redactarMontosSucursales,
+ * lib/sucursales-data.ts), pero el Dashboard se quedó fuera — y como
+ * prácticamente todo el personal de PIN aterriza en esta misma pantalla al
+ * iniciar sesión (dashboard/page.tsx), cualquier rol sin ese permiso veía
+ * aquí las ventas del día, el total de la semana, el costo cotizado de
+ * cada reparación, etc. de su sucursal — justo lo que Carlos pidió evitar
+ * ("cada empleado solo lo que necesite... nunca un panorama general de las
+ * finanzas").
+ *
+ * Redacta TODO monto en pesos de un golpe, dejando intactos los conteos
+ * (num. de ventas, reparaciones activas, tickets, categorías — que son un
+ * % de mezcla de ventas, no un monto) que no son dinero. El servidor ni
+ * siquiera manda el número real al cliente — no es solo "ocultar en
+ * pantalla", mismo criterio que el resto del proyecto.
+ *
+ * costo/vsAyer quedan en `null` en vez de 0 (mismo motivo que cajaActual en
+ * redactarMontosSucursales): un 0 literal se leería como "no hay nada" o
+ * "sin cambio vs ayer", no como "tu rol no puede ver esto" —
+ * DashboardClient.tsx distingue ambos casos con el prop `montosVisibles`,
+ * nunca mirando solo si el valor es 0/null.
+ */
+export function redactarMontosDashboard(data: DashboardData): DashboardData {
+  return {
+    ...data,
+    totalVentasHoy: 0,
+    ticketPromedio: 0,
+    ventasHoy: data.ventasHoy.map((v) => ({ ...v, total: 0 })),
+    reparacionesActivas: data.reparacionesActivas.map((r) => ({ ...r, costo: null })),
+    equiposListos: data.equiposListos.map((r) => ({ ...r, costo: null })),
+    equiposDevolucion: data.equiposDevolucion.map((r) => ({ ...r, costo: null })),
+    ventasSemana: data.ventasSemana.map((d) => ({ ...d, ventas: 0, reparaciones: 0, total: 0 })),
+    totalSemana: 0,
+    promedioVentasSemana: 0,
+    sucursales: data.sucursales.map((s) => ({ ...s, ventasDia: 0, vsAyer: null })),
+  };
+}
+
 // ============================================
 // Utilidades de fecha (zona horaria de negocio)
 // ============================================
@@ -639,5 +680,23 @@ export async function getVentasPorDia(tenantId: string, fechaStr: string, branch
     ticketPromedio,
     porHora,
     horaPico: horaPico ? { hora: horaPico.hora, horaLabel: horaPico.horaLabel, numVentas: horaPico.numVentas } : null,
+  };
+}
+
+/**
+ * Redacta los montos de un VentasPorDiaData ya calculado — 2026-09-24,
+ * mismo criterio y mismo motivo que redactarMontosDashboard: se usa tanto
+ * en dashboard/page.tsx (la carga inicial de "Ventas por día y hora") como
+ * en obtenerVentasPorDiaAction (el selector de fecha vía AJAX), para que un
+ * empleado sin Role.verMontosCaja no pueda esquivar la redacción del
+ * servidor cambiando la fecha en el selector. `numVentas` (aquí y por hora)
+ * es un conteo, no dinero — se conserva igual que en el resto del Dashboard.
+ */
+export function redactarMontosVentasPorDia(data: VentasPorDiaData): VentasPorDiaData {
+  return {
+    ...data,
+    totalVentas: 0,
+    ticketPromedio: 0,
+    porHora: data.porHora.map((h) => ({ ...h, totalVentas: 0 })),
   };
 }

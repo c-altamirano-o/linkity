@@ -20,6 +20,16 @@ interface InventarioClientProps {
   branches: BranchOption[];
   tenantSlug: string;
   tenantName: string;
+  // 2026-09-24, a petición de Carlos (revisión de permisos, seguridad
+  // anti-fraude): false cuando el rol de este empleado de PIN no tiene
+  // Role.verMontosCaja — `productos` ya llega con `cost` en 0 desde el
+  // servidor en ese caso (ver redactarMontosInventario, lib/inventario-data.ts).
+  // "Costo" es precio de COMPRA (margen del negocio), a diferencia de
+  // "Precio venta" que un Cajero sí necesita para vender — por eso solo el
+  // costo se oculta, no toda la pantalla. No con un candado: se omite la
+  // ficha "Valor del inventario" y la columna "Costo" enteras (tabla y
+  // exportables), mismo criterio que el resto de la auditoría. Default true.
+  puedeVerMontos?: boolean;
 }
 
 const TODAS_SUCURSALES_ID = "__todas__";
@@ -41,7 +51,7 @@ interface VistaProducto extends ProductoInventario {
   minStock: number;
 }
 
-export default function InventarioClient({ productos, labels, branches, tenantSlug, tenantName }: InventarioClientProps) {
+export default function InventarioClient({ productos, labels, branches, tenantSlug, tenantName, puedeVerMontos = true }: InventarioClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -110,15 +120,21 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   }
 
   // ── CSV ──────────────────────────────────────────────────
+  // 2026-09-24: "Costo" y "Valor inventario" son las mismas dos columnas de
+  // margen que se ocultan en la tabla/ficha — se omiten aquí también para
+  // que un rol sin Role.verMontosCaja no las obtenga vía exportar.
   const exportarCSV = () => {
     const lines = [
       `# ${tenantName} — Inventario`,
       `# Sucursal: ${sucursal === TODAS_SUCURSALES_ID ? "Todas las sucursales" : branches.find((b) => b.id === sucursal)?.name ?? ""}`,
       `# Generado el: ${new Date().toLocaleString("es-MX")}`,
-      `Producto,SKU,Categoria,Tipo,Stock actual,Stock minimo,Precio venta,Costo,Valor inventario`,
-      ...productosFiltrados.map(
-        (p) =>
-          `"${p.name}",${p.sku ?? ""},"${p.categoryName}",${p.type === "PRODUCT" ? "Producto" : "Refaccion"},${p.stock},${p.minStock},${p.price},${p.cost},${(p.cost * p.stock).toFixed(2)}`
+      puedeVerMontos
+        ? `Producto,SKU,Categoria,Tipo,Stock actual,Stock minimo,Precio venta,Costo,Valor inventario`
+        : `Producto,SKU,Categoria,Tipo,Stock actual,Stock minimo,Precio venta`,
+      ...productosFiltrados.map((p) =>
+        puedeVerMontos
+          ? `"${p.name}",${p.sku ?? ""},"${p.categoryName}",${p.type === "PRODUCT" ? "Producto" : "Refaccion"},${p.stock},${p.minStock},${p.price},${p.cost},${(p.cost * p.stock).toFixed(2)}`
+          : `"${p.name}",${p.sku ?? ""},"${p.categoryName}",${p.type === "PRODUCT" ? "Producto" : "Refaccion"},${p.stock},${p.minStock},${p.price}`
       ),
     ];
     const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -132,18 +148,21 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   };
 
   // ── XLSX ─────────────────────────────────────────────────
+  // 2026-09-24: mismo recorte que exportarCSV — "Costo"/"Valor inventario"
+  // se omiten como columnas cuando este rol no tiene Role.verMontosCaja.
   const exportarXLSX = async () => {
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook();
     wb.creator = "Linkity Soluciones";
+    const numCols = puedeVerMontos ? 9 : 7;
+    const ultimaCol = String.fromCharCode("A".charCodeAt(0) + numCols - 1);
     const ws = wb.addWorksheet("Inventario", { views: [{ state: "frozen", ySplit: 4 }] });
     const PU = "4F46E5", LP = "EDE9FE";
     const BD = { style: "thin" as const, color: { argb: "E2E8F0" } };
     const bdr = { top: BD, bottom: BD, left: BD, right: BD };
-    ws.columns = [
-      { width: 28 }, { width: 14 }, { width: 18 }, { width: 12 },
-      { width: 12 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 16 },
-    ];
+    ws.columns = puedeVerMontos
+      ? [{ width: 28 }, { width: 14 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 16 }]
+      : [{ width: 28 }, { width: 14 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 14 }];
     const addMerged = (range: string, text: string, bg: string, fc: string, sz: number, bold = false, align: any = "left") => {
       ws.mergeCells(range);
       const c = ws.getCell(range.split(":")[0]);
@@ -152,13 +171,16 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
       c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
       c.alignment = { horizontal: align, vertical: "middle" };
     };
-    addMerged("A1:I1", `${tenantName} — Inventario`, PU, "FFFFFF", 14, true);
+    addMerged(`A1:${ultimaCol}1`, `${tenantName} — Inventario`, PU, "FFFFFF", 14, true);
     ws.getRow(1).height = 26;
     const sucursalTexto = sucursal === TODAS_SUCURSALES_ID ? "Todas las sucursales" : branches.find((b) => b.id === sucursal)?.name ?? "";
-    addMerged("A2:I2", `Sucursal: ${sucursalTexto}  ·  Generado el: ${new Date().toLocaleString("es-MX")}`, LP, "374151", 9);
+    addMerged(`A2:${ultimaCol}2`, `Sucursal: ${sucursalTexto}  ·  Generado el: ${new Date().toLocaleString("es-MX")}`, LP, "374151", 9);
     ws.addRow([]);
 
-    const header = ws.addRow(["Producto", "SKU", "Categoría", "Tipo", "Stock actual", "Stock mínimo", "Precio venta", "Costo", "Valor inventario"]);
+    const headerLabels = puedeVerMontos
+      ? ["Producto", "SKU", "Categoría", "Tipo", "Stock actual", "Stock mínimo", "Precio venta", "Costo", "Valor inventario"]
+      : ["Producto", "SKU", "Categoría", "Tipo", "Stock actual", "Stock mínimo", "Precio venta"];
+    const header = ws.addRow(headerLabels);
     header.eachCell((c) => {
       c.font = { bold: true, size: 10, color: { argb: "FFFFFF" } };
       c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E293B" } };
@@ -167,10 +189,10 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
     });
 
     for (const p of productosFiltrados) {
-      const row = ws.addRow([
-        p.name, p.sku ?? "", p.categoryName, p.type === "PRODUCT" ? "Producto" : "Refacción",
-        p.stock, p.minStock, p.price, p.cost, Number((p.cost * p.stock).toFixed(2)),
-      ]);
+      const valores = puedeVerMontos
+        ? [p.name, p.sku ?? "", p.categoryName, p.type === "PRODUCT" ? "Producto" : "Refacción", p.stock, p.minStock, p.price, p.cost, Number((p.cost * p.stock).toFixed(2))]
+        : [p.name, p.sku ?? "", p.categoryName, p.type === "PRODUCT" ? "Producto" : "Refacción", p.stock, p.minStock, p.price];
+      const row = ws.addRow(valores);
       row.eachCell((c, colNumber) => {
         c.border = bdr;
         if (colNumber >= 7) c.numFmt = "$#,##0.00";
@@ -329,10 +351,16 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
       </div>
 
       {/* ── Métricas — 2×2 en móvil, 4 en línea en desktop ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 px-3 sm:px-5 py-3 bg-card border-b border-border">
+      {/* 2026-09-24: "Valor del inventario" (Σ costo × stock) es dinero de
+          margen puro — se omite la ficha entera (no un candado) para quien
+          no tiene Role.verMontosCaja, mismo patrón que el resto de la
+          auditoría (ver lib/dashboard-data.ts). */}
+      <div className={`grid gap-2 sm:gap-3 px-3 sm:px-5 py-3 bg-card border-b border-border ${puedeVerMontos ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
         {[
           { label: "Total productos", value: totalProductos, sub: "En catálogo", color: "text-foreground", subColor: "text-muted-foreground" },
-          { label: "Valor del inventario", value: formatMXN(valorInventario), sub: "Precio de costo", color: "text-foreground", subColor: "text-muted-foreground" },
+          ...(puedeVerMontos
+            ? [{ label: "Valor del inventario", value: formatMXN(valorInventario), sub: "Precio de costo", color: "text-foreground", subColor: "text-muted-foreground" }]
+            : []),
           { label: "Stock bajo", value: stockBajo, sub: "Requieren surtir", color: "text-amber-600", subColor: "text-amber-500", icon: AlertTriangle },
           { label: "Agotados", value: agotados, sub: "Sin stock", color: "text-red-600", subColor: "text-red-400", icon: XCircle },
         ].map((m) => (
@@ -371,7 +399,10 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
           <table className="w-full min-w-[680px]">
             <thead className="sticky top-0 bg-card border-b border-border z-10">
               <tr>
-                {["Producto", "Categoría", "Stock actual", "Stock mínimo", "Precio venta", "Costo", "Acción"].map((h) => (
+                {/* 2026-09-24: "Costo" es la misma columna de margen que se
+                    omite en los exportables — no se muestra a quien no
+                    tiene Role.verMontosCaja. */}
+                {["Producto", "Categoría", "Stock actual", "Stock mínimo", "Precio venta", ...(puedeVerMontos ? ["Costo"] : []), "Acción"].map((h) => (
                   <th key={h} className="text-left text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5 whitespace-nowrap">
                     {h}
                   </th>
@@ -417,7 +448,9 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 text-xs text-muted-foreground">{p.minStock}</td>
                     <td className="px-3 sm:px-4 py-2.5 text-xs font-medium text-foreground">{formatMXN(p.price)}</td>
-                    <td className="px-3 sm:px-4 py-2.5 text-xs text-muted-foreground">{formatMXN(p.cost)}</td>
+                    {puedeVerMontos && (
+                      <td className="px-3 sm:px-4 py-2.5 text-xs text-muted-foreground">{formatMXN(p.cost)}</td>
+                    )}
                     <td className="px-3 sm:px-4 py-2.5">
                       <button onClick={() => abrirModal(p)}
                         className={`text-[11.5px] px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${

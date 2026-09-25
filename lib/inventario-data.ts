@@ -42,6 +42,23 @@ export interface InventarioData {
   productos: ProductoInventario[];
 }
 
+/**
+ * Redacta el costo de compra de cada producto — 2026-09-24, mismo hueco que
+ * el resto de la auditoría de permisos (Carlos: "cada empleado solo lo que
+ * necesite... nunca un panorama general de las finanzas"): `cost` es el
+ * precio de COSTO (información de margen del negocio), a diferencia de
+ * `price` (precio de VENTA al público, que un Cajero sí necesita ver para
+ * vender) — nunca se le mandaba este recorte a ningún rol. Se redacta en el
+ * servidor (no solo en la UI) para que el costo real ni siquiera llegue al
+ * navegador de ese empleado. `price`, `stock`, `minStock` y todo lo demás no
+ * son dinero-de-margen y se conservan tal cual.
+ */
+export function redactarMontosInventario(data: InventarioData): InventarioData {
+  return {
+    productos: data.productos.map((p) => ({ ...p, cost: 0 })),
+  };
+}
+
 const TYPE_FALLBACK_EMOJI: Record<TipoInventario, string> = {
   PRODUCT: "📦",
   PART: "🔩",

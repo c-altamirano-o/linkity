@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getClientesData } from "@/lib/clientes-data";
+import { verificarSesionPersonalVigente } from "@/lib/asistencia";
+import { verMontosCajaParaRolPorNombre } from "@/lib/roles-server";
+import { getClientesData, redactarMontosClientes } from "@/lib/clientes-data";
 import { getExpedientesData } from "@/lib/expediente-data";
 import { getPlanesTratamientoData } from "@/lib/tratamiento-data";
 import { getConsentimientosData } from "@/lib/consentimiento-data";
@@ -55,7 +57,17 @@ export default async function ClientesPage({
   const reparacionesActiva = !reparacionesInactiva;
   const expedienteActiva = !expedienteInactivo;
 
-  const [clientes, expedientes, planesTratamiento, consentimientos, recetas, labels] = await Promise.all([
+  // 2026-09-25, auditoría de permisos completa a petición de Carlos: esta
+  // pantalla no tenía NINGÚN chequeo de sesión/permiso — "Total gastado" (el
+  // gasto histórico del cliente, en pesos) se mandaba completo a CUALQUIER
+  // empleado con el módulo "clientes", sin importar Role.verMontosCaja.
+  // Confirmado explícitamente por Carlos: se oculta igual que el resto del
+  // dinero del negocio (ver redactarMontosClientes, lib/clientes-data.ts).
+  const sesionPersonal = await verificarSesionPersonalVigente();
+  const sesionValida = sesionPersonal && sesionPersonal.tenantId === tenant.id ? sesionPersonal : null;
+  const puedeVerMontos = sesionValida ? await verMontosCajaParaRolPorNombre(tenant.id, sesionValida.roleName) : true;
+
+  const [clientesCompletos, expedientes, planesTratamiento, consentimientos, recetas, labels] = await Promise.all([
     getClientesData(tenant.id),
     expedienteActiva ? getExpedientesData(tenant.id) : Promise.resolve({}),
     // Plan de Tratamiento (M17, Fase 2) vive bajo el mismo módulo
@@ -71,6 +83,8 @@ export default async function ClientesPage({
     getTenantLabels(tenant.id, tenant.businessType),
   ]);
 
+  const clientes = puedeVerMontos ? clientesCompletos : redactarMontosClientes(clientesCompletos);
+
   return (
     <ClientesClient
       clientes={clientes}
@@ -78,6 +92,7 @@ export default async function ClientesPage({
       tenantSlug={tenantSlug}
       reparacionesActiva={reparacionesActiva}
       expedienteActiva={expedienteActiva}
+      puedeVerMontos={puedeVerMontos}
       // El odontograma solo aplica a un consultorio dental (dientes) — ver
       // el comentario largo en schema.prisma (M16).
       odontogramaActivo={tenant.businessType === "consultorio_dental"}

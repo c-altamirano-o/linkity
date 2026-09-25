@@ -45,6 +45,15 @@ export interface SesionCajaActual {
   ingresosManual: number;
   egresosManual: number;
   efectivoEsperado: number;
+  // 2026-09-24, a petición de Carlos ("se puede hacer que caja solo muestre
+  // el total de operaciones realizadas, sin montos de dinero?"): conteos
+  // puros (no son un peso ni se derivan de uno), así que a diferencia de los
+  // campos de arriba NUNCA se redactan — redactarMontosCaja los deja pasar
+  // tal cual para que un Cajero sin Role.verMontosCaja pueda ver "cuántas"
+  // operaciones lleva su turno aunque no pueda ver "cuánto" dinero representan.
+  numVentas: number;
+  numIngresosManual: number;
+  numEgresosManual: number;
 }
 
 export interface CajaData {
@@ -64,12 +73,18 @@ export interface CajaData {
  * es un simple "ocultar en la UI": esta función corre en el servidor, así
  * que los montos reales nunca viajan al navegador de ese empleado (ni en
  * el HTML ni en la respuesta de un Server Component), no solo se esconden
- * con CSS. `movimientos` se vacía por completo (el panel de Detalle —
- * KPIs, tabla, exportar — no se le muestra a este nivel, así que tampoco
- * hace falta mandarle 400 días de ventas/movimientos reales). Los campos
- * NO monetarios de sesionActual (id, branchId, abiertaPor, abiertaEn) se
- * conservan — siguen operando caja (abrir/cerrar/registrar movimiento)
- * con normalidad, ver CajaClient.tsx.
+ * con CSS.
+ *
+ * Revisión 2026-09-24 (misma fecha, respuesta posterior de Carlos): "se
+ * puede hacer que caja solo muestre el total de operaciones realizadas,
+ * sin montos de dinero? y que solo un administrador los pueda ver" — antes
+ * `movimientos` se vaciaba por completo y el panel de Detalle se
+ * reemplazaba entero por un aviso de "Sección restringida". Ahora se
+ * conserva la lista completa de movimientos (folio, fecha, concepto,
+ * método, tipo) para que ese empleado pueda ver CUÁNTAS operaciones se
+ * hicieron — solo se le quita el campo `monto` a cada una (CUÁNTO dinero).
+ * Los conteos de sesionActual (numVentas/numIngresosManual/numEgresosManual)
+ * tampoco se tocan por la misma razón: son operaciones, no pesos.
  */
 export function redactarMontosCaja(data: CajaData): CajaData {
   return {
@@ -85,9 +100,12 @@ export function redactarMontosCaja(data: CajaData): CajaData {
           ingresosManual: 0,
           egresosManual: 0,
           efectivoEsperado: 0,
+          numVentas: data.sesionActual.numVentas,
+          numIngresosManual: data.sesionActual.numIngresosManual,
+          numEgresosManual: data.sesionActual.numEgresosManual,
         }
       : null,
-    movimientos: [],
+    movimientos: data.movimientos.map((m) => ({ ...m, monto: 0 })),
   };
 }
 
@@ -244,6 +262,10 @@ export async function getCajaData(tenantId: string, branchId: string): Promise<C
       ingresosManual,
       egresosManual,
       efectivoEsperado: aperturaMonto + ventasEfectivo + ingresosManual - egresosManual,
+      // Conteos puros — ver el comentario de redactarMontosCaja arriba.
+      numVentas: ventasSesion.length,
+      numIngresosManual: sesionRaw.movements.filter((m) => m.type === MovementType.INCOME).length,
+      numEgresosManual: sesionRaw.movements.filter((m) => m.type === MovementType.EXPENSE).length,
     };
   }
 

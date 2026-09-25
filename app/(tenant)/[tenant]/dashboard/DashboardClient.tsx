@@ -134,6 +134,7 @@ export default function DashboardClient({
   branches,
   sucursalActualId,
   puedeConfigurarCategorias = true,
+  montosVisibles = true,
 }: {
   data: DashboardData;
   labels: LabelDictionary;
@@ -156,6 +157,18 @@ export default function DashboardClient({
   // (dashboard-actions.ts) — esto es solo para no mostrar un botón que el
   // servidor va a rechazar. Default true para no romper otros usos.
   puedeConfigurarCategorias?: boolean;
+  // 2026-09-24, a petición de Carlos (revisión de permisos, hueco
+  // encontrado en producción): false para un empleado de PIN cuyo rol no
+  // tiene Role.verMontosCaja — `data`/`ventasPorDiaInicial` ya llegan
+  // redactados desde el servidor (ver redactarMontosDashboard/
+  // redactarMontosVentasPorDia, lib/dashboard-data.ts). A diferencia de
+  // Caja/Sucursales (que mostraban "🔒 Oculto" en el lugar del monto),
+  // Carlos pidió explícitamente NO usar ese candado aquí — "se ve poco
+  // estético" — así que en vez de reemplazar el valor, cada ficha/columna/
+  // gráfica que es ÚNICAMENTE dinero se OMITE por completo cuando esto es
+  // false, dejando visible solo lo que sí es un conteo (ventas, tickets,
+  // reparaciones activas...). Default true para no romper otros usos.
+  montosVisibles?: boolean;
 }) {
   const router = useRouter();
   const t = (key: string) => label(labels, key);
@@ -264,19 +277,26 @@ export default function DashboardClient({
   };
 
   // ── Tabla ventas reutilizable ────────────────────────
+  // 2026-09-24: la columna "Total" (dinero) se omite por completo cuando
+  // montosVisibles es false, en vez de mostrar un candado — ver el
+  // comentario largo en el prop montosVisibles más arriba. El grid pasa de
+  // 4 a 3 columnas para que no quede un hueco vacío donde estaba el monto.
   function TablaVentas() {
     if (data.ventasHoy.length === 0) {
       return <EmptyState text="Aún no hay ventas registradas hoy." />;
     }
+    const cols = montosVisibles
+      ? "grid-cols-[70px_1fr_80px_65px] sm:grid-cols-[80px_1fr_90px_75px]"
+      : "grid-cols-[70px_1fr_80px] sm:grid-cols-[80px_1fr_90px]";
     return (
       <>
-        <div className="grid grid-cols-[70px_1fr_80px_65px] sm:grid-cols-[80px_1fr_90px_75px] px-4 py-2 bg-muted/50 border-b border-border sticky top-0">
-          {["Folio · Hora", "Artículos", "Método", "Total"].map((h, i) => (
-            <p key={h} className={`text-[11.5px] font-medium text-muted-foreground ${i === 3 ? "text-right" : ""}`}>{h}</p>
+        <div className={`grid ${cols} px-4 py-2 bg-muted/50 border-b border-border sticky top-0`}>
+          {(montosVisibles ? ["Folio · Hora", "Artículos", "Método", "Total"] : ["Folio · Hora", "Artículos", "Método"]).map((h, i) => (
+            <p key={h} className={`text-[11.5px] font-medium text-muted-foreground ${montosVisibles && i === 3 ? "text-right" : ""}`}>{h}</p>
           ))}
         </div>
         {data.ventasHoy.map((v) => (
-          <div key={v.id} className="grid grid-cols-[70px_1fr_80px_65px] sm:grid-cols-[80px_1fr_90px_75px] px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-center">
+          <div key={v.id} className={`grid ${cols} px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-center`}>
             <div>
               <p className="text-xs font-semibold text-primary-text">{v.folio}</p>
               <p className="text-[11.5px] text-muted-foreground">{v.hora}</p>
@@ -286,7 +306,7 @@ export default function DashboardClient({
               <p className="text-[11.5px] text-muted-foreground">{v.count} {v.count === 1 ? "artículo" : "artículos"}</p>
             </div>
             <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full w-fit ${metodoBadge[v.metodo]}`}>{v.metodo}</span>
-            <p className="text-xs font-semibold text-foreground text-right">{formatMXN(v.total)}</p>
+            {montosVisibles && <p className="text-xs font-semibold text-foreground text-right">{formatMXN(v.total)}</p>}
           </div>
         ))}
       </>
@@ -322,17 +342,21 @@ export default function DashboardClient({
     );
   }
 
+  // 2026-09-24: misma omisión de columna que TablaVentas — sin la columna
+  // "Costo" cuando montosVisibles es false (en vez del candado que ya no
+  // se usa, ver el comentario del prop montosVisibles).
   function TablaListos({ rows }: { rows: RepairRow[] }) {
     if (rows.length === 0) return <EmptyState text="No hay equipos listos para entregar por ahora." />;
+    const cols = montosVisibles ? "grid-cols-[80px_1fr_90px_70px]" : "grid-cols-[80px_1fr_70px]";
     return (
       <>
-        <div className="grid grid-cols-[80px_1fr_90px_70px] px-4 py-2 bg-muted/50 border-b border-border sticky top-0">
-          {["Folio", "Cliente · Equipo", "Costo", "Espera"].map((h) => (
+        <div className={`grid ${cols} px-4 py-2 bg-muted/50 border-b border-border sticky top-0`}>
+          {(montosVisibles ? ["Folio", "Cliente · Equipo", "Costo", "Espera"] : ["Folio", "Cliente · Equipo", "Espera"]).map((h) => (
             <p key={h} className="text-[11.5px] font-medium text-muted-foreground">{h}</p>
           ))}
         </div>
         {rows.map((e) => (
-          <div key={e.id} className="grid grid-cols-[80px_1fr_90px_70px] px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-center">
+          <div key={e.id} className={`grid ${cols} px-4 py-3 border-b border-border/60 hover:bg-muted/40 items-center`}>
             <div>
               <p className="text-xs font-semibold text-primary-text">{e.folio}</p>
               <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Listo</span>
@@ -344,7 +368,7 @@ export default function DashboardClient({
                 <Phone className="w-2.5 h-2.5" /> {e.telefono}
               </p>
             </div>
-            <p className="text-xs font-semibold text-emerald-600">{e.costo != null ? formatMXN(e.costo) : "—"}</p>
+            {montosVisibles && <p className="text-xs font-semibold text-emerald-600">{e.costo != null ? formatMXN(e.costo) : "—"}</p>}
             <p className="text-[11.5px] text-muted-foreground">{e.espera}</p>
           </div>
         ))}
@@ -393,12 +417,15 @@ export default function DashboardClient({
       stats: { label: string; value: string; color: string }[];
       content: React.ReactNode;
     }> = {
+      // 2026-09-24: los stats de solo-dinero se omiten del arreglo cuando
+      // montosVisibles es false (en vez de un candado) — ver el comentario
+      // del prop montosVisibles más arriba.
       ventas: {
         titulo: "Ventas del día", iconBg: "bg-primary/10", iconColor: "text-primary-text", icon: ShoppingCart,
         stats: [
-          { label: "Total ventas", value: formatMXN(data.totalVentasHoy), color: "text-primary-text" },
+          ...(montosVisibles ? [{ label: "Total ventas", value: formatMXN(data.totalVentasHoy), color: "text-primary-text" }] : []),
           { label: "Num. de ventas", value: String(data.numVentasHoy), color: "text-foreground" },
-          { label: "Ticket promedio", value: formatMXN(data.ticketPromedio), color: "text-foreground" },
+          ...(montosVisibles ? [{ label: "Ticket promedio", value: formatMXN(data.ticketPromedio), color: "text-foreground" }] : []),
         ],
         content: <TablaVentas />,
       },
@@ -406,8 +433,10 @@ export default function DashboardClient({
         titulo: "Total de tickets", iconBg: "bg-cyan-50", iconColor: "text-cyan-600", icon: Receipt,
         stats: [
           { label: "Tickets hoy", value: String(data.numVentasHoy), color: "text-cyan-600" },
-          { label: "Monto total", value: formatMXN(data.totalVentasHoy), color: "text-primary-text" },
-          { label: "Ticket promedio", value: formatMXN(data.ticketPromedio), color: "text-foreground" },
+          ...(montosVisibles ? [
+            { label: "Monto total", value: formatMXN(data.totalVentasHoy), color: "text-primary-text" },
+            { label: "Ticket promedio", value: formatMXN(data.ticketPromedio), color: "text-foreground" },
+          ] : []),
         ],
         content: <TablaVentas />,
       },
@@ -424,7 +453,7 @@ export default function DashboardClient({
         titulo: "Equipos listos para entregar", iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: CheckCircle,
         stats: [
           { label: "Equipos listos", value: String(data.equiposListos.length), color: "text-emerald-600" },
-          { label: "Total a cobrar", value: formatMXN(data.equiposListos.reduce((s, e) => s + (e.costo ?? 0), 0)), color: "text-primary-text" },
+          ...(montosVisibles ? [{ label: "Total a cobrar", value: formatMXN(data.equiposListos.reduce((s, e) => s + (e.costo ?? 0), 0)), color: "text-primary-text" }] : []),
           { label: "Con espera > 1 día", value: String(data.equiposListos.filter((e) => e.espera.includes("día")).length), color: "text-amber-600" },
         ],
         content: <TablaListos rows={data.equiposListos} />,
@@ -462,7 +491,10 @@ export default function DashboardClient({
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 px-4 sm:px-5 py-3 border-b border-border flex-shrink-0">
+          {/* 2026-09-24: grid-cols dinámico — con montosVisibles=false algunos
+              modales quedan con menos de 3 stats (se omitió el/los de
+              dinero), un grid-cols-3 fijo dejaría una celda vacía. */}
+          <div className={`grid gap-2 sm:gap-3 px-4 sm:px-5 py-3 border-b border-border flex-shrink-0 ${cfg.stats.length === 2 ? "grid-cols-2" : cfg.stats.length === 1 ? "grid-cols-1" : "grid-cols-3"}`}>
             {cfg.stats.map((s) => (
               <div key={s.label} className="bg-muted/50 rounded-xl p-2 sm:p-3 text-center">
                 <p className="text-[10.5px] text-muted-foreground mb-1">{s.label}</p>
@@ -482,7 +514,11 @@ export default function DashboardClient({
   // Reparaciones activas, dispositivos listos y devolución... Es una
   // barbería, eso no aplica ahí" — reporte de Carlos en producción).
   const metricas = [
-    { label: "Ventas del día", value: formatMXN(data.totalVentasHoy), sub: data.numVentasHoy > 0 ? `${data.numVentasHoy} ${data.numVentasHoy === 1 ? "venta" : "ventas"} hoy` : "Sin ventas aún", positive: true, icon: ShoppingCart, iconBg: "bg-primary/10", iconColor: "text-primary-text", modal: "ventas" as ModalType, btnColor: "text-primary-text bg-primary/10" },
+    // 2026-09-24: la ficha "Ventas del día" es puro dinero (su único valor
+    // es un monto) — se omite por completo cuando montosVisibles es false,
+    // en vez de mostrarla con un candado (a petición de Carlos). "Total de
+    // tickets" se queda siempre: su valor es un conteo, no dinero.
+    ...(montosVisibles ? [{ label: "Ventas del día", value: formatMXN(data.totalVentasHoy), sub: data.numVentasHoy > 0 ? `${data.numVentasHoy} ${data.numVentasHoy === 1 ? "venta" : "ventas"} hoy` : "Sin ventas aún", positive: true, icon: ShoppingCart, iconBg: "bg-primary/10", iconColor: "text-primary-text", modal: "ventas" as ModalType, btnColor: "text-primary-text bg-primary/10" }] : []),
     { label: "Total de tickets", value: String(data.numVentasHoy), sub: "Transacciones hoy", positive: true, icon: Receipt, iconBg: "bg-cyan-50", iconColor: "text-cyan-600", modal: "tickets" as ModalType, btnColor: "text-cyan-600 bg-cyan-50" },
     ...(data.reparacionesActiva
       ? [
@@ -509,10 +545,12 @@ export default function DashboardClient({
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5 capitalize">{fechaHoy}</p>
         </div>
-        <div className="text-right">
-          <p className="text-[11.5px] text-muted-foreground">Total semana</p>
-          <p className="text-sm sm:text-base font-bold text-foreground">{formatMXN(data.totalSemana)}</p>
-        </div>
+        {montosVisibles && (
+          <div className="text-right">
+            <p className="text-[11.5px] text-muted-foreground">Total semana</p>
+            <p className="text-sm sm:text-base font-bold text-foreground">{formatMXN(data.totalSemana)}</p>
+          </div>
+        )}
       </div>
 
       {/* ── Vista global / vista por sucursal ────────────────────────────
@@ -584,59 +622,65 @@ export default function DashboardClient({
         ))}
       </div>
 
-      {/* ── Gráficas: área + pie ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+      {/* ── Gráficas: área + pie ───────────────────────────────────────────
+          2026-09-24: la gráfica "Ventas de la semana" es puro dinero — se
+          omite por completo (no solo sus valores) cuando montosVisibles es
+          false, y "Ventas por categoría" (un % de mezcla, no un monto en
+          pesos) pasa a ocupar todo el ancho en ese caso. */}
+      <div className={`grid grid-cols-1 ${montosVisibles ? "lg:grid-cols-3" : ""} gap-3 sm:gap-4`}>
 
-        <div className="lg:col-span-2 bg-card border border-border rounded-xl p-3 sm:p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-sm font-medium text-foreground">Ventas de la semana</p>
-              <p className="text-xs text-muted-foreground">Promedio diario: {formatMXN(data.promedioVentasSemana)}</p>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Ventas</span></div>
-              {data.reparacionesActiva && (
-                <>
-                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#06B6D4]" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Rep.</span></div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-0 border-t-2 border-dashed border-emerald-500" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Total</span></div>
-                </>
-              )}
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={140}>
-            <AreaChart data={data.ventasSemana} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="cV" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
-                </linearGradient>
+        {montosVisibles && (
+          <div className="lg:col-span-2 bg-card border border-border rounded-xl p-3 sm:p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">Ventas de la semana</p>
+                <p className="text-xs text-muted-foreground">Promedio diario: {formatMXN(data.promedioVentasSemana)}</p>
+              </div>
+              <div className="flex items-center gap-2 sm:gap-4">
+                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Ventas</span></div>
                 {data.reparacionesActiva && (
                   <>
-                    <linearGradient id="cR" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="cT" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.10} />
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                    </linearGradient>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#06B6D4]" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Rep.</span></div>
+                    <div className="flex items-center gap-1"><div className="w-3 h-0 border-t-2 border-dashed border-emerald-500" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Total</span></div>
                   </>
                 )}
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-              <XAxis dataKey="dia" tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} width={36} />
-              <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="ventas" stroke="var(--primary)" strokeWidth={2} fill="url(#cV)" />
-              {data.reparacionesActiva && (
-                <>
-                  <Area type="monotone" dataKey="reparaciones" stroke="#06B6D4" strokeWidth={2} fill="url(#cR)" />
-                  <Area type="monotone" dataKey="total" stroke="#10B981" strokeWidth={2} strokeDasharray="5 3" fill="url(#cT)" />
-                </>
-              )}
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={140}>
+              <AreaChart data={data.ventasSemana} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="cV" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+                  </linearGradient>
+                  {data.reparacionesActiva && (
+                    <>
+                      <linearGradient id="cR" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="cT" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.10} />
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                      </linearGradient>
+                    </>
+                  )}
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                <XAxis dataKey="dia" tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} width={36} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="ventas" stroke="var(--primary)" strokeWidth={2} fill="url(#cV)" />
+                {data.reparacionesActiva && (
+                  <>
+                    <Area type="monotone" dataKey="reparaciones" stroke="#06B6D4" strokeWidth={2} fill="url(#cR)" />
+                    <Area type="monotone" dataKey="total" stroke="#10B981" strokeWidth={2} strokeDasharray="5 3" fill="url(#cT)" />
+                  </>
+                )}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
         <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
           <div className="flex items-center justify-between mb-1">
@@ -713,11 +757,15 @@ export default function DashboardClient({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+        {/* 2026-09-24: "Total vendido"/"Ticket promedio" (dinero) se omiten
+            del arreglo cuando montosVisibles es false — "Ventas" (conteo) y
+            "Mayor flujo" (hora, calculado por num. de tickets no por monto,
+            ver getVentasPorDia en lib/dashboard-data.ts) se quedan. */}
+        <div className={`grid grid-cols-2 ${montosVisibles ? "sm:grid-cols-4" : ""} gap-2 mb-3`}>
           {[
-            { label: "Total vendido", value: formatMXN(ventasPorDia.totalVentas) },
+            ...(montosVisibles ? [{ label: "Total vendido", value: formatMXN(ventasPorDia.totalVentas) }] : []),
             { label: "Ventas", value: String(ventasPorDia.numVentas) },
-            { label: "Ticket promedio", value: formatMXN(ventasPorDia.ticketPromedio) },
+            ...(montosVisibles ? [{ label: "Ticket promedio", value: formatMXN(ventasPorDia.ticketPromedio) }] : []),
             { label: "Mayor flujo", value: ventasPorDia.horaPico ? ventasPorDia.horaPico.horaLabel : "—" },
           ].map((s) => (
             <div key={s.label} className="bg-muted/50 rounded-xl p-2 text-center">
@@ -822,7 +870,10 @@ export default function DashboardClient({
           anterior (reporte "AdminDaily") — comparación rápida de quién
           vendió más hoy, de un vistazo. No aparece en vista por sucursal
           (no hay nada que comparar viendo una sola). */}
-      {data.multiSucursal && enVistaGlobal && (
+      {/* 2026-09-24: este comparativo es puro dinero (ventasDia de cada
+          sucursal) — se omite por completo cuando montosVisibles es false,
+          no solo sus valores. */}
+      {montosVisibles && data.multiSucursal && enVistaGlobal && (
         <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-medium text-foreground">Ventas por sucursal</p>
@@ -869,9 +920,12 @@ export default function DashboardClient({
                       {suc.estado === "activa" ? "Activa" : "En prueba"}
                     </span>
                   </div>
+                  {/* 2026-09-24: "Ventas del día" y "Ticket promedio" (dinero)
+                      se omiten del arreglo cuando montosVisibles es false —
+                      el resto son conteos, se quedan igual. */}
                   <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-2 divide-x divide-y divide-border">
                     {[
-                      { label: "Ventas del día", value: formatMXN(suc.ventasDia), color: "text-primary-text", sub: suc.vsAyer != null ? `${suc.vsAyer >= 0 ? "↑" : "↓"} ${Math.abs(suc.vsAyer)}% vs ayer` : "Sin datos de ayer" },
+                      ...(montosVisibles ? [{ label: "Ventas del día", value: formatMXN(suc.ventasDia), color: "text-primary-text", sub: suc.vsAyer != null ? `${suc.vsAyer >= 0 ? "↑" : "↓"} ${Math.abs(suc.vsAyer)}% vs ayer` : "Sin datos de ayer" }] : []),
                       ...(data.reparacionesActiva
                         ? [
                             { label: "Equipos recibidos", value: String(suc.equiposRecibidos), color: "text-foreground", sub: "Hoy" },
@@ -880,7 +934,7 @@ export default function DashboardClient({
                             { label: "Rep. activas", value: String(suc.repActivas), color: "text-foreground", sub: "En proceso" },
                           ]
                         : []),
-                      { label: "Ticket promedio", value: formatMXN(suc.ticketsVenta > 0 ? Math.round(suc.ventasDia / suc.ticketsVenta) : 0), color: "text-primary-text", sub: "Por venta" },
+                      ...(montosVisibles ? [{ label: "Ticket promedio", value: formatMXN(suc.ticketsVenta > 0 ? Math.round(suc.ventasDia / suc.ticketsVenta) : 0), color: "text-primary-text", sub: "Por venta" }] : []),
                     ].map((m) => (
                       <div key={m.label} className="px-3 py-2.5">
                         <p className="text-[10.5px] text-muted-foreground mb-0.5">{m.label}</p>
@@ -896,7 +950,9 @@ export default function DashboardClient({
                         <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-orange-50 text-orange-700">{suc.ticketsRep} {t("entity.repair.plural").toLowerCase()}</span>
                       )}
                     </div>
-                    <span className="text-[11.5px] text-muted-foreground">Total: <span className="font-semibold text-foreground">{formatMXN(suc.ventasDia)}</span></span>
+                    {montosVisibles && (
+                      <span className="text-[11.5px] text-muted-foreground">Total: <span className="font-semibold text-foreground">{formatMXN(suc.ventasDia)}</span></span>
+                    )}
                   </div>
                 </div>
               );

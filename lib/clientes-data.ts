@@ -146,3 +146,24 @@ export async function getClientesData(tenantId: string): Promise<ClienteUI[]> {
     };
   });
 }
+
+/**
+ * Redacta el gasto histórico de una lista de ClienteUI ya calculada —
+ * 2026-09-24/25, mismo hueco que el resto de la auditoría de permisos:
+ * esta pantalla no tenía NINGÚN chequeo de Role.verMontosCaja. A petición
+ * explícita de Carlos (respuesta a la pregunta de "Total gastado"): se
+ * oculta igual que el resto del dinero del negocio. `totalGastado` se pone
+ * en 0 y el `monto` de cada renglón de `historial` también (son montos por
+ * transacción — igual de sensibles que el agregado). `visitas`,
+ * `reparaciones`, `reparacionesActivas`, `ultimaVisita` y todo lo demás en
+ * `historial` (folio, título, fecha, estado) NO son dinero y se conservan
+ * tal cual — un Cajero sigue viendo cuántas veces vino el cliente y qué
+ * compró/reparó, solo no el monto.
+ */
+export function redactarMontosClientes(clientes: ClienteUI[]): ClienteUI[] {
+  return clientes.map((c) => ({
+    ...c,
+    totalGastado: 0,
+    historial: c.historial.map((h) => ({ ...h, monto: 0 })),
+  }));
+}

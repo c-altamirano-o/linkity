@@ -184,7 +184,16 @@ export async function editarProductoAction(
         name: datos.name.trim(),
         sku: datos.sku?.trim() || null,
         price: datos.price,
-        cost: datos.cost ?? null,
+        // 2026-09-24, a petición de Carlos (revisión de permisos): `cost` es
+        // opcional a propósito — CatalogoClient.tsx ya no manda esta llave
+        // en absoluto cuando el rol no tiene Role.verMontosCaja (el campo
+        // "Costo" ni siquiera se le muestra en el formulario). Si aquí se
+        // hiciera `cost: datos.cost ?? null` sin distinguir "no venía en la
+        // petición" de "se mandó null a propósito", ese empleado borraría
+        // sin querer el costo real que un admin ya había capturado con solo
+        // editar el precio o el nombre del producto. `undefined` (la llave
+        // ausente) dentro de `data` le dice a Prisma "no toques este campo".
+        ...(datos.cost !== undefined ? { cost: datos.cost } : {}),
         type: datos.type,
         categoryId: datos.categoryId || null,
         emoji: datos.emoji?.trim() || null,

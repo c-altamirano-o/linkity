@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getDashboardData, getVentasPorDia, hoyMx } from "@/lib/dashboard-data";
+import { getDashboardData, getVentasPorDia, hoyMx, redactarMontosDashboard, redactarMontosVentasPorDia } from "@/lib/dashboard-data";
 import { getTenantLabels } from "@/lib/labels-server";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
-import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
+import { verTodoNegocioParaRolPorNombre, verMontosCajaParaRolPorNombre } from "@/lib/roles-server";
 import DashboardClient from "./DashboardClient";
 
 export default async function DashboardPage({
@@ -85,11 +85,25 @@ export default async function DashboardPage({
   // vez de mostrar un error.
   const branchIdFiltro = sucursalDeEmpleado ?? tenant.branches.find((b) => b.id === sucursal)?.id;
 
-  const [data, labels, ventasPorDiaInicial] = await Promise.all([
+  // 2026-09-24, a petición de Carlos (revisión de permisos, hueco real que
+  // él mismo encontró en producción: un "Jefe de Taller" con
+  // Role.verMontosCaja=false veía aquí las ventas completas de su
+  // sucursal) — mismo criterio anti-fraude que ya aplican Caja y
+  // Sucursales, que este Dashboard nunca tuvo pese a compartir el mismo
+  // recorte por sucursal desde arriba. A diferencia de esas dos pantallas,
+  // aquí Carlos pidió explícitamente NO reemplazar el monto por un
+  // candado — DashboardClient.tsx omite por completo cada ficha/columna/
+  // gráfica que es solo dinero cuando montosVisibles es false, en vez de
+  // mostrarla redactada.
+  const puedeVerMontos = sesionValida ? await verMontosCajaParaRolPorNombre(tenant.id, sesionValida.roleName) : true;
+
+  const [dataCompleta, labels, ventasPorDiaCompleta] = await Promise.all([
     getDashboardData(tenant.id, branchesVisibles, tenant.weekStartDay, reparacionesActiva, branchIdFiltro, tenant.dashboardCategoriasConfig),
     getTenantLabels(tenant.id, tenant.businessType),
     getVentasPorDia(tenant.id, hoyMx(), branchIdFiltro),
   ]);
+  const data = puedeVerMontos ? dataCompleta : redactarMontosDashboard(dataCompleta);
+  const ventasPorDiaInicial = puedeVerMontos ? ventasPorDiaCompleta : redactarMontosVentasPorDia(ventasPorDiaCompleta);
 
   return (
     <DashboardClient
@@ -117,6 +131,7 @@ export default async function DashboardPage({
       // un Supervisor de Sucursales sí puede; un empleado normal ya ni ve el
       // botón de engrane.
       puedeConfigurarCategorias={!sesionValida || veTodoElNegocio}
+      montosVisibles={puedeVerMontos}
     />
   );
 }

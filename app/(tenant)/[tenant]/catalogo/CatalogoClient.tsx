@@ -29,6 +29,15 @@ interface CatalogoClientProps {
   branches: BranchOption[];
   tenantSlug: string;
   businessType: string | null;
+  // 2026-09-24, a petición de Carlos (revisión de permisos, seguridad
+  // anti-fraude): false cuando el rol de este empleado de PIN no tiene
+  // Role.verMontosCaja — catalogo/page.tsx ya manda `data.ventasDetalle`
+  // vacío en ese caso (ver lib/catalogo-data.ts), así que aquí solo falta
+  // ocultar la pestaña "Top ventas" en sí (es dinero: ventas por producto
+  // en pesos) — no con un candado, se omite el botón por completo, mismo
+  // criterio que el resto de la auditoría. Default true (admin / roles con
+  // el permiso, no rompe llamadas viejas).
+  puedeVerMontos?: boolean;
 }
 
 interface FormProducto {
@@ -155,7 +164,7 @@ function matchesPeriodo(fechaISO: string, periodo: string, fechaInicio: string, 
   return true;
 }
 
-export default function CatalogoClient({ data, labels, branches, tenantSlug, businessType }: CatalogoClientProps) {
+export default function CatalogoClient({ data, labels, branches, tenantSlug, businessType, puedeVerMontos = true }: CatalogoClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { categorias, productos, ventasDetalle } = data;
@@ -424,7 +433,13 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
         name: form.name,
         sku: form.sku || null,
         price: Number(form.price),
-        cost: form.cost ? Number(form.cost) : null,
+        // 2026-09-24: el campo "Costo" ni se le muestra a este rol cuando
+        // !puedeVerMontos (ver el formulario arriba) — no se manda la llave
+        // en absoluto (en vez de mandar `null`) para que editarProductoAction
+        // no le borre a un admin el costo que ya tenía capturado solo porque
+        // esta cajera cambió el precio o el nombre. Ver el comentario largo
+        // en catalogo-actions.ts.
+        ...(puedeVerMontos ? { cost: form.cost ? Number(form.cost) : null } : {}),
         type: form.type,
         categoryId: categoryId || null,
         emoji: form.emoji.trim() || null,
@@ -613,15 +628,17 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             );
           })}
 
-          <button onClick={() => setTabActivo("topventas")}
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ml-auto whitespace-nowrap flex-shrink-0 ${
-              tabActivo === "topventas"
-                ? "text-amber-600 border-amber-500"
-                : "text-muted-foreground border-transparent hover:text-foreground"
-            }`}>
-            <TrendingUp className="w-3 h-3" />
-            Top ventas
-          </button>
+          {puedeVerMontos && (
+            <button onClick={() => setTabActivo("topventas")}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ml-auto whitespace-nowrap flex-shrink-0 ${
+                tabActivo === "topventas"
+                  ? "text-amber-600 border-amber-500"
+                  : "text-muted-foreground border-transparent hover:text-foreground"
+              }`}>
+              <TrendingUp className="w-3 h-3" />
+              Top ventas
+            </button>
+          )}
         </div>
 
         {/* ── Categorías en móvil (fila horizontal) ─────── */}
@@ -705,7 +722,10 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                         <span className="text-xs font-bold text-primary-text">{formatMXN(p.price)}</span>
                         {stockBadge(p.isService, p.stock)}
                       </div>
-                      {!p.isService && p.cost > 0 && (
+                      {/* 2026-09-24: "Costo" es precio de compra (margen del
+                          negocio) — se omite para quien no tiene
+                          Role.verMontosCaja, igual que en Inventario. */}
+                      {puedeVerMontos && !p.isService && p.cost > 0 && (
                         <p className="text-[10.5px] text-muted-foreground mt-1">Costo: {formatMXN(p.cost)}</p>
                       )}
                     </div>
@@ -941,7 +961,12 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   />
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              {/* 2026-09-24: "Costo" es precio de compra (margen del
+                  negocio) — el campo se omite por completo (no solo se
+                  deshabilita) para quien no tiene Role.verMontosCaja, mismo
+                  criterio que la ficha inline de arriba. Sin ese campo,
+                  "Precio de venta" ocupa el ancho completo. */}
+              <div className={`grid gap-3 ${puedeVerMontos ? "grid-cols-2" : "grid-cols-1"}`}>
                 <div>
                   <label className="text-[12.5px] font-medium text-muted-foreground">Precio de venta *</label>
                   <input
@@ -951,15 +976,17 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
                   />
                 </div>
-                <div>
-                  <label className="text-[12.5px] font-medium text-muted-foreground">Costo</label>
-                  <input
-                    type="number" min={0} step="0.01"
-                    value={form.cost}
-                    onChange={(e) => setForm({ ...form, cost: e.target.value })}
-                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
-                  />
-                </div>
+                {puedeVerMontos && (
+                  <div>
+                    <label className="text-[12.5px] font-medium text-muted-foreground">Costo</label>
+                    <input
+                      type="number" min={0} step="0.01"
+                      value={form.cost}
+                      onChange={(e) => setForm({ ...form, cost: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                )}
               </div>
               {!editando && form.type !== "SERVICE" && (
                 <div>

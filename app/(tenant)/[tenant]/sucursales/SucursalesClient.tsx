@@ -27,10 +27,13 @@ interface SucursalesClientProps {
   // 2026-09-24, a petición de Carlos (revisión de permisos, seguridad
   // anti-fraude) — false cuando el rol de este empleado no tiene
   // Role.verMontosCaja (redactarMontosSucursales, lib/sucursales-data.ts, ya
-  // puso ventasHoy/cajaActual en 0/null server-side): se muestra "Oculto" en
-  // vez de esos ceros, para no dar a entender que la sucursal no vendió
-  // nada o no tiene efectivo cuando en realidad es que este rol no puede
-  // verlo. Default true (no rompe llamadas viejas ni el caso admin).
+  // puso ventasHoy/cajaActual en 0/null server-side). Rediseño el mismo día
+  // (Carlos: "no quiero que coloques candados... solo no muestres esa
+  // ficha"): en vez de mostrar esos ceros como "Oculto", las fichas/columnas
+  // que son puro dinero (Ventas hoy, Caja actual, Rendimiento — % de venta
+  // entre sucursales) se omiten por completo; solo quedan las que de verdad
+  // no son un peso (Reparaciones activas, Stock total, Personal). Default
+  // true (no rompe llamadas viejas ni el caso admin).
   montosVisibles?: boolean;
 }
 
@@ -275,22 +278,32 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
                 </span>
               </div>
 
-              {/* Métricas */}
+              {/* Métricas — 2026-09-24, rediseño a petición de Carlos ("no
+                  quiero que coloques candados en las fichas que muestren
+                  dinero... solo no muestres esa ficha si el empleado o el
+                  rol no necesita verla"): antes "Ventas hoy"/"Caja actual"
+                  se quedaban en la grilla mostrando el texto "Oculto" — ahora
+                  esas dos fichas (son dinero puro) se omiten por completo
+                  cuando montosVisibles es false, dejando solo las fichas que
+                  de verdad no son un peso (Reparaciones activas, Stock
+                  total). Mismo patrón que Dashboard/Reportes, ver
+                  lib/dashboard-data.ts. */}
               <div className="grid grid-cols-2 gap-2 p-3">
                 {[
-                  {
-                    icon: DollarSign,
-                    label: "Ventas hoy",
-                    value: montosVisibles ? formatMXN(suc.ventasHoy) : "Oculto",
-                    color: montosVisibles ? "text-primary-text" : "text-muted-foreground",
-                  },
+                  ...(montosVisibles
+                    ? [{ icon: DollarSign, label: "Ventas hoy", value: formatMXN(suc.ventasHoy), color: "text-primary-text" }]
+                    : []),
                   { icon: Wrench, label: "Reparaciones activas", value: String(suc.reparacionesActivas), color: "text-cyan-600" },
-                  {
-                    icon: Package,
-                    label: "Caja actual",
-                    value: !montosVisibles ? "Oculto" : suc.cajaAbierta ? formatMXN(suc.cajaActual ?? 0) : "Cerrada",
-                    color: !montosVisibles ? "text-muted-foreground" : suc.cajaAbierta ? "text-emerald-600" : "text-muted-foreground",
-                  },
+                  ...(montosVisibles
+                    ? [
+                        {
+                          icon: Package,
+                          label: "Caja actual",
+                          value: suc.cajaAbierta ? formatMXN(suc.cajaActual ?? 0) : "Cerrada",
+                          color: suc.cajaAbierta ? "text-emerald-600" : "text-muted-foreground",
+                        },
+                      ]
+                    : []),
                   { icon: Package, label: "Stock total", value: String(suc.stockTotal), color: "text-amber-600" },
                 ].map((m) => (
                   <div key={m.label} className="bg-muted rounded-lg p-2">
@@ -443,7 +456,24 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
             <table className="w-full">
               <thead>
                 <tr className="bg-muted border-b border-border">
-                  {["Sucursal", "Ventas hoy", "Rendimiento", "Reparaciones activas", "Personal activo"].map((h) => (
+                  {/* 2026-09-24, rediseño a petición de Carlos ("no candados,
+                      omite la ficha/columna de dinero"): antes "Ventas hoy"
+                      mostraba el texto "Oculto" y "Rendimiento" (el % de
+                      participación de cada sucursal en el total de ventas —
+                      a diferencia del pie de "Ventas por categoría", que
+                      Carlos confirmó que SÍ puede quedar visible porque es
+                      mezcla dentro de una sola tienda, este % compara el
+                      desempeño de ventas ENTRE sucursales, mismo dato
+                      sensible que el bloque "Comparativo por sucursal" que
+                      ya se omite entero en el Dashboard) mostraba un "—".
+                      Ahora ambas columnas se omiten por completo cuando
+                      montosVisibles es false. */}
+                  {[
+                    "Sucursal",
+                    ...(montosVisibles ? ["Ventas hoy", "Rendimiento"] : []),
+                    "Reparaciones activas",
+                    "Personal activo",
+                  ].map((h) => (
                     <th key={h} className="text-left text-[11.5px] font-medium text-muted-foreground px-4 py-2.5 whitespace-nowrap">
                       {h}
                     </th>
@@ -463,21 +493,21 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-[12.5px] font-medium text-foreground whitespace-nowrap">
-                        {montosVisibles ? formatMXN(suc.ventasHoy) : <span className="text-muted-foreground">Oculto</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        {montosVisibles ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${BARRA_COLORES[i % BARRA_COLORES.length]}`} style={{ width: `${pct}%` }} />
+                      {montosVisibles && (
+                        <>
+                          <td className="px-4 py-3 text-[12.5px] font-medium text-foreground whitespace-nowrap">
+                            {formatMXN(suc.ventasHoy)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${BARRA_COLORES[i % BARRA_COLORES.length]}`} style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-[11.5px] text-muted-foreground">{pct}%</span>
                             </div>
-                            <span className="text-[11.5px] text-muted-foreground">{pct}%</span>
-                          </div>
-                        ) : (
-                          <span className="text-[11.5px] text-muted-foreground">—</span>
-                        )}
-                      </td>
+                          </td>
+                        </>
+                      )}
                       <td className="px-4 py-3 text-[12.5px] text-foreground/80">{suc.reparacionesActivas}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">

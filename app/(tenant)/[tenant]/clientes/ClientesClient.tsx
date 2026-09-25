@@ -36,6 +36,12 @@ interface ClientesClientProps {
   labels: LabelDictionary;
   tenantSlug: string;
   reparacionesActiva: boolean;
+  // 2026-09-25, a petición explícita de Carlos (revisión de permisos,
+  // seguridad anti-fraude): false cuando el rol de este empleado de PIN no
+  // tiene Role.verMontosCaja — `clientes` ya llega con totalGastado/
+  // historial[].monto en 0 desde el servidor en ese caso (ver
+  // redactarMontosClientes, lib/clientes-data.ts). Default true.
+  puedeVerMontos?: boolean;
   // Expediente Clínico + Odontograma (M16, 2026-09-18) — ver el comentario
   // largo en schema.prisma. expedienteActiva es el módulo completo (el
   // negocio lo apagó/prendió desde Configuración); odontogramaActivo es
@@ -385,6 +391,7 @@ const FORM_VACIO: DatosCliente = { name: "", phone: "", phoneCountryCode: PAIS_T
 export default function ClientesClient({
   clientes, labels, tenantSlug, reparacionesActiva, expedienteActiva, odontogramaActivo, expedientes,
   planesTratamiento, doctores, branches, consentimientos, plantillasConsentimiento, recetas,
+  puedeVerMontos = true,
 }: ClientesClientProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -1126,7 +1133,15 @@ export default function ClientesClient({
 
               <div className={`grid grid-cols-2 gap-2 sm:gap-3 ${reparacionesActiva ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
                 {[
-                  { label: "Total gastado", value: formatMXN(seleccionado.totalGastado), sub: `${seleccionado.visitas} visitas` },
+                  // 2026-09-25, a petición explícita de Carlos: "Total
+                  // gastado" es dinero — se omite (no un candado) para quien
+                  // no tiene Role.verMontosCaja. Antes "visitas" solo vivía
+                  // como subtítulo de esta ficha; para que ese conteo (no es
+                  // dinero) no desaparezca junto con el monto, se muestra
+                  // como su propia ficha cuando montosVisibles es false.
+                  puedeVerMontos
+                    ? { label: "Total gastado", value: formatMXN(seleccionado.totalGastado), sub: `${seleccionado.visitas} visitas` }
+                    : { label: "Visitas", value: String(seleccionado.visitas), sub: "" },
                   ...(reparacionesActiva
                     ? [
                         {
@@ -1229,9 +1244,19 @@ export default function ClientesClient({
                               ? label(labels, `repair.status.${h.estado}`)
                               : VENTA_TEXTO[h.estado as EstadoVentaCliente]}
                           </span>
-                          <span className="text-xs font-semibold text-foreground min-w-[60px] text-right flex-shrink-0">
-                            {h.monto > 0 ? formatMXN(h.monto) : "Por definir"}
-                          </span>
+                          {/* 2026-09-25: `monto` ya viene en 0 desde el
+                              servidor cuando este rol no tiene
+                              Role.verMontosCaja (ver redactarMontosClientes)
+                              — mostrar "Por definir" ahí sería engañoso (da
+                              a entender que a esa venta/reparación ya
+                              entregada le falta capturar el costo, cuando
+                              en realidad es que este rol no puede verlo), así
+                              que se omite el span entero, no un texto. */}
+                          {puedeVerMontos && (
+                            <span className="text-xs font-semibold text-foreground min-w-[60px] text-right flex-shrink-0">
+                              {h.monto > 0 ? formatMXN(h.monto) : "Por definir"}
+                            </span>
+                          )}
                         </div>
                       ))
                     )}

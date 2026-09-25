@@ -55,6 +55,24 @@ export interface CatalogoData {
   ventasDetalle: VentaDetalleItem[];
 }
 
+/**
+ * Redacta los montos de dinero-de-margen de una CatalogoData ya calculada —
+ * 2026-09-24, mismo hueco que el resto de la auditoría de permisos: esta
+ * pantalla no tenía NINGÚN chequeo de Role.verMontosCaja. Dos cosas se
+ * redactan: `ventasDetalle` (el desglose de venta por producto en pesos que
+ * alimenta la pestaña "Top ventas" — se vacía, ver CatalogoClient.tsx, que
+ * además oculta esa pestaña por completo) y `cost` de cada producto (precio
+ * de COMPRA, dato de margen — a diferencia de `price`, el precio de VENTA
+ * al público, que un Cajero sí necesita para vender y por eso NO se toca).
+ */
+export function redactarMontosCatalogo(data: CatalogoData): CatalogoData {
+  return {
+    categorias: data.categorias,
+    productos: data.productos.map((p) => ({ ...p, cost: 0 })),
+    ventasDetalle: [],
+  };
+}
+
 const TYPE_FALLBACK_EMOJI: Record<TipoCatalogo, string> = {
   PRODUCT: "📦",
   PART: "🔩",

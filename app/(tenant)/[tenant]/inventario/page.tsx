@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
-import { getInventarioData } from "@/lib/inventario-data";
-import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
+import { getInventarioData, redactarMontosInventario } from "@/lib/inventario-data";
+import { verTodoNegocioParaRolPorNombre, verMontosCajaParaRolPorNombre } from "@/lib/roles-server";
 import { getTenantLabels } from "@/lib/labels-server";
 import InventarioClient from "./InventarioClient";
 
@@ -40,10 +40,17 @@ export default async function InventarioPage({
     ? tenant.branches.filter((b) => b.id === sucursalDeEmpleado)
     : tenant.branches;
 
-  const [{ productos }, labels] = await Promise.all([
+  // 2026-09-24, auditoría de permisos completa a petición de Carlos: "Costo"
+  // (precio de compra, dato de margen del negocio) se mandaba sin recorte a
+  // cualquier rol con el módulo "inventario" — ver redactarMontosInventario.
+  const puedeVerMontos = sesionValida ? await verMontosCajaParaRolPorNombre(tenant.id, sesionValida.roleName) : true;
+
+  const [{ productos: productosCompletos }, labels] = await Promise.all([
     getInventarioData(tenant.id, branchesTenant),
     getTenantLabels(tenant.id, tenant.businessType),
   ]);
+
+  const productos = puedeVerMontos ? productosCompletos : redactarMontosInventario({ productos: productosCompletos }).productos;
 
   const branches = branchesTenant.map((b) => ({ id: b.id, name: b.name }));
 
@@ -54,6 +61,7 @@ export default async function InventarioPage({
       branches={branches}
       tenantSlug={tenantSlug}
       tenantName={tenant.name}
+      puedeVerMontos={puedeVerMontos}
     />
   );
 }
