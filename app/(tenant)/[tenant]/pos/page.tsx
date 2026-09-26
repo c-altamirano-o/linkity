@@ -110,6 +110,7 @@ export default async function POSPage({
     telefono: tenant.phone,
     rfc: tenant.rfc,
     mensajePie: tenant.reciboMensajePie,
+    extra: tenant.reciboExtra,
   };
 
   return (

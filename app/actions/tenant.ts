@@ -141,23 +141,31 @@ export async function updateSupportPhone(tenantSlug: string, phone: string) {
 //   para capturarlos — se reutilizan aquí, no son campos nuevos.
 // - mensaje (Tenant.reciboMensajePie, SÍ es un campo nuevo): reemplaza el
 //   "¡Gracias por tu preferencia!" fijo de lib/recibo-imprimible.ts.
-// Cualquiera de los tres vacío/solo espacios se guarda como null (esa línea
-// simplemente no se imprime, o vuelve al mensaje de pie de siempre) — sin
-// necesidad de un botón "restaurar" aparte. Mismo criterio de validación que
-// updateSupportPhone/updateWeekStartDay: solo el administrador dueño de la
-// cuenta (resolverActor con "configuracion", ningún rol de PIN lo tiene en
-// su matriz de acceso).
+// - extra (Tenant.reciboExtra, 2026-09-26, segunda petición el mismo día:
+//   "agrega un cuadro de texto abierto... sin limite de caracteres...
+//   direcciones, promociones, un saludo, lo que sea") — a propósito SIN
+//   ningún límite de longitud aquí (a diferencia de los otros tres, que sí
+//   lo tienen) ni transformación (no se recorta a una sola línea) — el
+//   negocio puede escribir varios párrafos si quiere, ver el comentario
+//   largo en Tenant.reciboExtra (schema.prisma).
+// Cualquiera de los cuatro vacío/solo espacios se guarda como null (esa
+// línea simplemente no se imprime, o vuelve al mensaje de pie de siempre) —
+// sin necesidad de un botón "restaurar" aparte. Mismo criterio de
+// validación que updateSupportPhone/updateWeekStartDay: solo el
+// administrador dueño de la cuenta (resolverActor con "configuracion",
+// ningún rol de PIN lo tiene en su matriz de acceso).
 const MAX_LARGO_DIRECCION = 150;
 const MAX_LARGO_RFC = 20;
 const MAX_LARGO_MENSAJE_PIE = 200;
 
 export async function updateDatosTicket(
   tenantSlug: string,
-  datos: { direccion: string; rfc: string; mensajePie: string }
+  datos: { direccion: string; rfc: string; mensajePie: string; extra: string }
 ) {
   const direccion = datos.direccion.trim();
   const rfc = datos.rfc.trim().toUpperCase();
   const mensajePie = datos.mensajePie.trim();
+  const extra = datos.extra.trim();
 
   if (direccion.length > MAX_LARGO_DIRECCION) {
     return { success: false, error: `La dirección no puede pasar de ${MAX_LARGO_DIRECCION} caracteres` };
@@ -179,6 +187,7 @@ export async function updateDatosTicket(
         address: direccion || null,
         rfc: rfc || null,
         reciboMensajePie: mensajePie || null,
+        reciboExtra: extra || null,
       },
     });
 

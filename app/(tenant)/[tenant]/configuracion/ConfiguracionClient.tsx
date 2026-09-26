@@ -95,6 +95,7 @@ interface ConfiguracionClientProps {
   direccionTicketInicial: string | null;
   rfcTicketInicial: string | null;
   mensajePieTicketInicial: string | null;
+  extraTicketInicial: string | null;
   checklistTaller: EstadoTallerChecklist;
 }
 
@@ -115,6 +116,7 @@ export default function ConfiguracionClient({
   direccionTicketInicial,
   rfcTicketInicial,
   mensajePieTicketInicial,
+  extraTicketInicial,
   checklistTaller,
 }: ConfiguracionClientProps) {
   const router = useRouter();
@@ -259,15 +261,21 @@ export default function ConfiguracionClient({
   // solos — aquí solo faltaban dirección, RFC (Tenant.address/rfc, ya
   // existían en el schema para CFDI, sin pantalla propia hasta hoy) y el
   // mensaje de pie (Tenant.reciboMensajePie, campo nuevo).
+  // extraTicket (Tenant.reciboExtra, segunda petición el mismo día): "un
+  // cuadro de texto abierto... sin limite de caracteres... direcciones,
+  // promociones, un saludo, lo que sea" — a propósito SIN maxLength en el
+  // <textarea> de abajo (a diferencia de dirección/RFC/mensaje de pie, que
+  // sí lo tienen) — ver el comentario largo en updateDatosTicket.
   const [direccionTicket, setDireccionTicket] = useState(direccionTicketInicial ?? "");
   const [rfcTicket, setRfcTicket] = useState(rfcTicketInicial ?? "");
   const [mensajePieTicket, setMensajePieTicket] = useState(mensajePieTicketInicial ?? "");
+  const [extraTicket, setExtraTicket] = useState(extraTicketInicial ?? "");
   const [datosTicketPending, startDatosTicketTransition] = useTransition();
   const [datosTicketMensaje, setDatosTicketMensaje] = useState("");
 
   const guardarDatosTicket = () => {
     startDatosTicketTransition(async () => {
-      const result = await updateDatosTicket(tenantSlug, { direccion: direccionTicket, rfc: rfcTicket, mensajePie: mensajePieTicket });
+      const result = await updateDatosTicket(tenantSlug, { direccion: direccionTicket, rfc: rfcTicket, mensajePie: mensajePieTicket, extra: extraTicket });
       setDatosTicketMensaje(result.success ? "Ticket actualizado correctamente." : (result.error ?? "Error al actualizar."));
       if (result.success) {
         router.refresh();
@@ -936,7 +944,7 @@ export default function ConfiguracionClient({
           <p className="text-sm text-muted-foreground mb-5">
             Estos datos aparecen en el encabezado y pie de los tickets impresos (ventas y reparaciones).
             El nombre, logo y teléfono ya se toman de las secciones de arriba — aquí solo agregas dirección,
-            RFC y un mensaje de despedida propio.
+            RFC, un mensaje de despedida propio y un texto libre al fondo del ticket.
           </p>
 
           <div className="max-w-sm space-y-4">
@@ -975,6 +983,19 @@ export default function ConfiguracionClient({
                 className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
               />
             </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+              Extra <span className="font-normal">(sin límite de caracteres — direcciones, promociones, un saludo, lo que quieras)</span>
+            </label>
+            <textarea
+              value={extraTicket}
+              onChange={(e) => setExtraTicket(e.target.value)}
+              placeholder="Ej. También nos encuentras en Insurgentes 456 · Síguenos en @tunegocio · 10% de descuento en tu próxima visita presentando este ticket"
+              rows={5}
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
+            />
           </div>
 
           <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">

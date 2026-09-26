@@ -16,7 +16,7 @@ export default async function ConfiguracionPage({
     where: { slug: tenantSlug },
     select: {
       id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, logo: true, weekStartDay: true, phone: true,
-      cobrarEnDevolucion: true, montoDevolucion: true, address: true, rfc: true, reciboMensajePie: true,
+      cobrarEnDevolucion: true, montoDevolucion: true, address: true, rfc: true, reciboMensajePie: true, reciboExtra: true,
     },
   });
 
@@ -56,6 +56,7 @@ export default async function ConfiguracionPage({
       direccionTicketInicial={tenant.address}
       rfcTicketInicial={tenant.rfc}
       mensajePieTicketInicial={tenant.reciboMensajePie}
+      extraTicketInicial={tenant.reciboExtra}
       checklistTaller={checklistTaller}
     />
   );

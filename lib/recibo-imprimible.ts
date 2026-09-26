@@ -51,6 +51,15 @@
  * SÍNCRONA, en la misma línea, antes de cualquier await, para no arriesgar
  * el bloqueador de pop-ups — el contenido (incluido el QR) se escribe
  * después, cuando la promesa de QRCode.toString ya se resolvió.
+ *
+ * 2026-09-26 (mismo día, segunda petición): `negocio.extra` (Tenant.reciboExtra)
+ * es un cuadro de texto TOTALMENTE libre y sin tope de caracteres — a
+ * propósito aparte de `mensajePie` (despedida corta, 200 caracteres) — para
+ * "direcciones, promociones, un saludo, lo que sea". Va hasta el fondo del
+ * ticket, después de todo lo demás (incluida la despedida), y respeta los
+ * saltos de línea que el negocio haya escrito (white-space: pre-wrap) — es
+ * el único bloque del ticket que lo necesita, porque es el único que puede
+ * traer varias líneas de texto libre.
  */
 
 import QRCode from "qrcode";
@@ -71,6 +80,8 @@ export interface DatosNegocioRecibo {
   rfc?: string | null;
   /** Tenant.reciboMensajePie — reemplaza "¡Gracias por tu preferencia!" cuando el negocio capturó uno propio en Configuración. */
   mensajePie?: string | null;
+  /** Tenant.reciboExtra — texto libre y sin tope de caracteres, hasta el fondo del ticket (direcciones, promociones, saludo, lo que el negocio quiera). Ver el comentario largo arriba. */
+  extra?: string | null;
 }
 
 export interface ReciboRenglon {
@@ -145,6 +156,7 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
         .renglon { display: flex; justify-content: space-between; }
         .total { font-size: 15px; font-weight: bold; text-align: right; margin-top: 8px; }
         .aviso { margin-top: 14px; font-size: 10.5px; color: #4b5563; border-top: 1px dashed #9ca3af; padding-top: 8px; text-align: center; }
+        .extra { margin-top: 10px; font-size: 11px; color: #374151; white-space: pre-wrap; text-align: center; }
         .encabezado { display: flex; align-items: center; gap: 8px; }
         .encabezado img { width: 40px; height: 40px; object-fit: contain; border-radius: 6px; flex-shrink: 0; }
         .qr { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -186,6 +198,7 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
       ${r.notaPie ? `<p class="aviso">${r.notaPie}</p>` : ""}
       ${qrSvg ? `<div class="qr">${qrSvg}${r.qrEtiqueta ? `<p class="muted">${r.qrEtiqueta}</p>` : ""}</div>` : ""}
       <p class="aviso">${negocio.mensajePie?.trim() || "¡Gracias por tu preferencia!"}</p>
+      ${negocio.extra?.trim() ? `<p class="extra">${negocio.extra.trim()}</p>` : ""}
     </body>
     </html>
   `);

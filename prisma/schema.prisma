@@ -31,6 +31,17 @@ model Tenant {
   // que faltaba era que recibo-imprimible.ts los usara en vez de derivar un
   // nombre del slug de la URL — ver el comentario largo ahí.
   reciboMensajePie String?
+  // 2026-09-26, a petición de Carlos: "agrega un cuadro de texto abierto
+  // para que el cliente pueda poner texto a su gusto, sin limite de
+  // caracteres... ahi puede meter direcciones, promociones, un saludo, lo
+  // que sea". A propósito un campo APARTE de reciboMensajePie (arriba, tope
+  // de 200 caracteres, pensado como despedida corta) — este es de largo
+  // libre, sin ningún tope en el servidor (ver updateDatosTicket,
+  // app/actions/tenant.ts) ni en la base (@db.Text de Postgres no tiene el
+  // límite de ~10,485,760 caracteres de un varchar sin longitud declarada,
+  // que de cualquier forma nunca se acercaría a alcanzar un ticket real).
+  // null = no se imprime nada (sin regresión para quien no lo llene).
+  reciboExtra String? @db.Text
   themePreset  ThemePreset @default(LUMIA_COBALT)
 
   // Intensidad de color del tema (2026-09-23, a petición de Carlos: "hazlas
