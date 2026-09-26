@@ -107,12 +107,19 @@ const SIGUIENTES_ESTADOS: Partial<Record<EstadoReparacion, { estado: NuevoEstado
   WORKSHOP_RETURN: [{ estado: "SHOP_RETURN", texto: "Enviar a tienda (devolución)" }],
   // SHOP_READY/SHOP_RETURN también ofrecen un botón de "regresar" al taller
   // (2026-09-25, a petición de Carlos: corregir un "Enviar a tienda" hecho
-  // por error de dedo — antes no había forma de deshacerlo desde la UI, ver
-  // el comentario largo en TRANSICIONES_VALIDAS, reparaciones-actions.ts).
-  SHOP_READY: [{ estado: "WORKSHOP_READY", texto: "Regresar a taller (corregir)" }],
+  // por error de dedo — antes no había forma de deshacerlo desde la UI).
+  // Aterriza en IN_REPAIR, no en WORKSHOP_READY/WORKSHOP_RETURN (corregido
+  // 2026-09-26: Carlos reportó que, aterrizando ahí, la única opción
+  // siguiente era reenviar el mismo estatus de tienda que ya estaba
+  // corrigiendo — "debería poderse elegir cualquiera que involucre a
+  // taller, por ejemplo En reparación, Equipo Listo, En espera de
+  // refacción". IN_REPAIR ya ofrece esas tres salidas completas, ver el
+  // renglón de arriba — ver el comentario largo en TRANSICIONES_VALIDAS,
+  // reparaciones-actions.ts).
+  SHOP_READY: [{ estado: "IN_REPAIR", texto: "Regresar a taller (corregir)" }],
   SHOP_RETURN: [
     { estado: "DELIVERED", texto: "Entregar (sin cobro)" },
-    { estado: "WORKSHOP_RETURN", texto: "Regresar a taller (corregir)" },
+    { estado: "IN_REPAIR", texto: "Regresar a taller (corregir)" },
   ],
 };
 
