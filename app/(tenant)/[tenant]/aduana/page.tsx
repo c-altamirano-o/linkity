@@ -30,7 +30,7 @@ export default async function AduanaPage({
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
-    select: { id: true, businessType: true },
+    select: { id: true, businessType: true, cobrarEnDevolucion: true },
   });
 
   if (!tenant) notFound();
@@ -50,5 +50,5 @@ export default async function AduanaPage({
     puedeAccederModulo(tenant.id, "pos"),
   ]);
 
-  return <AduanaClient data={data} labels={labels} tenantSlug={tenantSlug} puedeCobrar={puedeCobrar} />;
+  return <AduanaClient data={data} labels={labels} tenantSlug={tenantSlug} puedeCobrar={puedeCobrar} cobrarEnDevolucion={tenant.cobrarEnDevolucion} />;
 }

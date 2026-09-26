@@ -52,6 +52,12 @@ type CartItem = {
   // render distinto (sin +/-, precio editable) y cómo se manda el renglón a
   // crearVentaAction (repairId + monto en vez de productId + cantidad).
   repairId?: string;
+  // 2026-09-26, junto con la unificación del botón "Entregar": el ticket de
+  // esta venta debe indicar SIEMPRE si el equipo estaba Listo o era una
+  // Devolución (a petición explícita de Carlos) — se guarda aquí (viene de
+  // RepairParaCobro.esDevolucion) para no tener que volver a consultar la
+  // reparación al momento de armar el recibo.
+  esDevolucion?: boolean;
 };
 
 const SIN_CATEGORIA_ID = "__sin_categoria__";
@@ -112,11 +118,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             {
               productId: r.id,
               repairId: r.id,
-              nombre: `Reparación ${r.folio} — ${r.deviceBrand} ${r.deviceModel}`.trim(),
+              nombre: `Reparación ${r.folio} — ${r.deviceBrand} ${r.deviceModel}${r.esDevolucion ? " (Devolución)" : " (Listo)"}`.trim(),
               precio: r.montoSugerido,
               taxRate: 0,
               cantidad: 1,
               isService: true,
+              esDevolucion: r.esDevolucion,
             },
           ]
     );
@@ -347,6 +354,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     // la misma reparación (ya DELIVERED) sin necesidad, y un back/forward
     // del navegador podría confundir con un ?repairId que ya no aplica.
     const carritoTeniaReparacion = carrito.some((i) => i.repairId);
+    // Encabezado del ticket (2026-09-26, a petición de Carlos: el ticket
+    // "siempre" debe indicar si el equipo estaba Listo o era Devolución) —
+    // el nombre del renglón ya lo deja claro también (ver el efecto de seed
+    // arriba), esto además cambia el título del comprobante impreso.
+    const repLinea = carrito.find((i) => i.repairId);
+    const tipoDocumentoTicket = !repLinea ? "Venta" : repLinea.esDevolucion ? "Reparación — Devolución" : "Reparación — Listo";
 
     startTransition(async () => {
       const res = await crearVentaAction({
@@ -373,7 +386,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         // ReparacionesClient.tsx). El botón "Reimprimir ticket" de abajo es
         // el respaldo manual si el navegador bloqueó el pop-up.
         const recibo: ReciboData = {
-          tipoDocumento: "Venta",
+          tipoDocumento: tipoDocumentoTicket,
           folio: res.folio,
           cliente: clienteTicket,
           telefono: null,

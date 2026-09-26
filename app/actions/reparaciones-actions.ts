@@ -67,7 +67,7 @@ export interface CrearReparacionParams {
 }
 
 export type CrearReparacionResult =
-  | { ok: true; id: string; folio: string }
+  | { ok: true; id: string; folio: string; publicToken: string }
   | { ok: false; error: string };
 
 export async function crearReparacionAction(params: CrearReparacionParams): Promise<CrearReparacionResult> {
@@ -234,7 +234,7 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
     revalidatePath(`/${tenantSlug}/taller`);
     revalidatePath(`/${tenantSlug}/dashboard`);
 
-    return { ok: true, id: repair.id, folio: repair.folio };
+    return { ok: true, id: repair.id, folio: repair.folio, publicToken: repair.publicToken };
   } catch (err: any) {
     if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
       return { ok: false, error: "No tienes acceso a este recurso" };

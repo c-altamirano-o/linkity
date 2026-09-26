@@ -155,6 +155,34 @@ export async function updateCobrarEnDevolucion(tenantSlug: string, valor: boolea
   }
 }
 
+// Monto fijo a cobrar por una devolución (Tenant.montoDevolucion, 2026-09-26,
+// junto con la unificación del botón "Entregar" de Aduana/Reparaciones —
+// ver el comentario largo en Tenant.montoDevolucion, schema.prisma). Solo
+// tiene efecto mientras cobrarEnDevolucion esté activo — se guarda aparte
+// (no junto con el toggle de arriba) porque es un campo de texto que el
+// administrador edita y confirma, no un switch que se guarda al instante.
+export async function updateMontoDevolucion(tenantSlug: string, valor: number) {
+  if (!Number.isFinite(valor) || valor < 0) {
+    return { success: false, error: "El monto debe ser un número válido mayor o igual a cero" };
+  }
+
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
+  try {
+    await prisma.tenant.update({
+      where: { id: resuelto.tenant.id },
+      data: { montoDevolucion: Math.round(valor * 100) / 100 },
+    });
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al actualizar el monto de devolución:", error);
+    return { success: false, error: "No se pudo actualizar este monto" };
+  }
+}
+
 export async function updateWeekStartDay(tenantSlug: string, weekStartDay: number) {
   if (!Number.isInteger(weekStartDay) || weekStartDay < 0 || weekStartDay > 6) {
     return { success: false, error: "Día inválido" };

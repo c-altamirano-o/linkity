@@ -16,7 +16,7 @@ export default async function ConfiguracionPage({
     where: { slug: tenantSlug },
     select: {
       id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, logo: true, weekStartDay: true, phone: true,
-      cobrarEnDevolucion: true,
+      cobrarEnDevolucion: true, montoDevolucion: true,
     },
   });
 
@@ -52,6 +52,7 @@ export default async function ConfiguracionPage({
       weekStartDayInicial={tenant.weekStartDay}
       supportPhoneInicial={tenant.phone}
       cobrarEnDevolucionInicial={tenant.cobrarEnDevolucion}
+      montoDevolucionInicial={Number(tenant.montoDevolucion)}
       checklistTaller={checklistTaller}
     />
   );

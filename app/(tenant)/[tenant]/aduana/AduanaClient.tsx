@@ -14,6 +14,7 @@ import {
   asignarTecnicoAction, agregarPiezaReparacionAction, eliminarPiezaReparacionAction,
   actualizarCostoEstimadoAction, avanzarEstadoAction, type NuevoEstadoReparacion,
 } from "@/app/actions/reparaciones-actions";
+import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
 
 /**
  * "Aduana" / Recepción del taller (2026-09-22, corrección explícita de
@@ -43,6 +44,12 @@ interface AduanaClientProps {
   // "Cobrar y entregar" hacia POS; nunca reemplaza la validación real, que
   // sigue pasando por crearVentaAction del lado del servidor.
   puedeCobrar: boolean;
+  // Tenant.cobrarEnDevolucion (2026-09-26) — decide si "Entregar (sin
+  // cobro)" se ofrece aquí para SHOP_RETURN: con la casilla activa esa
+  // transición directa la rechaza el servidor de cualquier forma (ver el
+  // comentario largo en SIGUIENTES_ESTADOS abajo), así que no tiene caso
+  // mostrar un botón que solo va a truene con un error.
+  cobrarEnDevolucion: boolean;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -94,7 +101,9 @@ const HISTORIAL_ICONOS: Record<EstadoReparacion, { icon: React.ElementType; bg: 
 // devolución no siempre tiene cargo), pero el servidor lo rechaza si el
 // negocio activó "cobrar en devolución" en Configuración — en ese caso el
 // mensaje de error le indica al usuario que use "Cobrar y entregar" desde
-// tienda.
+// tienda. 2026-09-26: con la casilla activa, este componente ya ni
+// siquiera OFRECE el botón (ver el filtro de "siguientes" más abajo) en
+// vez de mostrarlo y dejar que el servidor lo rechace.
 const SIGUIENTES_ESTADOS: Partial<Record<EstadoReparacion, { estado: NuevoEstadoReparacion; texto: string }[]>> = {
   RECEIVED: [{ estado: "IN_REPAIR", texto: "Iniciar reparación" }],
   IN_REPAIR: [
@@ -138,7 +147,7 @@ const formatFecha = (iso: string) =>
 const formatFechaHora = (iso: string) =>
   new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true });
 
-export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar }: AduanaClientProps) {
+export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, cobrarEnDevolucion }: AduanaClientProps) {
   const { reparaciones, productos, tecnicos } = data;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -213,6 +222,34 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar }: 
     ejecutar(() => avanzarEstadoAction({ tenantSlug, repairId: seleccionada.id, nuevoEstado }));
   };
 
+  // "Entregar (sin cobro)" de una devolución (2026-09-26, mismo cambio que
+  // handleEntregarSinCobro en ReparacionesClient.tsx, a petición explícita
+  // de Carlos: "si es devolución se imprime un ticket en $0.00, pero
+  // siempre indicando si fue Listo o Devolución" — antes esta entrega
+  // directa no dejaba ningún comprobante, solo cambiaba el estatus).
+  const handleEntregarSinCobro = () => {
+    if (!seleccionada) return;
+    const repair = seleccionada;
+    ejecutar(
+      () => avanzarEstadoAction({ tenantSlug, repairId: repair.id, nuevoEstado: "DELIVERED" }),
+      () => {
+        const recibo: ReciboData = {
+          tipoDocumento: "Reparación — Devolución",
+          folio: repair.folio,
+          cliente: repair.cliente,
+          telefono: repair.telefono,
+          renglones: [{ nombre: `${repair.marca} ${repair.modelo}`.trim(), cantidad: 1, precioUnitario: 0 }],
+          subtotal: 0,
+          iva: 0,
+          total: 0,
+          metodoPago: "Sin cargo",
+          notaPie: "No fue posible reparar el equipo — se entrega sin costo.",
+        };
+        abrirReciboImprimible(recibo, nombreNegocioDeSlug(tenantSlug));
+      }
+    );
+  };
+
   // 2026-09-25, a petición de Carlos: atajo para el dueño/único operador —
   // manda directo a POS con esta reparación precargada (mismo camino que ya
   // usa "Cobrar y entregar" en /reparaciones, ver getRepairParaCobro y
@@ -225,7 +262,13 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar }: 
   const entidadPlural = label(labels, "entity.repair.plural");
   const activo = label(labels, "entity.repair.asset");
   const cerrada = seleccionada?.estado === "DELIVERED" || seleccionada?.estado === "CANCELLED";
-  const siguientes = seleccionada ? (SIGUIENTES_ESTADOS[seleccionada.estado] ?? []) : [];
+  // Con "cobrar en devolución" activo, SHOP_RETURN -> DELIVERED directo NO
+  // se ofrece aquí (ver el comentario largo en SIGUIENTES_ESTADOS arriba):
+  // el servidor lo rechaza de cualquier forma, y ese caso pasa por "Cobrar
+  // y entregar" (el atajo de abajo, o /reparaciones).
+  const siguientes = (seleccionada ? (SIGUIENTES_ESTADOS[seleccionada.estado] ?? []) : []).filter(
+    (s) => !(s.estado === "DELIVERED" && cobrarEnDevolucion)
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -482,7 +525,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar }: 
                     {siguientes.map((s) => (
                       <button
                         key={s.estado}
-                        onClick={() => handleAvanzar(s.estado)}
+                        onClick={() => (s.estado === "DELIVERED" ? handleEntregarSinCobro() : handleAvanzar(s.estado))}
                         disabled={pending}
                         className="flex items-center gap-1.5 px-3 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12.5px] font-medium transition-colors"
                       >

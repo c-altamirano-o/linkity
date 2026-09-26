@@ -393,7 +393,11 @@ export type RepairParaCobro =
       customerName: string;
       // Punto de partida para el monto en POS — el cajero puede ajustarlo
       // ahí antes de cobrar, igual que ya podía en el modal que este flujo
-      // reemplaza (ver el comentario largo en pos-actions.ts).
+      // reemplaza (ver el comentario largo en pos-actions.ts). Para una
+      // reparación lista es finalCost/estimatedCost (lo cotizado); para una
+      // devolución con cobro es Tenant.montoDevolucion (2026-09-26, ver el
+      // comentario largo en ese campo, schema.prisma) — el costo cotizado de
+      // la reparación no aplica aquí, nunca se reparó.
       montoSugerido: number;
       esDevolucion: boolean;
     }
@@ -429,12 +433,18 @@ export async function getRepairParaCobro(tenantId: string, repairId: string): Pr
   if (!repair) return { ok: false, error: "Reparación no encontrada" };
 
   let esDevolucion = false;
+  // Tenant.montoDevolucion (2026-09-26) — solo se necesita consultar cuando
+  // la reparación SÍ es una devolución; se reutiliza esta misma consulta
+  // para las dos cosas (si cobra, y con qué monto sugerido) en vez de dos
+  // idas a la BD.
+  let montoDevolucionTenant = 0;
   if (repair.status === "SHOP_RETURN") {
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { cobrarEnDevolucion: true } });
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { cobrarEnDevolucion: true, montoDevolucion: true } });
     if (!tenant?.cobrarEnDevolucion) {
       return { ok: false, error: "Este negocio no cobra en devoluciones — entrégala directo desde Reparaciones" };
     }
     esDevolucion = true;
+    montoDevolucionTenant = Number(tenant.montoDevolucion);
   } else if (repair.status !== "SHOP_READY") {
     return { ok: false, error: "Esta reparación ya fue cobrada o no está lista para cobro" };
   }
@@ -448,7 +458,9 @@ export async function getRepairParaCobro(tenantId: string, repairId: string): Pr
     branchId: repair.branchId,
     customerId: repair.customerId,
     customerName: repair.customer.name,
-    montoSugerido: repair.finalCost != null ? Number(repair.finalCost) : repair.estimatedCost != null ? Number(repair.estimatedCost) : 0,
+    montoSugerido: esDevolucion
+      ? montoDevolucionTenant
+      : repair.finalCost != null ? Number(repair.finalCost) : repair.estimatedCost != null ? Number(repair.estimatedCost) : 0,
     esDevolucion,
   };
 }

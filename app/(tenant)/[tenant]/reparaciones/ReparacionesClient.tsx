@@ -18,6 +18,8 @@ import {
 } from "@/app/actions/reparaciones-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp } from "@/lib/paises";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
+import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
+import QRCode from "qrcode";
 
 // Agrupa el catálogo de "agregar pieza" por tipo — piezas/productos primero,
 // servicios (mano de obra: "quitar cuenta Google", "limpieza general", etc.)
@@ -138,6 +140,12 @@ interface TicketData {
   costoEstimado: number | null;
   fechaEstimada: string | null; // ISO
   telefonoSoporte: string | null;
+  // Repair.publicToken (2026-09-26, a petición explícita de Carlos: "en el
+  // ticket también debe venir un QR para una página pública donde el
+  // cliente pueda consultar el estatus de reparación de su equipo") — arma
+  // la URL de /rep/[token] (ver app/rep/[token]/page.tsx, sin necesidad de
+  // cuenta) para el QR que se imprime en abrirTicketImprimible.
+  publicToken: string;
 }
 
 // Texto plano para el mensaje de WhatsApp del ticket digital — mismo
@@ -176,8 +184,14 @@ function textoTicketWhatsapp(t: TicketData, negocio: string): string {
  * (eso sigue pendiente, ver notas del proyecto) — es solo el comprobante de
  * recepción con el costo pactado, para que quede algo físico en la mano del
  * cliente.
+ *
+ * Async desde 2026-09-26 (QR hacia /rep/[token], ver el comentario largo en
+ * TicketData.publicToken) — la ventana se abre SÍNCRONO, en la misma línea,
+ * antes de cualquier await (igual que siempre) para no arriesgar el
+ * bloqueador de pop-ups; el contenido (incluido el QR) se escribe después,
+ * cuando la promesa de QRCode.toString ya se resolvió.
  */
-function abrirTicketImprimible(t: TicketData, negocio: string) {
+async function abrirTicketImprimible(t: TicketData, negocio: string) {
   if (typeof window === "undefined") return;
   const subtotalPiezas = t.piezas.reduce((s, p) => s + p.price * p.quantity, 0);
   const filasPiezas = t.piezas
@@ -194,6 +208,11 @@ function abrirTicketImprimible(t: TicketData, negocio: string) {
 
   const win = window.open("", "_blank", "width=420,height=720");
   if (!win) return;
+
+  const urlSeguimiento = `${window.location.origin}/rep/${t.publicToken}`;
+  // margin:0 — el propio contenedor .qr del HTML ya le da espacio en
+  // blanco alrededor; un margen extra de la librería solo lo duplicaría.
+  const qrSvg = await QRCode.toString(urlSeguimiento, { type: "svg", margin: 0, width: 96 }).catch(() => null);
 
   win.document.write(`
     <!DOCTYPE html>
@@ -214,6 +233,8 @@ function abrirTicketImprimible(t: TicketData, negocio: string) {
         .total { font-size: 15px; font-weight: bold; text-align: right; margin-top: 8px; }
         .aviso { margin-top: 14px; font-size: 10.5px; color: #4b5563; border-top: 1px dashed #9ca3af; padding-top: 8px; }
         .firma { margin-top: 40px; border-top: 1px solid #374151; padding-top: 4px; font-size: 11px; text-align: center; color: #374151; }
+        .qr { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .qr svg { width: 96px; height: 96px; }
         @media print { body { padding: 0; } }
       </style>
     </head>
@@ -240,6 +261,11 @@ function abrirTicketImprimible(t: TicketData, negocio: string) {
       <p class="total">Costo estimado: ${t.costoEstimado != null ? formatMXN(t.costoEstimado) : "Por definir"}</p>
       ${t.fechaEstimada ? `<p class="muted" style="text-align:right">Fecha estimada de entrega: ${formatFecha(t.fechaEstimada)}</p>` : ""}
       <p class="aviso">Este costo es un estimado y puede ajustarse tras el diagnóstico completo del equipo. Cualquier cambio se te notificará antes de proceder con la reparación.</p>
+      ${
+        qrSvg
+          ? `<div class="qr">${qrSvg}<p class="muted">Escanea para consultar el estatus de tu reparación</p></div>`
+          : ""
+      }
       <div class="firma">Firma de conformidad</div>
     </body>
     </html>
@@ -254,7 +280,7 @@ function abrirTicketImprimible(t: TicketData, negocio: string) {
    lectura (costo, piezas, estatus, técnico asignado) y cobra/entrega — el
    control de piezas/costo/estatus/técnico vive en /aduana. ── */
 function VistaTienda({
-  reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, pending, onNuevaClick,
+  reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, onEntregarSinCobro, pending, onNuevaClick,
   negocio, telefonoNegocio, cobrarEnDevolucion,
 }: {
   reparaciones: ReparacionUI[];
@@ -262,6 +288,7 @@ function VistaTienda({
   onAvanzar: (repairId: string, nuevoEstado: NuevoEstadoReparacion) => void;
   onWhatsapp: (repairId: string) => void;
   onCobrarClick: (repairId: string) => void;
+  onEntregarSinCobro: (repair: ReparacionUI) => void;
   pending: boolean;
   onNuevaClick: () => void;
   negocio: string;
@@ -429,6 +456,7 @@ function VistaTienda({
                       costoEstimado: seleccionada.costoEstimado,
                       fechaEstimada: seleccionada.fechaEstimada,
                       telefonoSoporte: telefonoNegocio,
+                      publicToken: seleccionada.publicToken,
                     },
                     negocio
                   )
@@ -441,27 +469,30 @@ function VistaTienda({
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#22c35e] disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors">
                 <Phone className="w-3 h-3" /> Avisar
               </button>
+              {/* "Entregar" — 2026-09-26, unificado a petición explícita de
+                  Carlos: un solo botón/etiqueta sin importar el caso, la
+                  diferencia la decide el propio sistema, nunca el cajero
+                  eligiendo entre dos botones. Listo (SHOP_READY) siempre
+                  cobra: manda a POS con el costo cotizado precargado.
+                  Devolución (SHOP_RETURN) cobra SOLO si el negocio activó
+                  "Cobrar al entregar una devolución" en Configuración (manda
+                  a POS con Tenant.montoDevolucion precargado) — si no, se
+                  entrega directo aquí mismo con un ticket en $0.00
+                  (handleEntregarSinCobro), nunca sin ningún comprobante. */}
               {seleccionada.estado === "SHOP_READY" && (
                 <button disabled={pending} onClick={() => onCobrarClick(seleccionada.id)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
-                  <CheckCircle className="w-3 h-3" /> Cobrar y entregar
+                  <CheckCircle className="w-3 h-3" /> Entregar
                 </button>
               )}
-              {/* SHOP_RETURN — 2026-09-25, corrigiendo un hueco real: cuando
-                  el negocio tiene Tenant.cobrarEnDevolucion activo, el
-                  servidor (avanzarEstadoAction) YA rechazaba "Entregar" en
-                  este estado, pero esta pantalla nunca ofrecía la
-                  alternativa ("Cobrar y entregar") — no había ningún botón
-                  con el que de verdad se pudiera entregar una devolución con
-                  cargo. Mismo camino a POS que SHOP_READY. */}
               {seleccionada.estado === "SHOP_RETURN" && cobrarEnDevolucion && (
                 <button disabled={pending} onClick={() => onCobrarClick(seleccionada.id)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
-                  <CheckCircle className="w-3 h-3" /> Cobrar y entregar
+                  <CheckCircle className="w-3 h-3" /> Entregar
                 </button>
               )}
               {seleccionada.estado === "SHOP_RETURN" && !cobrarEnDevolucion && (
-                <button disabled={pending} onClick={() => onAvanzar(seleccionada.id, "DELIVERED")}
+                <button disabled={pending} onClick={() => onEntregarSinCobro(seleccionada)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
                   <CheckCircle className="w-3 h-3" /> Entregar
                 </button>
@@ -672,6 +703,40 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     });
   };
 
+  // "Entregar" sobre una devolución SIN cobro (2026-09-26, a petición
+  // explícita de Carlos: "si es devolución se imprime un ticket en $0.00,
+  // pero siempre indicando si fue Listo o Devolución" — antes esta entrega
+  // directa, ver "Entregar sin cobro"/cobrarEnDevolucion desactivado, no
+  // dejaba ningún comprobante, solo cambiaba el estatus). Reutiliza el
+  // mismo formato de recibo que POS/Cobrar y entregar (abrirReciboImprimible,
+  // lib/recibo-imprimible.ts) en vez de inventar un tercer formato de
+  // ticket — total $0.00, sin desglose de IVA, encabezado "Reparación —
+  // Devolución" para que quede claro que no es una venta cobrada.
+  const handleEntregarSinCobro = (repair: ReparacionUI) => {
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await avanzarEstadoAction({ tenantSlug, repairId: repair.id, nuevoEstado: "DELIVERED" });
+      if (!res.ok) {
+        setAccionError(res.error);
+        return;
+      }
+      const recibo: ReciboData = {
+        tipoDocumento: "Reparación — Devolución",
+        folio: repair.folio,
+        cliente: repair.cliente,
+        telefono: repair.telefono,
+        renglones: [{ nombre: `${repair.marca} ${repair.modelo}`.trim(), cantidad: 1, precioUnitario: 0 }],
+        subtotal: 0,
+        iva: 0,
+        total: 0,
+        metodoPago: "Sin cargo",
+        notaPie: "No fue posible reparar el equipo — se entrega sin costo.",
+      };
+      abrirReciboImprimible(recibo, nombreNegocioDeSlug(tenantSlug));
+      router.refresh();
+    });
+  };
+
   const handleWhatsapp = (repairId: string) => {
     setAccionError(null);
     startAccion(async () => {
@@ -777,6 +842,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
             costoEstimado: costoEstimadoTicket,
             fechaEstimada: nuevaFechaEstimada ? `${nuevaFechaEstimada}T00:00:00` : null,
             telefonoSoporte: telefonoNegocio,
+            publicToken: res.publicToken,
           },
           negocio
         );
@@ -796,7 +862,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
       )}
 
       <div className="flex-1 overflow-hidden">
-        <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={handleCobrarClick} pending={pendingAccion}
+        <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={handleCobrarClick} onEntregarSinCobro={handleEntregarSinCobro} pending={pendingAccion}
           onNuevaClick={() => setModalNuevaAbierto(true)} negocio={negocio} telefonoNegocio={telefonoNegocio} cobrarEnDevolucion={cobrarEnDevolucion} />
       </div>
 

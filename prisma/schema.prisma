@@ -94,6 +94,21 @@ model Tenant {
   // reparaciones-actions.ts para dónde se lee.
   cobrarEnDevolucion Boolean @default(false)
 
+  // Monto fijo a cobrar por una devolución (2026-09-26, a petición de
+  // Carlos, junto con la unificación del botón "Entregar" de Aduana/
+  // Reparaciones: "hay que habilitar donde se activa la casilla un campo
+  // para capturar en cuanto se cobraria la devolución"). Antes de esto,
+  // activar cobrarEnDevolucion solo mandaba al cajero a POS SIN ningún
+  // monto sugerido específico para el caso de devolución — reparaciones-data.ts
+  // (getRepairParaCobro) usaba el mismo criterio que una reparación lista
+  // (Repair.finalCost/estimatedCost), que no tiene sentido para un equipo
+  // que nunca se reparó. Ahora ese caso usa este monto fijo por negocio
+  // como sugerido en el carrito de POS (el cajero lo puede seguir ajustando
+  // ahí mismo, ver POSClient.tsx). Solo tiene efecto cuando
+  // cobrarEnDevolucion está activo; con la casilla apagada, la entrega de
+  // una devolución siempre es $0.00 sin pasar por aquí.
+  montoDevolucion Decimal @default(0) @db.Decimal(10, 2)
+
   // Qué categorías se muestran en la gráfica de pastel de "Ventas por
   // categoría" del Dashboard y de qué color — antes (2026-09-22, a
   // petición de Carlos, pendiente registrado) era solo estado del

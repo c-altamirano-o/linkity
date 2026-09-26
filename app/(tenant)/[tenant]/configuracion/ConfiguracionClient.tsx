@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion } from "@/app/actions/tenant";
+import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
@@ -91,6 +91,7 @@ interface ConfiguracionClientProps {
   weekStartDayInicial: number;
   supportPhoneInicial: string | null;
   cobrarEnDevolucionInicial: boolean;
+  montoDevolucionInicial: number;
   checklistTaller: EstadoTallerChecklist;
 }
 
@@ -107,6 +108,7 @@ export default function ConfiguracionClient({
   weekStartDayInicial,
   supportPhoneInicial,
   cobrarEnDevolucionInicial,
+  montoDevolucionInicial,
   checklistTaller,
 }: ConfiguracionClientProps) {
   const router = useRouter();
@@ -269,6 +271,27 @@ export default function ConfiguracionClient({
       router.refresh();
       setCobrarEnDevolucionMensaje("Configuración actualizada correctamente.");
       setTimeout(() => setCobrarEnDevolucionMensaje(""), 3000);
+    });
+  };
+
+  // Monto fijo a cobrar por una devolución (2026-09-26, junto con la
+  // unificación del botón "Entregar" — ver Tenant.montoDevolucion,
+  // schema.prisma). Solo importa mientras cobrarEnDevolucion esté activo;
+  // se guarda con su propio botón (no al instante como el switch de arriba)
+  // porque es un campo de texto que el administrador escribe y confirma.
+  const [montoDevolucion, setMontoDevolucion] = useState(String(montoDevolucionInicial));
+  const [montoDevolucionPending, startMontoDevolucionTransition] = useTransition();
+  const [montoDevolucionMensaje, setMontoDevolucionMensaje] = useState("");
+
+  const guardarMontoDevolucion = () => {
+    const valor = Number(montoDevolucion);
+    startMontoDevolucionTransition(async () => {
+      const result = await updateMontoDevolucion(tenantSlug, valor);
+      setMontoDevolucionMensaje(result.success ? "Monto actualizado correctamente." : (result.error ?? "Error al actualizar."));
+      if (result.success) {
+        router.refresh();
+        setTimeout(() => setMontoDevolucionMensaje(""), 3000);
+      }
     });
   };
 
@@ -908,6 +931,46 @@ export default function ConfiguracionClient({
             <p className={`text-sm font-medium mt-4 animate-in fade-in ${cobrarEnDevolucionMensaje.startsWith("Error") || cobrarEnDevolucionMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
               {cobrarEnDevolucionMensaje}
             </p>
+          )}
+
+          {/* Monto fijo a cobrar (2026-09-26) — solo aplica/se muestra
+              habilitado cuando la casilla de arriba está activa. Este monto
+              es el que se sugiere (editable) en el carrito de POS al usar
+              "Entregar" sobre una devolución. */}
+          {cobrarEnDevolucion && (
+            <div className="mt-5 pt-5 border-t border-border max-w-md">
+              <label className="block text-sm text-foreground mb-1.5">
+                Monto a cobrar por devolución
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  Se sugiere este monto al entregar una devolución en POS — el cajero lo puede ajustar ahí mismo si un caso particular lo requiere.
+                </span>
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={montoDevolucion}
+                    disabled={montoDevolucionPending}
+                    onChange={(e) => setMontoDevolucion(e.target.value)}
+                    className="w-full pl-6 pr-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground disabled:opacity-50"
+                  />
+                </div>
+                <button
+                  onClick={guardarMontoDevolucion}
+                  disabled={montoDevolucionPending}
+                  className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-sm font-medium transition-colors">
+                  Guardar
+                </button>
+              </div>
+              {montoDevolucionMensaje && (
+                <p className={`text-sm font-medium mt-2 animate-in fade-in ${montoDevolucionMensaje.startsWith("Error") || montoDevolucionMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
+                  {montoDevolucionMensaje}
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
