@@ -149,6 +149,12 @@ export interface DashboardData {
   // que es justo lo que Carlos reportó como bug ("Sigue mostrando
   // Reparaciones activas... Es una barbería, eso no aplica ahí").
   reparacionesActiva: boolean;
+  // Periodo resuelto para esta carga (2026-09-26, ver resolverPeriodoDashboard
+  // más arriba) — se manda de vuelta al cliente para pintar el selector
+  // (fechas + atajo activo) sin recalcularlo por separado y sin arriesgarse
+  // a que la UI muestre un atajo distinto al que en realidad filtró el
+  // servidor.
+  periodo: PeriodoDashboard;
 }
 
 /**
@@ -226,6 +232,120 @@ function monthRange() {
   return { start, end };
 }
 
+// Año calendario en curso (2026-09-26, atajo "Año" del selector de periodo
+// del Dashboard — ver resolverPeriodoDashboard más abajo).
+function yearRange() {
+  const now = new Date();
+  const mxNow = new Date(now.getTime() - MX_OFFSET_MS);
+  const y = mxNow.getUTCFullYear();
+  const start = new Date(Date.UTC(y, 0, 1, 0, 0, 0).valueOf() + MX_OFFSET_MS);
+  const end = new Date(Date.UTC(y + 1, 0, 1, 0, 0, 0).valueOf() + MX_OFFSET_MS);
+  return { start, end };
+}
+
+// ============================================
+// Selector de periodo del Dashboard (2026-09-26, a petición explícita de
+// Carlos: "para un administrador es importante poder medir periodos de
+// tiempo extensos, semanas, meses, años... con atajos para Hoy, Semana,
+// Mes, Año" — antes getDashboardData siempre miraba "hoy" a fuerza, sin
+// aceptar ningún parámetro de fecha, lo mismo para "Dispositivos listos"/
+// "Dispositivos devolución" que, además, miraban el estatus ACTUAL del
+// equipo en vez de si de verdad pasó por ese estatus dentro del periodo —
+// ver el comentario largo más abajo en esas dos fichas).
+//
+// dashboard/page.tsx resuelve el periodo UNA vez (con este helper) a partir
+// de ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD en la URL, y se lo pasa ya resuelto
+// tanto a getDashboardData (para las queries) como a DashboardClient (para
+// pintar el selector y resaltar el atajo activo) — mismo patrón que
+// branchIdFiltro (?sucursal=), un parámetro de la URL, no un useState local
+// que se perdería al compartir el link o recargar la página.
+// ============================================
+
+export type AtajoPeriodo = "hoy" | "semana" | "mes" | "año" | "personalizado";
+
+export interface PeriodoDashboard {
+  start: Date; // inclusivo
+  end: Date;   // exclusivo
+  desde: string; // "YYYY-MM-DD", para el input date del selector
+  hasta: string; // "YYYY-MM-DD", inclusivo
+  atajo: AtajoPeriodo;
+}
+
+const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Resuelve el periodo real a partir de los `desde`/`hasta` de la URL (o
+ * "Hoy" si vienen ausentes/inválidos — mismo comportamiento que tenía el
+ * Dashboard antes de este selector, así que un link viejo sin estos
+ * parámetros sigue funcionando igual). Si `hasta` < `desde` se intercambian
+ * en vez de devolver un rango vacío o tronar.
+ */
+export function resolverPeriodoDashboard(
+  desdeParam: string | undefined,
+  hastaParam: string | undefined,
+  weekStartDay: number
+): PeriodoDashboard {
+  const hoy = hoyMx();
+  const desdeValido = desdeParam && FECHA_RE.test(desdeParam) ? desdeParam : hoy;
+  const hastaValido = hastaParam && FECHA_RE.test(hastaParam) ? hastaParam : desdeValido;
+  const [desde, hasta] = desdeValido <= hastaValido ? [desdeValido, hastaValido] : [hastaValido, desdeValido];
+
+  const start = diaMxRangeDesdeFecha(desde).start;
+  const end = diaMxRangeDesdeFecha(hasta).end;
+
+  // Se compara contra los 4 atajos (por rango de fechas exacto, no por
+  // nombre) solo para saber cuál botón resaltar en el selector — si no
+  // coincide con ninguno, el usuario editó las fechas a mano ("personalizado").
+  let atajo: AtajoPeriodo = "personalizado";
+  const hoyRango = dayRange(0);
+  const semanaRango = rangoSemanaLaboral(new Date(), weekStartDay);
+  const mesRango = monthRange();
+  const anioRango = yearRange();
+  if (start.getTime() === hoyRango.start.getTime() && end.getTime() === hoyRango.end.getTime()) atajo = "hoy";
+  else if (start.getTime() === semanaRango.start.getTime() && end.getTime() === semanaRango.end.getTime()) atajo = "semana";
+  else if (start.getTime() === mesRango.start.getTime() && end.getTime() === mesRango.end.getTime()) atajo = "mes";
+  else if (start.getTime() === anioRango.start.getTime() && end.getTime() === anioRango.end.getTime()) atajo = "año";
+
+  return { start, end, desde, hasta, atajo };
+}
+
+/** "YYYY-MM-DD" en México de una fecha real (mismo truco que hoyMx(), para una fecha arbitraria en vez de "ahora"). */
+function fechaMxStr(d: Date): string {
+  const mx = new Date(d.getTime() - MX_OFFSET_MS);
+  return mx.toISOString().slice(0, 10);
+}
+
+export interface AtajosPeriodoDashboard {
+  hoy: { desde: string; hasta: string };
+  semana: { desde: string; hasta: string };
+  mes: { desde: string; hasta: string };
+  año: { desde: string; hasta: string };
+}
+
+/**
+ * Los 4 atajos del selector de periodo, como fechas concretas — se calculan
+ * en el servidor (dashboard/page.tsx) y se le pasan ya resueltos a
+ * DashboardClient.tsx, para no duplicar ahí la lógica de "semana laboral"
+ * (rangoSemanaLaboral depende de Tenant.weekStartDay) ni la de zona horaria
+ * de México. Cada botón del selector simplemente navega a
+ * ?desde=X&hasta=Y con el valor ya resuelto aquí.
+ */
+export function atajosPeriodoDashboard(weekStartDay: number): AtajosPeriodoDashboard {
+  const hoyRango = dayRange(0);
+  const semanaRango = rangoSemanaLaboral(new Date(), weekStartDay);
+  const mesRango = monthRange();
+  const anioRango = yearRange();
+  // `end` de cada rango es EXCLUSIVO (medianoche del día siguiente) — se le
+  // resta 1ms antes de formatear para obtener el último día real incluido.
+  const finReal = (end: Date) => fechaMxStr(new Date(end.getTime() - 1));
+  return {
+    hoy: { desde: fechaMxStr(hoyRango.start), hasta: finReal(hoyRango.end) },
+    semana: { desde: fechaMxStr(semanaRango.start), hasta: finReal(semanaRango.end) },
+    mes: { desde: fechaMxStr(mesRango.start), hasta: finReal(mesRango.end) },
+    año: { desde: fechaMxStr(anioRango.start), hasta: finReal(anioRango.end) },
+  };
+}
+
 const DIAS_SEMANA = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 // "Hoy" se marca comparando fechas reales, no por posición dentro del
@@ -286,6 +406,15 @@ export async function getDashboardData(
   branches: Pick<Branch, "id" | "name" | "isActive">[],
   weekStartDay: number,
   reparacionesActiva: boolean,
+  // Periodo ya resuelto (2026-09-26, ver resolverPeriodoDashboard arriba) —
+  // dashboard/page.tsx lo resuelve UNA vez a partir de ?desde=/?hasta= y lo
+  // manda ya calculado, tanto aquí como al propio DashboardClient, para que
+  // nunca puedan desincronizarse. Reemplaza el "today" fijo que usaban
+  // antes "Ventas del día"/"Total de tickets"/"Equipos recibidos" — y
+  // "Dispositivos listos"/"Dispositivos devolución" dejan de mirar el
+  // estatus ACTUAL del equipo para mirar si tuvo un checkpoint de ese
+  // estatus en el historial DENTRO de este periodo (ver más abajo).
+  periodo: PeriodoDashboard,
   // "Vista por sucursal" (2026-09-22, a petición de Carlos: "en el
   // dashboard de administrador debe contener una vista global y una por
   // tienda") — cuando viene, TODAS las queries de abajo se acotan a esa
@@ -337,20 +466,23 @@ export async function getDashboardData(
     receivedTodayByBranch,
     inventoryRows,
     categorySaleItems,
+    historialListosDevolucionRaw,
   ] = await Promise.all([
     db.sale.findMany({
       where: {
         status: "COMPLETED",
-        createdAt: { gte: today.start, lt: today.end },
+        // periodo (2026-09-26) — antes siempre "hoy"; ver el comentario
+        // largo del parámetro `periodo` arriba.
+        createdAt: { gte: periodo.start, lt: periodo.end },
         ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
       },
       // repair — 2026-09-25: un SaleItem ahora puede representar el cobro
       // de una reparación (repairId, product null) en vez de un producto —
       // ver el comentario largo en SaleItem, prisma/schema.prisma. A
       // propósito SÍ aparece aquí (a diferencia de categorySaleItems más
-      // abajo): "ventas de hoy" debe reflejar TODO el dinero que entró hoy,
-      // reparaciones incluidas — antes (cobrarYEntregarAction) ni siquiera
-      // generaba una Sale, así que este número quedaba incompleto.
+      // abajo): "ventas del periodo" debe reflejar TODO el dinero que
+      // entró, reparaciones incluidas — antes (cobrarYEntregarAction) ni
+      // siquiera generaba una Sale, así que este número quedaba incompleto.
       include: { items: { include: { product: true, repair: { select: { folio: true } } } } },
       orderBy: { createdAt: "desc" },
     }),
@@ -392,7 +524,10 @@ export async function getDashboardData(
     db.repair.groupBy({
       by: ["branchId"],
       where: {
-        receivedAt: { gte: today.start, lt: today.end },
+        // periodo (2026-09-26) — antes siempre "hoy" (ver el comentario
+        // largo del parámetro `periodo` arriba); alimenta la columna
+        // "Equipos recibidos" del resumen por sucursal.
+        receivedAt: { gte: periodo.start, lt: periodo.end },
         id: reparacionesActiva ? undefined : REPARACIONES_INACTIVA_ID,
         ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
       },
@@ -418,10 +553,36 @@ export async function getDashboardData(
       },
       include: { product: { include: { category: true } } },
     }),
+    // "Dispositivos listos"/"Dispositivos devolución" del periodo (2026-09-26,
+    // corrección explícita de Carlos: "el contador debe mostrar los equipos
+    // según el periodo seleccionado, sin importar que ya se hayan entregado
+    // al cliente. Porque fueron listos reales y devoluciones reales" — antes
+    // estas 2 fichas se calculaban de openRepairsRaw, es decir del estatus
+    // ACTUAL del equipo, así que un equipo ya entregado (DELIVERED) dejaba
+    // de contar aunque de verdad hubiera pasado por "listo" o "devolución"
+    // ese mismo día). Ahora se busca en RepairHistory un checkpoint con
+    // status LISTO/DEVOLUCIÓN dentro del periodo — sin importar el estatus
+    // actual del folio — y más abajo se traen los Repair completos de esos
+    // ids para armar las filas (toRepairRow). "Regresar a taller (corregir)"
+    // no aparece aquí nunca: su nota usa NOTA_CORRECCION_REGRESO_A_TALLER y
+    // su status es IN_REPAIR, no uno de READY_STATUSES/RETURN_STATUSES.
+    db.repairHistory.findMany({
+      where: {
+        status: { in: [...READY_STATUSES, ...RETURN_STATUSES] },
+        createdAt: { gte: periodo.start, lt: periodo.end },
+        repair: {
+          id: reparacionesActiva ? undefined : REPARACIONES_INACTIVA_ID,
+          ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
+        },
+      },
+      select: { repairId: true, status: true },
+    }),
   ]);
 
-  // ── Ventas de hoy ──────────────────────────────────────
-  const ventasHoy: VentaHoyRow[] = ventasHoyRaw.map((v) => ({
+  // ── Ventas del periodo ──────────────────────────────────
+  // (2026-09-26: antes siempre "hoy" — ver el comentario largo del
+  // parámetro `periodo` en la firma de esta función.)
+  const ventasPeriodoCompleto: VentaHoyRow[] = ventasHoyRaw.map((v) => ({
     id: v.id,
     folio: v.folio,
     hora: formatHoraMx(v.createdAt),
@@ -430,9 +591,14 @@ export async function getDashboardData(
     metodo: METODO_LABEL[v.paymentMethod] ?? "Efectivo",
     total: Number(v.total),
   }));
-  const totalVentasHoy = ventasHoy.reduce((s, v) => s + v.total, 0);
-  const numVentasHoy = ventasHoy.length;
+  // Total/num/ticket promedio SIEMPRE del arreglo completo — el recorte de
+  // abajo (mismo tope que equiposListos/equiposDevolucion, ver el
+  // comentario largo ahí) es solo para la tabla de detalle, nunca para
+  // estos 3 números.
+  const totalVentasHoy = ventasPeriodoCompleto.reduce((s, v) => s + v.total, 0);
+  const numVentasHoy = ventasPeriodoCompleto.length;
   const ticketPromedio = numVentasHoy > 0 ? Math.round(totalVentasHoy / numVentasHoy) : 0;
+  const ventasHoy = ventasPeriodoCompleto.slice(0, 300);
 
   // ── Reparaciones abiertas, partidas por grupo de estatus ─
   function toRepairRow(r: (typeof openRepairsRaw)[number]): RepairRow {
@@ -452,9 +618,50 @@ export async function getDashboardData(
     };
   }
 
+  // "Reparaciones activas" se queda mirando el estatus ACTUAL (openRepairsRaw,
+  // sin importar el periodo) a propósito — a diferencia de "listos"/
+  // "devolución" de abajo, "activas" es por naturaleza una foto del momento
+  // ("qué sigue en proceso ahorita"), no algo que tenga sentido acotar a un
+  // rango de fechas pasado.
   const reparacionesActivas = openRepairsRaw.filter((r) => ACTIVE_STATUSES.includes(r.status)).map(toRepairRow);
-  const equiposListos = openRepairsRaw.filter((r) => READY_STATUSES.includes(r.status)).map(toRepairRow);
-  const equiposDevolucion = openRepairsRaw.filter((r) => RETURN_STATUSES.includes(r.status)).map(toRepairRow);
+
+  // "Dispositivos listos"/"Dispositivos devolución" del periodo — ver el
+  // comentario largo junto a historialListosDevolucionRaw más arriba. Un
+  // mismo folio puede tener más de un checkpoint LISTO (o DEVOLUCIÓN)
+  // dentro del periodo (ej. WORKSHOP_READY y luego SHOP_READY el mismo
+  // día) — se cuenta una sola vez por folio (Set de ids), nunca una fila
+  // por checkpoint.
+  const idsListosPeriodo = new Set(
+    historialListosDevolucionRaw.filter((h) => (READY_STATUSES as string[]).includes(h.status)).map((h) => h.repairId)
+  );
+  const idsDevolucionPeriodo = new Set(
+    historialListosDevolucionRaw.filter((h) => (RETURN_STATUSES as string[]).includes(h.status)).map((h) => h.repairId)
+  );
+  const idsListosDevolucionPeriodo = Array.from(new Set([...idsListosPeriodo, ...idsDevolucionPeriodo]));
+  // Mismo `include` que openRepairsRaw (customer, user) a propósito — así
+  // toRepairRow(r) acepta ambas fuentes sin duplicar su firma de tipo. Se
+  // buscan por id sin filtrar por status: el punto de esta ficha es que
+  // cuenta aunque el folio YA se haya entregado después.
+  const repairsListosDevolucionRaw = idsListosDevolucionPeriodo.length
+    ? await db.repair.findMany({
+        where: { id: { in: idsListosDevolucionPeriodo } },
+        include: { customer: true, user: true },
+      })
+    : [];
+  // Tope de filas para las tablas de detalle (2026-09-26) — un periodo largo
+  // ("Año") puede acumular cientos de checkpoints; los CONTEOS de las
+  // fichas (equiposListosCount/equiposDevolucionCount más abajo) se toman
+  // de los Sets completos, sin recortar — solo la tabla de detalle se
+  // limita, para que la pantalla no se vuelva impracticable.
+  const MAX_FILAS_TABLA_REPARACIONES = 300;
+  const equiposListos = repairsListosDevolucionRaw
+    .filter((r) => idsListosPeriodo.has(r.id))
+    .map(toRepairRow)
+    .slice(0, MAX_FILAS_TABLA_REPARACIONES);
+  const equiposDevolucion = repairsListosDevolucionRaw
+    .filter((r) => idsDevolucionPeriodo.has(r.id))
+    .map(toRepairRow)
+    .slice(0, MAX_FILAS_TABLA_REPARACIONES);
 
   // ── Alertas: stock bajo/agotado + reparaciones sin avance ─
   const alertas: AlertaRow[] = [];
@@ -576,8 +783,12 @@ export async function getDashboardData(
     numVentasHoy,
     ticketPromedio,
     reparacionesActivasCount: reparacionesActivas.length,
-    equiposListosCount: equiposListos.length,
-    equiposDevolucionCount: equiposDevolucion.length,
+    // El conteo de la ficha usa el Set completo, no el arreglo ya recortado
+    // a MAX_FILAS_TABLA_REPARACIONES (ver el comentario largo arriba) — un
+    // periodo largo con más de 300 folios debe seguir mostrando el número
+    // real en la ficha, aunque la tabla de detalle no liste todos.
+    equiposListosCount: idsListosPeriodo.size,
+    equiposDevolucionCount: idsDevolucionPeriodo.size,
     ventasHoy,
     reparacionesActivas,
     equiposListos,
@@ -590,6 +801,7 @@ export async function getDashboardData(
     sucursales,
     multiSucursal: branches.length > 1,
     reparacionesActiva,
+    periodo,
   };
 }
 

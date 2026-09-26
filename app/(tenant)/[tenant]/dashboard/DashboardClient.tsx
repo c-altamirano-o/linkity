@@ -14,7 +14,7 @@ import {
 import type { RepairStatus, Priority } from "@prisma/client";
 import { label, type LabelDictionary } from "@/lib/labels";
 import type {
-  DashboardData, RepairRow, CategoriaVenta, VentasPorDiaData, VentaPorHora,
+  DashboardData, RepairRow, CategoriaVenta, VentasPorDiaData, VentaPorHora, AtajosPeriodoDashboard,
 } from "@/lib/dashboard-data";
 import { obtenerVentasPorDiaAction, guardarConfigCategoriasDashboardAction } from "@/app/actions/dashboard-actions";
 
@@ -82,6 +82,14 @@ function formatFechaLarga(fechaStr: string): string {
   return `${DIAS_LARGO[diaSemana]} ${d} de ${MESES_LARGO[m - 1]} de ${y}`;
 }
 
+// Versión corta "10 sep" — para el rango del selector de periodo
+// (2026-09-26), donde formatFechaLarga sería demasiado largo.
+const MESES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function formatFechaCorta(fechaStr: string): string {
+  const [, m, d] = fechaStr.split("-").map(Number);
+  return `${d} ${MESES_CORTO[m - 1]}`;
+}
+
 const CustomTooltipHora = ({ active, payload }: { active?: boolean; payload?: { payload: VentaPorHora }[] }) => {
   if (active && payload?.length) {
     const d = payload[0].payload;
@@ -135,6 +143,7 @@ export default function DashboardClient({
   sucursalActualId,
   puedeConfigurarCategorias = true,
   montosVisibles = true,
+  atajosPeriodo,
 }: {
   data: DashboardData;
   labels: LabelDictionary;
@@ -169,6 +178,11 @@ export default function DashboardClient({
   // false, dejando visible solo lo que sí es un conteo (ventas, tickets,
   // reparaciones activas...). Default true para no romper otros usos.
   montosVisibles?: boolean;
+  // Selector de periodo (2026-09-26, a petición de Carlos): rangos ya
+  // resueltos por el servidor para los 4 atajos (Hoy/Semana/Mes/Año) — se
+  // resuelven ahí y no aquí porque "Semana" depende de Tenant.weekStartDay
+  // (ver rangoSemanaLaboral, lib/periodo-laboral.ts).
+  atajosPeriodo: AtajosPeriodoDashboard;
 }) {
   const router = useRouter();
   const t = (key: string) => label(labels, key);
@@ -176,11 +190,40 @@ export default function DashboardClient({
 
   const cambiarVista = (destino: "global" | string) => {
     if (destino === "global") {
-      router.push(`/${tenantSlug}/dashboard`);
+      router.push(`/${tenantSlug}/dashboard${data.periodo.atajo !== "hoy" ? `?desde=${data.periodo.desde}&hasta=${data.periodo.hasta}` : ""}`);
     } else {
-      router.push(`/${tenantSlug}/dashboard?sucursal=${destino}`);
+      const params = new URLSearchParams({ sucursal: destino });
+      if (data.periodo.atajo !== "hoy") {
+        params.set("desde", data.periodo.desde);
+        params.set("hasta", data.periodo.hasta);
+      }
+      router.push(`/${tenantSlug}/dashboard?${params.toString()}`);
     }
   };
+
+  // Selector de periodo (2026-09-26): navega preservando la sucursal
+  // actual, igual que cambiarVista preserva el periodo actual arriba —
+  // ambos selectores conviven en la misma URL (?sucursal=&desde=&hasta=).
+  const cambiarPeriodo = (desde: string, hasta: string) => {
+    const params = new URLSearchParams();
+    if (sucursalActualId) params.set("sucursal", sucursalActualId);
+    params.set("desde", desde);
+    params.set("hasta", hasta);
+    router.push(`/${tenantSlug}/dashboard?${params.toString()}`);
+  };
+
+  const [desdeSel, setDesdeSel] = useState(data.periodo.desde);
+  const [hastaSel, setHastaSel] = useState(data.periodo.hasta);
+
+  const etiquetaPeriodo = (() => {
+    switch (data.periodo.atajo) {
+      case "hoy": return "hoy";
+      case "semana": return "esta semana";
+      case "mes": return "este mes";
+      case "año": return "este año";
+      default: return `del ${formatFechaCorta(data.periodo.desde)} al ${formatFechaCorta(data.periodo.hasta)}`;
+    }
+  })();
 
   const [modalAbierto, setModalAbierto] = useState<ModalType>(null);
   const [ventasPorDia, setVentasPorDia] = useState<VentasPorDiaData>(ventasPorDiaInicial);
@@ -483,7 +526,13 @@ export default function DashboardClient({
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">{cfg.titulo}</p>
-                <p className="text-[11.5px] text-muted-foreground">{fechaHoy} · Actualizado al momento</p>
+                <p className="text-[11.5px] text-muted-foreground capitalize">
+                  {modalAbierto === "reparaciones"
+                    ? `${fechaHoy} · Actualizado al momento`
+                    : data.periodo.desde === data.periodo.hasta
+                      ? formatFechaLarga(data.periodo.desde)
+                      : `${formatFechaCorta(data.periodo.desde)} – ${formatFechaCorta(data.periodo.hasta)}`}
+                </p>
               </div>
             </div>
             <button onClick={() => setModalAbierto(null)}
@@ -513,18 +562,23 @@ export default function DashboardClient({
   // en negocios como una barbería que no lo usan ("Sigue mostrando
   // Reparaciones activas, dispositivos listos y devolución... Es una
   // barbería, eso no aplica ahí" — reporte de Carlos en producción).
+  // 2026-09-26: las 4 fichas de abajo ahora reflejan el periodo
+  // seleccionado (no siempre "hoy") — "Reparaciones activas" es la única
+  // excepción deliberada: es una foto del momento (equipos que están
+  // AHORA en proceso), no tiene sentido acotarla a un rango de fechas
+  // pasado, así que se queda con "En proceso" sin importar el selector.
   const metricas = [
-    // 2026-09-24: la ficha "Ventas del día" es puro dinero (su único valor
-    // es un monto) — se omite por completo cuando montosVisibles es false,
-    // en vez de mostrarla con un candado (a petición de Carlos). "Total de
-    // tickets" se queda siempre: su valor es un conteo, no dinero.
-    ...(montosVisibles ? [{ label: "Ventas del día", value: formatMXN(data.totalVentasHoy), sub: data.numVentasHoy > 0 ? `${data.numVentasHoy} ${data.numVentasHoy === 1 ? "venta" : "ventas"} hoy` : "Sin ventas aún", positive: true, icon: ShoppingCart, iconBg: "bg-primary/10", iconColor: "text-primary-text", modal: "ventas" as ModalType, btnColor: "text-primary-text bg-primary/10" }] : []),
-    { label: "Total de tickets", value: String(data.numVentasHoy), sub: "Transacciones hoy", positive: true, icon: Receipt, iconBg: "bg-cyan-50", iconColor: "text-cyan-600", modal: "tickets" as ModalType, btnColor: "text-cyan-600 bg-cyan-50" },
+    // 2026-09-24: la ficha "Ventas del período" es puro dinero (su único
+    // valor es un monto) — se omite por completo cuando montosVisibles es
+    // false, en vez de mostrarla con un candado (a petición de Carlos).
+    // "Total de tickets" se queda siempre: su valor es un conteo, no dinero.
+    ...(montosVisibles ? [{ label: "Ventas del período", value: formatMXN(data.totalVentasHoy), sub: data.numVentasHoy > 0 ? `${data.numVentasHoy} ${data.numVentasHoy === 1 ? "venta" : "ventas"} · ${etiquetaPeriodo}` : `Sin ventas · ${etiquetaPeriodo}`, positive: true, icon: ShoppingCart, iconBg: "bg-primary/10", iconColor: "text-primary-text", modal: "ventas" as ModalType, btnColor: "text-primary-text bg-primary/10" }] : []),
+    { label: "Total de tickets", value: String(data.numVentasHoy), sub: `Transacciones · ${etiquetaPeriodo}`, positive: true, icon: Receipt, iconBg: "bg-cyan-50", iconColor: "text-cyan-600", modal: "tickets" as ModalType, btnColor: "text-cyan-600 bg-cyan-50" },
     ...(data.reparacionesActiva
       ? [
           { label: `${t("entity.repair.plural")} activas`, value: String(data.reparacionesActivasCount), sub: "En proceso", positive: true, icon: Wrench, iconBg: "bg-amber-50", iconColor: "text-amber-600", modal: "reparaciones" as ModalType, btnColor: "text-amber-600 bg-amber-50" },
-          { label: `${t("entity.repair.asset")}s listos`, value: String(data.equiposListosCount), sub: "Pendientes entregar", positive: true, icon: CheckCircle, iconBg: "bg-emerald-50", iconColor: "text-emerald-600", modal: "listos" as ModalType, btnColor: "text-emerald-600 bg-emerald-50" },
-          { label: `${t("entity.repair.asset")}s devolución`, value: String(data.equiposDevolucionCount), sub: "Sin reparación", positive: false, icon: RotateCcw, iconBg: "bg-red-50", iconColor: "text-red-500", modal: "devoluciones" as ModalType, btnColor: "text-red-600 bg-red-50" },
+          { label: `${t("entity.repair.asset")}s listos`, value: String(data.equiposListosCount), sub: `Quedaron listos · ${etiquetaPeriodo}`, positive: true, icon: CheckCircle, iconBg: "bg-emerald-50", iconColor: "text-emerald-600", modal: "listos" as ModalType, btnColor: "text-emerald-600 bg-emerald-50" },
+          { label: `${t("entity.repair.asset")}s devolución`, value: String(data.equiposDevolucionCount), sub: `Devueltos · ${etiquetaPeriodo}`, positive: false, icon: RotateCcw, iconBg: "bg-red-50", iconColor: "text-red-500", modal: "devoluciones" as ModalType, btnColor: "text-red-600 bg-red-50" },
         ]
       : []),
   ];
@@ -551,6 +605,65 @@ export default function DashboardClient({
             <p className="text-sm sm:text-base font-bold text-foreground">{formatMXN(data.totalSemana)}</p>
           </div>
         )}
+      </div>
+
+      {/* ── Selector de periodo ───────────────────────────────────────────
+          2026-09-26, a petición explícita de Carlos: "Agrega un selector...
+          no debe ser solo para un día en específico... ese selector debe
+          tener uno para Inicio otro para fin, pero atajos para Hoy, Semana,
+          Mes, Año". Aplica a "Ventas del período" / "Total de tickets" /
+          "Equipos listos" / "Equipos devolución" / "Equipos recibidos" (por
+          sucursal) — "Reparaciones activas" y las gráficas (tendencia
+          semanal, categorías del mes, día/hora, "vs ayer" por sucursal) se
+          quedan fuera de este selector por ahora, ver el mensaje que
+          acompaña este cambio. Los rangos de los 4 atajos ya vienen
+          resueltos del servidor (atajosPeriodoDashboard, lib/dashboard-data.ts)
+          porque "Semana" depende de Tenant.weekStartDay. */}
+      <div className="flex items-center gap-2 flex-wrap bg-card border border-border rounded-xl p-2.5">
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+          {(
+            [
+              { key: "hoy", label: "Hoy", rango: atajosPeriodo.hoy },
+              { key: "semana", label: "Semana", rango: atajosPeriodo.semana },
+              { key: "mes", label: "Mes", rango: atajosPeriodo.mes },
+              { key: "año", label: "Año", rango: atajosPeriodo.año },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => cambiarPeriodo(opt.rango.desde, opt.rango.hasta)}
+              className={`px-2.5 py-1.5 text-[12px] font-medium rounded-md transition-colors ${
+                data.periodo.atajo === opt.key ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="date"
+            value={desdeSel}
+            max={hastaSel}
+            onChange={(e) => e.target.value && setDesdeSel(e.target.value)}
+            className="px-2 py-1.5 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary"
+          />
+          <span className="text-xs text-muted-foreground">–</span>
+          <input
+            type="date"
+            value={hastaSel}
+            min={desdeSel}
+            onChange={(e) => e.target.value && setHastaSel(e.target.value)}
+            className="px-2 py-1.5 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary"
+          />
+          <button
+            onClick={() => cambiarPeriodo(desdeSel, hastaSel)}
+            disabled={desdeSel === data.periodo.desde && hastaSel === data.periodo.hasta}
+            className="text-[11.5px] font-medium px-2.5 py-1.5 rounded-lg text-primary-text bg-primary/10 hover:opacity-80 disabled:opacity-40 flex-shrink-0"
+          >
+            Aplicar
+          </button>
+        </div>
       </div>
 
       {/* ── Vista global / vista por sucursal ────────────────────────────

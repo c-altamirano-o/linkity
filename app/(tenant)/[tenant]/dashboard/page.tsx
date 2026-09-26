@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getDashboardData, getVentasPorDia, hoyMx, redactarMontosDashboard, redactarMontosVentasPorDia } from "@/lib/dashboard-data";
+import { getDashboardData, getVentasPorDia, hoyMx, redactarMontosDashboard, redactarMontosVentasPorDia, resolverPeriodoDashboard, atajosPeriodoDashboard } from "@/lib/dashboard-data";
 import { getTenantLabels } from "@/lib/labels-server";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { verTodoNegocioParaRolPorNombre, verMontosCajaParaRolPorNombre } from "@/lib/roles-server";
@@ -17,10 +17,14 @@ export default async function DashboardPage({
   // ausente = vista global (comportamiento de siempre); presente = todo el
   // Dashboard (tarjetas, gráficas, tablas, alertas) se acota a esa sola
   // sucursal, reutilizando el mismo layout — ver DashboardClient.tsx.
-  searchParams: Promise<{ sucursal?: string }>;
+  // desde/hasta (2026-09-26, selector de periodo del Dashboard, a petición
+  // explícita de Carlos): "YYYY-MM-DD", mismo patrón que ?sucursal= — ausentes
+  // o inválidos caen a "Hoy" dentro de resolverPeriodoDashboard, así que un
+  // link viejo sin estos parámetros se sigue comportando igual que antes.
+  searchParams: Promise<{ sucursal?: string; desde?: string; hasta?: string }>;
 }) {
   const { tenant: tenantSlug } = await params;
-  const { sucursal } = await searchParams;
+  const { sucursal, desde, hasta } = await searchParams;
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
@@ -34,6 +38,9 @@ export default async function DashboardPage({
   });
 
   if (!tenant) notFound();
+
+  const periodo = resolverPeriodoDashboard(desde, hasta, tenant.weekStartDay);
+  const atajosPeriodo = atajosPeriodoDashboard(tenant.weekStartDay);
 
   // Mismo query de "módulos apagados" que app/(tenant)/[tenant]/layout.tsx
   // y configuracion/page.tsx (2026-09-18) — "default abierto": sin fila en
@@ -98,7 +105,7 @@ export default async function DashboardPage({
   const puedeVerMontos = sesionValida ? await verMontosCajaParaRolPorNombre(tenant.id, sesionValida.roleName) : true;
 
   const [dataCompleta, labels, ventasPorDiaCompleta] = await Promise.all([
-    getDashboardData(tenant.id, branchesVisibles, tenant.weekStartDay, reparacionesActiva, branchIdFiltro, tenant.dashboardCategoriasConfig),
+    getDashboardData(tenant.id, branchesVisibles, tenant.weekStartDay, reparacionesActiva, periodo, branchIdFiltro, tenant.dashboardCategoriasConfig),
     getTenantLabels(tenant.id, tenant.businessType),
     getVentasPorDia(tenant.id, hoyMx(), branchIdFiltro),
   ]);
@@ -113,8 +120,10 @@ export default async function DashboardPage({
       // fecha de "ventas por día", etc.) se quedaría con los valores de la
       // sucursal anterior tras la navegación, porque Next.js reutiliza la
       // misma instancia del client component cuando solo cambia el
-      // searchParam de la misma ruta.
-      key={branchIdFiltro ?? "global"}
+      // searchParam de la misma ruta. 2026-09-26: el periodo (desde/hasta)
+      // se agrega a esta misma key por el mismo motivo, ahora que también
+      // es un searchParam propio.
+      key={`${branchIdFiltro ?? "global"}-${periodo.desde}-${periodo.hasta}`}
       data={data}
       labels={labels}
       tenantSlug={tenantSlug}
@@ -132,6 +141,7 @@ export default async function DashboardPage({
       // botón de engrane.
       puedeConfigurarCategorias={!sesionValida || veTodoElNegocio}
       montosVisibles={puedeVerMontos}
+      atajosPeriodo={atajosPeriodo}
     />
   );
 }
