@@ -937,7 +937,14 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             </p>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5 content-start pb-24 lg:pb-4">
+          <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5 content-start items-start pb-24 lg:pb-4">
+            {/* items-start (2026-09-26): sin esto, CSS Grid estira cada
+                ficha por default a la altura de su fila (align-items:
+                stretch) — con el layout horizontal nuevo (flex anidado sin
+                alto explícito) eso colapsaba cada ficha a ~2px de alto,
+                dejando solo una rayita gris con el contenido invisible
+                encima. Mismo fix que ya lleva CatalogoClient.tsx (ver el
+                comentario largo ahí junto a su propio grid). */}
             {productosFiltrados.map((producto) => {
               const stock = stockDe(producto);
               const agotado = !producto.isService && stock <= 0;
