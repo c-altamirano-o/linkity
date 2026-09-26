@@ -951,6 +951,20 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               const enCarrito = carrito.find((i) => i.productId === producto.id);
               const cantidadEnCarrito = enCarrito?.cantidad ?? 0;
               const chip = producto.categoryId ? chipPorCategoria.get(producto.categoryId) ?? null : null;
+              // Ficha horizontal por categoría (2026-09-26, a petición
+              // explícita de Carlos: "quiero esta configuración de la ficha
+              // en la que se muestra en el POS" fue al revés en realidad —
+              // el diseño que describió y aprobó en el mockup de Catálogo
+              // (ícono con fondo de color a la izquierda, información y
+              // stock a la derecha) ya no era el que tenía POS en ese
+              // momento — desde 2026-09-25 este archivo traía un mosaico
+              // vertical con solo un cuadrito de ícono arriba (ver abajo, el
+              // comentario de esa fecha se conserva por contexto histórico).
+              // Carlos confirmó con una captura que quiere el layout
+              // horizontal (igual al que ya quedó en CatalogoClient.tsx) en
+              // ambas pantallas — así que este archivo regresa a esa forma
+              // para que POS y Catálogo se vean consistentes.
+              //
               // Insignia de ícono por categoría (2026-09-25, reemplaza la
               // FICHA COMPLETA a color de 2026-09-24 — ver el comentario
               // largo junto al panel, arriba). El color de categoría
@@ -963,25 +977,26 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               const fichaBg = chip ? `var(--chip-${chip})` : "var(--primary)";
               return (
                 <button key={producto.id} onClick={() => agregarAlCarrito(producto)} disabled={agotado}
-                  className={`relative flex flex-col items-start gap-3 p-4 rounded-2xl bg-card border transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)] ${
+                  className={`relative flex items-stretch overflow-hidden rounded-xl bg-card border transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)] ${
                     cantidadEnCarrito > 0 ? "border-primary ring-2 ring-primary/25" : "border-border hover:border-primary/40"
                   }`}>
                   {cantidadEnCarrito > 0 && (
-                    <span className="absolute -top-2 -right-2 min-w-[24px] h-6 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center leading-none shadow-sm">
+                    <span className="absolute -top-2 -right-2 min-w-[24px] h-6 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center leading-none shadow-sm z-10">
                       {cantidadEnCarrito}
                     </span>
                   )}
-                  <div className="w-full h-[72px] rounded-xl flex items-center justify-center flex-shrink-0"
+                  <div className="w-20 sm:w-24 flex-shrink-0 flex items-center justify-center"
                     style={{ backgroundColor: fichaBg, color: "var(--tile-fg)" }}>
-                    <ProductoIcono value={producto.emoji} className="w-8 h-8" />
+                    <ProductoIcono value={producto.emoji} className="w-7 h-7 sm:w-8 sm:h-8" />
                   </div>
-                  <div className="w-full">
-                    <p className="text-[15px] font-semibold leading-snug mb-1 line-clamp-2 text-foreground">{producto.name}</p>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-lg font-extrabold text-foreground">{formatMXN(producto.price)}</p>
+                  <div className="flex-1 min-w-0 p-2 sm:p-2.5 flex flex-col justify-center gap-0.5">
+                    <p className="text-xs font-medium text-foreground leading-tight line-clamp-2">{producto.name}</p>
+                    <p className="text-[10.5px] text-muted-foreground truncate">{producto.sku || "Sin SKU"}</p>
+                    <div className="flex items-center justify-between gap-1 mt-0.5">
+                      <span className="text-xs font-bold text-primary-text">{formatMXN(producto.price)}</span>
                       {!producto.isService && (
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
-                          agotado ? "text-red-600 bg-red-50" : "text-emerald-700 bg-emerald-50"
+                        <span className={`text-[10.5px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap ${
+                          agotado ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"
                         }`}>
                           {agotado ? "Agotado" : `Stock: ${stock}`}
                         </span>
