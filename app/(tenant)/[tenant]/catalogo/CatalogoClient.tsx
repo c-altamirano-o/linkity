@@ -747,16 +747,34 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 )}
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 content-start">
+              <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 content-start items-start">
+                {/* 2026-09-26, a petición de Carlos: antes era vertical
+                    (franja de ícono arriba a lo ancho + info abajo) — con
+                    un ícono chico dentro de una franja ancha, se
+                    desperdiciaba espacio horizontal. Ahora es horizontal:
+                    el ícono (siempre cuadrado) va en una columna angosta a
+                    la izquierda, y el nombre/SKU/precio/stock aprovechan
+                    todo el ancho restante a la derecha.
+                    `items-start` en este grid es lo que corrige el hueco
+                    feo que Carlos reportó entre el precio y el badge de
+                    stock: por default CSS Grid estira TODAS las tarjetas de
+                    una misma fila a la altura de la más alta (ej. una con
+                    nombre de 2 líneas o con "Costo" visible) — sin
+                    `items-start`, una tarjeta con menos contenido (como
+                    "Adaptador Bluetooth", sin costo) se estiraba de más y
+                    ese sobrante de alto quedaba como espacio muerto entre
+                    sus propias líneas. Con `items-start` cada tarjeta mide
+                    solo lo que su contenido necesita, sin estirarse por sus
+                    vecinas. */}
                 {productosFiltrados.map((p) => (
-                  <div key={p.id} onClick={() => abrirEditar(p)} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer">
-                    <div className={`h-14 sm:h-16 ${tipoConfig[p.type].bg} flex items-center justify-center text-2xl border-b border-border`}>
-                      <ProductoIcono value={p.emoji} className={`w-7 h-7 ${tipoConfig[p.type].color}`} />
+                  <div key={p.id} onClick={() => abrirEditar(p)} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer flex">
+                    <div className={`w-20 sm:w-24 flex-shrink-0 ${tipoConfig[p.type].bg} flex items-center justify-center border-r border-border`}>
+                      <ProductoIcono value={p.emoji} className={`w-7 h-7 sm:w-8 sm:h-8 ${tipoConfig[p.type].color}`} />
                     </div>
-                    <div className="p-2.5 sm:p-3">
-                      <p className="text-xs font-medium text-foreground leading-tight mb-1 line-clamp-2">{p.name}</p>
-                      <p className="text-[10.5px] text-muted-foreground mb-2 truncate">{p.sku ?? "Sin SKU"}</p>
-                      <div className="flex items-center justify-between flex-wrap gap-1">
+                    <div className="flex-1 min-w-0 p-2 sm:p-2.5 flex flex-col justify-start gap-0.5">
+                      <p className="text-xs font-medium text-foreground leading-tight line-clamp-2">{p.name}</p>
+                      <p className="text-[10.5px] text-muted-foreground truncate">{p.sku ?? "Sin SKU"}</p>
+                      <div className="flex items-center justify-between gap-1 mt-0.5">
                         <span className="text-xs font-bold text-primary-text">{formatMXN(p.price)}</span>
                         {stockBadge(p.isService, p.stock)}
                       </div>
@@ -764,7 +782,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                           negocio) — se omite para quien no tiene
                           Role.verMontosCaja, igual que en Inventario. */}
                       {puedeVerMontos && !p.isService && p.cost > 0 && (
-                        <p className="text-[10.5px] text-muted-foreground mt-1">Costo: {formatMXN(p.cost)}</p>
+                        <p className="text-[10.5px] text-muted-foreground">Costo: {formatMXN(p.cost)}</p>
                       )}
                     </div>
                   </div>
@@ -772,8 +790,8 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 {productosFiltrados.length === 0 && (
                   <p className="col-span-full text-center text-xs text-muted-foreground py-6">Sin resultados para este filtro.</p>
                 )}
-                <button onClick={abrirNuevo} className="flex flex-col items-center justify-center border border-dashed border-border rounded-xl hover:border-primary/40 hover:bg-muted transition-all min-h-[130px] sm:min-h-[140px]">
-                  <Plus className="w-6 h-6 text-muted-foreground/50 mb-1" />
+                <button onClick={abrirNuevo} className="flex flex-col items-center justify-center border border-dashed border-border rounded-xl hover:border-primary/40 hover:bg-muted transition-all min-h-[76px] sm:min-h-[88px]">
+                  <Plus className="w-5 h-5 text-muted-foreground/50 mb-1" />
                   <span className="text-[11.5px] text-muted-foreground/50">Agregar</span>
                 </button>
               </div>
