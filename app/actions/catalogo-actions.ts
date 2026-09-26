@@ -483,6 +483,134 @@ export async function importarProductosAction(
   }
 }
 
+export type AccionArchivarResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Archiva un producto (2026-09-26, a petición de Carlos: "desactivar y
+ * dejarlos olvidados" no le resolvía el catálogo kilométrico de productos
+ * descontinuados). Distinto de solo desactivar: además de isActive=false
+ * (mismo efecto de siempre: se esconde de POS/Compras/Reparaciones), pone
+ * archivedAt para que CatalogoClient.tsx lo esconda también de la vista
+ * normal del Catálogo (salvo que el usuario prenda "Ver archivados") — el
+ * producto nunca se borra de la base de datos, así que cualquier
+ * venta/reparación/compra vieja que lo mencione se sigue viendo bien.
+ */
+export async function archivarProductoAction(
+  params: { tenantSlug: string; productId: string }
+): Promise<AccionArchivarResult> {
+  const { tenantSlug, productId } = params;
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const existente = await db.product.findUnique({ where: { id: productId }, select: { id: true } });
+    if (!existente) return { ok: false, error: "Producto no encontrado" };
+
+    await db.product.update({
+      where: { id: productId },
+      data: { archivedAt: new Date(), isActive: false },
+    });
+
+    revalidatePath(`/${tenantSlug}/catalogo`);
+    revalidatePath(`/${tenantSlug}/inventario`);
+    return { ok: true };
+  } catch (err: any) {
+    return manejarErrorAcceso(err, "No se pudo archivar el producto");
+  }
+}
+
+/**
+ * Regresa un producto archivado al catálogo activo — vuelve a poner
+ * isActive=true junto con archivedAt=null (ver el comentario de
+ * archivarProductoAction: los dos campos siempre se mueven juntos, nunca
+ * uno sin el otro).
+ */
+export async function restaurarProductoAction(
+  params: { tenantSlug: string; productId: string }
+): Promise<AccionArchivarResult> {
+  const { tenantSlug, productId } = params;
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const existente = await db.product.findUnique({ where: { id: productId }, select: { id: true } });
+    if (!existente) return { ok: false, error: "Producto no encontrado" };
+
+    await db.product.update({
+      where: { id: productId },
+      data: { archivedAt: null, isActive: true },
+    });
+
+    revalidatePath(`/${tenantSlug}/catalogo`);
+    revalidatePath(`/${tenantSlug}/inventario`);
+    return { ok: true };
+  } catch (err: any) {
+    return manejarErrorAcceso(err, "No se pudo restaurar el producto");
+  }
+}
+
+export type AccionEliminarResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Borrado DEFINITIVO — solo para un producto que jamás se movió (sin
+ * ninguna fila en SaleItem/RepairItem/PurchaseItem, ver el comentario en
+ * ProductoCatalogo.tieneHistorial). Si tiene aunque sea una venta,
+ * reparación o compra registrada se rechaza: borrar la fila de Product
+ * rompería esos registros históricos (SaleItem/RepairItem/PurchaseItem
+ * necesitan poder resolver qué producto fue). Para ese caso la única salida
+ * es archivarProductoAction, nunca este. Sí se borran sus filas de
+ * Inventory (no son historial, son solo la existencia actual) como parte
+ * de la misma transacción.
+ */
+export async function eliminarProductoAction(
+  params: { tenantSlug: string; productId: string }
+): Promise<AccionEliminarResult> {
+  const { tenantSlug, productId } = params;
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const existente = await db.product.findUnique({ where: { id: productId }, select: { id: true } });
+    if (!existente) return { ok: false, error: "Producto no encontrado" };
+
+    const [ventas, reparaciones, compras] = await Promise.all([
+      db.saleItem.count({ where: { productId } }),
+      db.repairItem.count({ where: { productId } }),
+      db.purchaseItem.count({ where: { productId } }),
+    ]);
+
+    if (ventas + reparaciones + compras > 0) {
+      return {
+        ok: false,
+        error: "Este producto ya tiene ventas, reparaciones o compras registradas — no se puede eliminar sin perder ese historial. Archívalo en su lugar.",
+      };
+    }
+
+    await db.$transaction([
+      db.inventory.deleteMany({ where: { productId } }),
+      db.product.delete({ where: { id: productId } }),
+    ]);
+
+    revalidatePath(`/${tenantSlug}/catalogo`);
+    revalidatePath(`/${tenantSlug}/inventario`);
+    return { ok: true };
+  } catch (err: any) {
+    return manejarErrorAcceso(err, "No se pudo eliminar el producto");
+  }
+}
+
 export type AccionAutoIconosResult =
   | { ok: true; asignados: number; sinCoincidencia: number }
   | { ok: false; error: string };

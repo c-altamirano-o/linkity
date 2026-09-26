@@ -620,6 +620,22 @@ model Product {
   emoji       String?
   metadata    Json?
   isActive    Boolean     @default(true)
+  // 2026-09-26, a petición de Carlos ("existe una mejor manera" que dejar
+  // productos descontinuados nada más desactivados y olvidados en el
+  // catálogo para siempre): archivedAt es un concepto DISTINTO de isActive.
+  // isActive=false sigue significando "pausado, no se vende por ahora pero
+  // puede regresar" (se sigue viendo en Catálogo, solo se esconde de
+  // POS/Compras/Reparaciones — sin cambios). archivedAt!=null significa
+  // "descontinuado de plano" — además de lo anterior, se esconde también de
+  // la vista normal de Catálogo (CatalogoClient.tsx lo filtra salvo que el
+  // usuario prenda "Ver archivados"), para que el catálogo del día a día no
+  // crezca para siempre con productos que ya nadie va a volver a surtir.
+  // Un producto archivado SIEMPRE tiene isActive=false también (ver
+  // archivarProductoAction/restaurarProductoAction en catalogo-actions.ts,
+  // que ponen/quitan ambos campos juntos) — nunca al revés: un producto
+  // puede estar inactivo sin estar archivado, pero no archivado sin estar
+  // inactivo.
+  archivedAt  DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 

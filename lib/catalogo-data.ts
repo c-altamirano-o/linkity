@@ -33,6 +33,16 @@ export interface ProductoCatalogo {
   cost: number;
   stock: number;
   minStock: number;
+  isActive: boolean;
+  // null = no archivado (vive en el catálogo normal). No-null = fecha en
+  // que se archivó como descontinuado — ver el comentario largo en
+  // Product.archivedAt (prisma/schema.prisma) y en catalogo-actions.ts.
+  archivedAt: string | null;
+  // true si ya tiene alguna venta, reparación o compra registrada — un
+  // producto así NUNCA se puede borrar de verdad (rompería ese historial),
+  // solo archivar. Lo calcula getCatalogoData vía _count para que
+  // CatalogoClient.tsx no tenga que adivinarlo ni pedirlo aparte.
+  tieneHistorial: boolean;
 }
 
 // Un renglón por cada línea de venta completada — se manda "en crudo" al
@@ -108,6 +118,9 @@ export async function getCatalogoData(
       include: {
         category: true,
         inventory: { where: { branchId: { in: activeBranchIds } } },
+        // Solo para saber SI existe historial (>0), no para traerlo completo
+        // — de ahí _count en vez de un include de las 3 tablas.
+        _count: { select: { saleItems: true, repairItems: true, purchaseItems: true } },
       },
       orderBy: { name: "asc" },
     }),
@@ -151,6 +164,9 @@ export async function getCatalogoData(
       cost: p.cost != null ? Number(p.cost) : 0,
       stock: isService ? 0 : p.inventory.reduce((s, i) => s + i.stock, 0),
       minStock: isService ? 0 : p.inventory.reduce((s, i) => s + i.minStock, 0),
+      isActive: p.isActive,
+      archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
+      tieneHistorial: p._count.saleItems + p._count.repairItems + p._count.purchaseItems > 0,
     };
   });
 

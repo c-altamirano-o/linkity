@@ -6,6 +6,7 @@ import {
   Search, Plus, SlidersHorizontal, Smartphone, Cpu,
   Wrench, TrendingUp, Building2, Calendar, Menu, X,
   Sparkles, Upload, Download, Loader2, CheckCircle2, AlertTriangle, Wand2,
+  Archive,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import type { CatalogoData, TipoCatalogo, ProductoCatalogo } from "@/lib/catalogo-data";
@@ -15,6 +16,7 @@ import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confi
 import {
   crearProductoAction, editarProductoAction, crearCategoriaAction,
   cargarCatalogoArranqueAction, importarProductosAction, autoAsignarIconosAction,
+  archivarProductoAction, restaurarProductoAction, eliminarProductoAction,
   type TipoProductoInput, type FilaImportacion,
 } from "@/app/actions/catalogo-actions";
 
@@ -399,6 +401,18 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   const [nuevaCategoria, setNuevaCategoria] = useState(false);
   const [nombreNuevaCategoria, setNombreNuevaCategoria] = useState("");
 
+  // ── Archivar / restaurar / eliminar (2026-09-26) ─────────────
+  // "Ver archivados" es aparte de isActive: por default el catálogo NO
+  // muestra productos archivados (ver productosFiltrados más abajo), para
+  // que el día a día no se llene de artículos descontinuados; este switch
+  // los vuelve a mostrar (atenuados) cuando Carlos sí los necesita
+  // consultar. confirmarAccionProducto guarda un paso de "¿seguro?" antes
+  // de archivar/restaurar/eliminar de verdad — mismo criterio del resto del
+  // proyecto de no usar window.confirm() nativo.
+  const [mostrarArchivados, setMostrarArchivados] = useState(false);
+  const [confirmarAccionProducto, setConfirmarAccionProducto] = useState<"archivar" | "restaurar" | "eliminar" | null>(null);
+  const [errorAccionProducto, setErrorAccionProducto] = useState<string | null>(null);
+
   // Selector de ícono del modal: "icono" muestra la galería de ICONOS
   // (misma paleta vectorial que ya usa el catálogo de arranque),  "emoji"
   // muestra el campo de texto libre de siempre para quien prefiera escribir
@@ -420,6 +434,8 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
     setErrorModal(null);
     setNuevaCategoria(false);
     setNombreNuevaCategoria("");
+    setConfirmarAccionProducto(null);
+    setErrorAccionProducto(null);
     setModalAbierto(true);
   }
 
@@ -434,7 +450,12 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       type: p.type,
       categoryId: p.categoryId ?? "",
       emoji: p.emoji ?? "",
-      isActive: true,
+      // 2026-09-26: antes siempre arrancaba en `true` sin importar el
+      // estado real del producto (bug — nunca había un campo isActive en
+      // ProductoCatalogo del que leer). Con el campo ya disponible, esto
+      // evita que reabrir y guardar un producto YA desactivado lo
+      // reactivara solo, por editar cualquier otro campo.
+      isActive: p.isActive,
       stock: "1", // no se usa al editar, ver comentario en FormProducto
     });
     // Si ya trae un ícono de la galería, o si no tiene nada todavía,
@@ -444,7 +465,32 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
     setErrorModal(null);
     setNuevaCategoria(false);
     setNombreNuevaCategoria("");
+    setConfirmarAccionProducto(null);
+    setErrorAccionProducto(null);
     setModalAbierto(true);
+  }
+
+  // Ejecuta archivar/restaurar/eliminar sobre el producto que está siendo
+  // editado — comparte isPending/startTransition con guardarProducto (no
+  // pueden dispararse al mismo tiempo, ambos requieren el modal abierto).
+  function ejecutarAccionProducto(accion: "archivar" | "restaurar" | "eliminar") {
+    if (!editando) return;
+    setErrorAccionProducto(null);
+    const productId = editando.id;
+    startTransition(async () => {
+      const res =
+        accion === "archivar" ? await archivarProductoAction({ tenantSlug, productId })
+        : accion === "restaurar" ? await restaurarProductoAction({ tenantSlug, productId })
+        : await eliminarProductoAction({ tenantSlug, productId });
+
+      if (!res.ok) {
+        setErrorAccionProducto(res.error);
+        setConfirmarAccionProducto(null);
+        return;
+      }
+      setModalAbierto(false);
+      router.refresh();
+    });
   }
 
   function guardarProducto() {
@@ -505,12 +551,25 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       : p.categoryId === categoriaActiva;
     const q = busqueda.toLowerCase();
     const matchSearch = p.name.toLowerCase().includes(q) || (p.sku ?? "").toLowerCase().includes(q);
-    return matchTipo && matchCat && matchSearch;
+    // 2026-09-26: por default el catálogo del día a día no incluye
+    // productos archivados (descontinuados) — "Ver archivados" los vuelve a
+    // traer, atenuados, cuando sí se necesitan consultar.
+    const matchArchivado = mostrarArchivados ? true : !p.archivedAt;
+    return matchTipo && matchCat && matchSearch && matchArchivado;
   });
 
-  const conteo = (tipo: TipoCatalogo) => productos.filter((p) => p.type === tipo).length;
+  const totalArchivados = productos.filter((p) => p.archivedAt).length;
+
+  // Mismo criterio de "Ver archivados" que productosFiltrados — estos
+  // contadores del sidebar deben coincidir con lo que en verdad se ve.
+  const conteo = (tipo: TipoCatalogo) =>
+    productos.filter((p) => p.type === tipo && (mostrarArchivados || !p.archivedAt)).length;
   const conteoCat = (tipo: TipoCatalogo, catId: string) =>
-    productos.filter((p) => p.type === tipo && (catId === SIN_CATEGORIA_ID ? p.categoryId === null : p.categoryId === catId)).length;
+    productos.filter((p) =>
+      p.type === tipo &&
+      (catId === SIN_CATEGORIA_ID ? p.categoryId === null : p.categoryId === catId) &&
+      (mostrarArchivados || !p.archivedAt)
+    ).length;
 
   const sucursalNombre = sucursal === TODAS_SUCURSALES_ID
     ? "Todas las sucursales"
@@ -705,6 +764,24 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   placeholder="Buscar por nombre o SKU..."
                   className="w-full pl-7 pr-3 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
               </div>
+              <button
+                type="button"
+                onClick={() => setMostrarArchivados((v) => !v)}
+                title="Mostrar también los productos archivados (descontinuados)"
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2 border rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${
+                  mostrarArchivados
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <Archive className="w-3 h-3" />
+                <span className="hidden sm:inline">Archivados</span>
+                {totalArchivados > 0 && (
+                  <span className={`text-[10.5px] px-1 rounded-full ${mostrarArchivados ? "bg-primary-foreground/20" : "bg-muted"}`}>
+                    {totalArchivados}
+                  </span>
+                )}
+              </button>
               <button className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted transition-colors flex-shrink-0">
                 <SlidersHorizontal className="w-3 h-3" />
                 <span className="hidden sm:inline">Filtros</span>
@@ -767,9 +844,15 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                     solo lo que su contenido necesita, sin estirarse por sus
                     vecinas. */}
                 {productosFiltrados.map((p) => (
-                  <div key={p.id} onClick={() => abrirEditar(p)} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer flex">
-                    <div className={`w-20 sm:w-24 flex-shrink-0 ${tipoConfig[p.type].bg} flex items-center justify-center border-r border-border`}>
+                  <div key={p.id} onClick={() => abrirEditar(p)}
+                    className={`bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer flex ${p.archivedAt ? "opacity-60" : ""}`}>
+                    <div className={`relative w-20 sm:w-24 flex-shrink-0 ${tipoConfig[p.type].bg} flex items-center justify-center border-r border-border`}>
                       <ProductoIcono value={p.emoji} className={`w-7 h-7 sm:w-8 sm:h-8 ${tipoConfig[p.type].color}`} />
+                      {p.archivedAt && (
+                        <span className="absolute bottom-0.5 left-0.5 right-0.5 text-center text-[8px] font-semibold uppercase tracking-wide bg-foreground/70 text-background rounded px-0.5 py-px">
+                          Archivado
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0 p-2 sm:p-2.5 flex flex-col justify-start gap-0.5">
                       <p className="text-xs font-medium text-foreground leading-tight line-clamp-2">{p.name}</p>
@@ -1089,16 +1172,99 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 )}
               </div>
               {editando && (
-                <label className="flex items-center gap-2 text-[12.5px] text-foreground/80">
+                <label className={`flex items-center gap-2 text-[12.5px] ${editando.archivedAt ? "text-muted-foreground/50" : "text-foreground/80"}`}>
                   <input
                     type="checkbox"
                     checked={form.isActive}
+                    disabled={!!editando.archivedAt}
                     onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
                   />
                   Producto activo (visible para venderse)
                 </label>
               )}
               {errorModal && <p className="text-[12.5px] text-red-600">{errorModal}</p>}
+
+              {/* 2026-09-26, a petición de Carlos: "existe una mejor manera"
+                  que solo desactivar y dejar productos descontinuados
+                  olvidados para siempre en el catálogo — ver el comentario
+                  largo en catalogo-actions.ts (archivarProductoAction). */}
+              {editando && (
+                <div className="pt-3 mt-1 border-t border-border flex flex-col gap-2">
+                  {editando.archivedAt ? (
+                    <>
+                      <div className="flex items-start gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                        <Archive className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-[12.5px] text-amber-700">
+                          Este producto está archivado — no aparece en el catálogo ni se puede vender. Su historial sigue intacto.
+                        </p>
+                      </div>
+
+                      {confirmarAccionProducto === "restaurar" ? (
+                        <div className="flex items-center gap-2">
+                          <p className="text-[12px] text-foreground/80 flex-1">¿Restaurarlo al catálogo activo?</p>
+                          <button type="button" onClick={() => setConfirmarAccionProducto(null)}
+                            className="px-2 py-1 text-[12px] text-muted-foreground hover:text-foreground">
+                            Cancelar
+                          </button>
+                          <button type="button" onClick={() => ejecutarAccionProducto("restaurar")} disabled={isPending}
+                            className="px-2 py-1 text-[12px] font-medium bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg">
+                            {isPending ? "Restaurando…" : "Confirmar"}
+                          </button>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => setConfirmarAccionProducto("restaurar")}
+                          className="self-start text-[12.5px] font-medium text-primary-text hover:underline">
+                          Restaurar producto
+                        </button>
+                      )}
+
+                      {editando.tieneHistorial ? (
+                        <p className="text-[11.5px] text-muted-foreground">
+                          Tiene ventas, reparaciones o compras registradas — no se puede eliminar sin perder ese historial, solo archivar.
+                        </p>
+                      ) : confirmarAccionProducto === "eliminar" ? (
+                        <div className="flex items-center gap-2">
+                          <p className="text-[12px] text-red-700 flex-1">Esto lo borra por completo, sin poder deshacerlo. ¿Continuar?</p>
+                          <button type="button" onClick={() => setConfirmarAccionProducto(null)}
+                            className="px-2 py-1 text-[12px] text-muted-foreground hover:text-foreground">
+                            Cancelar
+                          </button>
+                          <button type="button" onClick={() => ejecutarAccionProducto("eliminar")} disabled={isPending}
+                            className="px-2 py-1 text-[12px] font-medium bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg">
+                            {isPending ? "Eliminando…" : "Eliminar definitivamente"}
+                          </button>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => setConfirmarAccionProducto("eliminar")}
+                          className="self-start text-[12.5px] font-medium text-red-600 hover:underline">
+                          Eliminar definitivamente
+                        </button>
+                      )}
+                    </>
+                  ) : confirmarAccionProducto === "archivar" ? (
+                    <div className="flex items-center gap-2">
+                      <p className="text-[12px] text-foreground/80 flex-1">
+                        Se ocultará del catálogo y de POS/Compras/Reparaciones, sin borrar su historial. ¿Continuar?
+                      </p>
+                      <button type="button" onClick={() => setConfirmarAccionProducto(null)}
+                        className="px-2 py-1 text-[12px] text-muted-foreground hover:text-foreground">
+                        Cancelar
+                      </button>
+                      <button type="button" onClick={() => ejecutarAccionProducto("archivar")} disabled={isPending}
+                        className="px-2 py-1 text-[12px] font-medium bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg">
+                        {isPending ? "Archivando…" : "Confirmar"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setConfirmarAccionProducto("archivar")}
+                      className="self-start flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-foreground">
+                      <Archive className="w-3.5 h-3.5" /> Archivar producto (descontinuado)
+                    </button>
+                  )}
+
+                  {errorAccionProducto && <p className="text-[12.5px] text-red-600">{errorAccionProducto}</p>}
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
