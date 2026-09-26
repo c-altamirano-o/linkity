@@ -13,6 +13,7 @@ import type { CatalogoData, TipoCatalogo, ProductoCatalogo } from "@/lib/catalog
 import { label, type LabelDictionary } from "@/lib/labels";
 import { ProductoIcono, ICON_PREFIX, ICONOS } from "@/lib/catalogo-iconos";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
+import { CANTIDAD_CHIPS_CATEGORIA } from "@/lib/theme-presets";
 import {
   crearProductoAction, editarProductoAction, crearCategoriaAction,
   cargarCatalogoArranqueAction, importarProductosAction, autoAsignarIconosAction,
@@ -170,6 +171,19 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { categorias, productos, ventasDetalle } = data;
+
+  // "Chip" de color por categoría (2026-09-26, a petición de Carlos: "quiero
+  // esta configuración de la ficha en la que se muestra en el POS... icono
+  // con fondo de color lado izquierdo, información y stock del lado
+  // derecho" — mismo mecanismo que ya usa POSClient.tsx, ver el comentario
+  // largo ahí y en lib/theme-presets.ts. Antes, la ficha de Catálogo pintaba
+  // el bloque del ícono según el TIPO de producto (tipoConfig, 3 colores
+  // pálidos fijos) — ahora es por CATEGORÍA (hasta 5 colores vivos del tema
+  // activo, cíclicos), igual que en POS, para que ambas pantallas se vean
+  // consistentes. "Sin categoría" se queda con --primary, igual que en POS.
+  const chipPorCategoria = new Map<string, number>(
+    categorias.map((c, i) => [c.id, (i % CANTIDAD_CHIPS_CATEGORIA) + 1])
+  );
 
   const categoriasPorTipo = useMemo(() => {
     const map: Record<TipoCatalogo, { id: string; name: string }[]> = { PRODUCT: [], PART: [], SERVICE: [] };
@@ -843,11 +857,15 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                     sus propias líneas. Con `items-start` cada tarjeta mide
                     solo lo que su contenido necesita, sin estirarse por sus
                     vecinas. */}
-                {productosFiltrados.map((p) => (
+                {productosFiltrados.map((p) => {
+                  const chip = p.categoryId ? chipPorCategoria.get(p.categoryId) ?? null : null;
+                  const fichaBg = chip ? `var(--chip-${chip})` : "var(--primary)";
+                  return (
                   <div key={p.id} onClick={() => abrirEditar(p)}
                     className={`bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer flex ${p.archivedAt ? "opacity-60" : ""}`}>
-                    <div className={`relative w-20 sm:w-24 flex-shrink-0 ${tipoConfig[p.type].bg} flex items-center justify-center border-r border-border`}>
-                      <ProductoIcono value={p.emoji} className={`w-7 h-7 sm:w-8 sm:h-8 ${tipoConfig[p.type].color}`} />
+                    <div className="relative w-20 sm:w-24 flex-shrink-0 flex items-center justify-center"
+                      style={{ backgroundColor: fichaBg, color: "var(--tile-fg)" }}>
+                      <ProductoIcono value={p.emoji} className="w-7 h-7 sm:w-8 sm:h-8" />
                       {p.archivedAt && (
                         <span className="absolute bottom-0.5 left-0.5 right-0.5 text-center text-[8px] font-semibold uppercase tracking-wide bg-foreground/70 text-background rounded px-0.5 py-px">
                           Archivado
@@ -869,7 +887,8 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 {productosFiltrados.length === 0 && (
                   <p className="col-span-full text-center text-xs text-muted-foreground py-6">Sin resultados para este filtro.</p>
                 )}
