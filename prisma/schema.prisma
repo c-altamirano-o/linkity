@@ -42,6 +42,18 @@ model Tenant {
   // que de cualquier forma nunca se acercaría a alcanzar un ticket real).
   // null = no se imprime nada (sin regresión para quien no lo llene).
   reciboExtra String? @db.Text
+  // 2026-09-26, tercera petición el mismo día: "podemos hacerlo
+  // configurable. Que el cliente seleccione el tipo de salida que quiera.
+  // Darle las opciones mas comunes y que el formato se adapte según el
+  // seleccionado?" — el ticket (tanto el de recepción de una reparación
+  // como el de cobro/venta, ver lib/recibo-imprimible.ts) no traía ninguna
+  // regla @page de CSS, así que salía en el papel que el diálogo de
+  // impresión del navegador tuviera por default, sin ajustarse al ancho
+  // real de una impresora térmica de rollo. Default CARTA porque es el
+  // comportamiento de SIEMPRE (sin @page fijo) — así ningún negocio
+  // existente ve cambiar su ticket hasta que entre a Configuración y elija
+  // el formato de su impresora real.
+  reciboFormato ReciboFormato @default(CARTA)
   themePreset  ThemePreset @default(LUMIA_COBALT)
 
   // Intensidad de color del tema (2026-09-23, a petición de Carlos: "hazlas
@@ -232,6 +244,18 @@ enum ThemePreset {
   // ver ColoresPersonalizados/construirPresetPersonalizado en
   // lib/theme-presets.ts.
   CUSTOM
+}
+
+// Formato de salida del ticket imprimible (2026-09-26, ver el comentario
+// largo en Tenant.reciboFormato) — las tres opciones más comunes para un
+// negocio pequeño en México: rollo térmico angosto, rollo térmico ancho (la
+// más común en punto de venta), y hoja de oficina normal/PDF. Ver
+// estilosImpresionTicket en lib/recibo-imprimible.ts para el CSS que arma
+// cada una.
+enum ReciboFormato {
+  TERMICA_58
+  TERMICA_80
+  CARTA
 }
 
 model Branch {

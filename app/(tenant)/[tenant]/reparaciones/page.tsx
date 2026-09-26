@@ -67,6 +67,7 @@ export default async function ReparacionesPage({
     rfc: tenant.rfc,
     mensajePie: tenant.reciboMensajePie,
     extra: tenant.reciboExtra,
+    formato: tenant.reciboFormato,
   };
 
   return (

@@ -18,7 +18,7 @@ import {
 } from "@/app/actions/reparaciones-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp } from "@/lib/paises";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
-import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData } from "@/lib/recibo-imprimible";
+import { abrirReciboImprimible, estilosImpresionTicket, type DatosNegocioRecibo, type FormatoTicket, type ReciboData } from "@/lib/recibo-imprimible";
 import QRCode from "qrcode";
 
 // Agrupa el catálogo de "agregar pieza" por tipo — piezas/productos primero,
@@ -196,8 +196,16 @@ function textoTicketWhatsapp(t: TicketData, negocio: string): string {
  * antes de cualquier await (igual que siempre) para no arriesgar el
  * bloqueador de pop-ups; el contenido (incluido el QR) se escribe después,
  * cuando la promesa de QRCode.toString ya se resolvió.
+ *
+ * `formato` (Tenant.reciboFormato, 2026-09-26, tercera petición el mismo
+ * día: formato de impresión configurable) — se recibe aparte de `negocio`
+ * (que aquí sigue siendo un string plano, no el DatosNegocioRecibo completo
+ * — ver el comentario de negocio/nombreNegocio más abajo) porque este
+ * ticket usa estilosImpresionTicket, la MISMA función que
+ * abrirReciboImprimible (lib/recibo-imprimible.ts), para que ambos tickets
+ * respeten el formato elegido por el negocio sin duplicar el CSS.
  */
-async function abrirTicketImprimible(t: TicketData, negocio: string) {
+async function abrirTicketImprimible(t: TicketData, negocio: string, formato: FormatoTicket | null | undefined) {
   if (typeof window === "undefined") return;
   const subtotalPiezas = t.piezas.reduce((s, p) => s + p.price * p.quantity, 0);
   const filasPiezas = t.piezas
@@ -242,6 +250,7 @@ async function abrirTicketImprimible(t: TicketData, negocio: string) {
         .qr { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
         .qr svg { width: 96px; height: 96px; }
         @media print { body { padding: 0; } }
+        ${estilosImpresionTicket(formato)}
       </style>
     </head>
     <body>
@@ -287,7 +296,7 @@ async function abrirTicketImprimible(t: TicketData, negocio: string) {
    control de piezas/costo/estatus/técnico vive en /aduana. ── */
 function VistaTienda({
   reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, onEntregarSinCobro, pending, onNuevaClick,
-  negocio, telefonoNegocio, cobrarEnDevolucion,
+  negocio, telefonoNegocio, formatoTicket, cobrarEnDevolucion,
 }: {
   reparaciones: ReparacionUI[];
   labels: LabelDictionary;
@@ -299,6 +308,7 @@ function VistaTienda({
   onNuevaClick: () => void;
   negocio: string;
   telefonoNegocio: string | null;
+  formatoTicket: FormatoTicket | null | undefined;
   cobrarEnDevolucion: boolean;
 }) {
   const [busqueda, setBusqueda] = useState("");
@@ -464,7 +474,8 @@ function VistaTienda({
                       telefonoSoporte: telefonoNegocio,
                       publicToken: seleccionada.publicToken,
                     },
-                    negocio
+                    negocio,
+                    formatoTicket
                   )
                 }
                 title="Reimprimir ticket de recepción"
@@ -852,7 +863,8 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
             telefonoSoporte: telefonoNegocio,
             publicToken: res.publicToken,
           },
-          negocio
+          negocio,
+          negocioRecibo.formato
         );
         setModalNuevaAbierto(false);
         resetModalNueva();
@@ -871,7 +883,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
       <div className="flex-1 overflow-hidden">
         <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={handleCobrarClick} onEntregarSinCobro={handleEntregarSinCobro} pending={pendingAccion}
-          onNuevaClick={() => setModalNuevaAbierto(true)} negocio={negocio} telefonoNegocio={telefonoNegocio} cobrarEnDevolucion={cobrarEnDevolucion} />
+          onNuevaClick={() => setModalNuevaAbierto(true)} negocio={negocio} telefonoNegocio={telefonoNegocio} formatoTicket={negocioRecibo.formato} cobrarEnDevolucion={cobrarEnDevolucion} />
       </div>
 
       {modalNuevaAbierto && (

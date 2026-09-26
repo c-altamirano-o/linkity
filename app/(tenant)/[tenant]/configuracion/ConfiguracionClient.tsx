@@ -9,6 +9,7 @@ import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions"
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/client";
+import type { FormatoTicket } from "@/lib/recibo-imprimible";
 import {
   WINDOWS_THEMES, resolverPresetTenant, TENANT_THEME_ROOT_ID,
   INTENSIDAD_DEFAULT, INTENSIDAD_MIN, INTENSIDAD_MAX,
@@ -70,6 +71,16 @@ const SIN_RUBRO = "";
 // y lib/periodo-laboral.ts.
 const DIAS_SEMANA_COMPLETOS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
+// Las 3 opciones de Tenant.reciboFormato (2026-09-26, "que el cliente
+// seleccione el tipo de salida que quiera... las opciones mas comunes") —
+// ver estilosImpresionTicket en lib/recibo-imprimible.ts para el CSS que
+// arma cada una.
+const FORMATOS_TICKET: { valor: FormatoTicket; nombre: string; descripcion: string }[] = [
+  { valor: "TERMICA_58", nombre: "Térmica 58mm", descripcion: "Rollo angosto de punto de venta" },
+  { valor: "TERMICA_80", nombre: "Térmica 80mm", descripcion: "Rollo ancho — la más común" },
+  { valor: "CARTA", nombre: "Hoja normal", descripcion: "Carta / A4, o guardar como PDF" },
+];
+
 interface ModuloPersonalizable {
   code: string;
   name: string;
@@ -96,6 +107,7 @@ interface ConfiguracionClientProps {
   rfcTicketInicial: string | null;
   mensajePieTicketInicial: string | null;
   extraTicketInicial: string | null;
+  formatoTicketInicial: FormatoTicket;
   checklistTaller: EstadoTallerChecklist;
 }
 
@@ -117,6 +129,7 @@ export default function ConfiguracionClient({
   rfcTicketInicial,
   mensajePieTicketInicial,
   extraTicketInicial,
+  formatoTicketInicial,
   checklistTaller,
 }: ConfiguracionClientProps) {
   const router = useRouter();
@@ -270,12 +283,13 @@ export default function ConfiguracionClient({
   const [rfcTicket, setRfcTicket] = useState(rfcTicketInicial ?? "");
   const [mensajePieTicket, setMensajePieTicket] = useState(mensajePieTicketInicial ?? "");
   const [extraTicket, setExtraTicket] = useState(extraTicketInicial ?? "");
+  const [formatoTicket, setFormatoTicket] = useState<FormatoTicket>(formatoTicketInicial);
   const [datosTicketPending, startDatosTicketTransition] = useTransition();
   const [datosTicketMensaje, setDatosTicketMensaje] = useState("");
 
   const guardarDatosTicket = () => {
     startDatosTicketTransition(async () => {
-      const result = await updateDatosTicket(tenantSlug, { direccion: direccionTicket, rfc: rfcTicket, mensajePie: mensajePieTicket, extra: extraTicket });
+      const result = await updateDatosTicket(tenantSlug, { direccion: direccionTicket, rfc: rfcTicket, mensajePie: mensajePieTicket, extra: extraTicket, formato: formatoTicket });
       setDatosTicketMensaje(result.success ? "Ticket actualizado correctamente." : (result.error ?? "Error al actualizar."));
       if (result.success) {
         router.refresh();
@@ -996,6 +1010,30 @@ export default function ConfiguracionClient({
               rows={5}
               className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
             />
+          </div>
+
+          <div className="mt-6">
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Formato de impresión</label>
+            <p className="text-xs text-muted-foreground mb-2.5">
+              Elige el tipo de impresora o salida que usas para que el ticket se ajuste al ancho de papel correcto.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-xl">
+              {FORMATOS_TICKET.map((f) => (
+                <button
+                  key={f.valor}
+                  type="button"
+                  onClick={() => setFormatoTicket(f.valor)}
+                  className={`text-left p-3 rounded-lg border text-xs transition-all ${
+                    formatoTicket === f.valor
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "border-border bg-muted hover:border-foreground/30"
+                  }`}
+                >
+                  <p className="font-medium text-foreground">{f.nombre}</p>
+                  <p className="text-muted-foreground mt-0.5">{f.descripcion}</p>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">

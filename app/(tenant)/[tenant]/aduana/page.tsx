@@ -33,7 +33,7 @@ export default async function AduanaPage({
     where: { slug: tenantSlug },
     select: {
       id: true, businessType: true, cobrarEnDevolucion: true,
-      logo: true, address: true, phone: true, rfc: true, reciboMensajePie: true, reciboExtra: true,
+      logo: true, address: true, phone: true, rfc: true, reciboMensajePie: true, reciboExtra: true, reciboFormato: true,
     },
   });
 
@@ -64,6 +64,7 @@ export default async function AduanaPage({
     rfc: tenant.rfc,
     mensajePie: tenant.reciboMensajePie,
     extra: tenant.reciboExtra,
+    formato: tenant.reciboFormato,
   };
 
   return (

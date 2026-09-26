@@ -111,6 +111,7 @@ export default async function POSPage({
     rfc: tenant.rfc,
     mensajePie: tenant.reciboMensajePie,
     extra: tenant.reciboExtra,
+    formato: tenant.reciboFormato,
   };
 
   return (

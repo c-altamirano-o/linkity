@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { ReciboFormato } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { resolverActor } from "@/lib/actor";
 import { parseColoresPersonalizados, TEMA_PERSONALIZADO_ID } from "@/lib/theme-presets";
@@ -148,10 +149,16 @@ export async function updateSupportPhone(tenantSlug: string, phone: string) {
 //   lo tienen) ni transformación (no se recorta a una sola línea) — el
 //   negocio puede escribir varios párrafos si quiere, ver el comentario
 //   largo en Tenant.reciboExtra (schema.prisma).
-// Cualquiera de los cuatro vacío/solo espacios se guarda como null (esa
-// línea simplemente no se imprime, o vuelve al mensaje de pie de siempre) —
-// sin necesidad de un botón "restaurar" aparte. Mismo criterio de
-// validación que updateSupportPhone/updateWeekStartDay: solo el
+// - formato (Tenant.reciboFormato, 2026-09-26, tercera petición el mismo
+//   día: "que el cliente seleccione el tipo de salida que quiera... que el
+//   formato se adapte según el seleccionado") — un enum (ReciboFormato),
+//   no texto libre, así que la única validación posible es que el valor
+//   recibido sea uno de los 3 que existen — ver estilosImpresionTicket en
+//   lib/recibo-imprimible.ts para qué hace cada uno.
+// Cualquiera de los tres campos de texto vacío/solo espacios se guarda como
+// null (esa línea simplemente no se imprime, o vuelve al mensaje de pie de
+// siempre) — sin necesidad de un botón "restaurar" aparte. Mismo criterio
+// de validación que updateSupportPhone/updateWeekStartDay: solo el
 // administrador dueño de la cuenta (resolverActor con "configuracion",
 // ningún rol de PIN lo tiene en su matriz de acceso).
 const MAX_LARGO_DIRECCION = 150;
@@ -160,7 +167,7 @@ const MAX_LARGO_MENSAJE_PIE = 200;
 
 export async function updateDatosTicket(
   tenantSlug: string,
-  datos: { direccion: string; rfc: string; mensajePie: string; extra: string }
+  datos: { direccion: string; rfc: string; mensajePie: string; extra: string; formato: string }
 ) {
   const direccion = datos.direccion.trim();
   const rfc = datos.rfc.trim().toUpperCase();
@@ -176,6 +183,9 @@ export async function updateDatosTicket(
   if (mensajePie.length > MAX_LARGO_MENSAJE_PIE) {
     return { success: false, error: `El mensaje no puede pasar de ${MAX_LARGO_MENSAJE_PIE} caracteres` };
   }
+  if (!Object.values(ReciboFormato).includes(datos.formato as ReciboFormato)) {
+    return { success: false, error: "Formato de ticket inválido" };
+  }
 
   const resuelto = await resolverActor(tenantSlug, "configuracion");
   if (!resuelto.ok) return { success: false, error: resuelto.error };
@@ -188,6 +198,7 @@ export async function updateDatosTicket(
         rfc: rfc || null,
         reciboMensajePie: mensajePie || null,
         reciboExtra: extra || null,
+        reciboFormato: datos.formato as ReciboFormato,
       },
     });
 

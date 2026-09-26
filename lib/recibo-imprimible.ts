@@ -60,6 +60,19 @@
  * saltos de línea que el negocio haya escrito (white-space: pre-wrap) — es
  * el único bloque del ticket que lo necesita, porque es el único que puede
  * traer varias líneas de texto libre.
+ *
+ * 2026-09-26 (mismo día, tercera petición): "podemos hacerlo configurable.
+ * Que el cliente seleccione el tipo de salida que quiera. Darle las
+ * opciones mas comunes y que el formato se adapte según el seleccionado" —
+ * hasta ahora el `<style>` de este ticket no traía ninguna regla `@page`,
+ * así que imprimía en lo que el diálogo de impresión del navegador tuviera
+ * configurado, sin ajustarse al ancho real de una impresora térmica.
+ * `negocio.formato` (Tenant.reciboFormato) resuelve esto con 3 opciones —
+ * ver FormatoTicket/estilosImpresionTicket abajo. Esta misma función la usa
+ * TAMBIÉN abrirTicketImprimible en ReparacionesClient.tsx (el ticket de
+ * RECEPCIÓN, con su propio HTML pero la MISMA impresora física del
+ * negocio) — para que ambos tickets respeten el mismo formato sin que el
+ * negocio tenga que configurarlo dos veces.
  */
 
 import QRCode from "qrcode";
@@ -72,6 +85,62 @@ export function nombreNegocioDeSlug(tenantSlug: string): string {
   return decodeURIComponent(tenantSlug).replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
+/**
+ * Tenant.reciboFormato — tipo local (no se importa el enum de
+ * @prisma/client aquí) porque este módulo se importa desde Client
+ * Components (POSClient.tsx, ReparacionesClient.tsx, AduanaClient.tsx) y
+ * solo hace falta el TIPO, nunca el enum como valor en tiempo de ejecución
+ * — mismo criterio que MetodoPago en pos-actions.ts. Los 3 valores son
+ * literalmente los mismos strings que el enum ReciboFormato de
+ * schema.prisma, así que un valor real de Prisma (leído en un Server
+ * Component) encaja aquí sin conversión.
+ */
+export type FormatoTicket = "TERMICA_58" | "TERMICA_80" | "CARTA";
+
+/**
+ * CSS que ajusta el ticket al formato de salida elegido (ver el comentario
+ * largo arriba). Se inyecta al FINAL del bloque <style> de cada ticket
+ * (después de las reglas base) para que gane por orden de aparición sobre
+ * esas mismas reglas — nunca se listan aquí propiedades que no vayan a
+ * pisar una regla base ya existente.
+ *
+ * TERMICA_58/TERMICA_80: @page fija el ancho real de papel de una
+ * impresora térmica de rollo — así el navegador ya no deja que el usuario
+ * tenga que adivinar/ajustar el tamaño de papel en el diálogo de impresión
+ * cada vez. El resto de los tamaños (fuente, ancho de contenido, QR) se
+ * reducen proporcionalmente porque las reglas base están pensadas para un
+ * ticket de ~380px (~10cm) de ancho, más ancho que cualquiera de estos dos
+ * rollos.
+ *
+ * CARTA (o `null`/sin configurar todavía, el default de todo tenant
+ * existente): sin ninguna regla nueva — es exactamente el comportamiento de
+ * SIEMPRE, se imprime en lo que el navegador tenga configurado (hoja
+ * carta/A4, o "Guardar como PDF").
+ */
+export function estilosImpresionTicket(formato: FormatoTicket | null | undefined): string {
+  if (formato === "TERMICA_58") {
+    return `
+        @page { size: 58mm auto; margin: 2mm; }
+        body { max-width: 50mm; font-size: 9.5px; padding: 0; }
+        h1 { font-size: 11px; }
+        .muted, th, td { font-size: 8.5px; }
+        .total { font-size: 11px; }
+        .qr svg { width: 64px; height: 64px; }
+      `;
+  }
+  if (formato === "TERMICA_80") {
+    return `
+        @page { size: 80mm auto; margin: 3mm; }
+        body { max-width: 72mm; font-size: 11px; padding: 0; }
+        h1 { font-size: 13px; }
+        .muted, th, td { font-size: 10px; }
+        .total { font-size: 13px; }
+        .qr svg { width: 80px; height: 80px; }
+      `;
+  }
+  return "";
+}
+
 export interface DatosNegocioRecibo {
   nombre: string;
   logoUrl?: string | null;
@@ -82,6 +151,8 @@ export interface DatosNegocioRecibo {
   mensajePie?: string | null;
   /** Tenant.reciboExtra — texto libre y sin tope de caracteres, hasta el fondo del ticket (direcciones, promociones, saludo, lo que el negocio quiera). Ver el comentario largo arriba. */
   extra?: string | null;
+  /** Tenant.reciboFormato — TERMICA_58 / TERMICA_80 / CARTA. Ver FormatoTicket/estilosImpresionTicket arriba. */
+  formato?: FormatoTicket | null;
 }
 
 export interface ReciboRenglon {
@@ -162,6 +233,7 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
         .qr { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
         .qr svg { width: 96px; height: 96px; }
         @media print { body { padding: 0; } }
+        ${estilosImpresionTicket(negocio.formato)}
       </style>
     </head>
     <body>
