@@ -961,15 +961,30 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               // CSS Grid estira cada ficha a la altura de su fila por
               // default y, combinado con este layout horizontal (flex
               // anidado sin alto explícito), el navegador podía colapsar
-              // cada ficha. Se probó esta misma estructura de forma aislada
-              // (fuera de la app, con datos de prueba) antes de aplicarla
-              // aquí de nuevo, y renderiza correctamente sin colapsos ni
-              // traslapes — ver el mensaje a Carlos del 2026-09-26 con la
-              // captura de esa prueba.
+              // cada ficha.
+              //
+              // NOTA sobre "overflow-hidden" (2026-09-26, causa real del
+              // traslape masivo que solo aparecía en la pestaña "Todos"):
+              // con cientos de fichas visibles a la vez (Todos junta TODAS
+              // las categorías; una categoría sola nunca llega a esa
+              // cantidad, por eso Catálogo — que siempre filtra por una sola
+              // categoría — nunca lo mostró), `overflow-hidden` en CADA
+              // ficha individual fuerza una capa de composición GPU por
+              // ficha, y con 200+ fichas el navegador terminaba pintando mal
+              // — el layout medido por JS (getBoundingClientRect) siempre
+              // fue correcto, pero los píxeles reales en pantalla no. Se
+              // comprobó en vivo quitando overflow-hidden: el problema
+              // desaparece por completo. Como nada dentro de la ficha
+              // realmente se desborda (el nombre ya se recorta solo via
+              // line-clamp, el SKU via truncate), no hacía falta ese
+              // overflow-hidden para nada más que redondear la esquina
+              // izquierda del bloque de ícono — eso ahora se logra
+              // redondeando esa esquina directamente en el propio bloque
+              // (rounded-l-xl más abajo), sin necesitar clip del padre.
               const fichaBg = chip ? `var(--chip-${chip})` : "var(--primary)";
               return (
                 <button key={producto.id} onClick={() => agregarAlCarrito(producto)} disabled={agotado}
-                  className={`relative flex items-stretch overflow-hidden rounded-xl bg-card border transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)] ${
+                  className={`relative flex items-stretch rounded-xl bg-card border transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)] ${
                     cantidadEnCarrito > 0 ? "border-primary ring-2 ring-primary/25" : "border-border hover:border-primary/40"
                   }`}>
                   {cantidadEnCarrito > 0 && (
@@ -977,7 +992,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                       {cantidadEnCarrito}
                     </span>
                   )}
-                  <div className="w-20 sm:w-24 flex-shrink-0 flex items-center justify-center"
+                  <div className="w-20 sm:w-24 flex-shrink-0 rounded-l-xl flex items-center justify-center"
                     style={{ backgroundColor: fichaBg, color: "var(--tile-fg)" }}>
                     <ProductoIcono value={producto.emoji} className="w-7 h-7 sm:w-8 sm:h-8" />
                   </div>
