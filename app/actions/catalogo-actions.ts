@@ -4,6 +4,7 @@ import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getCatalogoArranque } from "@/lib/catalogo-arranque";
 import { resolverActor, type ActorResult } from "@/lib/actor";
+import { adivinarIconoProducto } from "@/lib/catalogo-icono-match";
 
 /**
  * Server Actions del módulo Catálogo (M6). Antes de este cambio no existía
@@ -442,6 +443,15 @@ export async function importarProductosAction(
         }
       }
 
+      // 2026-09-26, a petición de Carlos: el archivo importado nunca trae
+      // un ícono (la plantilla no tiene esa columna), así que sin esto
+      // TODA fila importada terminaba con el emoji genérico de tipo — ver
+      // el comentario largo en lib/catalogo-icono-match.ts. Se adivina por
+      // el nombre del producto y, si no hay nada, por el de su categoría;
+      // si tampoco hay coincidencia se deja null, exactamente el
+      // comportamiento de antes (sin regresión).
+      const emojiSugerido = adivinarIconoProducto(nombre, categoryName || null);
+
       const nuevo = await db.product.create({
         data: {
           tenantId: tenant.id,
@@ -451,6 +461,7 @@ export async function importarProductosAction(
           type: fila.type,
           price: fila.price,
           cost: fila.cost ?? null,
+          emoji: emojiSugerido,
         },
       });
 
@@ -469,5 +480,62 @@ export async function importarProductosAction(
     return { ok: true, creados, omitidos };
   } catch (err: any) {
     return manejarErrorAcceso(err, "No se pudo completar la importación") as AccionImportarResult;
+  }
+}
+
+export type AccionAutoIconosResult =
+  | { ok: true; asignados: number; sinCoincidencia: number }
+  | { ok: false; error: string };
+
+/**
+ * Arreglo retroactivo de un clic (2026-09-26, a petición de Carlos, tras un
+ * import de 208 productos donde casi todos quedaron con el emoji genérico
+ * de tipo): busca todos los productos de este tenant SIN ícono (emoji
+ * null — nunca toca uno que el usuario ya puso a mano, de la galería o
+ * escrito libre) y les aplica el mismo adivinador por palabra clave que ya
+ * usa importarProductosAction (lib/catalogo-icono-match.ts). Sirve tanto
+ * para el catálogo recién importado como para cualquier producto viejo
+ * (alta manual sin ícono, catálogo de arranque de antes de este cambio,
+ * etc.) — no distingue su origen. Es idempotente: correrlo dos veces no
+ * cambia nada la segunda vez, porque los productos que ya recibieron un
+ * ícono dejan de calificar (emoji ya no es null).
+ */
+export async function autoAsignarIconosAction(
+  params: { tenantSlug: string }
+): Promise<AccionAutoIconosResult> {
+  const { tenantSlug } = params;
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const sinIcono = await db.product.findMany({
+      where: { emoji: null },
+      select: { id: true, name: true, category: { select: { name: true } } },
+    });
+
+    let asignados = 0;
+    let sinCoincidencia = 0;
+
+    for (const p of sinIcono) {
+      const emojiSugerido = adivinarIconoProducto(p.name, p.category?.name ?? null);
+      if (!emojiSugerido) {
+        sinCoincidencia++;
+        continue;
+      }
+      await db.product.update({ where: { id: p.id }, data: { emoji: emojiSugerido } });
+      asignados++;
+    }
+
+    if (asignados > 0) {
+      revalidatePath(`/${tenantSlug}/catalogo`);
+    }
+
+    return { ok: true, asignados, sinCoincidencia };
+  } catch (err: any) {
+    return manejarErrorAcceso(err, "No se pudo completar la asignación de íconos") as AccionAutoIconosResult;
   }
 }

@@ -44,6 +44,19 @@ export const ICON_IDS = [
   "HeartPulse", "Watch", "Gem", "Footprints", "Key", "KeyRound", "Lock", "Sofa",
   "Armchair", "Ruler", "Dumbbell", "Shirt", "PenTool", "CupSoda", "Cookie",
   "ShoppingBag", "Heart", "Package", "Flower2", "Fan", "Feather", "Star", "Tag",
+  // 2026-09-26, a petición de Carlos: al importar un catálogo desde CSV/
+  // Excel (venta al menudeo/accesorios de celular), la mayoría de las filas
+  // terminaban con el emoji genérico de tipo (📦) porque esos ~60 íconos de
+  // arriba se eligieron para los ~20 rubros de servicio (talleres,
+  // consultorios, etc.), no para un catálogo de accesorios/retail. Estos 14
+  // se agregan para que lib/catalogo-icono-match.ts (el adivinador por
+  // palabra clave usado en la importación y en autoAsignarIconosAction,
+  // catalogo-actions.ts) tenga con qué distinguir ese tipo de producto.
+  // Verificados uno por uno en node_modules/@phosphor-icons/react (mismo
+  // método ya usado para los 60 originales) antes de agregarlos aquí.
+  "Headphones", "SpeakerHigh", "Camera", "SecurityCamera", "Sunglasses", "Usb",
+  "Power", "Cube", "GameController", "Devices", "Cpu", "Basket", "DeviceTablet",
+  "Lightbulb",
 ] as const;
 
 export type IconoArranqueId = (typeof ICON_IDS)[number];

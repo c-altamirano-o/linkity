@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Search, Plus, SlidersHorizontal, Smartphone, Cpu,
   Wrench, TrendingUp, Building2, Calendar, Menu, X,
-  Sparkles, Upload, Download, Loader2, CheckCircle2, AlertTriangle,
+  Sparkles, Upload, Download, Loader2, CheckCircle2, AlertTriangle, Wand2,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import type { CatalogoData, TipoCatalogo, ProductoCatalogo } from "@/lib/catalogo-data";
@@ -14,7 +14,7 @@ import { ProductoIcono, ICON_PREFIX, ICONOS } from "@/lib/catalogo-iconos";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import {
   crearProductoAction, editarProductoAction, crearCategoriaAction,
-  cargarCatalogoArranqueAction, importarProductosAction,
+  cargarCatalogoArranqueAction, importarProductosAction, autoAsignarIconosAction,
   type TipoProductoInput, type FilaImportacion,
 } from "@/app/actions/catalogo-actions";
 
@@ -227,6 +227,38 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   const cancelarModalImportar = () => {
     if (resultadoImportar || confirmarSalirSinGuardar()) setModalImportar(false);
   };
+
+  // ── Auto-asignar íconos (2026-09-26, a petición de Carlos) ────
+  // Arregla de un clic los productos que se quedaron con el emoji genérico
+  // de tipo (📦/🔩/🔧) porque nunca tuvieron un ícono — típicamente tras
+  // importar un catálogo de otro sistema (el CSV no trae íconos). Nunca
+  // toca un producto que ya tiene un ícono puesto a mano, así que es
+  // seguro correrlo varias veces (ver autoAsignarIconosAction).
+  const [modalAutoIconos, setModalAutoIconos] = useState(false);
+  const [autoIconosPendiente, setAutoIconosPendiente] = useState(false);
+  const [autoIconosError, setAutoIconosError] = useState<string | null>(null);
+  const [autoIconosResultado, setAutoIconosResultado] = useState<{ asignados: number; sinCoincidencia: number } | null>(null);
+
+  function ejecutarAutoIconos() {
+    setAutoIconosError(null);
+    setAutoIconosPendiente(true);
+    startTransition(async () => {
+      const res = await autoAsignarIconosAction({ tenantSlug });
+      setAutoIconosPendiente(false);
+      if (!res.ok) {
+        setAutoIconosError(res.error);
+        return;
+      }
+      setAutoIconosResultado({ asignados: res.asignados, sinCoincidencia: res.sinCoincidencia });
+      if (res.asignados > 0) router.refresh();
+    });
+  }
+
+  function abrirModalAutoIconos() {
+    setAutoIconosError(null);
+    setAutoIconosResultado(null);
+    setModalAutoIconos(true);
+  }
 
   const TIPO_ARCHIVO_A_ENUM: Record<string, TipoProductoInput> = {
     producto: "PRODUCT", productos: "PRODUCT", product: "PRODUCT",
@@ -522,6 +554,12 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       <div className="flex items-center justify-between px-3 py-3 border-b border-border gap-1.5">
         <span className="text-sm font-medium text-foreground">{label(labels, "module.catalog.name")}</span>
         <div className="flex items-center gap-1.5">
+          <button
+            onClick={abrirModalAutoIconos}
+            title="Auto-asignar íconos a productos que se quedaron con el genérico"
+            className="w-6 h-6 flex-shrink-0 flex items-center justify-center bg-muted text-muted-foreground rounded-lg hover:bg-muted/70">
+            <Wand2 className="w-3 h-3" />
+          </button>
           <button
             onClick={() => { setModalImportar(true); setErrorImportar(null); setResultadoImportar(null); }}
             title="Importar catálogo desde CSV o Excel"
@@ -1128,6 +1166,11 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                         : `Se importaron ${resultadoImportar.creados} producto${resultadoImportar.creados === 1 ? "" : "s"} correctamente.`}
                     </p>
                   </div>
+                  {resultadoImportar.creados > 0 && (
+                    <p className="text-[11.5px] text-muted-foreground px-1">
+                      Tip: si tu archivo no traía íconos, usa el botón <Wand2 className="inline w-3 h-3 -mt-0.5" /> junto a "Importar" para asignarlos automáticamente según el nombre de cada producto.
+                    </p>
+                  )}
                   {resultadoImportar.omitidos.length > 0 && (
                     <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg max-h-32 overflow-y-auto">
                       <p className="text-[12.5px] font-medium text-amber-700 mb-1">
@@ -1150,6 +1193,80 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
               >
                 {resultadoImportar ? "Cerrar" : "Cancelar"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal auto-asignar íconos (2026-09-26) */}
+      {modalAutoIconos && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={() => !autoIconosPendiente && setModalAutoIconos(false)}
+        >
+          <div
+            className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h3 className="text-[14.5px] font-semibold text-foreground flex items-center gap-1.5">
+                <Wand2 className="w-4 h-4 text-primary-text" /> Auto-asignar íconos
+              </h3>
+              <button onClick={() => !autoIconosPendiente && setModalAutoIconos(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 flex flex-col gap-3">
+              <p className="text-xs text-muted-foreground">
+                Busca todos los productos que se quedaron con el ícono genérico (📦) y les asigna uno más específico según su nombre y categoría — por ejemplo, "Cámara de seguridad" recibe un ícono de cámara, "Cargador rápido" uno de carga. Nunca toca un producto que ya tenga un ícono puesto a mano.
+              </p>
+
+              {autoIconosError && (
+                <div className="flex items-start gap-1.5 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-[12.5px] text-red-700">{autoIconosError}</p>
+                </div>
+              )}
+
+              {autoIconosResultado && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-start gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-[12.5px] text-emerald-700">
+                      {autoIconosResultado.asignados === 0
+                        ? "No había ningún producto pendiente de ícono."
+                        : `Se asignó ícono a ${autoIconosResultado.asignados} producto${autoIconosResultado.asignados === 1 ? "" : "s"}.`}
+                    </p>
+                  </div>
+                  {autoIconosResultado.sinCoincidencia > 0 && (
+                    <div className="flex items-start gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-[12.5px] text-amber-700">
+                        {autoIconosResultado.sinCoincidencia} producto{autoIconosResultado.sinCoincidencia === 1 ? "" : "s"} no tuvo ninguna coincidencia y se quedó con el ícono genérico — puedes ajustarlo a mano desde su tarjeta.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
+              <button
+                onClick={() => setModalAutoIconos(false)}
+                disabled={autoIconosPendiente}
+                className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground disabled:opacity-50"
+              >
+                {autoIconosResultado ? "Cerrar" : "Cancelar"}
+              </button>
+              {!autoIconosResultado && (
+                <button
+                  onClick={ejecutarAutoIconos}
+                  disabled={autoIconosPendiente}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[13.5px] font-medium transition-colors"
+                >
+                  {autoIconosPendiente && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {autoIconosPendiente ? "Asignando…" : "Ejecutar"}
+                </button>
+              )}
             </div>
           </div>
         </div>

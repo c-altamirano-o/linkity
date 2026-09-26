@@ -25,6 +25,13 @@ import {
   LockIcon, CouchIcon, ArmchairIcon, RulerIcon, BarbellIcon, TShirtIcon, PenNibIcon,
   JarIcon, CookieIcon, ShoppingBagIcon, HeartIcon, PackageIcon, FlowerLotusIcon,
   FanIcon, FeatherIcon, StarIcon, TagIcon,
+  // 2026-09-26: los 14 agregados para catálogos de accesorios/retail — ver
+  // el comentario largo en lib/catalogo-iconos-base.ts (ICON_IDS) para el
+  // porqué. Mismo criterio de siempre: nombre verificado uno por uno contra
+  // los exports reales de la librería antes de usarlo.
+  HeadphonesIcon, SpeakerHighIcon, CameraIcon, SecurityCameraIcon, SunglassesIcon,
+  UsbIcon, PowerIcon, CubeIcon, GameControllerIcon, DevicesIcon, CpuIcon,
+  BasketIcon, DeviceTabletIcon, LightbulbIcon,
   type Icon,
 } from "@phosphor-icons/react";
 
@@ -177,6 +184,20 @@ export const ICONOS: Record<string, Icon> = {
   Feather: FeatherIcon,
   Star: StarIcon,
   Tag: TagIcon,
+  Headphones: HeadphonesIcon,
+  SpeakerHigh: SpeakerHighIcon,
+  Camera: CameraIcon,
+  SecurityCamera: SecurityCameraIcon,
+  Sunglasses: SunglassesIcon,
+  Usb: UsbIcon,
+  Power: PowerIcon,
+  Cube: CubeIcon,
+  GameController: GameControllerIcon,
+  Devices: DevicesIcon,
+  Cpu: CpuIcon,
+  Basket: BasketIcon,
+  DeviceTablet: DeviceTabletIcon,
+  Lightbulb: LightbulbIcon,
 };
 
 export function ProductoIcono({
