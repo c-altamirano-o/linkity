@@ -14,7 +14,7 @@ import {
   asignarTecnicoAction, agregarPiezaReparacionAction, eliminarPiezaReparacionAction,
   actualizarCostoEstimadoAction, avanzarEstadoAction, type NuevoEstadoReparacion,
 } from "@/app/actions/reparaciones-actions";
-import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
+import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData } from "@/lib/recibo-imprimible";
 
 /**
  * "Aduana" / Recepción del taller (2026-09-22, corrección explícita de
@@ -44,6 +44,9 @@ interface AduanaClientProps {
   // "Cobrar y entregar" hacia POS; nunca reemplaza la validación real, que
   // sigue pasando por crearVentaAction del lado del servidor.
   puedeCobrar: boolean;
+  // Datos reales del negocio para el ticket de "Entregar sin cobro"
+  // (2026-09-26, ver el comentario largo en lib/recibo-imprimible.ts).
+  negocioRecibo: DatosNegocioRecibo;
   // Tenant.cobrarEnDevolucion (2026-09-26) — decide si "Entregar (sin
   // cobro)" se ofrece aquí para SHOP_RETURN: con la casilla activa esa
   // transición directa la rechaza el servidor de cualquier forma (ver el
@@ -147,7 +150,7 @@ const formatFecha = (iso: string) =>
 const formatFechaHora = (iso: string) =>
   new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true });
 
-export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, cobrarEnDevolucion }: AduanaClientProps) {
+export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, negocioRecibo, cobrarEnDevolucion }: AduanaClientProps) {
   const { reparaciones, productos, tecnicos } = data;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -232,7 +235,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, co
     const repair = seleccionada;
     ejecutar(
       () => avanzarEstadoAction({ tenantSlug, repairId: repair.id, nuevoEstado: "DELIVERED" }),
-      () => {
+      async () => {
         const recibo: ReciboData = {
           tipoDocumento: "Reparación — Devolución",
           folio: repair.folio,
@@ -244,8 +247,10 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, co
           total: 0,
           metodoPago: "Sin cargo",
           notaPie: "No fue posible reparar el equipo — se entrega sin costo.",
+          qrUrl: `${window.location.origin}/rep/${repair.publicToken}`,
+          qrEtiqueta: "Sigue tu reparación",
         };
-        abrirReciboImprimible(recibo, nombreNegocioDeSlug(tenantSlug));
+        await abrirReciboImprimible(recibo, negocioRecibo);
       }
     );
   };

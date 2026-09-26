@@ -18,7 +18,7 @@ import {
 } from "@/app/actions/reparaciones-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp } from "@/lib/paises";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
-import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
+import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData } from "@/lib/recibo-imprimible";
 import QRCode from "qrcode";
 
 // Agrupa el catálogo de "agregar pieza" por tipo — piezas/productos primero,
@@ -48,6 +48,12 @@ interface ReparacionesClientProps {
   // ticket ("el ticket debe venir el teléfono de soporte del taller o del
   // negocio"). Se captura en Configuración → Teléfono de soporte.
   telefonoNegocio: string | null;
+  // Datos reales del negocio para el ticket de "Entregar sin cobro"
+  // (2026-09-26, ver el comentario largo en lib/recibo-imprimible.ts) — solo
+  // para abrirReciboImprimible (el ticket de RECEPCIÓN, abrirTicketImprimible
+  // más abajo, sigue usando telefonoNegocio/nombreNegocio de siempre, sin
+  // tocar).
+  negocioRecibo: DatosNegocioRecibo;
   // Tenant.cobrarEnDevolucion — 2026-09-25, junto con el cambio de "Cobrar y
   // entregar" hacia POS (ver el comentario largo en handleCobrarClick más
   // abajo): antes NINGÚN botón de esta pantalla permitía cobrar una
@@ -594,7 +600,7 @@ function VistaTienda({
    NINGÚN rol — se movió por completo a /aduana, ver AduanaClient.tsx. Esta
    pantalla ahora es SIEMPRE la vista de tienda: recibir con folio, ver el
    detalle de solo lectura, y cobrar/entregar/avisar.) ── */
-export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, cobrarEnDevolucion, clienteInicialId }: ReparacionesClientProps) {
+export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, negocioRecibo, cobrarEnDevolucion, clienteInicialId }: ReparacionesClientProps) {
   const { reparaciones, clientes, productos } = data;
   const router = useRouter();
   const negocio = nombreNegocio(tenantSlug);
@@ -731,8 +737,10 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
         total: 0,
         metodoPago: "Sin cargo",
         notaPie: "No fue posible reparar el equipo — se entrega sin costo.",
+        qrUrl: `${window.location.origin}/rep/${repair.publicToken}`,
+        qrEtiqueta: "Sigue tu reparación",
       };
-      abrirReciboImprimible(recibo, nombreNegocioDeSlug(tenantSlug));
+      await abrirReciboImprimible(recibo, negocioRecibo);
       router.refresh();
     });
   };

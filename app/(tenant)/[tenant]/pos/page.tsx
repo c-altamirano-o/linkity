@@ -5,6 +5,7 @@ import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { getPosData } from "@/lib/pos-data";
 import { getRepairParaCobro, type RepairParaCobro } from "@/lib/reparaciones-data";
 import { getTenantLabels } from "@/lib/labels-server";
+import { nombreNegocioDeSlug, type DatosNegocioRecibo } from "@/lib/recibo-imprimible";
 import POSClient from "./POSClient";
 
 export default async function POSPage({
@@ -97,6 +98,20 @@ export default async function POSPage({
     getTenantLabels(tenant.id, tenant.businessType),
   ]);
 
+  // Datos reales del negocio para el ticket impreso (2026-09-26, ver el
+  // comentario largo en lib/recibo-imprimible.ts) — el nombre se conserva
+  // "bonito-ficado" a partir del slug (nombreNegocioDeSlug), a propósito NO
+  // Tenant.name, para no terminar con dos nombres distintos del mismo
+  // negocio en dos pantallas distintas (sidebar vs. ticket).
+  const negocio: DatosNegocioRecibo = {
+    nombre: nombreNegocioDeSlug(tenantSlug),
+    logoUrl: tenant.logo,
+    direccion: tenant.address,
+    telefono: tenant.phone,
+    rfc: tenant.rfc,
+    mensajePie: tenant.reciboMensajePie,
+  };
+
   return (
     <POSClient
       data={data}
@@ -104,6 +119,7 @@ export default async function POSPage({
       branches={branches}
       branchInicial={branchInicial}
       tenantSlug={tenantSlug}
+      negocio={negocio}
       repairParaCobro={repairParaCobro}
       clienteInicialId={clienteId ?? null}
     />

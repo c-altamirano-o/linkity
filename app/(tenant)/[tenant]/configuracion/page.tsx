@@ -16,7 +16,7 @@ export default async function ConfiguracionPage({
     where: { slug: tenantSlug },
     select: {
       id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, logo: true, weekStartDay: true, phone: true,
-      cobrarEnDevolucion: true, montoDevolucion: true,
+      cobrarEnDevolucion: true, montoDevolucion: true, address: true, rfc: true, reciboMensajePie: true,
     },
   });
 
@@ -53,6 +53,9 @@ export default async function ConfiguracionPage({
       supportPhoneInicial={tenant.phone}
       cobrarEnDevolucionInicial={tenant.cobrarEnDevolucion}
       montoDevolucionInicial={Number(tenant.montoDevolucion)}
+      direccionTicketInicial={tenant.address}
+      rfcTicketInicial={tenant.rfc}
+      mensajePieTicketInicial={tenant.reciboMensajePie}
       checklistTaller={checklistTaller}
     />
   );

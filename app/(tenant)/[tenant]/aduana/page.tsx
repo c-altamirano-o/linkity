@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getReparacionesData } from "@/lib/reparaciones-data";
 import { getTenantLabels } from "@/lib/labels-server";
 import { puedeAccederModulo } from "@/lib/actor";
+import { nombreNegocioDeSlug, type DatosNegocioRecibo } from "@/lib/recibo-imprimible";
 import AduanaClient from "./AduanaClient";
 
 /**
@@ -30,7 +31,10 @@ export default async function AduanaPage({
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
-    select: { id: true, businessType: true, cobrarEnDevolucion: true },
+    select: {
+      id: true, businessType: true, cobrarEnDevolucion: true,
+      logo: true, address: true, phone: true, rfc: true, reciboMensajePie: true,
+    },
   });
 
   if (!tenant) notFound();
@@ -50,5 +54,25 @@ export default async function AduanaPage({
     puedeAccederModulo(tenant.id, "pos"),
   ]);
 
-  return <AduanaClient data={data} labels={labels} tenantSlug={tenantSlug} puedeCobrar={puedeCobrar} cobrarEnDevolucion={tenant.cobrarEnDevolucion} />;
+  // Datos reales del negocio para el ticket de "Entregar sin cobro"
+  // (2026-09-26, ver el comentario largo en lib/recibo-imprimible.ts).
+  const negocioRecibo: DatosNegocioRecibo = {
+    nombre: nombreNegocioDeSlug(tenantSlug),
+    logoUrl: tenant.logo,
+    direccion: tenant.address,
+    telefono: tenant.phone,
+    rfc: tenant.rfc,
+    mensajePie: tenant.reciboMensajePie,
+  };
+
+  return (
+    <AduanaClient
+      data={data}
+      labels={labels}
+      tenantSlug={tenantSlug}
+      puedeCobrar={puedeCobrar}
+      negocioRecibo={negocioRecibo}
+      cobrarEnDevolucion={tenant.cobrarEnDevolucion}
+    />
+  );
 }

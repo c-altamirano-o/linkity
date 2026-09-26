@@ -127,6 +127,69 @@ export async function updateSupportPhone(tenantSlug: string, phone: string) {
   }
 }
 
+// Personalización del ticket (2026-09-26, a petición de Carlos: "¿existe un
+// apartado para personalizar el ticket?"). Tres datos en un solo botón de
+// "Guardar cambios" — logo y teléfono YA tienen su propia sección en esta
+// misma pantalla (subirLogoAction / updateSupportPhone) y el nombre del
+// negocio en el ticket sigue siendo el mismo que ya se ve en el resto de la
+// app (derivado del slug, ver nombreNegocioDeSlug en lib/recibo-imprimible.ts
+// y businessName en TenantShell.tsx) — a propósito NO se vuelve editable
+// aparte aquí, para no terminar con dos nombres distintos del mismo negocio
+// en dos pantallas distintas.
+// - direccion/rfc (Tenant.address/Tenant.rfc): ya existían en el schema
+//   desde antes (pensados para CFDI/facturación) pero sin ninguna pantalla
+//   para capturarlos — se reutilizan aquí, no son campos nuevos.
+// - mensaje (Tenant.reciboMensajePie, SÍ es un campo nuevo): reemplaza el
+//   "¡Gracias por tu preferencia!" fijo de lib/recibo-imprimible.ts.
+// Cualquiera de los tres vacío/solo espacios se guarda como null (esa línea
+// simplemente no se imprime, o vuelve al mensaje de pie de siempre) — sin
+// necesidad de un botón "restaurar" aparte. Mismo criterio de validación que
+// updateSupportPhone/updateWeekStartDay: solo el administrador dueño de la
+// cuenta (resolverActor con "configuracion", ningún rol de PIN lo tiene en
+// su matriz de acceso).
+const MAX_LARGO_DIRECCION = 150;
+const MAX_LARGO_RFC = 20;
+const MAX_LARGO_MENSAJE_PIE = 200;
+
+export async function updateDatosTicket(
+  tenantSlug: string,
+  datos: { direccion: string; rfc: string; mensajePie: string }
+) {
+  const direccion = datos.direccion.trim();
+  const rfc = datos.rfc.trim().toUpperCase();
+  const mensajePie = datos.mensajePie.trim();
+
+  if (direccion.length > MAX_LARGO_DIRECCION) {
+    return { success: false, error: `La dirección no puede pasar de ${MAX_LARGO_DIRECCION} caracteres` };
+  }
+  if (rfc && !/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/.test(rfc)) {
+    return { success: false, error: "Ese RFC no parece válido" };
+  }
+  if (mensajePie.length > MAX_LARGO_MENSAJE_PIE) {
+    return { success: false, error: `El mensaje no puede pasar de ${MAX_LARGO_MENSAJE_PIE} caracteres` };
+  }
+
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
+  try {
+    await prisma.tenant.update({
+      where: { id: resuelto.tenant.id },
+      data: {
+        address: direccion || null,
+        rfc: rfc || null,
+        reciboMensajePie: mensajePie || null,
+      },
+    });
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al actualizar los datos del ticket:", error);
+    return { success: false, error: "No se pudo actualizar" };
+  }
+}
+
 // Cobro en devoluciones (Tenant.cobrarEnDevolucion, 2026-09-22, a petición
 // de Carlos, ejemplo "Fix Expres": "eso debe ser configurable desde la
 // pantalla del administrador" — una sola regla para TODO el negocio, no por

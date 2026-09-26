@@ -400,6 +400,10 @@ export type RepairParaCobro =
       // la reparación no aplica aquí, nunca se reparó.
       montoSugerido: number;
       esDevolucion: boolean;
+      // 2026-09-26, para el QR del ticket de esta venta (POS) — misma página
+      // pública de seguimiento de siempre (/rep/[token]), ver el comentario
+      // largo en lib/recibo-imprimible.ts.
+      publicToken: string;
     }
   | { ok: false; error: string };
 
@@ -427,6 +431,7 @@ export async function getRepairParaCobro(tenantId: string, repairId: string): Pr
       deviceModel: true,
       estimatedCost: true,
       finalCost: true,
+      publicToken: true,
       customer: { select: { name: true } },
     },
   });
@@ -458,6 +463,7 @@ export async function getRepairParaCobro(tenantId: string, repairId: string): Pr
     branchId: repair.branchId,
     customerId: repair.customerId,
     customerName: repair.customer.name,
+    publicToken: repair.publicToken,
     montoSugerido: esDevolucion
       ? montoDevolucionTenant
       : repair.finalCost != null ? Number(repair.finalCost) : repair.estimatedCost != null ? Number(repair.estimatedCost) : 0,

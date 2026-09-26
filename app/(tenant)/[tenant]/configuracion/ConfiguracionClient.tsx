@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion } from "@/app/actions/tenant";
+import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateDatosTicket } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
@@ -19,7 +19,7 @@ import ActivarNotificacionesPush from "@/components/tenant/ActivarNotificaciones
 import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
   LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock, Phone, Undo2,
-  Bell, RefreshCw, Smartphone, X, Wrench, Circle, ArrowRight,
+  Bell, RefreshCw, Smartphone, X, Wrench, Circle, ArrowRight, Receipt,
 } from "lucide-react";
 import type { EstadoTallerChecklist } from "@/lib/roles-server";
 
@@ -92,6 +92,9 @@ interface ConfiguracionClientProps {
   supportPhoneInicial: string | null;
   cobrarEnDevolucionInicial: boolean;
   montoDevolucionInicial: number;
+  direccionTicketInicial: string | null;
+  rfcTicketInicial: string | null;
+  mensajePieTicketInicial: string | null;
   checklistTaller: EstadoTallerChecklist;
 }
 
@@ -109,6 +112,9 @@ export default function ConfiguracionClient({
   supportPhoneInicial,
   cobrarEnDevolucionInicial,
   montoDevolucionInicial,
+  direccionTicketInicial,
+  rfcTicketInicial,
+  mensajePieTicketInicial,
   checklistTaller,
 }: ConfiguracionClientProps) {
   const router = useRouter();
@@ -242,6 +248,30 @@ export default function ConfiguracionClient({
       if (result.success) {
         router.refresh();
         setTimeout(() => setSupportPhoneMensaje(""), 3000);
+      }
+    });
+  };
+
+  // ── Personalizar ticket ────────────────────────────────────
+  // 2026-09-26, a petición de Carlos: "¿existe un apartado para
+  // personalizar el ticket?". El nombre (mismo que ya se ve en el resto de
+  // la app) y el teléfono/logo (secciones propias, arriba) ya se imprimen
+  // solos — aquí solo faltaban dirección, RFC (Tenant.address/rfc, ya
+  // existían en el schema para CFDI, sin pantalla propia hasta hoy) y el
+  // mensaje de pie (Tenant.reciboMensajePie, campo nuevo).
+  const [direccionTicket, setDireccionTicket] = useState(direccionTicketInicial ?? "");
+  const [rfcTicket, setRfcTicket] = useState(rfcTicketInicial ?? "");
+  const [mensajePieTicket, setMensajePieTicket] = useState(mensajePieTicketInicial ?? "");
+  const [datosTicketPending, startDatosTicketTransition] = useTransition();
+  const [datosTicketMensaje, setDatosTicketMensaje] = useState("");
+
+  const guardarDatosTicket = () => {
+    startDatosTicketTransition(async () => {
+      const result = await updateDatosTicket(tenantSlug, { direccion: direccionTicket, rfc: rfcTicket, mensajePie: mensajePieTicket });
+      setDatosTicketMensaje(result.success ? "Ticket actualizado correctamente." : (result.error ?? "Error al actualizar."));
+      if (result.success) {
+        router.refresh();
+        setTimeout(() => setDatosTicketMensaje(""), 3000);
       }
     });
   };
@@ -891,6 +921,72 @@ export default function ConfiguracionClient({
               {supportPhonePending ? "Aplicando..." : "Guardar cambios"}
             </button>
             {supportPhoneMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{supportPhoneMensaje}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Personalizar ticket ─────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <Receipt className="w-5 h-5 text-primary-text" />
+          <h2 className="text-base font-semibold text-foreground">Personalizar ticket</h2>
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-muted-foreground mb-5">
+            Estos datos aparecen en el encabezado y pie de los tickets impresos (ventas y reparaciones).
+            El nombre, logo y teléfono ya se toman de las secciones de arriba — aquí solo agregas dirección,
+            RFC y un mensaje de despedida propio.
+          </p>
+
+          <div className="max-w-sm space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Dirección</label>
+              <input
+                type="text"
+                value={direccionTicket}
+                onChange={(e) => setDireccionTicket(e.target.value)}
+                placeholder="Ej. Av. Reforma 123, CDMX"
+                maxLength={150}
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">RFC</label>
+              <input
+                type="text"
+                value={rfcTicket}
+                onChange={(e) => setRfcTicket(e.target.value.toUpperCase())}
+                placeholder="Ej. XAXX010101000"
+                maxLength={13}
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary uppercase"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Mensaje de pie</label>
+              <textarea
+                value={mensajePieTicket}
+                onChange={(e) => setMensajePieTicket(e.target.value)}
+                placeholder="Ej. ¡Gracias por tu preferencia! Garantía de 30 días presentando este ticket."
+                maxLength={200}
+                rows={3}
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+              />
+            </div>
+          </div>
+
+          <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
+            <button
+              onClick={guardarDatosTicket}
+              disabled={datosTicketPending}
+              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              {datosTicketPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              {datosTicketPending ? "Aplicando..." : "Guardar cambios"}
+            </button>
+            {datosTicketMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{datosTicketMensaje}</span>}
           </div>
         </div>
       </div>

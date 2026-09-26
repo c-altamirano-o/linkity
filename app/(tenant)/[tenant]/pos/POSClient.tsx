@@ -13,7 +13,7 @@ import { label, type LabelDictionary } from "@/lib/labels";
 import { crearVentaAction, type MetodoPago } from "@/app/actions/pos-actions";
 import { ProductoIcono } from "@/lib/catalogo-iconos";
 import { CANTIDAD_CHIPS_CATEGORIA } from "@/lib/theme-presets";
-import { abrirReciboImprimible, nombreNegocioDeSlug, type ReciboData } from "@/lib/recibo-imprimible";
+import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData } from "@/lib/recibo-imprimible";
 import EscanearModal from "./EscanearModal";
 
 interface BranchOption {
@@ -27,6 +27,10 @@ interface POSClientProps {
   branches: BranchOption[];
   branchInicial: string | null;
   tenantSlug: string;
+  // Datos reales del negocio para el encabezado/pie del ticket impreso
+  // (2026-09-26, ver el comentario largo en lib/recibo-imprimible.ts) —
+  // armado en el servidor (page.tsx) a partir de Tenant + nombreNegocioDeSlug.
+  negocio: DatosNegocioRecibo;
   // Precarga de "Cobrar y entregar" desde Reparaciones (2026-09-25) — ver el
   // comentario largo en pos-actions.ts. null cuando se llegó a /pos sin
   // ?repairId; { ok:false } cuando el repairId no era válido/cobrable
@@ -58,6 +62,11 @@ type CartItem = {
   // RepairParaCobro.esDevolucion) para no tener que volver a consultar la
   // reparación al momento de armar el recibo.
   esDevolucion?: boolean;
+  // Repair.publicToken (2026-09-26) — para el QR del ticket de esta venta,
+  // que debe apuntar a la página pública de seguimiento de ESA reparación
+  // (/rep/[token]), no a la página pública de catálogo que llevan las ventas
+  // normales de artículo/servicio. Viene de RepairParaCobro.publicToken.
+  repairPublicToken?: string;
 };
 
 const SIN_CATEGORIA_ID = "__sin_categoria__";
@@ -65,7 +74,7 @@ const SIN_CATEGORIA_ID = "__sin_categoria__";
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
-export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, repairParaCobro, clienteInicialId }: POSClientProps) {
+export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, negocio, repairParaCobro, clienteInicialId }: POSClientProps) {
   const { categorias, productos, clientes, cajaAbiertaPorSucursal } = data;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -124,6 +133,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               cantidad: 1,
               isService: true,
               esDevolucion: r.esDevolucion,
+              repairPublicToken: r.publicToken,
             },
           ]
     );
@@ -360,6 +370,15 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     // arriba), esto además cambia el título del comprobante impreso.
     const repLinea = carrito.find((i) => i.repairId);
     const tipoDocumentoTicket = !repLinea ? "Venta" : repLinea.esDevolucion ? "Reparación — Devolución" : "Reparación — Listo";
+    // QR del ticket (2026-09-26, ver el comentario largo en
+    // lib/recibo-imprimible.ts): si esta venta cobra una reparación, apunta a
+    // su página pública de seguimiento de siempre (/rep/[token]); si es una
+    // venta normal de artículo/servicio, a la nueva página pública de
+    // catálogo + sucursales (/pub/[tenant]).
+    const qrUrlTicket = repLinea?.repairPublicToken
+      ? `${window.location.origin}/rep/${repLinea.repairPublicToken}`
+      : `${window.location.origin}/pub/${tenantSlug}`;
+    const qrEtiquetaTicket = repLinea?.repairPublicToken ? "Sigue tu reparación" : "Catálogo y sucursales";
 
     startTransition(async () => {
       const res = await crearVentaAction({
@@ -397,9 +416,11 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           metodoPago: METODO_PAGO_TEXTO_TICKET[metodoPagoAlCobrar],
           montoRecibido: metodoPagoAlCobrar === "efectivo" ? montoNum : null,
           cambio: res.cambio > 0 ? res.cambio : null,
+          qrUrl: qrUrlTicket,
+          qrEtiqueta: qrEtiquetaTicket,
         };
         setUltimoRecibo(recibo);
-        abrirReciboImprimible(recibo, nombreNegocioDeSlug(tenantSlug));
+        await abrirReciboImprimible(recibo, negocio);
 
         limpiarCarrito();
         setClienteId(null);
@@ -625,7 +646,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               </div>
               {ultimoRecibo && (
                 <button
-                  onClick={() => abrirReciboImprimible(ultimoRecibo, nombreNegocioDeSlug(tenantSlug))}
+                  onClick={() => abrirReciboImprimible(ultimoRecibo, negocio)}
                   title="El ticket ya se imprimió solo al cobrar — usa esto si el navegador bloqueó esa ventana"
                   className="flex items-center gap-1 px-2.5 py-1.5 bg-card border border-emerald-300 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold flex-shrink-0"
                 >

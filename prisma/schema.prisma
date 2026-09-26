@@ -22,6 +22,15 @@ model Tenant {
   state        String?
   rfc          String?
   businessType String?
+  // 2026-09-26, a petición de Carlos ("¿existe un apartado para
+  // personalizar el ticket?"): mensaje libre que reemplaza el pie fijo
+  // "¡Gracias por tu preferencia!" de lib/recibo-imprimible.ts — null usa
+  // ese texto de siempre (sin regresión para ningún negocio existente). El
+  // resto de los datos del ticket (nombre real, logo, dirección, teléfono,
+  // RFC) NO son campos nuevos: ya existían arriba en este mismo modelo, lo
+  // que faltaba era que recibo-imprimible.ts los usara en vez de derivar un
+  // nombre del slug de la URL — ver el comentario largo ahí.
+  reciboMensajePie String?
   themePreset  ThemePreset @default(LUMIA_COBALT)
 
   // Intensidad de color del tema (2026-09-23, a petición de Carlos: "hazlas

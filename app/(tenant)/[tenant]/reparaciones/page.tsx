@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { getReparacionesData } from "@/lib/reparaciones-data";
 import { getTenantLabels } from "@/lib/labels-server";
+import { nombreNegocioDeSlug, type DatosNegocioRecibo } from "@/lib/recibo-imprimible";
 import ReparacionesClient from "./ReparacionesClient";
 
 export default async function ReparacionesPage({
@@ -56,6 +57,17 @@ export default async function ReparacionesPage({
     getTenantLabels(tenant.id, tenant.businessType),
   ]);
 
+  // Datos reales del negocio para el ticket de "Entregar sin cobro"
+  // (2026-09-26, ver el comentario largo en lib/recibo-imprimible.ts).
+  const negocioRecibo: DatosNegocioRecibo = {
+    nombre: nombreNegocioDeSlug(tenantSlug),
+    logoUrl: tenant.logo,
+    direccion: tenant.address,
+    telefono: tenant.phone,
+    rfc: tenant.rfc,
+    mensajePie: tenant.reciboMensajePie,
+  };
+
   return (
     <ReparacionesClient
       data={data}
@@ -63,6 +75,7 @@ export default async function ReparacionesPage({
       branches={branches}
       tenantSlug={tenantSlug}
       telefonoNegocio={tenant.phone}
+      negocioRecibo={negocioRecibo}
       cobrarEnDevolucion={tenant.cobrarEnDevolucion}
       clienteInicialId={clienteId ?? null}
     />
