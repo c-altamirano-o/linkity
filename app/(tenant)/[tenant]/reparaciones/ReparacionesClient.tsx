@@ -680,8 +680,37 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   // confía en este valor.
   const [piezaNuevaId, setPiezaNuevaId] = useState("");
   const [piezaNuevaCantidad, setPiezaNuevaCantidad] = useState("1");
-  const [nuevasPiezas, setNuevasPiezas] = useState<{ productId: string; productName: string; price: number; quantity: number }[]>([]);
+  // "personalizado" solo está presente en las piezas que vinieron de "Otro"
+  // (2026-09-28, ver el comentario largo en crearProductoPersonalizado,
+  // reparaciones-actions.ts) — es lo que le dice a handleCrearReparacion
+  // que mande {nombre, precio} en vez de {productId} para esa línea.
+  // productId en esos casos es un id LOCAL inventado (solo para poder
+  // usarlo como key/para poder quitarlo de la lista), nunca se manda al
+  // servidor como si fuera un producto real.
+  const [nuevasPiezas, setNuevasPiezas] = useState<{ productId: string; productName: string; price: number; quantity: number; personalizado?: { nombre: string; precio: number } }[]>([]);
   const subtotalPiezasNueva = nuevasPiezas.reduce((s, p) => s + p.price * p.quantity, 0);
+
+  // Dialogo de "Otro" — pieza o servicio que no está en el catálogo (ver
+  // el <option value="__otro__"> del selector, más abajo).
+  const [otroAbierto, setOtroAbierto] = useState(false);
+  const [otroNombre, setOtroNombre] = useState("");
+  const [otroPrecio, setOtroPrecio] = useState("");
+  const [otroCantidad, setOtroCantidad] = useState("1");
+  const [otroError, setOtroError] = useState<string | null>(null);
+
+  const agregarPiezaPersonalizada = () => {
+    const nombre = otroNombre.trim();
+    const precio = parseFloat(otroPrecio);
+    if (!nombre) { setOtroError("Escribe un nombre"); return; }
+    if (!Number.isFinite(precio) || precio <= 0) { setOtroError("Escribe un precio válido"); return; }
+    const cantidad = Math.max(1, parseInt(otroCantidad, 10) || 1);
+    setNuevasPiezas((prev) => [
+      ...prev,
+      { productId: `otro-${Date.now()}-${Math.random().toString(36).slice(2)}`, productName: nombre, price: precio, quantity: cantidad, personalizado: { nombre, precio } },
+    ]);
+    setOtroNombre(""); setOtroPrecio(""); setOtroCantidad("1"); setOtroError(null);
+    setOtroAbierto(false);
+  };
 
   const agregarPiezaNueva = () => {
     const producto = productos.find((p) => p.id === piezaNuevaId);
@@ -796,6 +825,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     setNuevaClienteNuevoNombre(""); setNuevaClienteNuevoTelefono(""); setNuevaClienteNuevoCodigoPais(PAIS_TELEFONO_DEFAULT);
     setNuevaPrioridad("NORMAL"); setNuevaError(null);
     setNuevasPiezas([]); setPiezaNuevaId(""); setPiezaNuevaCantidad("1");
+    setOtroAbierto(false); setOtroNombre(""); setOtroPrecio(""); setOtroCantidad("1"); setOtroError(null);
   };
 
   const cancelarModalNueva = () => {
@@ -841,7 +871,11 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
         codigoDesbloqueo: nuevoCodigoDesbloqueo || null,
         fechaEstimada: nuevaFechaEstimada || null,
         prioridad: nuevaPrioridad,
-        piezas: nuevasPiezas.map((p) => ({ productId: p.productId, quantity: p.quantity })),
+        piezas: nuevasPiezas.map((p) =>
+          p.personalizado
+            ? { nombre: p.personalizado.nombre, precio: p.personalizado.precio, quantity: p.quantity }
+            : { productId: p.productId, quantity: p.quantity }
+        ),
       });
       if (res.ok) {
         // Se imprime/muestra el ticket de una vez, con lo que se acaba de
@@ -997,8 +1031,14 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                     poder guardar. */}
                 <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PIEZAS Y SERVICIOS COTIZADOS</label>
                 <div className="flex gap-2 mt-1">
-                  <select value={piezaNuevaId} onChange={(e) => setPiezaNuevaId(e.target.value)}
-                    className="flex-1 min-w-0 px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary">
+                  <select value={piezaNuevaId} onChange={(e) => {
+                    // "__otro__" no es un producto real — abre el diálogo de
+                    // pieza/servicio personalizado en vez de seleccionarlo
+                    // (2026-09-28, ver agregarPiezaPersonalizada arriba).
+                    if (e.target.value === "__otro__") { setOtroAbierto(true); return; }
+                    setPiezaNuevaId(e.target.value);
+                  }}
+                    className="flex-1 min-w-0 px-2 py-2 border border-border rounded-lg text-xs bg-muted text-foreground focus:outline-none focus:border-primary">
                     <option value="">Selecciona una pieza o servicio…</option>
                     {(() => {
                       const { piezas: piezasCat, servicios } = agruparProductosParaSelector(productos);
@@ -1021,6 +1061,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                         </>
                       );
                     })()}
+                    <option value="__otro__">+ Otro (nombre y precio libres)</option>
                   </select>
                   <input type="number" min={1} value={piezaNuevaCantidad} onChange={(e) => setPiezaNuevaCantidad(e.target.value)}
                     className="w-14 px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary" />
@@ -1080,6 +1121,63 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                 className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
                 {creando ? "Creando..." : "Crear"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Diálogo de "Otro" — pieza o servicio personalizado (2026-09-28, a
+          petición explícita de Carlos: "falta agregar un campo personalizado
+          para cuando la pieza o servicio no se encuentre guardado... Campo
+          (Otro) abre cuadro de diálogo para poner nombre y precio"). Se
+          apila SOBRE el modal de "Nueva reparación" (z-[60] > z-50) en vez
+          de ir dentro de él — así "Cancelar" aquí solo cierra este diálogo,
+          nunca pierde lo que ya se llevaba capturado en el formulario de
+          atrás. No toca Catálogo/Inventario: el producto real que se crea
+          detrás de esto (crearProductoPersonalizado, reparaciones-actions.ts)
+          se guarda ya archivado, de un solo uso. */}
+      {modalNuevaAbierto && otroAbierto && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40" onClick={() => setOtroAbierto(false)}>
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-sm font-medium text-foreground">Pieza o servicio personalizado</span>
+              <button onClick={() => setOtroAbierto(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              {otroError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{otroError}</div>}
+              <div>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NOMBRE</label>
+                <input type="text" autoFocus value={otroNombre} onChange={(e) => setOtroNombre(e.target.value)}
+                  placeholder='Ej. "Micrófono genérico" o "Limpieza interna"'
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted text-foreground focus:outline-none focus:border-primary" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PRECIO</label>
+                  <input type="number" min={0} step="0.01" value={otroPrecio} onChange={(e) => setOtroPrecio(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted text-foreground focus:outline-none focus:border-primary" />
+                </div>
+                <div>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">CANTIDAD</label>
+                  <input type="number" min={1} value={otroCantidad} onChange={(e) => setOtroCantidad(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted text-foreground focus:outline-none focus:border-primary" />
+                </div>
+              </div>
+              <p className="text-[11.5px] text-muted-foreground">
+                Úsalo cuando la pieza o el servicio no esté guardado en tu catálogo — no se agrega a Catálogo ni afecta tu inventario, solo se cotiza en esta reparación.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setOtroAbierto(false)}
+                  className="flex-1 px-3 py-2 rounded-lg text-xs border border-border text-muted-foreground hover:bg-muted">
+                  Cancelar
+                </button>
+                <button type="button" onClick={agregarPiezaPersonalizada}
+                  className="flex-1 px-3 py-2 rounded-lg text-xs bg-primary text-primary-foreground hover:opacity-90 font-medium">
+                  Agregar
+                </button>
+              </div>
             </div>
           </div>
         </div>

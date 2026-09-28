@@ -2,9 +2,55 @@
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { RepairStatus, Priority } from "@prisma/client";
+import { RepairStatus, Priority, ProductType } from "@prisma/client";
 import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
 import { PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
+
+/**
+ * "Otro" — pieza o servicio personalizado, para cuando no está guardado en
+ * el catálogo (2026-09-28, a petición explícita de Carlos, probando el
+ * flujo de Recepción/Aduana: "falta agregar un campo personalizado para
+ * cuando la pieza o servicio no se encuentre guardado... Campo (Otro) abre
+ * cuadro de diálogo para poner nombre y precio").
+ *
+ * En vez de agregar un campo nuevo a RepairItem (ej. "customName"/
+ * "customPrice" en paralelo a productId), se crea un Product REAL pero
+ * archivado desde el momento de su creación — mismo campo
+ * Product.archivedAt que ya existe para "descontinuar" productos viejos
+ * (ver el comentario largo junto a ese campo, schema.prisma), solo que
+ * aquí se usa desde el principio en vez de después. Esto evita tocar
+ * ningún otro punto del sistema (impresión de ticket, historial de la
+ * reparación, cualquier reporte futuro que lea RepairItem→Product): para
+ * todos ellos es un producto real con nombre/precio reales, ninguno
+ * necesita un caso especial para "sin producto". Queda oculto de
+ * Catálogo/POS/Inventario y de este mismo selector de piezas (archivedAt
+ * != null + isActive:false ya los filtra a todos) — nadie vuelve a verlo
+ * ni a poder reutilizarlo por accidente, es de un solo uso.
+ *
+ * type: SERVICE (no PRODUCT/PART) porque es lo más parecido a "un cargo
+ * cotizado a mano" — no implica ni necesita control de stock, igual que
+ * cualquier otro servicio del catálogo. No se descuenta inventario aquí de
+ * cualquier forma (ver el comentario largo junto a
+ * agregarPiezaReparacionAction, más abajo).
+ */
+async function crearProductoPersonalizado(
+  db: ReturnType<typeof getTenantPrisma>,
+  tenantId: string,
+  nombre: string,
+  precio: number,
+) {
+  return db.product.create({
+    data: {
+      tenantId,
+      name: nombre.trim().slice(0, 120),
+      price: precio,
+      type: ProductType.SERVICE,
+      isActive: false,
+      archivedAt: new Date(),
+    },
+    select: { id: true },
+  });
+}
 
 /**
  * Server Actions del módulo Reparaciones (M9). Mismo criterio que
@@ -61,9 +107,13 @@ export interface CrearReparacionParams {
   // medio — el catálogo de productos ya distingue PRODUCT/PART/SERVICE) y el
   // costo estimado de la reparación se calcula SIEMPRE como la suma de estas
   // líneas (ver más abajo) — nunca un número aparte que alguien capture a
-  // mano. Solo se manda productId+quantity — el precio SIEMPRE se toma del
-  // catálogo aquí en el servidor, nunca de lo que mande el cliente.
-  piezas: { productId: string; quantity: number }[];
+  // mano. Para una pieza del catálogo solo se manda productId+quantity — el
+  // precio SIEMPRE se toma del catálogo aquí en el servidor, nunca de lo
+  // que mande el cliente. La otra forma (nombre+precio, sin productId) es
+  // "Otro" (2026-09-28, ver crearProductoPersonalizado arriba) — aquí SÍ se
+  // confía en el precio que manda el cliente porque no existe ningún
+  // catálogo contra qué validarlo, es lo que la recepción cotizó a mano.
+  piezas: ({ productId: string; quantity: number } | { nombre: string; precio: number; quantity: number })[];
 }
 
 export type CrearReparacionResult =
@@ -85,13 +135,14 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
     fechaEstimadaDate = parsed;
   }
 
-  const piezasLimpias = (piezas ?? [])
-    .filter((p) => p.productId && Number.isFinite(p.quantity) && p.quantity > 0)
-    .map((p) => ({ productId: p.productId, quantity: Math.floor(p.quantity) }));
+  // Limpieza de forma únicamente (cantidad válida) — todavía sin separar
+  // catálogo vs. "Otro", eso pasa más abajo una vez que ya hay tenant.id
+  // (crearProductoPersonalizado lo necesita).
+  const piezasCrudas = (piezas ?? []).filter((p) => Number.isFinite(p.quantity) && p.quantity > 0);
 
   // 2026-09-24, a petición de Carlos: "una reparación no puede ingresar sin
   // costo estipulado" — ver el comentario largo en CrearReparacionParams.piezas.
-  if (piezasLimpias.length === 0) {
+  if (piezasCrudas.length === 0) {
     return { ok: false, error: "Agrega al menos una pieza del catálogo o un servicio cotizado (ej. diagnóstico/mano de obra) — una reparación no puede ingresar sin un costo estipulado" };
   }
 
@@ -115,9 +166,30 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
     const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true, code: true } });
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
 
+    // "Otro" (ver crearProductoPersonalizado, arriba del todo del archivo):
+    // cada entrada sin productId se convierte, aquí mismo, en un producto
+    // real archivado — de ahí en adelante se trata EXACTAMENTE igual que
+    // cualquier pieza de catálogo (mismo Map de precios, mismo
+    // RepairItem.create), sin ningún caso especial más abajo.
+    const piezasLimpias: { productId: string; quantity: number }[] = [];
+    for (const p of piezasCrudas) {
+      if ("productId" in p && p.productId) {
+        piezasLimpias.push({ productId: p.productId, quantity: Math.floor(p.quantity) });
+      } else if ("nombre" in p && p.nombre?.trim() && Number.isFinite(p.precio) && p.precio > 0) {
+        const nuevo = await crearProductoPersonalizado(db, tenant.id, p.nombre, p.precio);
+        piezasLimpias.push({ productId: nuevo.id, quantity: Math.floor(p.quantity) });
+      }
+    }
+    if (piezasLimpias.length === 0) {
+      return { ok: false, error: "Agrega al menos una pieza del catálogo o un servicio cotizado (ej. diagnóstico/mano de obra) — una reparación no puede ingresar sin un costo estipulado" };
+    }
+
     // Precio de cada pieza SIEMPRE tomado del catálogo en este momento
     // (nunca de lo que mande el cliente) — ver el comentario en
-    // CrearReparacionParams.piezas.
+    // CrearReparacionParams.piezas. Para las "Otro" recién creadas arriba
+    // esto solo relee el precio que se acaba de guardar (no hay forma de
+    // que no coincida), pero así el resto de la función no necesita
+    // ninguna rama especial.
     let preciosPiezas = new Map<string, number>();
     if (piezasLimpias.length > 0) {
       const productosDb = await db.product.findMany({
@@ -345,13 +417,16 @@ export async function asignarTecnicoAction(params: {
  */
 export type AccionPiezaResult = { ok: true } | { ok: false; error: string };
 
-export async function agregarPiezaReparacionAction(params: {
-  tenantSlug: string;
-  repairId: string;
-  productId: string;
-  quantity: number;
-}): Promise<AccionPiezaResult> {
-  const { tenantSlug, repairId, productId, quantity } = params;
+export async function agregarPiezaReparacionAction(
+  params:
+    | { tenantSlug: string; repairId: string; productId: string; quantity: number }
+    // "Otro" (2026-09-28, ver crearProductoPersonalizado más arriba) —
+    // mismo criterio que crearReparacionAction: sin productId, se manda
+    // nombre/precio libres y aquí SÍ se confía en el precio (no hay
+    // catálogo contra qué validarlo).
+    | { tenantSlug: string; repairId: string; nombre: string; precio: number; quantity: number }
+): Promise<AccionPiezaResult> {
+  const { tenantSlug, repairId, quantity } = params;
   const cantidad = Math.floor(quantity);
   if (!Number.isFinite(cantidad) || cantidad <= 0) return { ok: false, error: "Cantidad no válida" };
 
@@ -372,7 +447,23 @@ export async function agregarPiezaReparacionAction(params: {
     // no tiene sentido acotar por la sucursal propia del empleado de Aduana
     // (ver el mismo criterio en avanzarEstadoAction/actualizarCostoEstimadoAction).
 
-    const producto = await db.product.findUnique({ where: { id: productId }, select: { id: true, price: true } });
+    let productId: string;
+    if ("productId" in params) {
+      const existe = await db.product.findUnique({ where: { id: params.productId }, select: { id: true } });
+      if (!existe) return { ok: false, error: "Producto no encontrado en el catálogo" };
+      productId = existe.id;
+    } else {
+      const nombre = params.nombre?.trim();
+      if (!nombre) return { ok: false, error: "Escribe un nombre" };
+      if (!Number.isFinite(params.precio) || params.precio <= 0) return { ok: false, error: "Escribe un precio válido" };
+      const nuevo = await crearProductoPersonalizado(db, tenant.id, nombre, params.precio);
+      productId = nuevo.id;
+    }
+
+    // Precio SIEMPRE releído del producto ya guardado (catálogo o el
+    // "Otro" recién creado arriba) — un solo camino para ambos casos, sin
+    // tener que unificar tipos entre el Decimal de Prisma y un number.
+    const producto = await db.product.findUnique({ where: { id: productId }, select: { price: true } });
     if (!producto) return { ok: false, error: "Producto no encontrado en el catálogo" };
 
     await db.repairItem.create({
