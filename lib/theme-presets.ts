@@ -159,6 +159,84 @@ export const WINDOWS_THEMES: Record<WindowsThemeId, WindowsThemeDef> = {
   },
 };
 
+/* ────────────────────────────────────────────────────────────────────
+ * TEMAS ESTILO MATERIAL DESIGN (2026-09-28)
+ *
+ * Carlos encontró un repositorio de Google (material-components-web) que
+ * le pareció más pulido que los temas Windows Phone ("los que pones, se
+ * me hacen un poco toscos"). Ese repo está descontinuado y es JS
+ * imperativo (mdc.textField.MDCTextField.attachTo(...)) — no encaja con
+ * Next.js/React/Tailwind/shadcn sin reescribir cada componente desde
+ * cero. Carlos confirmó (AskUserQuestion) que lo que quiere es el ESTILO
+ * VISUAL de Material Design como temas nuevos, no la librería en sí.
+ *
+ * MATERIAL_THEMES reutiliza EXACTAMENTE el mismo mecanismo que
+ * WINDOWS_THEMES (mismas 3 piezas: backgroundColor = color Primary,
+ * defaultIconColor = color de ícono/texto, tileColors = 5 colores de
+ * ficha de categoría del POS) y la misma construirPresetDesdeDef — cero
+ * código nuevo de derivación de color, cero riesgo de tocar
+ * POSClient.tsx/CatalogoClient.tsx. Los 6 temas son combinaciones reales
+ * "de catálogo" de Material Design 2 (Índigo/Rosa, Teal, Azul, Rojo/Cian,
+ * Púrpura oscuro, y el "Material Dark" oficial con su morado #BB86FC
+ * característico) — Carlos los vio en un mockup interactivo (mismo
+ * cálculo que construirPresetDesdeDef) y confirmó "si, me agradan esos
+ * temas" antes de escribir esto. Se agregan de forma ADITIVA junto a los
+ * 10 temas Windows Phone — ninguno de esos ni "Personalizado" se toca.
+ * ──────────────────────────────────────────────────────────────────── */
+
+export type MaterialThemeId =
+  | "MATERIAL_INDIGO"
+  | "MATERIAL_TEAL"
+  | "MATERIAL_BLUE"
+  | "MATERIAL_RED_CYAN"
+  | "MATERIAL_DEEP_PURPLE_DARK"
+  | "MATERIAL_DARK_THEME";
+
+export const MATERIAL_THEMES: Record<MaterialThemeId, WindowsThemeDef> = {
+  MATERIAL_INDIGO: {
+    name: "Material Índigo",
+    baseStyle: "Light",
+    backgroundColor: "#3F51B5",
+    defaultIconColor: "#FFFFFF",
+    tileColors: ["#FF4081", "#009688", "#FFC107", "#673AB7", "#8BC34A"],
+  },
+  MATERIAL_TEAL: {
+    name: "Material Teal",
+    baseStyle: "Light",
+    backgroundColor: "#009688",
+    defaultIconColor: "#FFFFFF",
+    tileColors: ["#FF5722", "#3F51B5", "#FFC107", "#9C27B0", "#4CAF50"],
+  },
+  MATERIAL_BLUE: {
+    name: "Material Azul",
+    baseStyle: "Light",
+    backgroundColor: "#2196F3",
+    defaultIconColor: "#FFFFFF",
+    tileColors: ["#FF9800", "#8BC34A", "#E91E63", "#009688", "#9C27B0"],
+  },
+  MATERIAL_RED_CYAN: {
+    name: "Material Rojo",
+    baseStyle: "Light",
+    backgroundColor: "#F44336",
+    defaultIconColor: "#FFFFFF",
+    tileColors: ["#00BCD4", "#FFC107", "#4CAF50", "#3F51B5", "#9C27B0"],
+  },
+  MATERIAL_DEEP_PURPLE_DARK: {
+    name: "Material Púrpura",
+    baseStyle: "Dark",
+    backgroundColor: "#673AB7",
+    defaultIconColor: "#FFFFFF",
+    tileColors: ["#00BCD4", "#FF4081", "#FFEB3B", "#4CAF50", "#FF7043"],
+  },
+  MATERIAL_DARK_THEME: {
+    name: "Material Dark",
+    baseStyle: "Dark",
+    backgroundColor: "#BB86FC",
+    defaultIconColor: "#121212",
+    tileColors: ["#03DAC6", "#CF6679", "#FFD54F", "#81D4FA", "#A5D6A7"],
+  },
+};
+
 export const CANTIDAD_CHIPS_CATEGORIA = 5;
 
 // Intensidad: 100 = paleta original de Carlos, 0 = escala de grises, 200 =
@@ -260,6 +338,19 @@ export function construirPresetWindowsPhone(
   intensidadFondo: number = intensidadFicha,
 ): Record<string, string> {
   return construirPresetDesdeDef(WINDOWS_THEMES[id], intensidadFicha, intensidadFondo);
+}
+
+// Misma derivación que construirPresetWindowsPhone, pero para uno de los 6
+// temas nuevos de MATERIAL_THEMES (ver el comentario largo arriba de esa
+// constante) — función separada (en vez de aceptar cualquier id en la
+// misma función) para que quede explícito en cada punto de llamada de qué
+// galería viene el tema, aunque ambas terminen en construirPresetDesdeDef.
+export function construirPresetMaterial(
+  id: MaterialThemeId,
+  intensidadFicha: number = INTENSIDAD_DEFAULT,
+  intensidadFondo: number = intensidadFicha,
+): Record<string, string> {
+  return construirPresetDesdeDef(MATERIAL_THEMES[id], intensidadFicha, intensidadFondo);
 }
 
 // 2026-09-24, a petición de Carlos: forma que necesita un tema "Personalizado"
@@ -602,7 +693,7 @@ export const THEME_PRESETS = {
 } as const;
 
 export type LegacyThemePresetId = keyof typeof THEME_PRESETS;
-export type ThemePresetId = WindowsThemeId | LegacyThemePresetId | typeof TEMA_PERSONALIZADO_ID;
+export type ThemePresetId = WindowsThemeId | MaterialThemeId | LegacyThemePresetId | typeof TEMA_PERSONALIZADO_ID;
 
 /**
  * Punto de entrada ÚNICO para resolver el tema real de un tenant — lo usa
@@ -639,6 +730,9 @@ export function resolverPresetTenant(
   }
   if (themePreset in WINDOWS_THEMES) {
     return construirPresetWindowsPhone(themePreset as WindowsThemeId, intensidadFicha, intensidadFondo);
+  }
+  if (themePreset in MATERIAL_THEMES) {
+    return construirPresetMaterial(themePreset as MaterialThemeId, intensidadFicha, intensidadFondo);
   }
   if (themePreset in THEME_PRESETS) {
     return { ...THEME_PRESETS[themePreset as LegacyThemePresetId] };

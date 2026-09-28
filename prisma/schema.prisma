@@ -238,6 +238,17 @@ enum ThemePreset {
   DEEP_PLUM
   CRIMSON_START
 
+  // Temas estilo Material Design (2026-09-28, a petición de Carlos: los
+  // temas Windows Phone "se me hacen un poco toscos" — ver el comentario
+  // largo junto a MATERIAL_THEMES en lib/theme-presets.ts). Agregados de
+  // forma aditiva junto a los de arriba, ninguno se toca ni se renombra.
+  MATERIAL_INDIGO
+  MATERIAL_TEAL
+  MATERIAL_BLUE
+  MATERIAL_RED_CYAN
+  MATERIAL_DEEP_PURPLE_DARK
+  MATERIAL_DARK_THEME
+
   // "Personalizado" (2026-09-24, a petición de Carlos): en vez de una
   // paleta fija de WINDOWS_THEMES, el negocio elige sus propios 7 colores
   // (fondo, ícono/texto, 5 fichas), guardados en Tenant.themeCustomColors —

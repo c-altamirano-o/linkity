@@ -11,7 +11,7 @@ import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/client";
 import type { FormatoTicket } from "@/lib/recibo-imprimible";
 import {
-  WINDOWS_THEMES, resolverPresetTenant, TENANT_THEME_ROOT_ID,
+  WINDOWS_THEMES, MATERIAL_THEMES, resolverPresetTenant, TENANT_THEME_ROOT_ID,
   INTENSIDAD_DEFAULT, INTENSIDAD_MIN, INTENSIDAD_MAX,
   TEMA_PERSONALIZADO_ID, COLORES_PERSONALIZADOS_DEFAULT, parseColoresPersonalizados,
   type ColoresPersonalizados,
@@ -56,6 +56,16 @@ function aplicarTemaEnVivo(themeId: string, intensidadFicha: number, intensidadF
 // backgroundColor (el color de fondo de toda la ventana del POS), que es lo
 // que más distingue un tema de otro a simple vista.
 const THEMES = Object.entries(WINDOWS_THEMES).map(([id, tema]) => ({
+  id,
+  name: tema.name,
+  swatch: tema.backgroundColor,
+}));
+
+// Los 6 temas estilo Material Design (2026-09-28, a petición de Carlos —
+// ver el comentario largo junto a MATERIAL_THEMES en lib/theme-presets.ts)
+// — misma tarjeta/swatch que los Windows Phone, en una galería aparte para
+// que se note que es un estilo distinto.
+const THEMES_MATERIAL = Object.entries(MATERIAL_THEMES).map(([id, tema]) => ({
   id,
   name: tema.name,
   swatch: tema.backgroundColor,
@@ -625,6 +635,34 @@ export default function ConfiguracionClient({
               </div>
               <span className="text-xs font-medium text-foreground">Personalizado</span>
             </button>
+          </div>
+
+          {/* Temas estilo Material Design (2026-09-28, a petición de Carlos:
+              los temas Windows Phone de arriba "se me hacen un poco toscos"
+              — ver el comentario largo junto a MATERIAL_THEMES en
+              lib/theme-presets.ts). Galería aparte, mismo tipo de tarjeta,
+              para que se note que es un estilo distinto de los de arriba. */}
+          <div className="mt-6 pt-5 border-t border-border">
+            <p className="text-sm text-muted-foreground mb-4">O, si prefieres un estilo Material Design:</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+              {THEMES_MATERIAL.map((theme) => (
+                <button
+                  key={theme.id}
+                  onClick={() => seleccionarTema(theme.id)}
+                  className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                    temaSeleccionado === theme.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
+                  }`}
+                >
+                  <div
+                    className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
+                    style={{ backgroundColor: theme.swatch }}
+                  >
+                    {temaSeleccionado === theme.id && <Check className="w-5 h-5 text-white drop-shadow" />}
+                  </div>
+                  <span className="text-xs font-medium text-foreground">{theme.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Selector de colores del tema "Personalizado" — solo se muestra
