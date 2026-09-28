@@ -50,8 +50,17 @@ const alertaEstilo: Record<string, { color: string; bg: string; icon: React.Elem
   repair_stale: { color: "text-red-600",   bg: "bg-red-50 border-red-200",     icon: Clock },
 };
 
+// 2026-09-28: "var(--primary)" nunca aquí (bug real, tema "Monochrome
+// Metro" — texto/gráficas invisibles). Mismo criterio que
+// CATEGORY_FALLBACK_COLORS en lib/dashboard-data.ts: "--primary" es el
+// color de ventana/ficha del POS (fondoVentana), pensado como relleno de
+// SU PROPIA ficha junto con "--primary-foreground", no para pintarse
+// directo sobre una superficie neutra — en un tema oscuro con fondo casi
+// negro queda casi idéntico al fondo/card de la app. "--primary-text" es
+// el token ya pensado para esto (siempre legible sobre superficie
+// neutra, sin importar qué tan oscuro/claro sea el tema activo).
 const coloresDisponibles = [
-  "var(--primary)", "#06B6D4", "#10B981", "#F59E0B",
+  "var(--primary-text)", "#06B6D4", "#10B981", "#F59E0B",
   "#EF4444", "#8B5CF6", "#EC4899", "#F97316",
   "#14B8A6", "#84CC16", "#2563EB", "#DC2626",
 ];
@@ -761,7 +770,8 @@ export default function DashboardClient({
                 </p>
               </div>
               <div className="flex items-center gap-2 sm:gap-4">
-                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Ventas</span></div>
+                {/* bg-primary-text, no bg-primary: mismo motivo que coloresDisponibles arriba — este punto debe matchear el color real de la línea "ventas" de la gráfica (ver "cV"/<Area dataKey="ventas">), que también se cambió a --primary-text. */}
+                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary-text" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Ventas</span></div>
                 {data.reparacionesActiva && (
                   <>
                     <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#06B6D4]" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Rep.</span></div>
@@ -773,9 +783,10 @@ export default function DashboardClient({
             <ResponsiveContainer width="100%" height={140}>
               <AreaChart data={data.ventasSemana} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
                 <defs>
+                  {/* var(--primary-text), no var(--primary) — mismo motivo que coloresDisponibles: en un tema oscuro de fondo casi negro (Monochrome Metro) "--primary" se pierde contra el fondo/card. */}
                   <linearGradient id="cV" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+                    <stop offset="5%" stopColor="var(--primary-text)" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="var(--primary-text)" stopOpacity={0} />
                   </linearGradient>
                   {data.reparacionesActiva && (
                     <>
@@ -794,7 +805,7 @@ export default function DashboardClient({
                 <XAxis dataKey="dia" tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} width={36} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="ventas" stroke="var(--primary)" strokeWidth={2} fill="url(#cV)" />
+                <Area type="monotone" dataKey="ventas" stroke="var(--primary-text)" strokeWidth={2} fill="url(#cV)" />
                 {data.reparacionesActiva && (
                   <>
                     <Area type="monotone" dataKey="reparaciones" stroke="#06B6D4" strokeWidth={2} fill="url(#cR)" />
@@ -893,8 +904,8 @@ export default function DashboardClient({
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
               <XAxis dataKey="horaLabel" tick={{ fontSize: 8, fill: "#94A3B8" }} axisLine={false} tickLine={false} interval={2} />
               <YAxis tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} width={22} allowDecimals={false} />
-              <Tooltip content={<CustomTooltipHora />} cursor={{ fill: "var(--primary)", fillOpacity: 0.06 }} />
-              <Bar dataKey="numVentas" fill="var(--primary)" radius={[4, 4, 0, 0]} maxBarSize={18} />
+              <Tooltip content={<CustomTooltipHora />} cursor={{ fill: "var(--primary-text)", fillOpacity: 0.06 }} />
+              <Bar dataKey="numVentas" fill="var(--primary-text)" radius={[4, 4, 0, 0]} maxBarSize={18} />
             </BarChart>
           </ResponsiveContainer>
         )}

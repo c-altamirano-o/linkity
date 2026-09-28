@@ -493,8 +493,22 @@ const CLOSED_STATUSES: RepairStatus[] = ["DELIVERED", "CANCELLED"];
 // comentario junto al Promise.all de getDashboardData).
 const REPARACIONES_INACTIVA_ID = "__reparaciones_modulo_inactivo__";
 
+// 2026-09-28: "var(--primary)" NUNCA debe ir aquí (bug real reportado por
+// Carlos con capturas del tema "Monochrome Metro" — texto y gráficas
+// invisibles). "--primary" es literalmente fondoVentana, el color de
+// ventana/ficha del POS que el negocio eligió (ver el comentario largo en
+// lib/theme-presets.ts junto a "--primary-text") — pensado SOLO como
+// relleno sólido de su propia ficha, emparejado con "--primary-foreground"
+// encima. Si el tema activo es oscuro con fondo casi negro (como
+// Monochrome Metro, #1A1A1A), fondoVentana y el fondo/card de toda la app
+// terminan casi idénticos — cualquier color/texto pintado directo con
+// "var(--primary)" sobre una superficie neutra (una gráfica, un punto de
+// leyenda) se vuelve invisible. "--primary-text" es el token que YA existe
+// para esto exactamente (mismo matiz, luminosidad/saturación fijas
+// pensadas para leerse siempre bien sobre una superficie neutra, sin
+// importar qué tan oscuro/claro sea el tema) — se usa aquí en su lugar.
 const CATEGORY_FALLBACK_COLORS = [
-  "var(--primary)", "#06B6D4", "#10B981", "#F59E0B",
+  "var(--primary-text)", "#06B6D4", "#10B981", "#F59E0B",
   "#EF4444", "#8B5CF6", "#EC4899", "#F97316",
 ];
 

@@ -119,7 +119,13 @@ const periodos = ["Hoy", "Semana", "Mes", "Año", "Personalizado"];
 // Paleta para las barras de "Top ventas": el primer lugar usa el color de
 // marca del tema activo, el resto son acentos fijos solo para distinguir
 // productos entre sí (no representan ningún estatus).
-const RANKING_COLORS = ["var(--primary)", "#06B6D4", "#8B5CF6", "#10B981", "#F59E0B"];
+// 2026-09-28: "var(--primary-text)", no "var(--primary)" — mismo bug real
+// que en coloresDisponibles/CATEGORY_FALLBACK_COLORS del Dashboard (tema
+// "Monochrome Metro": la barra del #1 lugar se volvía invisible). "--primary"
+// es el color de ficha del POS (fondoVentana), pensado para rellenar SU
+// PROPIA ficha junto con "--primary-foreground" encima, no para pintarse
+// directo sobre el fondo/card de una gráfica.
+const RANKING_COLORS = ["var(--primary-text)", "#06B6D4", "#8B5CF6", "#10B981", "#F59E0B"];
 
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
