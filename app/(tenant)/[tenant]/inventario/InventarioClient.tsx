@@ -418,8 +418,8 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                   <tr key={p.id} className={`border-b border-border hover:bg-muted transition-colors ${rowBg}`}>
                     <td className="px-3 sm:px-4 py-2.5">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 bg-muted rounded-lg flex items-center justify-center text-sm flex-shrink-0">
-                          <ProductoIcono value={p.emoji} className="w-4 h-4 text-primary-text" />
+                        <div className="relative w-7 h-7 bg-muted rounded-lg flex items-center justify-center text-sm flex-shrink-0">
+                          <ProductoIcono value={p.emoji} imageUrl={p.image} className="w-4 h-4 text-primary-text" imageClassName="absolute inset-0 w-full h-full object-cover rounded-lg" />
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-foreground truncate max-w-[140px]">{p.name}</p>

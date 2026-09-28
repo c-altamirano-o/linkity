@@ -25,6 +25,10 @@ export interface ProductoCatalogo {
   name: string;
   sku: string | null;
   emoji: string;
+  // Foto propia del producto (Product.image) — null si nunca subió una,
+  // en cuyo caso se sigue mostrando `emoji`. Ver el comentario largo en
+  // Product.image (schema.prisma).
+  image: string | null;
   categoryId: string | null;
   categoryName: string;
   type: TipoCatalogo;
@@ -156,6 +160,7 @@ export async function getCatalogoData(
       name: p.name,
       sku: p.sku,
       emoji: p.emoji ?? TYPE_FALLBACK_EMOJI[type],
+      image: p.image,
       categoryId: p.categoryId,
       categoryName: p.category?.name ?? "Sin categoría",
       type,

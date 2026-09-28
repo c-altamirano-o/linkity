@@ -202,11 +202,29 @@ export const ICONOS: Record<string, Icon> = {
 
 export function ProductoIcono({
   value,
+  imageUrl,
   className,
+  imageClassName,
 }: {
   value?: string | null;
+  // Foto propia del producto (2026-09-28, Product.image) — cuando existe,
+  // tiene prioridad visual sobre el ícono/emoji. `imageClassName` posiciona
+  // la imagen dentro de su contenedor (el llamador decide, porque cada
+  // ficha — POS/Catálogo/Inventario — tiene su propio tamaño y radio de
+  // esquina); a propósito NO se envuelve en un contenedor con
+  // overflow-hidden propio: POS ya tuvo un bug real de rasterizado en Chrome
+  // por combinar overflow-hidden + esquinas redondeadas en cientos de fichas
+  // a la vez (ver el historial largo en POSClient.tsx) — el radio se aplica
+  // directo sobre el <img>, igual que se corrigió ahí.
+  imageUrl?: string | null;
   className?: string;
+  imageClassName?: string;
 }) {
+  if (imageUrl) {
+    // eslint-disable-next-line @next/next/no-img-element -- foto subida por
+    // el negocio a Supabase Storage, dominio/tamaño no se conocen de antemano
+    return <img src={imageUrl} alt="" className={imageClassName ?? "absolute inset-0 w-full h-full object-cover"} />;
+  }
   if (value?.startsWith(ICON_PREFIX)) {
     const Icono = ICONOS[value.slice(ICON_PREFIX.length)];
     if (Icono) return <Icono className={className} weight="regular" />;

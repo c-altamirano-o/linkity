@@ -992,9 +992,14 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                       {cantidadEnCarrito}
                     </span>
                   )}
-                  <div className="w-20 sm:w-24 flex-shrink-0 rounded-l-xl flex items-center justify-center"
+                  <div className="relative w-20 sm:w-24 flex-shrink-0 rounded-l-xl flex items-center justify-center"
                     style={{ backgroundColor: fichaBg, color: "var(--tile-fg)" }}>
-                    <ProductoIcono value={producto.emoji} className="w-7 h-7 sm:w-8 sm:h-8" />
+                    {/* imageClassName trae su propio rounded-l-xl (no
+                        overflow-hidden en el contenedor) — mismo criterio que
+                        ya se usó para arreglar el bug real de rasterizado de
+                        Chrome con cientos de fichas a la vez en esta pestaña,
+                        ver el historial largo más arriba en este archivo. */}
+                    <ProductoIcono value={producto.emoji} imageUrl={producto.image} className="w-7 h-7 sm:w-8 sm:h-8" imageClassName="absolute inset-0 w-full h-full object-cover rounded-l-xl" />
                   </div>
                   <div className="flex-1 min-w-0 p-2 sm:p-2.5 flex flex-col justify-center gap-0.5">
                     <p className="text-xs font-medium text-foreground leading-tight line-clamp-2">{producto.name}</p>

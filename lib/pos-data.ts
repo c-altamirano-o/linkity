@@ -25,6 +25,10 @@ export interface ProductoPOS {
   id: string;
   name: string;
   emoji: string;
+  // Ver el comentario largo en Product.image (schema.prisma) y en
+  // ProductoCatalogo.image (lib/catalogo-data.ts) — mismo campo, misma
+  // prioridad visual sobre `emoji` en <ProductoIcono>.
+  image: string | null;
   categoryId: string | null;
   categoryName: string;
   type: TipoPOS;
@@ -115,6 +119,7 @@ export async function getPosData(
       id: p.id,
       name: p.name,
       emoji: p.emoji ?? TYPE_FALLBACK_EMOJI[type],
+      image: p.image,
       categoryId: p.categoryId,
       categoryName: p.category?.name ?? "Sin categoría",
       type,

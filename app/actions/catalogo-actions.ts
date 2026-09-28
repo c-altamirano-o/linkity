@@ -89,6 +89,12 @@ export interface DatosProducto {
   type: TipoProductoInput;
   categoryId?: string | null;
   emoji?: string | null;
+  // Foto propia (Product.image) — ya viene subida a Supabase Storage antes
+  // de llegar aquí (ver producto-imagen-actions.ts); esta acción solo
+  // persiste la URL, igual que ya hace con `emoji`. `undefined` = no se
+  // tocó el campo (edición sin cambiar la foto); `null` = se quitó a
+  // propósito (botón "Quitar foto").
+  image?: string | null;
 }
 
 function validarDatosProducto(datos: DatosProducto): string | null {
@@ -133,6 +139,7 @@ export async function crearProductoAction(
         type: datos.type,
         categoryId: datos.categoryId || null,
         emoji: datos.emoji?.trim() || null,
+        image: datos.image ?? null,
       },
     });
 
@@ -198,6 +205,7 @@ export async function editarProductoAction(
         type: datos.type,
         categoryId: datos.categoryId || null,
         emoji: datos.emoji?.trim() || null,
+        image: datos.image ?? null,
         isActive,
       },
     });

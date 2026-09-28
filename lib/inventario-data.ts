@@ -29,6 +29,8 @@ export interface ProductoInventario {
   name: string;
   sku: string | null;
   emoji: string;
+  // Ver el comentario largo en Product.image (schema.prisma).
+  image: string | null;
   categoryName: string;
   type: TipoInventario;
   price: number;
@@ -99,6 +101,7 @@ export async function getInventarioData(
       name: p.name,
       sku: p.sku,
       emoji: p.emoji ?? TYPE_FALLBACK_EMOJI[type],
+      image: p.image,
       categoryName: p.category?.name ?? "Sin categoría",
       type,
       price: Number(p.price),

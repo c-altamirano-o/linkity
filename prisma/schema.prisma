@@ -673,6 +673,15 @@ model Product {
   cost        Decimal?    @db.Decimal(10, 2)
   taxRate     Decimal     @default(16) @db.Decimal(5, 2)
   emoji       String?
+  // Foto propia del producto (2026-09-28, a petición de Carlos) — guardada
+  // en Supabase Storage (bucket "product-images"), no en la base de datos,
+  // mismo patrón ya probado con Tenant.logo (ver el comentario largo en
+  // app/actions/producto-imagen-actions.ts). Cuando existe, tiene prioridad
+  // visual sobre `emoji` en <ProductoIcono> (lib/catalogo-iconos.tsx) — el
+  // ícono/emoji nunca se borra al subir una foto, así que si el usuario
+  // quita la foto después el producto regresa a su ícono de siempre sin
+  // tener que volver a elegirlo.
+  image       String?
   metadata    Json?
   isActive    Boolean     @default(true)
   // 2026-09-26, a petición de Carlos ("existe una mejor manera" que dejar

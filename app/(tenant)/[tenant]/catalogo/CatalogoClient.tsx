@@ -6,7 +6,7 @@ import {
   Search, Plus, SlidersHorizontal, Smartphone, Cpu,
   Wrench, TrendingUp, Building2, Calendar, Menu, X,
   Sparkles, Upload, Download, Loader2, CheckCircle2, AlertTriangle, Wand2,
-  Archive,
+  Archive, ImagePlus,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import type { CatalogoData, TipoCatalogo, ProductoCatalogo } from "@/lib/catalogo-data";
@@ -20,6 +20,7 @@ import {
   archivarProductoAction, restaurarProductoAction, eliminarProductoAction,
   type TipoProductoInput, type FilaImportacion,
 } from "@/app/actions/catalogo-actions";
+import { subirFotoProductoAction } from "@/app/actions/producto-imagen-actions";
 
 interface BranchOption {
   id: string;
@@ -51,6 +52,11 @@ interface FormProducto {
   type: TipoProductoInput;
   categoryId: string;
   emoji: string;
+  // Foto propia del producto (Product.image) — ya subida a Supabase Storage
+  // por subirFotoProductoAction al elegir el archivo (ver "foto" en
+  // modoIcono más abajo); aquí solo se guarda la URL resultante, mismo
+  // criterio que `emoji`. null = sin foto (usa el ícono/emoji de siempre).
+  image: string | null;
   isActive: boolean;
   // Solo se usa al CREAR (no al editar — editar nunca ha tocado Inventory,
   // ver nota en catalogo-actions.ts). "1" por default para que coincida
@@ -60,7 +66,7 @@ interface FormProducto {
 }
 
 const FORM_VACIO: FormProducto = {
-  name: "", sku: "", price: "", cost: "", type: "PRODUCT", categoryId: "", emoji: "", isActive: true, stock: "1",
+  name: "", sku: "", price: "", cost: "", type: "PRODUCT", categoryId: "", emoji: "", image: null, isActive: true, stock: "1",
 };
 
 const TIPO_LABELS: Record<TipoCatalogo, string> = {
@@ -428,17 +434,36 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   const [errorAccionProducto, setErrorAccionProducto] = useState<string | null>(null);
 
   // Selector de ícono del modal: "icono" muestra la galería de ICONOS
-  // (misma paleta vectorial que ya usa el catálogo de arranque),  "emoji"
+  // (misma paleta vectorial que ya usa el catálogo de arranque), "emoji"
   // muestra el campo de texto libre de siempre para quien prefiera escribir
-  // un emoji real que no esté en la galería. form.emoji guarda el valor
-  // final en ambos casos (con prefijo ICON_PREFIX si viene de la galería,
-  // o el texto tal cual si es un emoji escrito a mano) — un solo campo,
-  // sin necesidad de reconciliar dos fuentes al guardar.
-  const [modoIcono, setModoIcono] = useState<"icono" | "emoji">("icono");
+  // un emoji real que no esté en la galería, y "foto" (2026-09-28, a
+  // petición de Carlos) sube una foto real del producto. form.emoji guarda
+  // el ícono/emoji en los dos primeros modos; form.image guarda la URL de
+  // la foto en el tercero — son campos independientes a propósito: cambiar
+  // de modo NUNCA borra lo que el usuario ya tenía en el otro (si sube una
+  // foto y luego la quita, el producto regresa al ícono que ya tenía sin
+  // que se le haya perdido).
+  const [modoIcono, setModoIcono] = useState<"icono" | "emoji" | "foto">("icono");
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [errorFoto, setErrorFoto] = useState<string | null>(null);
 
-  function alternarModoIcono() {
-    setModoIcono((m) => (m === "icono" ? "emoji" : "icono"));
+  function alternarModoIcono(modo: "icono" | "emoji" | "foto") {
+    setModoIcono(modo);
     setForm((f) => ({ ...f, emoji: "" }));
+  }
+
+  async function subirFoto(archivo: File) {
+    setErrorFoto(null);
+    setSubiendoFoto(true);
+    const fd = new FormData();
+    fd.set("foto", archivo);
+    const res = await subirFotoProductoAction(tenantSlug, fd);
+    setSubiendoFoto(false);
+    if (!res.ok) {
+      setErrorFoto(res.error);
+      return;
+    }
+    setForm((f) => ({ ...f, image: res.url }));
   }
 
   function abrirNuevo() {
@@ -446,6 +471,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
     setForm({ ...FORM_VACIO, type: tipoActivo });
     setModoIcono("icono");
     setErrorModal(null);
+    setErrorFoto(null);
     setNuevaCategoria(false);
     setNombreNuevaCategoria("");
     setConfirmarAccionProducto(null);
@@ -464,6 +490,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       type: p.type,
       categoryId: p.categoryId ?? "",
       emoji: p.emoji ?? "",
+      image: p.image,
       // 2026-09-26: antes siempre arrancaba en `true` sin importar el
       // estado real del producto (bug — nunca había un campo isActive en
       // ProductoCatalogo del que leer). Con el campo ya disponible, esto
@@ -472,11 +499,12 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       isActive: p.isActive,
       stock: "1", // no se usa al editar, ver comentario en FormProducto
     });
-    // Si ya trae un ícono de la galería, o si no tiene nada todavía,
-    // arranca en modo galería; solo entra directo a modo texto si ya
-    // tenía un emoji escrito a mano.
-    setModoIcono(esIconoDeSistema || !p.emoji ? "icono" : "emoji");
+    // Si ya tiene foto, arranca mostrándola; si no, mismo criterio de
+    // siempre (galería si trae un ícono de sistema o nada, texto libre si
+    // ya tenía un emoji escrito a mano).
+    setModoIcono(p.image ? "foto" : esIconoDeSistema || !p.emoji ? "icono" : "emoji");
     setErrorModal(null);
+    setErrorFoto(null);
     setNuevaCategoria(false);
     setNombreNuevaCategoria("");
     setConfirmarAccionProducto(null);
@@ -535,6 +563,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
         type: form.type,
         categoryId: categoryId || null,
         emoji: form.emoji.trim() || null,
+        image: form.image,
       };
 
       const res = editando
@@ -865,7 +894,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                     className={`bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer flex ${p.archivedAt ? "opacity-60" : ""}`}>
                     <div className="relative w-20 sm:w-24 flex-shrink-0 flex items-center justify-center"
                       style={{ backgroundColor: fichaBg, color: "var(--tile-fg)" }}>
-                      <ProductoIcono value={p.emoji} className="w-7 h-7 sm:w-8 sm:h-8" />
+                      <ProductoIcono value={p.emoji} imageUrl={p.image} className="w-7 h-7 sm:w-8 sm:h-8" />
                       {p.archivedAt && (
                         <span className="absolute bottom-0.5 left-0.5 right-0.5 text-center text-[8px] font-semibold uppercase tracking-wide bg-foreground/70 text-background rounded px-0.5 py-px">
                           Archivado
@@ -1064,19 +1093,78 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 <div className="flex items-center justify-between">
                   <label className="text-[12.5px] font-medium text-muted-foreground flex items-center gap-1.5">
                     Ícono
-                    <span className="w-5 h-5 rounded-md bg-muted border border-border flex items-center justify-center text-muted-foreground">
-                      <ProductoIcono value={form.emoji || null} className="w-3 h-3" />
+                    <span className="relative w-5 h-5 rounded-md bg-muted border border-border flex items-center justify-center text-muted-foreground overflow-hidden">
+                      <ProductoIcono value={form.emoji || null} imageUrl={form.image} className="w-3 h-3" imageClassName="absolute inset-0 w-full h-full object-cover" />
                     </span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={alternarModoIcono}
-                    className="text-[11.5px] text-primary-text font-medium hover:underline"
-                  >
-                    {modoIcono === "icono" ? "Escribir mi propio emoji" : "Elegir de la galería"}
-                  </button>
+                  {/* 2026-09-28: el toggle de un solo link (alternaba entre 2
+                      modos) se volvió selector de 3 pestañas al agregar
+                      "Foto" — cada botón cambia de modo directo, sin ciclo. */}
+                  <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+                    {([
+                      ["icono", "Galería"],
+                      ["emoji", "Emoji"],
+                      ["foto", "Foto"],
+                    ] as const).map(([modo, etiqueta]) => (
+                      <button
+                        key={modo}
+                        type="button"
+                        onClick={() => alternarModoIcono(modo)}
+                        className={`text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
+                          modoIcono === modo
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {etiqueta}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                {modoIcono === "icono" ? (
+                {modoIcono === "foto" ? (
+                  <div className="mt-1 border border-border rounded-lg bg-muted p-3 flex items-center gap-3">
+                    {form.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- preview de una foto recién subida por el negocio, dominio/tamaño no se conocen de antemano
+                      <img
+                        src={form.image}
+                        alt=""
+                        className="w-14 h-14 rounded-lg object-cover border border-border flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-lg bg-card border border-dashed border-border flex items-center justify-center text-muted-foreground flex-shrink-0">
+                        <ImagePlus className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <label className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-primary-text hover:underline cursor-pointer">
+                        {subiendoFoto ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                        {subiendoFoto ? "Subiendo..." : form.image ? "Cambiar foto" : "Subir foto"}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="hidden"
+                          disabled={subiendoFoto}
+                          onChange={(e) => {
+                            const archivo = e.target.files?.[0];
+                            e.target.value = "";
+                            if (archivo) subirFoto(archivo);
+                          }}
+                        />
+                      </label>
+                      {form.image && !subiendoFoto && (
+                        <button
+                          type="button"
+                          onClick={() => setForm((f) => ({ ...f, image: null }))}
+                          className="block text-[11.5px] text-muted-foreground hover:text-destructive mt-1"
+                        >
+                          Quitar foto
+                        </button>
+                      )}
+                      <p className="text-[10.5px] text-muted-foreground mt-1">PNG, JPG o WEBP, máx. 4 MB.</p>
+                      {errorFoto && <p className="text-[10.5px] text-destructive mt-1">{errorFoto}</p>}
+                    </div>
+                  </div>
+                ) : modoIcono === "icono" ? (
                   <div className="mt-1 grid grid-cols-8 gap-1 p-2 border border-border rounded-lg bg-muted max-h-32 overflow-y-auto">
                     <button
                       type="button"
