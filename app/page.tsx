@@ -3,7 +3,26 @@ import Link from "next/link";
 import {
   ArrowRight, ShoppingCart, Wrench, GitBranch, FileText, BarChart3, ShieldCheck,
   Smartphone, Car, Bike, Scissors, Stethoscope, PawPrint, Store, Check,
+  ClipboardList, Users, TrendingUp, ChevronDown, Building2, Quote,
 } from "lucide-react";
+
+// Colores cíclicos para el círculo de iniciales de cada reseña — mismo
+// espíritu que chipPorCategoria (POS/Catálogo): nada de fotos de stock
+// haciéndose pasar por la persona, solo sus iniciales.
+const COLOR_INICIALES = [
+  "bg-primary/10 text-primary",
+  "bg-green-500/10 text-green-600",
+  "bg-orange-500/10 text-orange-600",
+];
+
+function iniciales(nombre: string) {
+  return nombre
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join("");
+}
 
 const FEATURES = [
   {
@@ -24,7 +43,7 @@ const FEATURES = [
   {
     icon: FileText,
     title: "Facturación CFDI",
-    desc: "Genera y timbra facturas directo desde tus ventas, con el folio y los datos fiscales de tu cliente.",
+    desc: "Genera el documento de factura directo desde tus ventas, con folio y los datos fiscales de tu cliente.",
   },
   {
     icon: BarChart3,
@@ -81,6 +100,70 @@ const PLANES = [
       "200 folios CFDI al mes incluidos"
     ],
     destacado: false,
+  },
+];
+
+const PASOS = [
+  {
+    icon: ClipboardList,
+    title: "Elige tu rubro y regístrate",
+    desc: "Al crear tu cuenta eliges el giro de tu negocio — celulares, taller automotriz, barbería y más — y Linkity ajusta nombres, catálogo de arranque y flujos a tu operación.",
+  },
+  {
+    icon: Users,
+    title: "Configura tu equipo y sucursales",
+    desc: "Da de alta tus sucursales, tu personal con PIN propio y los roles que necesites, sin quedarte con plantillas genéricas.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Vende y da seguimiento",
+    desc: "Cobra en el punto de venta, da seguimiento a cada reparación paso a paso y revisa todo en tu Dashboard, sin armar reportes a mano.",
+  },
+];
+
+// Reseñas reales de gente que ya usa el sistema en las sucursales que
+// administra Carlos — solo nombre y puesto, a petición explícita suya
+// (2026-09-28: decidido con Carlos no usar reseñas ficticias en la landing
+// ya pública; estas 3 sí son de personas reales, el contenido y la
+// atribución los dio él mismo).
+const TESTIMONIOS = [
+  {
+    nombre: "Andrea Salcido",
+    puesto: "Dueña",
+    texto: "Muy fácil de entender, antes no sabía cómo administrar mi negocio.",
+  },
+  {
+    nombre: "Rodrigo Orozco",
+    puesto: "Supervisor de tiendas",
+    texto: "Excelente la opción de ver el historial de días anteriores.",
+  },
+  {
+    nombre: "Kevin Zamora",
+    puesto: "Cajero",
+    texto: "Es muy rápido dar de alta los artículos o importarlos desde mi viejo sistema.",
+  },
+];
+
+const FAQS = [
+  {
+    q: "¿Necesito instalar algo?",
+    a: "No. Linkity funciona 100% desde el navegador — solo necesitas internet, ya sea en una computadora, tablet o celular.",
+  },
+  {
+    q: "¿Mis datos se mezclan con los de otros negocios?",
+    a: "No. Cada negocio vive en su propio espacio de datos, completamente aislado — nadie más puede ver tu información, ni tú la de otros negocios en la plataforma.",
+  },
+  {
+    q: "¿Puedo cancelar cuando quiera?",
+    a: "Sí. No hay contrato forzoso — eliges la vigencia (1, 3, 6 o 12 meses) al registrarte y decides si renuevas o no.",
+  },
+  {
+    q: "¿Qué pasa si mi negocio crece y necesito más sucursales o usuarios?",
+    a: "Puedes cambiar de plan cuando quieras, sin perder tu información ni tener que reconfigurar nada.",
+  },
+  {
+    q: "¿Cómo funciona la facturación CFDI?",
+    a: "Linkity genera el documento de venta con el formato y los datos fiscales que pide un CFDI, directo desde cada venta. El timbrado directo con el SAT está en desarrollo — te avisaremos en cuanto esté disponible.",
   },
 ];
 
@@ -211,7 +294,40 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* SECCIÓN DE CREDIBILIDAD (honesta: sin nombres/reseñas inventadas — ver
+          decisión con Carlos 2026-09-28: la landing ya es pública y no hay
+          clientes reales todavía, así que en vez de testimonios ficticios se
+          respalda con hechos verificables sobre quién y cómo se construyó
+          Linkity) */}
       <section className="border-t border-border">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
+          <div className="max-w-3xl mx-auto text-center">
+            <div className="inline-flex items-center justify-center gap-2 bg-primary/10 text-primary rounded-full w-14 h-14 mb-6">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">Hecho por quien repara celulares todos los días</h2>
+            <p className="text-muted-foreground mt-4 text-base sm:text-lg leading-relaxed">
+              Linkity no nació en una mesa de planeación genérica: quien está detrás de Linkity administra sus propias sucursales de reparación de celulares y, antes de este sistema, ya operaba con un sistema propio hecho a la medida. Cada módulo — desde el PIN de personal hasta el ticket de recepción con seguimiento — responde a algo que pasó de verdad en un mostrador.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-4 sm:gap-8 mt-12 max-w-3xl mx-auto text-center">
+            <div>
+              <p className="text-2xl sm:text-4xl font-extrabold text-primary">20+</p>
+              <p className="text-muted-foreground text-xs sm:text-sm mt-1 font-medium">Giros de negocio soportados</p>
+            </div>
+            <div>
+              <p className="text-2xl sm:text-4xl font-extrabold text-primary">14</p>
+              <p className="text-muted-foreground text-xs sm:text-sm mt-1 font-medium">Módulos en un solo sistema</p>
+            </div>
+            <div>
+              <p className="text-2xl sm:text-4xl font-extrabold text-primary">100%</p>
+              <p className="text-muted-foreground text-xs sm:text-sm mt-1 font-medium">Datos aislados por negocio</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-border bg-muted/30">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
           <h2 className="text-2xl sm:text-4xl font-bold text-center tracking-tight">Para el giro de tu negocio</h2>
           <p className="text-muted-foreground text-center mt-3 max-w-lg mx-auto text-base sm:text-lg">
@@ -234,8 +350,58 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* SECCIÓN DE PLANES */}
+      {/* CÓMO FUNCIONA */}
+      <section className="border-t border-border">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
+          <h2 className="text-2xl sm:text-4xl font-bold text-center tracking-tight">Cómo funciona</h2>
+          <p className="text-muted-foreground text-center mt-3 max-w-lg mx-auto text-base sm:text-lg">
+            De registrarte a tener tu negocio operando, en el mismo día.
+          </p>
+          <div className="grid sm:grid-cols-3 gap-6 sm:gap-8 mt-12 sm:mt-16 max-w-5xl mx-auto">
+            {PASOS.map((p, i) => (
+              <div key={p.title} className="relative bg-background border border-border rounded-2xl p-6 sm:p-8">
+                <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold flex items-center justify-center shadow-sm">
+                  {i + 1}
+                </span>
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-5">
+                  <p.icon className="w-6 h-6 text-primary" />
+                </div>
+                <h3 className="font-bold text-lg mb-2">{p.title}</h3>
+                <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{p.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* TESTIMONIOS */}
       <section className="border-t border-border bg-muted/30">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
+          <h2 className="text-2xl sm:text-4xl font-bold text-center tracking-tight">Lo que dice quien ya lo usa</h2>
+          <div className="grid sm:grid-cols-3 gap-6 sm:gap-8 mt-12 sm:mt-16 max-w-6xl mx-auto">
+            {TESTIMONIOS.map((t, i) => (
+              <div key={t.nombre} className="bg-background border border-border rounded-2xl p-6 sm:p-8 flex flex-col">
+                <Quote className="w-7 h-7 text-primary/30 mb-4" />
+                <p className="text-foreground/90 leading-relaxed text-sm sm:text-base flex-1">
+                  “{t.texto}”
+                </p>
+                <div className="flex items-center gap-3 mt-6 pt-6 border-t border-border">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${COLOR_INICIALES[i % COLOR_INICIALES.length]}`}>
+                    {iniciales(t.nombre)}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">{t.nombre}</p>
+                    <p className="text-muted-foreground text-xs">{t.puesto}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SECCIÓN DE PLANES */}
+      <section className="border-t border-border">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
           <div className="text-center max-w-2xl mx-auto">
             <span className="inline-block bg-green-500/10 text-green-600 font-semibold px-3.5 py-1 rounded-full text-xs sm:text-sm mb-4 border border-green-500/20">
@@ -287,6 +453,26 @@ export default function LandingPage() {
                   Empezar prueba gratis <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="border-t border-border bg-muted/30">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 py-16 sm:py-24">
+          <h2 className="text-2xl sm:text-4xl font-bold text-center tracking-tight">Preguntas frecuentes</h2>
+          <div className="mt-10 sm:mt-12 space-y-3">
+            {FAQS.map((f) => (
+              <details key={f.q} className="group bg-background border border-border rounded-xl px-5 sm:px-6 py-1 open:shadow-sm">
+                <summary className="flex items-center justify-between gap-4 py-4 sm:py-5 cursor-pointer list-none font-semibold text-sm sm:text-base marker:content-none [&::-webkit-details-marker]:hidden">
+                  {f.q}
+                  <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground shrink-0 transition-transform duration-200 group-open:rotate-180" />
+                </summary>
+                <p className="text-muted-foreground text-sm sm:text-base leading-relaxed pb-4 sm:pb-5 pr-8">
+                  {f.a}
+                </p>
+              </details>
             ))}
           </div>
         </div>
