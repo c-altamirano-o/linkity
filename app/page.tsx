@@ -146,11 +146,12 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Columna Derecha: Composición de Mockups Múltiples (Optimizada para Móvil) */}
-            <div className="lg:col-span-7 relative w-full h-[240px] sm:h-[400px] lg:h-[650px] flex items-center justify-center mt-4 sm:mt-0">
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] bg-gradient-to-tr from-primary/30 to-purple-500/20 blur-[80px] rounded-full pointer-events-none" />
+            {/* Columna Derecha: Composición Visual Enriquecida para Móvil y Desktop */}
+            <div className="lg:col-span-7 relative w-full h-[320px] sm:h-[450px] lg:h-[650px] flex items-center justify-center mt-6 sm:mt-0">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] h-[90%] bg-gradient-to-tr from-primary/30 to-purple-500/20 blur-[90px] rounded-full pointer-events-none" />
               
-              <div className="absolute z-10 w-full sm:w-[85%] lg:right-0 shadow-2xl rounded-xl sm:rounded-2xl overflow-hidden border border-border/50 bg-background transition-transform duration-700">
+              {/* Dashboard Principal */}
+              <div className="absolute z-10 w-[95%] sm:w-[85%] lg:right-0 shadow-2xl rounded-xl sm:rounded-2xl overflow-hidden border border-border/50 bg-background transition-transform duration-700">
                 <div className="bg-muted/60 border-b border-border/50 px-3 py-2 sm:px-4 sm:py-2.5 flex gap-1.5 backdrop-blur-sm">
                   <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#FF5F56]" />
                   <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#FFBD2E]" />
@@ -159,27 +160,30 @@ export default function LandingPage() {
                 <Image src="/images/dashboard-preview.png" width={1200} height={800} className="w-full h-auto" alt="Dashboard principal" priority />
               </div>
 
-              <div className="hidden sm:block absolute z-25 w-[55%] lg:w-[45%] bottom-0 lg:-bottom-8 left-0 lg:-left-12 shadow-[0_20px_50px_rgba(0,0,0,0.4)] rounded-xl overflow-hidden border border-border bg-background">
-                <div className="bg-muted/60 border-b border-border/50 px-3 py-2 flex gap-1.5 backdrop-blur-sm">
-                  <span className="text-[10px] font-medium text-muted-foreground">Punto de Venta</span>
+              {/* Mockup POS Secundario (Visible también en Móvil con escala adecuada) */}
+              <div className="absolute z-20 w-[65%] sm:w-[55%] lg:w-[45%] -bottom-4 sm:-bottom-8 left-2 sm:-left-12 shadow-[0_20px_50px_rgba(0,0,0,0.4)] rounded-xl overflow-hidden border border-border bg-background">
+                <div className="bg-muted/60 border-b border-border/50 px-2.5 py-1.5 sm:px-3 sm:py-2 flex gap-1.5 backdrop-blur-sm">
+                  <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground">Punto de Venta</span>
                 </div>
                 <Image src="/images/POS-preview.png" width={800} height={500} className="w-full h-auto" alt="Módulo POS" />
               </div>
 
-              <div className="hidden lg:block absolute z-30 w-[40%] -top-6 -left-4 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-xl overflow-hidden border border-border bg-background">
+              {/* Mockup Inventario (Visible en pantallas medianas y grandes) */}
+              <div className="hidden sm:block absolute z-30 w-[40%] -top-6 -left-4 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-xl overflow-hidden border border-border bg-background">
                 <div className="bg-muted/60 border-b border-border/50 px-3 py-2 flex gap-1.5 backdrop-blur-sm">
                   <span className="text-[10px] font-medium text-muted-foreground">Inventario</span>
                 </div>
                 <Image src="/images/inventario-preview.png" width={600} height={400} className="w-full h-auto" alt="Módulo Inventario" />
               </div>
               
-              <div className="hidden lg:flex absolute z-40 right-[-5%] top-[15%] bg-background/90 backdrop-blur-md border border-border/50 p-4 rounded-2xl shadow-xl items-center gap-4">
-                <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center text-green-500">
-                  <BarChart3 className="w-6 h-6" />
+              {/* Tarjeta de Ventas Flotante */}
+              <div className="absolute z-40 right-2 sm:right-[-5%] top-[10%] sm:top-[15%] bg-background/95 backdrop-blur-md border border-border/50 p-3 sm:p-4 rounded-xl sm:rounded-2xl shadow-xl flex items-center gap-3 sm:gap-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500/10 rounded-full flex items-center justify-center text-green-500 shrink-0">
+                  <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Ventas de hoy</p>
-                  <p className="text-xl font-bold">+$12,450.00</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground font-medium uppercase tracking-wider">Ventas de hoy</p>
+                  <p className="text-base sm:text-xl font-bold">+$12,450.00</p>
                 </div>
               </div>
             </div>
