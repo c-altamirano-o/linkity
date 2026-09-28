@@ -546,6 +546,29 @@ function construirPresetDesdeDef(
     "--sidebar-primary": fondoVentana,
     "--sidebar-primary-foreground": tema.defaultIconColor,
     ...neutrales,
+    // 2026-09-28 (bug real reportado por Carlos, capturas del selector de
+    // fechas del Dashboard: fondo gris oscuro con texto NEGRO ilegible,
+    // aunque el tema activo ya es oscuro). Causa raíz: estos tokens de
+    // color se inyectan como inline style en un <div> ANIDADO dentro de
+    // <body> (TENANT_THEME_ROOT_ID, ver app/(tenant)/[tenant]/layout.tsx),
+    // no en :root/<html>. `body { @apply text-foreground }` en globals.css
+    // resuelve su propio var(--foreground) mirando hacia ARRIBA en el
+    // árbol (donde solo existe el valor default de :root, el tema claro
+    // genérico) — nunca ve este valor de aquí abajo (las custom properties
+    // solo heredan hacia abajo). Cualquier elemento que dependía de
+    // `color: inherit` sin una clase text-* propia (todos los <select> y
+    // <input type="date"> del sistema, entre otros) terminaba heredando
+    // ESE valor equivocado en cascada, no el color real del tema activo.
+    // Fix: declarar "color" aquí mismo, en este mismo nodo — así cualquier
+    // descendiente sin su propio color explícito hereda el valor CORRECTO
+    // desde este punto en vez de seguir subiendo hasta <body>.
+    color: "var(--foreground)",
+    // "colorScheme" (no "--color-scheme": es una propiedad real de CSS,
+    // no un token) — para que el ícono/calendario nativo de
+    // <input type="date"> y el menú desplegable nativo de <select> (partes
+    // que el navegador dibuja él mismo, fuera del alcance de "color") usen
+    // también los colores nativos oscuros/claros correctos según el tema.
+    colorScheme: esOscuro ? "dark" : "light",
   };
 }
 
@@ -735,7 +758,12 @@ export function resolverPresetTenant(
     return construirPresetMaterial(themePreset as MaterialThemeId, intensidadFicha, intensidadFondo);
   }
   if (themePreset in THEME_PRESETS) {
-    return { ...THEME_PRESETS[themePreset as LegacyThemePresetId] };
+    // Mismo fix de "color"/"colorScheme" que construirPresetDesdeDef (ver
+    // el comentario largo ahí) — estos 5 presets viejos (oklch) ya no se
+    // pueden elegir, pero un tenant que se quedó con uno no debe arrastrar
+    // el mismo bug de texto negro heredado. Solo BLACK_GOLD es oscuro.
+    const preset = THEME_PRESETS[themePreset as LegacyThemePresetId];
+    return { ...preset, color: "var(--foreground)", colorScheme: themePreset === "BLACK_GOLD" ? "dark" : "light" };
   }
   return construirPresetWindowsPhone("LUMIA_COBALT", INTENSIDAD_DEFAULT, INTENSIDAD_DEFAULT);
 }

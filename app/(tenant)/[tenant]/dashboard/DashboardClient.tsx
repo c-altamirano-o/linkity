@@ -660,7 +660,7 @@ export default function DashboardClient({
             value={desdeSel}
             max={hastaSel}
             onChange={(e) => e.target.value && setDesdeSel(e.target.value)}
-            className="px-2 py-1.5 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary"
+            className="px-2 py-1.5 border border-border rounded-lg text-xs bg-muted text-foreground focus:outline-none focus:border-primary"
           />
           <span className="text-xs text-muted-foreground">–</span>
           <input
@@ -668,7 +668,7 @@ export default function DashboardClient({
             value={hastaSel}
             min={desdeSel}
             onChange={(e) => e.target.value && setHastaSel(e.target.value)}
-            className="px-2 py-1.5 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary"
+            className="px-2 py-1.5 border border-border rounded-lg text-xs bg-muted text-foreground focus:outline-none focus:border-primary"
           />
           <button
             onClick={() => cambiarPeriodo(desdeSel, hastaSel)}
