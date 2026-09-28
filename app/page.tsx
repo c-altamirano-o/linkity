@@ -72,7 +72,7 @@ const PLANES = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground overflow-hidden">
-      <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
           <Image
             src="/images/logo-full.svg"
@@ -84,13 +84,13 @@ export default function LandingPage() {
           <div className="flex items-center gap-4">
             <Link
               href="/login"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-2"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-2 hidden sm:block"
             >
               Iniciar sesión
             </Link>
             <Link
               href="/register"
-              className="text-sm font-semibold bg-primary hover:bg-primary/90 text-primary-foreground px-5 py-2.5 rounded-lg transition-all shadow-sm hover:shadow-md"
+              className="text-sm font-semibold bg-primary hover:bg-primary/90 text-primary-foreground px-5 py-2.5 rounded-full transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
             >
               Crear cuenta
             </Link>
@@ -98,86 +98,92 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* HERO SECTION REDISEÑADO */}
+      {/* HERO SECTION REDISEÑADO CON MÚLTIPLES CAPAS */}
       <section className="relative pt-16 pb-24 lg:pt-28 lg:pb-32">
-        {/* Fondos dinámicos / Blobs */}
-        <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/3 blur-[100px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[30rem] h-[30rem] bg-primary/5 rounded-full translate-y-1/3 -translate-x-1/3 blur-[100px] pointer-events-none" />
-
         <div className="mx-auto max-w-7xl px-6 relative z-10">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+          <div className="grid lg:grid-cols-12 gap-12 lg:gap-8 items-center">
             
-            {/* Columna Izquierda: Textos y CTAs */}
-            <div className="max-w-2xl">
-              <span className="inline-flex items-center gap-1.5 bg-primary/10 text-primary text-xs font-bold px-3 py-1.5 rounded-full mb-6 tracking-wide border border-primary/20">
-                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                HECHO PARA NEGOCIOS DE SERVICIO Y RETAIL
-              </span>
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.1] tracking-tight mb-6">
-                El ecosistema integral <br className="hidden lg:block"/> para tu negocio
+            {/* Columna Izquierda: Textos */}
+            <div className="lg:col-span-5 max-w-2xl mx-auto text-center lg:text-left">
+              <div className="inline-flex items-center justify-center lg:justify-start gap-2 bg-primary/10 text-primary text-xs font-bold px-4 py-2 rounded-full mb-8 tracking-wide border border-primary/20 backdrop-blur-md">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                </span>
+                SISTEMA INTEGRAL PARA SERVICIOS Y RETAIL
+              </div>
+              
+              <h1 className="text-4xl sm:text-5xl lg:text-[4rem] font-extrabold leading-[1.1] tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-br from-foreground to-foreground/70">
+                Libera el potencial <br className="hidden lg:block"/> de tu negocio
               </h1>
-              <p className="text-muted-foreground text-lg sm:text-xl mb-8 leading-relaxed max-w-xl">
-                Punto de venta, reparaciones, inventario, caja, personal y facturación CFDI — todo en una sola plataforma que se adapta al giro de tu empresa.
+              
+              <p className="text-muted-foreground text-lg sm:text-xl mb-10 leading-relaxed max-w-xl mx-auto lg:mx-0">
+                Administra ventas, inventario, reparaciones y facturación en una sola plataforma diseñada para crecer contigo.
               </p>
               
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-10">
+              <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 mb-10">
                 <Link
                   href="/register"
-                  className="flex justify-center items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-8 py-4 rounded-xl transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40 w-full sm:w-auto"
+                  className="flex justify-center items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-8 py-4 rounded-full transition-all duration-300 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 w-full sm:w-auto"
                 >
-                  Crear mi cuenta <ArrowRight className="w-5 h-5" />
+                  Empezar gratis <ArrowRight className="w-5 h-5" />
                 </Link>
                 <Link
                   href="/login"
-                  className="flex justify-center items-center gap-2 bg-background border-2 border-border hover:border-primary/50 text-foreground font-medium px-8 py-4 rounded-xl transition-all w-full sm:w-auto"
+                  className="flex justify-center items-center gap-2 bg-background border-2 border-border hover:border-primary/30 text-foreground font-medium px-8 py-4 rounded-full transition-all duration-300 w-full sm:w-auto hover:bg-muted/50"
                 >
-                  Ya tengo cuenta
+                  Agendar una demo
                 </Link>
               </div>
-
-              <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-muted-foreground font-medium">
-                {["Módulos activos desde el día uno", "Ajustado a tu rubro", "Cancela cuando quieras"].map((t) => (
-                  <span key={t} className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <Check className="w-3.5 h-3.5 text-primary" />
-                    </div>
-                    {t}
-                  </span>
-                ))}
-              </div>
             </div>
 
-            {/* Columna Derecha: Mockup del Sistema */}
-            <div className="relative mx-auto w-full max-w-[600px] lg:max-w-none mt-8 lg:mt-0">
-              <div className="absolute inset-0 bg-gradient-to-tr from-primary/30 to-transparent rounded-2xl blur-3xl transform rotate-3" />
-              <div className="relative bg-background border border-border rounded-2xl shadow-2xl overflow-hidden ring-1 ring-border/50">
-                
-                {/* Cabecera simulada de navegador */}
-                <div className="bg-muted/40 border-b border-border px-4 py-3 flex items-center gap-2">
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]" />
-                    <div className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]" />
-                    <div className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]" />
-                  </div>
+            {/* Columna Derecha: Composición de Mockups Múltiples */}
+            <div className="lg:col-span-7 relative w-full h-[300px] sm:h-[450px] lg:h-[650px] flex items-center justify-center">
+              {/* Resplandores de fondo */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-gradient-to-tr from-primary/30 to-purple-500/20 blur-[100px] rounded-full pointer-events-none" />
+              
+              {/* Imagen Principal (Dashboard) */}
+              <div className="absolute z-10 w-[95%] lg:w-[85%] lg:right-0 shadow-2xl rounded-2xl overflow-hidden border border-border/50 bg-background transition-transform duration-700 hover:scale-[1.02]">
+                <div className="bg-muted/60 border-b border-border/50 px-4 py-2.5 flex gap-1.5 backdrop-blur-sm">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
                 </div>
-                
-                {/* Imagen del Dashboard */}
-                <Image
-                  src="/images/dashboard-preview.png"
-                  alt="Vista previa del Dashboard de Linkity"
-                  width={1200}
-                  height={800}
-                  className="w-full h-auto object-cover"
-                  priority
-                />
+                <Image src="/images/dashboard-preview.png" width={1200} height={800} className="w-full h-auto" alt="Dashboard principal" priority />
+              </div>
+
+              {/* Imagen Flotante 1: POS (Se muestra en pantallas sm en adelante) */}
+              <div className="hidden sm:block absolute z-20 w-[60%] lg:w-[45%] bottom-0 lg:-bottom-8 left-0 lg:-left-12 shadow-[0_20px_50px_rgba(0,0,0,0.4)] rounded-xl overflow-hidden border border-border bg-background transition-all duration-700 hover:-translate-y-4 hover:scale-105">
+                <div className="bg-muted/60 border-b border-border/50 px-3 py-2 flex gap-1.5 backdrop-blur-sm">
+                  <span className="text-[10px] font-medium text-muted-foreground">Punto de Venta</span>
+                </div>
+                <Image src="/images/POS-preview.png" width={800} height={500} className="w-full h-auto" alt="Módulo POS" />
+              </div>
+
+              {/* Imagen Flotante 2: Inventario (Solo en pantallas grandes lg) */}
+              <div className="hidden lg:block absolute z-30 w-[40%] -top-6 -left-4 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-xl overflow-hidden border border-border bg-background transition-all duration-700 hover:-translate-y-3 hover:scale-105">
+                <div className="bg-muted/60 border-b border-border/50 px-3 py-2 flex gap-1.5 backdrop-blur-sm">
+                  <span className="text-[10px] font-medium text-muted-foreground">Inventario</span>
+                </div>
+                <Image src="/images/inventario-preview.png" width={600} height={400} className="w-full h-auto" alt="Módulo Inventario" />
+              </div>
+              
+              {/* Tarjeta de Estadística Flotante */}
+              <div className="hidden lg:flex absolute z-40 right-[-5%] top-[15%] bg-background/90 backdrop-blur-md border border-border/50 p-4 rounded-2xl shadow-xl items-center gap-4 transition-all duration-500 hover:-translate-y-2">
+                <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center text-green-500">
+                  <BarChart3 className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Ventas de hoy</p>
+                  <p className="text-xl font-bold">+$12,450.00</p>
+                </div>
               </div>
             </div>
-
           </div>
         </div>
       </section>
 
-      {/* EL RESTO DE LAS SECCIONES SE MANTIENEN IGUAL PERO CENTRADAS EN MAX-W-7XL */}
+      {/* EL RESTO DEL CÓDIGO SE MANTIENE INTACTO */}
       <section className="border-t border-border bg-muted/30">
         <div className="mx-auto max-w-7xl px-6 py-24">
           <h2 className="text-3xl sm:text-4xl font-bold text-center tracking-tight">Todo lo que tu negocio necesita</h2>
