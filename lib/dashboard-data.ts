@@ -119,7 +119,17 @@ export interface SucursalResumen {
   repActivas: number;
   listosEntrega: number;
   devoluciones: number;
-  vsAyer: number | null; // null = sin ventas ayer para comparar ("primer día")
+  // 2026-09-28, a petición de Carlos ("todos los apartados del dashboard
+  // deberían mostrar el periodo seleccionado"): antes era "vsAyer" — SIEMPRE
+  // ventas de hoy contra ventas de ayer, sin importar el selector de
+  // periodo. Ahora compara `ventasDia` (que también dejó de ser "hoy" fijo,
+  // ver el comentario largo junto a su cálculo más abajo) contra el periodo
+  // INMEDIATAMENTE ANTERIOR de la MISMA duración — con "Hoy" eso sigue
+  // siendo exactamente "ayer" (un periodo de 1 día), con "Semana" la semana
+  // pasada, con "Mes"/"Año"/personalizado el tramo equivalente justo antes.
+  // null = sin ventas en ese periodo anterior para comparar (no hay contra
+  // qué medir el cambio).
+  vsPeriodoAnterior: number | null;
 }
 
 export interface DashboardData {
@@ -135,9 +145,28 @@ export interface DashboardData {
   equiposDevolucion: RepairRow[];
   alertas: AlertaRow[];
   categorias: CategoriaVenta[];
+  // 2026-09-28: dejó de ser SIEMPRE la semana laboral en curso — ahora son
+  // los "buckets" del periodo elegido en el selector (ver el comentario
+  // largo junto a construirBucketsTendencia más abajo): un bucket por día
+  // si el periodo cabe en ~31 días (Hoy/Semana/Mes/personalizado corto), o
+  // un bucket por MES si es más largo (Año/personalizado largo) — el campo
+  // `dia` de cada uno sigue siendo la etiqueta a mostrar en el eje X, sea
+  // cual sea la unidad real. `tendenciaGranularidad` le dice al cliente cuál
+  // de las dos es, para poder mostrar "Promedio diario"/"Promedio mensual"
+  // correctamente en vez de asumir siempre "diario".
   ventasSemana: VentaSemanaDia[];
+  tendenciaGranularidad: "dia" | "mes";
   totalSemana: number;
   promedioVentasSemana: number;
+  // Ventas por hora del día, SUMADAS a lo largo de TODO el periodo elegido
+  // (2026-09-28, a petición de Carlos — reemplaza el selector de un solo
+  // día que tenía antes esta sección, ver el comentario largo junto a
+  // getVentasPorDia más abajo, ahora sin usar desde el Dashboard). Con
+  // "Hoy" esto es exactamente un solo día (comportamiento idéntico al
+  // anterior); con "Semana"/"Mes"/"Año" sí sirve para algo nuevo: en qué
+  // hora del día se concentran más ventas A LO LARGO de todo ese periodo.
+  ventasPorHora: VentaPorHora[];
+  horaPico: { hora: number; horaLabel: string; numVentas: number } | null;
   sucursales: SucursalResumen[];
   multiSucursal: boolean;
   // Módulo "Reparaciones" activo para este tenant (2026-09-18) — cuando es
@@ -176,9 +205,10 @@ export interface DashboardData {
  * siquiera manda el número real al cliente — no es solo "ocultar en
  * pantalla", mismo criterio que el resto del proyecto.
  *
- * costo/vsAyer quedan en `null` en vez de 0 (mismo motivo que cajaActual en
- * redactarMontosSucursales): un 0 literal se leería como "no hay nada" o
- * "sin cambio vs ayer", no como "tu rol no puede ver esto" —
+ * costo/vsPeriodoAnterior quedan en `null` en vez de 0 (mismo motivo que
+ * cajaActual en redactarMontosSucursales): un 0 literal se leería como "no
+ * hay nada" o "sin cambio vs el periodo anterior", no como "tu rol no
+ * puede ver esto" —
  * DashboardClient.tsx distingue ambos casos con el prop `montosVisibles`,
  * nunca mirando solo si el valor es 0/null.
  */
@@ -194,7 +224,10 @@ export function redactarMontosDashboard(data: DashboardData): DashboardData {
     ventasSemana: data.ventasSemana.map((d) => ({ ...d, ventas: 0, reparaciones: 0, total: 0 })),
     totalSemana: 0,
     promedioVentasSemana: 0,
-    sucursales: data.sucursales.map((s) => ({ ...s, ventasDia: 0, vsAyer: null })),
+    // 2026-09-28: mismo criterio que ventasSemana/totalSemana de arriba —
+    // numVentas (conteo) se conserva, totalVentas (dinero) se redacta.
+    ventasPorHora: data.ventasPorHora.map((h) => ({ ...h, totalVentas: 0 })),
+    sucursales: data.sucursales.map((s) => ({ ...s, ventasDia: 0, vsPeriodoAnterior: null })),
   };
 }
 
@@ -359,6 +392,70 @@ function diaLabel(date: Date, hoyInicio: Date) {
   return DIAS_SEMANA[mxDate.getUTCDay()];
 }
 
+const MESES_CORTO = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const UN_DIA_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * "Ventas de la semana" (2026-09-28, a petición de Carlos: "todos los
+ * apartados del dashboard deberían mostrar el periodo seleccionado") — esta
+ * gráfica dejó de mirar SIEMPRE la semana laboral en curso para seguir el
+ * periodo elegido en el selector de arriba (Hoy/Semana/Mes/Año/
+ * personalizado). Como el eje X no puede ser siempre "7 días" (un año
+ * entero no cabe como 365 barras legibles), la unidad de cada barra se
+ * decide por la DURACIÓN real del periodo, no por el nombre del atajo — así
+ * "Mes" (≈28-31 días) sale día por día igual que antes, "Año" (365 días)
+ * sale mes por mes, y un periodo "personalizado" se comporta como el que
+ * más se le parezca en duración, sin necesidad de casos especiales por
+ * atajo. Carlos confirmó esta forma de resolverlo (AskUserQuestion,
+ * 2026-09-28: "Cambia de forma según el periodo").
+ *
+ * ≤31 días → un bucket por día (el mismo límite natural que separa "Mes" de
+ * "Año"); más de eso → un bucket por mes calendario, desde el mes de
+ * `periodo.start` hasta el de `periodo.end` inclusive.
+ */
+function construirBucketsTendencia(periodo: PeriodoDashboard, hoyInicio: Date): {
+  granularidad: "dia" | "mes";
+  buckets: { start: Date; end: Date; label: string }[];
+} {
+  const dias = Math.round((periodo.end.getTime() - periodo.start.getTime()) / UN_DIA_MS);
+  if (dias <= 31) {
+    // Buckets diarios — misma etiqueta ("Hoy"/día de la semana) que ya usaba
+    // "Ventas de la semana" cuando el periodo son 7 días o menos; con "Mes"
+    // (hasta 31 buckets) se vuelve el número de día del mes, porque 28-31
+    // etiquetas de día de la semana repetidas serían ilegibles/inútiles.
+    const usarNumeroDeDia = dias > 7;
+    const buckets: { start: Date; end: Date; label: string }[] = [];
+    for (let start = periodo.start; start < periodo.end; start = new Date(start.getTime() + UN_DIA_MS)) {
+      const end = new Date(start.getTime() + UN_DIA_MS);
+      const label = usarNumeroDeDia
+        ? String(new Date(start.getTime() - MX_OFFSET_MS).getUTCDate())
+        : diaLabel(start, hoyInicio);
+      buckets.push({ start, end, label });
+    }
+    return { granularidad: "dia", buckets };
+  }
+  // Buckets mensuales — un mes calendario (en horario de México) por barra,
+  // desde el mes de periodo.start hasta el de periodo.end inclusive (con el
+  // atajo "Año" esto da exactamente los 12 meses del año en curso).
+  const inicioMx = new Date(periodo.start.getTime() - MX_OFFSET_MS);
+  const finMx = new Date(periodo.end.getTime() - 1 - MX_OFFSET_MS);
+  const buckets: { start: Date; end: Date; label: string }[] = [];
+  let y = inicioMx.getUTCFullYear();
+  let m = inicioMx.getUTCMonth();
+  while (y < finMx.getUTCFullYear() || (y === finMx.getUTCFullYear() && m <= finMx.getUTCMonth())) {
+    const start = new Date(Date.UTC(y, m, 1, 0, 0, 0).valueOf() + MX_OFFSET_MS);
+    const end = new Date(Date.UTC(y, m + 1, 1, 0, 0, 0).valueOf() + MX_OFFSET_MS);
+    buckets.push({
+      start: start < periodo.start ? periodo.start : start,
+      end: end > periodo.end ? periodo.end : end,
+      label: MESES_CORTO[m],
+    });
+    m += 1;
+    if (m > 11) { m = 0; y += 1; }
+  }
+  return { granularidad: "mes", buckets };
+}
+
 function formatHoraMx(date: Date) {
   return new Intl.DateTimeFormat("es-MX", {
     hour: "numeric",
@@ -438,30 +535,23 @@ export async function getDashboardData(
 
   const now = new Date();
   const today = dayRange(0);
-  const ayer = dayRange(1);
-  const month = monthRange();
 
-  // Semana laboral configurable por tenant (lib/periodo-laboral.ts) — ya NO
-  // es una ventana rodante de 7 días terminando siempre hoy (eso hacía que
-  // "Total semana" fuera en realidad "últimos 7 días", sin relación con
-  // ningún corte de nómina real — ver el comentario largo en
-  // Tenant.weekStartDay, schema.prisma).
-  const { start: weekStart, end: weekEnd } = rangoSemanaLaboral(now, weekStartDay);
-  const week = Array.from({ length: 7 }, (_, i) => {
-    const start = new Date(weekStart.getTime() + i * 24 * 60 * 60 * 1000);
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-    return { start, end };
-  });
-  // "ayer" puede caer FUERA de la semana laboral en curso (ej. si hoy es el
-  // primer día de una semana nueva, ayer perteneció a la semana anterior) —
-  // por eso el query de abajo arranca en el más temprano de los dos rangos,
-  // en vez de asumir que "ayer" siempre está dentro de la semana.
-  const consultaDesde = ayer.start < weekStart ? ayer.start : weekStart;
+  // Periodo INMEDIATAMENTE ANTERIOR, de la MISMA duración que el elegido en
+  // el selector (2026-09-28, ver el comentario largo junto a
+  // SucursalResumen.vsPeriodoAnterior más arriba) — reemplaza el "ayer" fijo
+  // que usaba antes el comparativo por sucursal. Con el atajo "Hoy" (un
+  // periodo de 1 día) esto da exactamente "ayer", sin necesidad de un caso
+  // especial: se calcula igual para los 4 atajos y para "personalizado".
+  const duracionPeriodoMs = periodo.end.getTime() - periodo.start.getTime();
+  const periodoAnterior = {
+    start: new Date(periodo.start.getTime() - duracionPeriodoMs),
+    end: periodo.start,
+  };
 
   const [
     ventasHoyRaw,
-    weekSales,
-    weekRepairsDelivered,
+    ventasAnteriorPorBranch,
+    repairsDeliveredPeriodo,
     openRepairsRaw,
     receivedTodayByBranch,
     inventoryRows,
@@ -483,16 +573,26 @@ export async function getDashboardData(
       // abajo): "ventas del periodo" debe reflejar TODO el dinero que
       // entró, reparaciones incluidas — antes (cobrarYEntregarAction) ni
       // siquiera generaba una Sale, así que este número quedaba incompleto.
+      // Trae branchId/createdAt (escalares normales de Sale, no hace falta
+      // pedirlos con `select`) — 2026-09-28: este mismo arreglo alimenta
+      // ahora "Ventas de la semana" (buckets por periodo), "Ventas por
+      // sucursal" (ventasDiaBranch) y "Ventas por día y hora" (ventasPorHora)
+      // más abajo, así que ya no hace falta una query de sucursal aparte.
       include: { items: { include: { product: true, repair: { select: { folio: true } } } } },
       orderBy: { createdAt: "desc" },
     }),
-    db.sale.findMany({
+    // Solo para el comparativo "vs periodo anterior" (2026-09-28) — un
+    // groupBy con _sum es mucho más barato que traer cada venta del periodo
+    // anterior fila por fila, sobre todo con el atajo "Año" (un año entero
+    // de más, solo para un porcentaje de cambio).
+    db.sale.groupBy({
+      by: ["branchId"],
       where: {
         status: "COMPLETED",
-        createdAt: { gte: consultaDesde, lt: today.end },
+        createdAt: { gte: periodoAnterior.start, lt: periodoAnterior.end },
         ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
       },
-      select: { branchId: true, total: true, createdAt: true },
+      _sum: { total: true },
     }),
     // Las 3 queries de reparaciones de abajo llevan un filtro `id` extra
     // (2026-09-18, módulo Reparaciones por tenant) que cuando el módulo
@@ -506,7 +606,10 @@ export async function getDashboardData(
     // dos formas de llamada distintas.
     db.repair.findMany({
       where: {
-        deliveredAt: { gte: weekStart, lt: weekEnd },
+        // periodo (2026-09-28) — antes SIEMPRE la semana laboral en curso,
+        // sin importar el selector; ver el comentario largo junto a
+        // construirBucketsTendencia más arriba.
+        deliveredAt: { gte: periodo.start, lt: periodo.end },
         id: reparacionesActiva ? undefined : REPARACIONES_INACTIVA_ID,
         ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
       },
@@ -542,7 +645,11 @@ export async function getDashboardData(
         sale: {
           tenantId,
           status: "COMPLETED",
-          createdAt: { gte: month.start, lt: month.end },
+          // periodo (2026-09-28) — antes SIEMPRE el mes calendario en
+          // curso, sin importar el selector de arriba (comentario original:
+          // "Ventas por categoría (mes en curso)"); ver el comentario largo
+          // del parámetro `periodo` en la firma de esta función.
+          createdAt: { gte: periodo.start, lt: periodo.end },
           ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
         },
         // 2026-09-25: excluye el cobro de reparaciones (productId null,
@@ -710,26 +817,64 @@ export async function getDashboardData(
     : [];
   const categorias: CategoriaVenta[] = aplicarConfigCategorias(categoriasBase, categoriasConfigGuardada);
 
-  // ── Ventas de la semana (área) ─────────────────────────
-  const ventasSemana: VentaSemanaDia[] = week.map(({ start, end }) => {
-    const ventasDia = weekSales
+  // ── Ventas de la semana (tendencia del periodo elegido) ─
+  // 2026-09-28: dejó de mirar SIEMPRE la semana laboral en curso — ver el
+  // comentario largo junto a construirBucketsTendencia más arriba.
+  const { granularidad: tendenciaGranularidad, buckets: bucketsTendencia } = construirBucketsTendencia(periodo, today.start);
+  const ventasSemana: VentaSemanaDia[] = bucketsTendencia.map(({ start, end, label }) => {
+    const ventasBucket = ventasHoyRaw
       .filter((s) => s.createdAt >= start && s.createdAt < end)
       .reduce((sum, s) => sum + Number(s.total), 0);
-    const reparacionesDia = weekRepairsDelivered
+    const reparacionesBucket = repairsDeliveredPeriodo
       .filter((r) => r.deliveredAt && r.deliveredAt >= start && r.deliveredAt < end)
       .reduce((sum, r) => sum + Number(r.finalCost ?? 0), 0);
     return {
-      dia: diaLabel(start, today.start),
-      ventas: Math.round(ventasDia),
-      reparaciones: Math.round(reparacionesDia),
-      total: Math.round(ventasDia + reparacionesDia),
+      dia: label,
+      ventas: Math.round(ventasBucket),
+      reparaciones: Math.round(reparacionesBucket),
+      total: Math.round(ventasBucket + reparacionesBucket),
     };
   });
   const totalSemana = ventasSemana.reduce((s, d) => s + d.total, 0);
-  const promedioVentasSemana = Math.round(ventasSemana.reduce((s, d) => s + d.ventas, 0) / 7);
+  const promedioVentasSemana = ventasSemana.length > 0
+    ? Math.round(ventasSemana.reduce((s, d) => s + d.ventas, 0) / ventasSemana.length)
+    : 0;
+
+  // ── Ventas por hora, sumadas a lo largo de TODO el periodo elegido ─
+  // (2026-09-28, reemplaza el selector de un solo día que tenía antes esta
+  // gráfica — ver el comentario largo junto a DashboardData.ventasPorHora
+  // más arriba y getVentasPorDia más abajo, ya sin usar desde aquí). Se
+  // calcula directo de ventasHoyRaw (ya viene acotado al periodo elegido),
+  // sin una query aparte — mismo agrupado por hora de México que usaba
+  // getVentasPorDia para un solo día.
+  const porHoraMap = new Map<number, { numVentas: number; totalVentas: number }>();
+  for (const v of ventasHoyRaw) {
+    const horaMx = new Date(v.createdAt.getTime() - MX_OFFSET_MS).getUTCHours();
+    const prev = porHoraMap.get(horaMx) ?? { numVentas: 0, totalVentas: 0 };
+    prev.numVentas += 1;
+    prev.totalVentas += Number(v.total);
+    porHoraMap.set(horaMx, prev);
+  }
+  const ventasPorHora: VentaPorHora[] = Array.from({ length: 24 }, (_, hora) => {
+    const d = porHoraMap.get(hora);
+    return {
+      hora,
+      horaLabel: formatHoraCorta(hora),
+      numVentas: d?.numVentas ?? 0,
+      totalVentas: Math.round(d?.totalVentas ?? 0),
+    };
+  });
+  const horaPico = ventasPorHora.reduce<VentaPorHora | null>(
+    (max, h) => (h.numVentas > 0 && (!max || h.numVentas > max.numVentas) ? h : max),
+    null
+  );
 
   // ── Resumen por sucursal ───────────────────────────────
   const receivedTodayMap = new Map(receivedTodayByBranch.map((g) => [g.branchId, g._count._all]));
+  // "vs periodo anterior" (2026-09-28) — sumas ya resueltas por el groupBy
+  // de ventasAnteriorPorBranch (ver el comentario largo junto a su query
+  // más arriba), una por sucursal.
+  const ventasAnteriorMap = new Map(ventasAnteriorPorBranch.map((g) => [g.branchId, Number(g._sum.total ?? 0)]));
 
   const repairsByBranch = new Map<string, typeof openRepairsRaw>();
   for (const r of openRepairsRaw) {
@@ -747,15 +892,16 @@ export async function getDashboardData(
   const branchesParaResumen = branchIdFiltro ? branches.filter((b) => b.id === branchIdFiltro) : branches;
 
   const sucursales: SucursalResumen[] = branchesParaResumen.map((b) => {
-    const ventasDiaBranch = weekSales
-      .filter((s) => s.branchId === b.id && s.createdAt >= today.start && s.createdAt < today.end)
+    // "Ventas del periodo" por sucursal (2026-09-28) — antes SIEMPRE "hoy",
+    // sin importar el selector (ver el comentario largo junto a
+    // SucursalResumen.vsPeriodoAnterior más arriba). ventasHoyRaw ya viene
+    // acotado al periodo elegido (y a branchIdFiltro cuando aplica), así
+    // que no hace falta otra query aquí.
+    const ventasBranch = ventasHoyRaw
+      .filter((s) => s.branchId === b.id)
       .reduce((sum, s) => sum + Number(s.total), 0);
-    const ventasAyerBranch = weekSales
-      .filter((s) => s.branchId === b.id && s.createdAt >= ayer.start && s.createdAt < ayer.end)
-      .reduce((sum, s) => sum + Number(s.total), 0);
-    const ticketsVenta = weekSales.filter(
-      (s) => s.branchId === b.id && s.createdAt >= today.start && s.createdAt < today.end
-    ).length;
+    const ticketsVenta = ventasHoyRaw.filter((s) => s.branchId === b.id).length;
+    const ventasAnteriorBranch = ventasAnteriorMap.get(b.id) ?? 0;
 
     const repairsHere = repairsByBranch.get(b.id) ?? [];
     const repActivas = repairsHere.filter((r) => ACTIVE_STATUSES.includes(r.status)).length;
@@ -767,14 +913,14 @@ export async function getDashboardData(
       id: b.id,
       nombre: b.name,
       estado: b.isActive ? "activa" : "prueba",
-      ventasDia: Math.round(ventasDiaBranch),
+      ventasDia: Math.round(ventasBranch),
       ticketsVenta,
       ticketsRep: equiposRecibidos,
       equiposRecibidos,
       repActivas,
       listosEntrega,
       devoluciones,
-      vsAyer: ventasAyerBranch > 0 ? Math.round(((ventasDiaBranch - ventasAyerBranch) / ventasAyerBranch) * 100) : null,
+      vsPeriodoAnterior: ventasAnteriorBranch > 0 ? Math.round(((ventasBranch - ventasAnteriorBranch) / ventasAnteriorBranch) * 100) : null,
     };
   });
 
@@ -796,8 +942,11 @@ export async function getDashboardData(
     alertas: alertasFinal,
     categorias,
     ventasSemana,
+    tendenciaGranularidad,
     totalSemana: Math.round(totalSemana),
     promedioVentasSemana,
+    ventasPorHora,
+    horaPico: horaPico ? { hora: horaPico.hora, horaLabel: horaPico.horaLabel, numVentas: horaPico.numVentas } : null,
     sucursales,
     multiSucursal: branches.length > 1,
     reparacionesActiva,
@@ -806,16 +955,21 @@ export async function getDashboardData(
 }
 
 // ============================================
-// Ventas por día y hora — selector de fecha (2026-09-17, a petición de
-// Carlos: "a mí como dueño me gustaría poder checar día por día qué tanto
-// se vendió y en qué horas fue el mayor flujo de clientes"). A diferencia
-// de getDashboardData de arriba (que siempre mira "hoy"/"esta semana" en
-// tiempo real y no acepta parámetros), este bloque responde a una fecha
-// arbitraria elegida por el dueño con un selector tipo calendario en
-// DashboardClient.tsx, y se recalcula bajo demanda vía
-// obtenerVentasPorDiaAction (app/actions/dashboard-actions.ts) cada vez que
-// cambia la fecha — la carga inicial (fecha = hoy) sí va en el primer
-// render server-side, igual que el resto del Dashboard.
+// Ventas por día y hora (2026-09-17, a petición de Carlos: "a mí como dueño
+// me gustaría poder checar día por día qué tanto se vendió y en qué horas
+// fue el mayor flujo de clientes"). 2026-09-28: esta sección dejó de tener
+// su PROPIO selector de un solo día (con flechas día anterior/siguiente,
+// vía getVentasPorDia/obtenerVentasPorDiaAction más abajo) — a petición de
+// Carlos ("todos los apartados del dashboard deberían mostrar el periodo
+// seleccionado"), ahora usa el MISMO selector de periodo que el resto del
+// Dashboard, sumando las horas de TODOS los días del rango elegido (ver
+// DashboardData.ventasPorHora, calculado dentro de getDashboardData más
+// arriba a partir de ventasHoyRaw — ya no hace falta una query aparte).
+// getVentasPorDia/redactarMontosVentasPorDia/VentasPorDiaData se quedan
+// abajo sin usar desde la UI del Dashboard (no se borran por si hiciera
+// falta un reporte de un solo día más adelante), pero
+// obtenerVentasPorDiaAction (dashboard-actions.ts) sí se quitó por completo
+// junto con su único punto de entrada.
 // ============================================
 
 export interface VentaPorHora {
@@ -834,7 +988,7 @@ export interface VentasPorDiaData {
   horaPico: { hora: number; horaLabel: string; numVentas: number } | null;
 }
 
-/** "YYYY-MM-DD" de hoy en México — valor por defecto del selector de fecha. */
+/** "YYYY-MM-DD" de hoy en México — usado por resolverPeriodoDashboard. */
 export function hoyMx(): string {
   const now = new Date();
   const mx = new Date(now.getTime() - MX_OFFSET_MS);
@@ -913,12 +1067,10 @@ export async function getVentasPorDia(tenantId: string, fechaStr: string, branch
 
 /**
  * Redacta los montos de un VentasPorDiaData ya calculado — 2026-09-24,
- * mismo criterio y mismo motivo que redactarMontosDashboard: se usa tanto
- * en dashboard/page.tsx (la carga inicial de "Ventas por día y hora") como
- * en obtenerVentasPorDiaAction (el selector de fecha vía AJAX), para que un
- * empleado sin Role.verMontosCaja no pueda esquivar la redacción del
- * servidor cambiando la fecha en el selector. `numVentas` (aquí y por hora)
- * es un conteo, no dinero — se conserva igual que en el resto del Dashboard.
+ * mismo criterio y mismo motivo que redactarMontosDashboard. 2026-09-28: ya
+ * no la llama nada del Dashboard (ver el comentario largo junto a
+ * getVentasPorDia) — se conserva por si getVentasPorDia se vuelve a usar
+ * más adelante para algún reporte de un solo día.
  */
 export function redactarMontosVentasPorDia(data: VentasPorDiaData): VentasPorDiaData {
   return {

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getDashboardData, getVentasPorDia, hoyMx, redactarMontosDashboard, redactarMontosVentasPorDia, resolverPeriodoDashboard, atajosPeriodoDashboard } from "@/lib/dashboard-data";
+import { getDashboardData, redactarMontosDashboard, resolverPeriodoDashboard, atajosPeriodoDashboard } from "@/lib/dashboard-data";
 import { getTenantLabels } from "@/lib/labels-server";
 import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { verTodoNegocioParaRolPorNombre, verMontosCajaParaRolPorNombre } from "@/lib/roles-server";
@@ -104,30 +104,26 @@ export default async function DashboardPage({
   // mostrarla redactada.
   const puedeVerMontos = sesionValida ? await verMontosCajaParaRolPorNombre(tenant.id, sesionValida.roleName) : true;
 
-  const [dataCompleta, labels, ventasPorDiaCompleta] = await Promise.all([
+  const [dataCompleta, labels] = await Promise.all([
     getDashboardData(tenant.id, branchesVisibles, tenant.weekStartDay, reparacionesActiva, periodo, branchIdFiltro, tenant.dashboardCategoriasConfig),
     getTenantLabels(tenant.id, tenant.businessType),
-    getVentasPorDia(tenant.id, hoyMx(), branchIdFiltro),
   ]);
   const data = puedeVerMontos ? dataCompleta : redactarMontosDashboard(dataCompleta);
-  const ventasPorDiaInicial = puedeVerMontos ? ventasPorDiaCompleta : redactarMontosVentasPorDia(ventasPorDiaCompleta);
 
   return (
     <DashboardClient
       // 2026-09-22: se remonta el componente completo al cambiar de
       // sucursal (o volver a la vista global) — sin esto, el useState de
-      // varios pedazos del Dashboard (config. de categorías, selector de
-      // fecha de "ventas por día", etc.) se quedaría con los valores de la
-      // sucursal anterior tras la navegación, porque Next.js reutiliza la
-      // misma instancia del client component cuando solo cambia el
-      // searchParam de la misma ruta. 2026-09-26: el periodo (desde/hasta)
-      // se agrega a esta misma key por el mismo motivo, ahora que también
-      // es un searchParam propio.
+      // varios pedazos del Dashboard (config. de categorías, modal de
+      // detalle, etc.) se quedaría con los valores de la sucursal anterior
+      // tras la navegación, porque Next.js reutiliza la misma instancia del
+      // client component cuando solo cambia el searchParam de la misma
+      // ruta. 2026-09-26: el periodo (desde/hasta) se agrega a esta misma
+      // key por el mismo motivo, ahora que también es un searchParam propio.
       key={`${branchIdFiltro ?? "global"}-${periodo.desde}-${periodo.hasta}`}
       data={data}
       labels={labels}
       tenantSlug={tenantSlug}
-      ventasPorDiaInicial={ventasPorDiaInicial}
       branches={branchesVisibles}
       sucursalActualId={branchIdFiltro ?? null}
       // 2026-09-24, a petición de Carlos (revisión de permisos): "Configurar

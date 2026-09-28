@@ -53,18 +53,33 @@ const PLANES = [
     nombre: "Básico",
     precio: 499,
     desc: "Para un negocio con una sola sucursal que está arrancando.",
+    caracteristicas: [
+      "1 Sucursal",
+      "Hasta 2 Usuarios",
+      "Módulo de facturación CFDI por separado"
+    ],
     destacado: false,
   },
   {
     nombre: "Pro",
     precio: 999,
     desc: "Para negocios en crecimiento con más de una sucursal.",
+    caracteristicas: [
+      "De 1 a 3 Sucursales",
+      "3 a 5 Usuarios por sucursal",
+      "50 folios CFDI al mes incluidos"
+    ],
     destacado: true,
   },
   {
     nombre: "Enterprise",
     precio: 1999,
     desc: "Para franquicias y operaciones con varias sucursales activas.",
+    caracteristicas: [
+      "5 o más sucursales",
+      "Usuarios ilimitados",
+      "200 folios CFDI al mes incluidos"
+    ],
     destacado: false,
   },
 ];
@@ -98,7 +113,7 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* HERO SECTION REDISEÑADO CON MÚLTIPLES CAPAS */}
+      {/* HERO SECTION */}
       <section className="relative pt-16 pb-24 lg:pt-28 lg:pb-32">
         <div className="mx-auto max-w-7xl px-6 relative z-10">
           <div className="grid lg:grid-cols-12 gap-12 lg:gap-8 items-center">
@@ -126,23 +141,16 @@ export default function LandingPage() {
                   href="/register"
                   className="flex justify-center items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-8 py-4 rounded-full transition-all duration-300 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 w-full sm:w-auto"
                 >
-                  Empezar gratis <ArrowRight className="w-5 h-5" />
+                  Prueba 1 mes gratis <ArrowRight className="w-5 h-5" />
                 </Link>
-                <Link
-                  href="/login"
-                  className="flex justify-center items-center gap-2 bg-background border-2 border-border hover:border-primary/30 text-foreground font-medium px-8 py-4 rounded-full transition-all duration-300 w-full sm:w-auto hover:bg-muted/50"
-                >
-                  Agendar una demo
-                </Link>
+                {/* Se eliminó el botón de "Agendar demo" */}
               </div>
             </div>
 
             {/* Columna Derecha: Composición de Mockups Múltiples */}
             <div className="lg:col-span-7 relative w-full h-[300px] sm:h-[450px] lg:h-[650px] flex items-center justify-center">
-              {/* Resplandores de fondo */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-gradient-to-tr from-primary/30 to-purple-500/20 blur-[100px] rounded-full pointer-events-none" />
               
-              {/* Imagen Principal (Dashboard) */}
               <div className="absolute z-10 w-[95%] lg:w-[85%] lg:right-0 shadow-2xl rounded-2xl overflow-hidden border border-border/50 bg-background transition-transform duration-700 hover:scale-[1.02]">
                 <div className="bg-muted/60 border-b border-border/50 px-4 py-2.5 flex gap-1.5 backdrop-blur-sm">
                   <div className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
@@ -152,7 +160,6 @@ export default function LandingPage() {
                 <Image src="/images/dashboard-preview.png" width={1200} height={800} className="w-full h-auto" alt="Dashboard principal" priority />
               </div>
 
-              {/* Imagen Flotante 1: POS (Se muestra en pantallas sm en adelante) */}
               <div className="hidden sm:block absolute z-20 w-[60%] lg:w-[45%] bottom-0 lg:-bottom-8 left-0 lg:-left-12 shadow-[0_20px_50px_rgba(0,0,0,0.4)] rounded-xl overflow-hidden border border-border bg-background transition-all duration-700 hover:-translate-y-4 hover:scale-105">
                 <div className="bg-muted/60 border-b border-border/50 px-3 py-2 flex gap-1.5 backdrop-blur-sm">
                   <span className="text-[10px] font-medium text-muted-foreground">Punto de Venta</span>
@@ -160,7 +167,6 @@ export default function LandingPage() {
                 <Image src="/images/POS-preview.png" width={800} height={500} className="w-full h-auto" alt="Módulo POS" />
               </div>
 
-              {/* Imagen Flotante 2: Inventario (Solo en pantallas grandes lg) */}
               <div className="hidden lg:block absolute z-30 w-[40%] -top-6 -left-4 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-xl overflow-hidden border border-border bg-background transition-all duration-700 hover:-translate-y-3 hover:scale-105">
                 <div className="bg-muted/60 border-b border-border/50 px-3 py-2 flex gap-1.5 backdrop-blur-sm">
                   <span className="text-[10px] font-medium text-muted-foreground">Inventario</span>
@@ -168,7 +174,6 @@ export default function LandingPage() {
                 <Image src="/images/inventario-preview.png" width={600} height={400} className="w-full h-auto" alt="Módulo Inventario" />
               </div>
               
-              {/* Tarjeta de Estadística Flotante */}
               <div className="hidden lg:flex absolute z-40 right-[-5%] top-[15%] bg-background/90 backdrop-blur-md border border-border/50 p-4 rounded-2xl shadow-xl items-center gap-4 transition-all duration-500 hover:-translate-y-2">
                 <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center text-green-500">
                   <BarChart3 className="w-6 h-6" />
@@ -183,7 +188,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* EL RESTO DEL CÓDIGO SE MANTIENE INTACTO */}
       <section className="border-t border-border bg-muted/30">
         <div className="mx-auto max-w-7xl px-6 py-24">
           <h2 className="text-3xl sm:text-4xl font-bold text-center tracking-tight">Todo lo que tu negocio necesita</h2>
@@ -227,17 +231,24 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* SECCIÓN DE PLANES ACTUALIZADA */}
       <section className="border-t border-border bg-muted/30">
         <div className="mx-auto max-w-7xl px-6 py-24">
-          <h2 className="text-3xl sm:text-4xl font-bold text-center tracking-tight">Planes simples, sin sorpresas</h2>
-          <p className="text-muted-foreground text-center mt-3 max-w-lg mx-auto text-lg">
-            Elige tu vigencia al registrarte — 1, 3, 6 o 12 meses — con la opción de renovar automáticamente.
-          </p>
-          <div className="grid sm:grid-cols-3 gap-8 mt-16 max-w-5xl mx-auto">
+          <div className="text-center max-w-2xl mx-auto">
+            <span className="inline-block bg-green-500/10 text-green-600 font-semibold px-4 py-1.5 rounded-full text-sm mb-4 border border-green-500/20">
+              🎁 Todos los planes incluyen 1 mes de prueba gratis
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">Planes simples, sin sorpresas</h2>
+            <p className="text-muted-foreground mt-4 text-lg">
+              Elige tu vigencia al registrarte — 1, 3, 6 o 12 meses — con la opción de renovar automáticamente. Cancela cuando quieras.
+            </p>
+          </div>
+          
+          <div className="grid sm:grid-cols-3 gap-8 mt-12 max-w-6xl mx-auto">
             {PLANES.map((p) => (
               <div
                 key={p.nombre}
-                className={`rounded-2xl p-8 border ${p.destacado ? "border-primary bg-background shadow-xl shadow-primary/10 relative transform sm:-translate-y-4" : "border-border bg-background"}`}
+                className={`rounded-2xl p-8 border flex flex-col ${p.destacado ? "border-primary bg-background shadow-xl shadow-primary/10 relative transform sm:-translate-y-4" : "border-border bg-background"}`}
               >
                 {p.destacado && (
                   <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[13px] font-bold px-4 py-1 rounded-full shadow-sm">
@@ -249,16 +260,28 @@ export default function LandingPage() {
                   ${p.precio.toLocaleString("es-MX")}
                   <span className="text-base font-normal text-muted-foreground"> MXN / mes</span>
                 </p>
-                <p className="text-muted-foreground mt-4 leading-relaxed">{p.desc}</p>
+                <p className="text-muted-foreground mt-4 leading-relaxed text-sm h-10">{p.desc}</p>
+                
+                <div className="w-full h-px bg-border my-6" />
+                
+                <ul className="space-y-4 mb-8 flex-1">
+                  {p.caracteristicas.map((c, i) => (
+                    <li key={i} className="flex items-start gap-3 text-sm">
+                      <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      <span className="font-medium text-foreground/80">{c}</span>
+                    </li>
+                  ))}
+                </ul>
+
                 <Link
                   href="/register"
-                  className={`mt-8 flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-bold transition-all ${
+                  className={`flex items-center justify-center gap-2 w-full py-3.5 rounded-xl text-sm font-bold transition-all ${
                     p.destacado
                       ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
                       : "border-2 border-border hover:border-primary/50 text-foreground"
                   }`}
                 >
-                  Empezar <ArrowRight className="w-4 h-4" />
+                  Empezar prueba gratis <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
             ))}
@@ -274,9 +297,9 @@ export default function LandingPage() {
           </p>
           <Link
             href="/register"
-            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-8 py-4 rounded-xl mt-8 transition-all shadow-lg shadow-primary/25"
+            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-8 py-4 rounded-xl mt-8 transition-all shadow-lg shadow-primary/25 hover:-translate-y-1"
           >
-            Crear mi cuenta <ArrowRight className="w-5 h-5" />
+            Comenzar mi mes gratis <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
       </section>

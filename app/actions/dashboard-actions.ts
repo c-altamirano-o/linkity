@@ -1,89 +1,16 @@
 "use server";
 
-import { getVentasPorDia, hoyMx, redactarMontosVentasPorDia, type VentasPorDiaData } from "@/lib/dashboard-data";
 import { resolverActor } from "@/lib/actor";
-import { verTodoNegocioParaRolPorNombre, verMontosCajaParaRolPorNombre } from "@/lib/roles-server";
-import { getTenantPrisma, prisma } from "@/lib/prisma";
+import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 
-/**
- * Server Action del selector de fecha del Dashboard ("Ventas por día y
- * hora" — 2026-09-17, a petición de Carlos: ver el comentario largo en
- * lib/dashboard-data.ts). dashboard/page.tsx ya llama a getVentasPorDia
- * server-side para la carga inicial (fecha = hoy); este Action es para
- * cuando el dueño cambia la fecha desde DashboardClient.tsx después de esa
- * carga inicial, así que necesita su propio punto de entrada con
- * autenticación — igual que cualquier otro *-actions.ts del proyecto,
- * resuelto vía resolverActor (lib/actor.ts) en vez de confiar en un
- * tenantId que mandara el cliente.
- */
-export async function obtenerVentasPorDiaAction(
-  tenantSlug: string,
-  fecha: string,
-  // "Vista por sucursal" del Dashboard (2026-09-22) — cuando DashboardClient
-  // está filtrado a una sucursal, el selector de fecha debe seguir
-  // reflejando esa misma sucursal al cambiar de día, no el negocio
-  // completo. Se revalida contra la BD (nunca se confía en que el branchId
-  // que manda el cliente de verdad pertenezca a este tenant), mismo
-  // criterio que puedeOperarSucursal en el resto del proyecto.
-  branchId?: string
-): Promise<{ ok: true; data: VentasPorDiaData } | { ok: false; error: string }> {
-  const resuelto = await resolverActor(tenantSlug, "dashboard");
-  if (!resuelto.ok) return { ok: false, error: resuelto.error };
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-    return { ok: false, error: "Fecha inválida" };
-  }
-
-  // No se aceptan fechas futuras — se recorta a hoy (México) en vez de
-  // rechazar con error, para que un reloj de cliente ligeramente adelantado
-  // no le muestre un error al dueño sin necesidad.
-  const hoy = hoyMx();
-  const fechaFinal = fecha > hoy ? hoy : fecha;
-
-  try {
-    // 2026-09-24, corrigiendo el mismo hueco que dashboard/page.tsx (ver el
-    // comentario largo ahí): este Action confiaba en el branchId que
-    // mandara el cliente sin verificar que de verdad fuera el suyo — un
-    // empleado de PIN sin Role.verTodoNegocio podía, en teoría, pedir los
-    // datos de OTRA sucursal con solo cambiar este parámetro (la pantalla
-    // ya no se lo ofrece, pero el Action en sí no lo impedía). Mismo
-    // criterio que caja/page.tsx: para él, el servidor IGNORA el branchId
-    // que mande y siempre usa el suyo propio.
-    let branchIdPedido = branchId;
-    if (resuelto.actor === "staff") {
-      const veTodoElNegocio = await verTodoNegocioParaRolPorNombre(resuelto.tenant.id, resuelto.roleName);
-      branchIdPedido = veTodoElNegocio ? branchId : (resuelto.branchId ?? undefined);
-    }
-
-    let branchIdValidado: string | undefined;
-    if (branchIdPedido) {
-      const db = getTenantPrisma(resuelto.tenant.id);
-      const branch = await db.branch.findUnique({ where: { id: branchIdPedido }, select: { id: true } });
-      branchIdValidado = branch?.id;
-    }
-
-    const data = await getVentasPorDia(resuelto.tenant.id, fechaFinal, branchIdValidado);
-
-    // 2026-09-24, a petición de Carlos (revisión de permisos, mismo hueco
-    // que dashboard/page.tsx — ver redactarMontosVentasPorDia,
-    // lib/dashboard-data.ts): este Action recalcula el mismo bloque de
-    // datos que la carga inicial de la página cada vez que el dueño cambia
-    // de fecha, así que necesita el mismo candado anti-fraude aquí, no
-    // solo en la carga inicial — sin esto, un empleado sin
-    // Role.verMontosCaja podía saltarse la redacción del servidor con solo
-    // mover el selector de fecha.
-    const puedeVerMontos = resuelto.actor === "staff"
-      ? await verMontosCajaParaRolPorNombre(resuelto.tenant.id, resuelto.roleName)
-      : true;
-
-    return { ok: true, data: puedeVerMontos ? data : redactarMontosVentasPorDia(data) };
-  } catch (err) {
-    console.error("obtenerVentasPorDiaAction", err);
-    return { ok: false, error: "No se pudo obtener la información de ese día" };
-  }
-}
+// 2026-09-28: obtenerVentasPorDiaAction (el selector de un solo día de
+// "Ventas por día y hora") se quitó de aquí — esa sección ahora usa el
+// mismo selector de periodo que el resto del Dashboard (ver el comentario
+// largo junto a DashboardData.ventasPorHora, lib/dashboard-data.ts), así
+// que ya no necesita su propio Action ni recarga vía AJAX.
 
 export interface CategoriaDashboardConfigInput {
   name: string;

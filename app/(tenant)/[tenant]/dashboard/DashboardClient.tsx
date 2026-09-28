@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ShoppingCart, Wrench, AlertTriangle, Clock, ArrowUpRight, ArrowDownRight,
   CheckCircle, RotateCcw, Receipt, Building2, X, Phone, Settings,
-  Calendar, ChevronLeft, ChevronRight,
+  Calendar,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -14,9 +14,9 @@ import {
 import type { RepairStatus, Priority } from "@prisma/client";
 import { label, type LabelDictionary } from "@/lib/labels";
 import type {
-  DashboardData, RepairRow, CategoriaVenta, VentasPorDiaData, VentaPorHora, AtajosPeriodoDashboard,
+  DashboardData, RepairRow, CategoriaVenta, VentaPorHora, AtajosPeriodoDashboard,
 } from "@/lib/dashboard-data";
-import { obtenerVentasPorDiaAction, guardarConfigCategoriasDashboardAction } from "@/app/actions/dashboard-actions";
+import { guardarConfigCategoriasDashboardAction } from "@/app/actions/dashboard-actions";
 
 // ── Config de presentación (claves = valores reales del enum) ───────────────
 const estadoConfig: Record<RepairStatus, { label: string; classes: string }> = {
@@ -138,7 +138,6 @@ export default function DashboardClient({
   data,
   labels,
   tenantSlug,
-  ventasPorDiaInicial,
   branches,
   sucursalActualId,
   puedeConfigurarCategorias = true,
@@ -148,7 +147,6 @@ export default function DashboardClient({
   data: DashboardData;
   labels: LabelDictionary;
   tenantSlug: string;
-  ventasPorDiaInicial: VentasPorDiaData;
   // "Vista global" / "vista por sucursal" (2026-09-22, a petición de
   // Carlos). branches = TODAS las sucursales activas del tenant (para el
   // selector, sin importar cuál esté filtrada ahora mismo — ver
@@ -168,9 +166,8 @@ export default function DashboardClient({
   puedeConfigurarCategorias?: boolean;
   // 2026-09-24, a petición de Carlos (revisión de permisos, hueco
   // encontrado en producción): false para un empleado de PIN cuyo rol no
-  // tiene Role.verMontosCaja — `data`/`ventasPorDiaInicial` ya llegan
-  // redactados desde el servidor (ver redactarMontosDashboard/
-  // redactarMontosVentasPorDia, lib/dashboard-data.ts). A diferencia de
+  // tiene Role.verMontosCaja — `data` ya llega redactado desde el servidor
+  // (ver redactarMontosDashboard, lib/dashboard-data.ts). A diferencia de
   // Caja/Sucursales (que mostraban "🔒 Oculto" en el lugar del monto),
   // Carlos pidió explícitamente NO usar ese candado aquí — "se ve poco
   // estético" — así que en vez de reemplazar el valor, cada ficha/columna/
@@ -225,11 +222,28 @@ export default function DashboardClient({
     }
   })();
 
+  // Versión con mayúscula inicial de etiquetaPeriodo (2026-09-28) — para
+  // subtítulos cortos y solos como "Hoy"/"Esta semana" (el resto de los
+  // subtítulos de esa misma tarjeta, "En proceso"/"Pendientes", ya empiezan
+  // con mayúscula) en vez de la versión en minúsculas pensada para ir
+  // después de "·" o "vs".
+  const etiquetaPeriodoCap = etiquetaPeriodo.charAt(0).toUpperCase() + etiquetaPeriodo.slice(1);
+
+  // 2026-09-28: para el comparativo "vs periodo anterior" por sucursal (ver
+  // SucursalResumen.vsPeriodoAnterior, lib/dashboard-data.ts) — "Hoy" sigue
+  // diciendo "vs ayer" (que es justo lo que es un periodo anterior de 1
+  // día), el resto nombra el tramo equivalente que se está comparando.
+  const etiquetaComparativo = (() => {
+    switch (data.periodo.atajo) {
+      case "hoy": return "vs ayer";
+      case "semana": return "vs semana pasada";
+      case "mes": return "vs mes pasado";
+      case "año": return "vs año pasado";
+      default: return "vs periodo anterior";
+    }
+  })();
+
   const [modalAbierto, setModalAbierto] = useState<ModalType>(null);
-  const [ventasPorDia, setVentasPorDia] = useState<VentasPorDiaData>(ventasPorDiaInicial);
-  const [fechaSel, setFechaSel] = useState(ventasPorDiaInicial.fecha);
-  const [hoyStr, setHoyStr] = useState(ventasPorDiaInicial.fecha);
-  const [cargandoFecha, setCargandoFecha] = useState(false);
   const [configurandoCategorias, setConfigurandoCategorias] = useState(false);
   // 2026-09-22: data.categorias ya viene con "visible" resuelto desde el
   // servidor (config guardada del tenant, o el default de las primeras 6
@@ -253,26 +267,7 @@ export default function DashboardClient({
         timeZone: "America/Mexico_City",
       }).format(new Date())
     );
-    // "en-CA" formatea como YYYY-MM-DD directamente — mismo truco que el
-    // resto del proyecto para no reconstruir el string a mano.
-    setHoyStr(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date()));
   }, []);
-
-  const cambiarFechaVentas = async (nuevaFecha: string) => {
-    if (nuevaFecha === fechaSel || cargandoFecha) return;
-    setFechaSel(nuevaFecha);
-    setCargandoFecha(true);
-    const res = await obtenerVentasPorDiaAction(tenantSlug, nuevaFecha, sucursalActualId ?? undefined);
-    if (res.ok) setVentasPorDia(res.data);
-    setCargandoFecha(false);
-  };
-
-  const sumarDias = (fechaStr: string, delta: number) => {
-    const [y, m, d] = fechaStr.split("-").map(Number);
-    return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
-  };
-
-  const esHoySeleccionado = fechaSel >= hoyStr;
 
   const categoriasVisibles = categoriasConfig.filter((c) => c.visible);
 
@@ -464,7 +459,7 @@ export default function DashboardClient({
       // montosVisibles es false (en vez de un candado) — ver el comentario
       // del prop montosVisibles más arriba.
       ventas: {
-        titulo: "Ventas del día", iconBg: "bg-primary/10", iconColor: "text-primary-text", icon: ShoppingCart,
+        titulo: "Ventas del periodo", iconBg: "bg-primary/10", iconColor: "text-primary-text", icon: ShoppingCart,
         stats: [
           ...(montosVisibles ? [{ label: "Total ventas", value: formatMXN(data.totalVentasHoy), color: "text-primary-text" }] : []),
           { label: "Num. de ventas", value: String(data.numVentasHoy), color: "text-foreground" },
@@ -601,7 +596,11 @@ export default function DashboardClient({
         </div>
         {montosVisibles && (
           <div className="text-right">
-            <p className="text-[11.5px] text-muted-foreground">Total semana</p>
+            {/* 2026-09-28: dejó de decir siempre "Total semana" — data.totalSemana
+                ahora es el total de la tendencia del PERIODO elegido (ver el
+                comentario largo junto a DashboardData.ventasSemana,
+                lib/dashboard-data.ts), así que la etiqueta lo acompaña. */}
+            <p className="text-[11.5px] text-muted-foreground">Total del período</p>
             <p className="text-sm sm:text-base font-bold text-foreground">{formatMXN(data.totalSemana)}</p>
           </div>
         )}
@@ -611,14 +610,20 @@ export default function DashboardClient({
           2026-09-26, a petición explícita de Carlos: "Agrega un selector...
           no debe ser solo para un día en específico... ese selector debe
           tener uno para Inicio otro para fin, pero atajos para Hoy, Semana,
-          Mes, Año". Aplica a "Ventas del período" / "Total de tickets" /
-          "Equipos listos" / "Equipos devolución" / "Equipos recibidos" (por
-          sucursal) — "Reparaciones activas" y las gráficas (tendencia
-          semanal, categorías del mes, día/hora, "vs ayer" por sucursal) se
-          quedan fuera de este selector por ahora, ver el mensaje que
-          acompaña este cambio. Los rangos de los 4 atajos ya vienen
-          resueltos del servidor (atajosPeriodoDashboard, lib/dashboard-data.ts)
-          porque "Semana" depende de Tenant.weekStartDay. */}
+          Mes, Año". 2026-09-28, a petición de Carlos ("todos los apartados
+          del dashboard deberían mostrar el periodo seleccionado"): ahora
+          aplica a TODO el Dashboard — las fichas de arriba, "Ventas de la
+          semana" (que cambia de forma según la duración del periodo, ver
+          construirBucketsTendencia en lib/dashboard-data.ts), "Ventas por
+          categoría", "Ventas por día y hora" (suma las horas de todo el
+          periodo en vez de un solo día) y el comparativo por sucursal
+          ("vs periodo anterior" en vez de "vs ayer" fijo) — la única
+          excepción deliberada sigue siendo "Reparaciones activas" (una foto
+          del momento, no tiene sentido acotarla a un rango pasado, ver el
+          comentario junto a esa ficha más abajo). Los rangos de los 4
+          atajos ya vienen resueltos del servidor (atajosPeriodoDashboard,
+          lib/dashboard-data.ts) porque "Semana" depende de
+          Tenant.weekStartDay. */}
       <div className="flex items-center gap-2 flex-wrap bg-card border border-border rounded-xl p-2.5">
         <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
           {(
@@ -746,8 +751,14 @@ export default function DashboardClient({
           <div className="lg:col-span-2 bg-card border border-border rounded-xl p-3 sm:p-4">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <p className="text-sm font-medium text-foreground">Ventas de la semana</p>
-                <p className="text-xs text-muted-foreground">Promedio diario: {formatMXN(data.promedioVentasSemana)}</p>
+                {/* 2026-09-28: título y "promedio" siguen la granularidad real
+                    de data.ventasSemana — con "Mes" son barras por día
+                    ("diario"), con "Año" son barras por mes ("mensual"), ver
+                    construirBucketsTendencia en lib/dashboard-data.ts. */}
+                <p className="text-sm font-medium text-foreground capitalize">Ventas · {etiquetaPeriodo}</p>
+                <p className="text-xs text-muted-foreground">
+                  Promedio {data.tendenciaGranularidad === "mes" ? "mensual" : "diario"}: {formatMXN(data.promedioVentasSemana)}
+                </p>
               </div>
               <div className="flex items-center gap-2 sm:gap-4">
                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /><span className="text-[11.5px] sm:text-xs text-muted-foreground">Ventas</span></div>
@@ -805,9 +816,12 @@ export default function DashboardClient({
               </button>
             )}
           </div>
-          <p className="text-xs text-muted-foreground mb-2">Este mes</p>
+          {/* 2026-09-28: dejó de decir siempre "Este mes" — ahora sigue el
+              periodo elegido en el selector (mismo texto que ya usan las
+              fichas de arriba, ej. "Sin ventas · esta semana"). */}
+          <p className="text-xs text-muted-foreground mb-2 capitalize">{etiquetaPeriodo}</p>
           {categoriasVisibles.length === 0 ? (
-            <EmptyState text="Aún no hay ventas registradas este mes." />
+            <EmptyState text={`Aún no hay ventas registradas ${etiquetaPeriodo}.`} />
           ) : (
             <div className="flex flex-col sm:block">
               <ResponsiveContainer width="100%" height={110}>
@@ -835,51 +849,34 @@ export default function DashboardClient({
         </div>
       </div>
 
-      {/* ── Ventas por día y hora (selector de fecha) ─────────────────────── */}
+      {/* ── Ventas por día y hora ──────────────────────────────────────────
+          2026-09-28: dejó de tener su PROPIO selector de un solo día (con
+          flechas anterior/siguiente) — a petición de Carlos ("todos los
+          apartados del dashboard deberían mostrar el periodo seleccionado"),
+          ahora usa el MISMO selector de arriba, sumando las horas de TODOS
+          los días del periodo elegido (con "Hoy" sigue siendo exactamente un
+          solo día, igual que antes). Ver DashboardData.ventasPorHora en
+          lib/dashboard-data.ts. */}
       <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3">
-          <div>
-            <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-primary-text" /> Ventas por día y hora
-            </p>
-            <p className="text-xs text-muted-foreground capitalize">{formatFechaLarga(fechaSel)}</p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => cambiarFechaVentas(sumarDias(fechaSel, -1))} disabled={cargandoFecha}
-              className="w-7 h-7 rounded-lg border border-border hover:bg-muted flex items-center justify-center disabled:opacity-40 flex-shrink-0">
-              <ChevronLeft className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-            <input
-              type="date"
-              value={fechaSel}
-              max={hoyStr}
-              disabled={cargandoFecha}
-              onChange={(e) => e.target.value && cambiarFechaVentas(e.target.value)}
-              className="px-2 py-1.5 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary disabled:opacity-60"
-            />
-            <button onClick={() => cambiarFechaVentas(sumarDias(fechaSel, 1))} disabled={cargandoFecha || esHoySeleccionado}
-              className="w-7 h-7 rounded-lg border border-border hover:bg-muted flex items-center justify-center disabled:opacity-40 flex-shrink-0">
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-            {!esHoySeleccionado && (
-              <button onClick={() => cambiarFechaVentas(hoyStr)} disabled={cargandoFecha}
-                className="text-[11.5px] font-medium px-2 py-1.5 rounded-lg text-primary-text bg-primary/10 hover:opacity-80 flex-shrink-0">
-                Hoy
-              </button>
-            )}
-          </div>
+        <div className="mb-3">
+          <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-primary-text" /> Ventas por día y hora
+          </p>
+          <p className="text-xs text-muted-foreground capitalize">{etiquetaPeriodo}</p>
         </div>
 
         {/* 2026-09-24: "Total vendido"/"Ticket promedio" (dinero) se omiten
             del arreglo cuando montosVisibles es false — "Ventas" (conteo) y
-            "Mayor flujo" (hora, calculado por num. de tickets no por monto,
-            ver getVentasPorDia en lib/dashboard-data.ts) se quedan. */}
+            "Mayor flujo" (hora, calculado por num. de tickets no por monto)
+            se quedan. Reusa los mismos totales del periodo que ya calculó
+            getDashboardData (totalVentasHoy/numVentasHoy/ticketPromedio) —
+            son exactamente el mismo rango de fechas que data.ventasPorHora. */}
         <div className={`grid grid-cols-2 ${montosVisibles ? "sm:grid-cols-4" : ""} gap-2 mb-3`}>
           {[
-            ...(montosVisibles ? [{ label: "Total vendido", value: formatMXN(ventasPorDia.totalVentas) }] : []),
-            { label: "Ventas", value: String(ventasPorDia.numVentas) },
-            ...(montosVisibles ? [{ label: "Ticket promedio", value: formatMXN(ventasPorDia.ticketPromedio) }] : []),
-            { label: "Mayor flujo", value: ventasPorDia.horaPico ? ventasPorDia.horaPico.horaLabel : "—" },
+            ...(montosVisibles ? [{ label: "Total vendido", value: formatMXN(data.totalVentasHoy) }] : []),
+            { label: "Ventas", value: String(data.numVentasHoy) },
+            ...(montosVisibles ? [{ label: "Ticket promedio", value: formatMXN(data.ticketPromedio) }] : []),
+            { label: "Mayor flujo", value: data.horaPico ? data.horaPico.horaLabel : "—" },
           ].map((s) => (
             <div key={s.label} className="bg-muted/50 rounded-xl p-2 text-center">
               <p className="text-[10.5px] text-muted-foreground mb-0.5">{s.label}</p>
@@ -888,11 +885,11 @@ export default function DashboardClient({
           ))}
         </div>
 
-        {ventasPorDia.numVentas === 0 ? (
-          <EmptyState text="No hay ventas registradas ese día." />
+        {data.numVentasHoy === 0 ? (
+          <EmptyState text={`No hay ventas registradas ${etiquetaPeriodo}.`} />
         ) : (
           <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={ventasPorDia.porHora} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+            <BarChart data={data.ventasPorHora} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
               <XAxis dataKey="horaLabel" tick={{ fontSize: 8, fill: "#94A3B8" }} axisLine={false} tickLine={false} interval={2} />
               <YAxis tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} width={22} allowDecimals={false} />
@@ -901,7 +898,6 @@ export default function DashboardClient({
             </BarChart>
           </ResponsiveContainer>
         )}
-        {cargandoFecha && <p className="text-[11.5px] text-muted-foreground text-center mt-2">Cargando…</p>}
       </div>
 
       {/* ── Reparaciones + Alertas ─────────────────────────────────────────── */}
@@ -981,8 +977,11 @@ export default function DashboardClient({
       {/* ── Comparativo de ventas por sucursal (solo vista global) ───────
           2026-09-22, a petición de Carlos, referencia de su sistema
           anterior (reporte "AdminDaily") — comparación rápida de quién
-          vendió más hoy, de un vistazo. No aparece en vista por sucursal
-          (no hay nada que comparar viendo una sola). */}
+          vendió más, de un vistazo. No aparece en vista por sucursal (no
+          hay nada que comparar viendo una sola). 2026-09-28: ventasDia dejó
+          de ser SIEMPRE "hoy" — ahora es el periodo elegido en el selector
+          (ver el comentario largo junto a SucursalResumen.vsPeriodoAnterior,
+          lib/dashboard-data.ts). */}
       {/* 2026-09-24: este comparativo es puro dinero (ventasDia de cada
           sucursal) — se omite por completo cuando montosVisibles es false,
           no solo sus valores. */}
@@ -990,7 +989,7 @@ export default function DashboardClient({
         <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-medium text-foreground">Ventas por sucursal</p>
-            <span className="text-xs text-muted-foreground hidden sm:block capitalize">Hoy · {fechaHoy}</span>
+            <span className="text-xs text-muted-foreground hidden sm:block capitalize">{etiquetaPeriodo}</span>
           </div>
           <ResponsiveContainer width="100%" height={Math.max(120, sucursalesOrdenadas.length * 38)}>
             <BarChart data={sucursalesOrdenadas} layout="vertical" margin={{ top: 5, right: 30, left: 0, bottom: 0 }}>
@@ -1020,7 +1019,7 @@ export default function DashboardClient({
               <Building2 className="w-4 h-4 text-primary-text" />
               <p className="text-sm font-medium text-foreground">Resumen por sucursal</p>
             </div>
-            <span className="text-xs text-muted-foreground hidden sm:block capitalize">Hoy · {fechaHoy}</span>
+            <span className="text-xs text-muted-foreground hidden sm:block capitalize">{etiquetaPeriodo}</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border">
             {data.sucursales.map((suc, i) => {
@@ -1033,15 +1032,19 @@ export default function DashboardClient({
                       {suc.estado === "activa" ? "Activa" : "En prueba"}
                     </span>
                   </div>
-                  {/* 2026-09-24: "Ventas del día" y "Ticket promedio" (dinero)
+                  {/* 2026-09-24: "Ventas del período" y "Ticket promedio" (dinero)
                       se omiten del arreglo cuando montosVisibles es false —
-                      el resto son conteos, se quedan igual. */}
+                      el resto son conteos, se quedan igual. 2026-09-28:
+                      ventasDia/vsPeriodoAnterior/equiposRecibidos dejaron de
+                      ser SIEMPRE "hoy"/"vs ayer" — siguen el periodo elegido
+                      (ver el comentario largo junto a
+                      SucursalResumen.vsPeriodoAnterior, lib/dashboard-data.ts). */}
                   <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-2 divide-x divide-y divide-border">
                     {[
-                      ...(montosVisibles ? [{ label: "Ventas del día", value: formatMXN(suc.ventasDia), color: "text-primary-text", sub: suc.vsAyer != null ? `${suc.vsAyer >= 0 ? "↑" : "↓"} ${Math.abs(suc.vsAyer)}% vs ayer` : "Sin datos de ayer" }] : []),
+                      ...(montosVisibles ? [{ label: "Ventas del período", value: formatMXN(suc.ventasDia), color: "text-primary-text", sub: suc.vsPeriodoAnterior != null ? `${suc.vsPeriodoAnterior >= 0 ? "↑" : "↓"} ${Math.abs(suc.vsPeriodoAnterior)}% ${etiquetaComparativo}` : `Sin datos · ${etiquetaComparativo}` }] : []),
                       ...(data.reparacionesActiva
                         ? [
-                            { label: "Equipos recibidos", value: String(suc.equiposRecibidos), color: "text-foreground", sub: "Hoy" },
+                            { label: "Equipos recibidos", value: String(suc.equiposRecibidos), color: "text-foreground", sub: etiquetaPeriodoCap },
                             { label: "Listos entrega", value: String(suc.listosEntrega), color: suc.listosEntrega > 0 ? "text-emerald-600" : "text-muted-foreground", sub: "En tienda" },
                             { label: "Devoluciones", value: String(suc.devoluciones), color: suc.devoluciones > 0 ? "text-amber-600" : "text-muted-foreground", sub: "Pendientes" },
                             { label: "Rep. activas", value: String(suc.repActivas), color: "text-foreground", sub: "En proceso" },
