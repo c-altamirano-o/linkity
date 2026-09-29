@@ -117,6 +117,22 @@ export type FormatoTicket = "TERMICA_58" | "TERMICA_80" | "CARTA";
  * SIEMPRE, se imprime en lo que el navegador tenga configurado (hoja
  * carta/A4, o "Guardar como PDF").
  */
+
+/**
+ * 2026-09-29, rediseño estético del ticket a petición de Carlos ("el ticket
+ * que generamos se me hace burdo, quiero un diseño inovador pero funcional"),
+ * a partir de 3 propuestas mostradas como mockup — eligió la B ("minimalista
+ * con acento": header centrado, sin cajas de fondo, jerarquía tipográfica,
+ * total grande con regla superior). Con una condición explícita: "la mayoria
+ * usará el POS con impresora térmica de 5 u 8 mm así que sería
+ * monocromática" (58mm/80mm) — por eso NINGÚN elemento depende de color para
+ * comunicar algo: el "acento" del diseño es tipográfico/estructural (tamaño,
+ * peso, espaciado, líneas negras) en vez de un color, así se ve exactamente
+ * igual de bien en térmica monocromática que en CARTA. Se agregan además
+ * `sucursal` y `atendioPor` a ReciboData (ver abajo) — ambos ya existían en
+ * el modelo (Sale.branchId/userId, Repair.branchId + el usuario resuelto por
+ * resolverActor), este cambio solo los hace llegar hasta el ticket.
+ */
 export function estilosImpresionTicket(formato: FormatoTicket | null | undefined): string {
   if (formato === "TERMICA_58") {
     return `
@@ -124,8 +140,10 @@ export function estilosImpresionTicket(formato: FormatoTicket | null | undefined
         body { max-width: 50mm; font-size: 9.5px; padding: 0; }
         h1 { font-size: 11px; }
         .muted, th, td { font-size: 8.5px; }
-        .total { font-size: 11px; }
+        .total { font-size: 17px; }
         .qr svg { width: 64px; height: 64px; }
+        .badge, .renglon-item { font-size: 8.5px; }
+        .renglon-item .cant { font-size: 7.5px; }
       `;
   }
   if (formato === "TERMICA_80") {
@@ -134,8 +152,10 @@ export function estilosImpresionTicket(formato: FormatoTicket | null | undefined
         body { max-width: 72mm; font-size: 11px; padding: 0; }
         h1 { font-size: 13px; }
         .muted, th, td { font-size: 10px; }
-        .total { font-size: 13px; }
+        .total { font-size: 19px; }
         .qr svg { width: 80px; height: 80px; }
+        .badge, .renglon-item { font-size: 10px; }
+        .renglon-item .cant { font-size: 9px; }
       `;
   }
   return "";
@@ -167,6 +187,10 @@ export interface ReciboData {
   folio: string;
   cliente: string | null;
   telefono: string | null;
+  /** Nombre de la sucursal donde se hizo esta venta/entrega (Branch.name) — null si no se resolvió (ej. tenant sin sucursales configuradas). */
+  sucursal?: string | null;
+  /** Nombre de quién atendió (User.name — la cuenta de atribución, sea dueño con cuenta real o empleado con PIN, ver Staff.userId en schema.prisma) — null si no se resolvió. */
+  atendioPor?: string | null;
   renglones: ReciboRenglon[];
   subtotal: number;
   iva: number;
@@ -196,16 +220,34 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
     ? await QRCode.toString(r.qrUrl, { type: "svg", margin: 0, width: 96 }).catch(() => null)
     : null;
 
+  // Renglones: ya no es una <table> (era la única pieza del diseño viejo
+  // que forzaba columnas fijas) — cada renglón es una fila flex
+  // (.renglon-item) con el nombre + cantidad a la izquierda y el importe a
+  // la derecha, alineado por `justify-content: space-between` renglón por
+  // renglón, así que el resultado se ve igual de ordenado que una tabla sin
+  // depender de <table>/<th>/<td> (que este ticket ya no usa — siguen
+  // soportados por estilosImpresionTicket solo porque el ticket de
+  // RECEPCIÓN, en ReparacionesClient.tsx, todavía los usa).
   const filas = r.renglones
     .map(
       (l) => `
-        <tr>
-          <td>${l.nombre}</td>
-          <td style="text-align:center">${l.cantidad}</td>
-          <td style="text-align:right">${formatMXN(l.precioUnitario)}</td>
-          <td style="text-align:right">${formatMXN(l.precioUnitario * l.cantidad)}</td>
-        </tr>`
+        <div class="renglon-item">
+          <span>${l.nombre}${l.cantidad !== 1 ? `<span class="cant"> ×${l.cantidad}</span>` : ""}</span>
+          <span>${formatMXN(l.precioUnitario * l.cantidad)}</span>
+        </div>`
     )
+    .join("");
+
+  // Sucursal/atendió: la misma "badge" (recuadro con borde, sin relleno de
+  // color — ver el comentario largo arriba sobre monocromía) se reutiliza
+  // para cualquiera de los dos que venga; ninguno es obligatorio (un tenant
+  // de una sola sucursal, o una acción sin actor resuelto, simplemente no
+  // agrega su badge, igual que negocio.direccion/telefono de siempre).
+  const badges = [
+    r.sucursal ? `<span class="badge">Sucursal: ${r.sucursal}</span>` : "",
+    r.atendioPor ? `<span class="badge">Atendió: ${r.atendioPor}</span>` : "",
+  ]
+    .filter(Boolean)
     .join("");
 
   win.document.write(`
@@ -216,20 +258,30 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
       <title>${r.tipoDocumento} ${r.folio}</title>
       <style>
         * { box-sizing: border-box; }
-        body { font-family: Arial, Helvetica, sans-serif; padding: 20px; color: #111827; font-size: 13px; max-width: 380px; margin: 0 auto; }
-        h1 { font-size: 16px; margin: 0 0 2px; }
+        body { font-family: Arial, Helvetica, sans-serif; padding: 20px; color: #111827; font-size: 13px; max-width: 380px; margin: 0 auto; text-align: center; }
+        h1 { font-size: 16px; margin: 0; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; }
         .muted { color: #6b7280; font-size: 11px; margin: 0; }
         hr { border: none; border-top: 1px dashed #9ca3af; margin: 10px 0; }
         p { margin: 4px 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+        /* th/td siguen aquí SOLO por el ticket de recepción compartido
+           (abrirTicketImprimible, ReparacionesClient.tsx) — este ticket ya
+           no genera ninguna <table>. */
         th, td { padding: 4px 2px; font-size: 11.5px; border-bottom: 1px solid #f3f4f6; }
         th { text-align: left; color: #6b7280; font-weight: 600; }
-        .renglon { display: flex; justify-content: space-between; }
-        .total { font-size: 15px; font-weight: bold; text-align: right; margin-top: 8px; }
+        .renglon { display: flex; justify-content: space-between; text-align: left; }
+        .renglon-item { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; text-align: left; padding: 4px 0; border-bottom: 1px solid #f3f4f6; font-size: 12px; }
+        .renglon-item .cant { color: #9ca3af; font-size: 10px; }
+        .total-envoltura { margin-top: 10px; padding-top: 10px; border-top: 2px solid #111827; }
+        .total-envoltura .etiqueta { font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: #6b7280; }
+        .total { font-size: 22px; font-weight: 800; margin: 2px 0 0; }
         .aviso { margin-top: 14px; font-size: 10.5px; color: #4b5563; border-top: 1px dashed #9ca3af; padding-top: 8px; text-align: center; }
         .extra { margin-top: 10px; font-size: 11px; color: #374151; white-space: pre-wrap; text-align: center; }
-        .encabezado { display: flex; align-items: center; gap: 8px; }
-        .encabezado img { width: 40px; height: 40px; object-fit: contain; border-radius: 6px; flex-shrink: 0; }
+        .encabezado { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .encabezado img { width: 40px; height: 40px; object-fit: contain; border-radius: 8px; }
+        .barra { width: 42px; height: 2px; background: #111827; margin: 10px auto; }
+        .badges { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+        .badge { border: 1px solid #9ca3af; border-radius: 999px; padding: 2px 9px; font-size: 10px; color: #374151; }
+        .cliente { font-size: 11.5px; }
         .qr { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
         .qr svg { width: 96px; height: 96px; }
         @media print { body { padding: 0; } }
@@ -239,30 +291,26 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
     <body>
       <div class="encabezado">
         ${negocio.logoUrl ? `<img src="${negocio.logoUrl}" alt="" />` : ""}
-        <div>
-          <h1>${negocio.nombre}</h1>
-          ${negocio.direccion ? `<p class="muted">${negocio.direccion}</p>` : ""}
-          ${negocio.telefono || negocio.rfc
-            ? `<p class="muted">${[negocio.telefono, negocio.rfc ? `RFC: ${negocio.rfc}` : null].filter(Boolean).join(" · ")}</p>`
-            : ""
-          }
-        </div>
+        <h1>${negocio.nombre}</h1>
+        ${negocio.direccion ? `<p class="muted">${negocio.direccion}</p>` : ""}
+        ${negocio.telefono || negocio.rfc
+          ? `<p class="muted">${[negocio.telefono, negocio.rfc ? `RFC: ${negocio.rfc}` : null].filter(Boolean).join(" · ")}</p>`
+          : ""
+        }
       </div>
+      <div class="barra"></div>
       <p class="muted">${r.tipoDocumento} · ${r.folio}</p>
       <p class="muted">${new Date().toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</p>
+      ${badges ? `<div class="badges">${badges}</div>` : ""}
+      ${r.cliente ? `<p class="cliente"><strong>Cliente:</strong> ${r.cliente}${r.telefono ? ` · ${r.telefono}` : ""}</p>` : ""}
       <hr />
-      ${r.cliente ? `<p><strong>Cliente:</strong> ${r.cliente}${r.telefono ? ` · ${r.telefono}` : ""}</p>` : ""}
-      ${r.renglones.length > 0
-        ? `<table>
-        <thead><tr><th>Concepto</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
-        <tbody>${filas}</tbody>
-      </table>`
-        : ""
-      }
-      <hr />
-      <div class="renglon"><span class="muted">Subtotal</span><span class="muted">${formatMXN(r.subtotal)}</span></div>
+      ${filas}
+      <div class="renglon" style="margin-top:6px;"><span class="muted">Subtotal</span><span class="muted">${formatMXN(r.subtotal)}</span></div>
       <div class="renglon"><span class="muted">IVA</span><span class="muted">${formatMXN(r.iva)}</span></div>
-      <p class="total">Total: ${formatMXN(r.total)}</p>
+      <div class="total-envoltura">
+        <div class="etiqueta">Total</div>
+        <p class="total">${formatMXN(r.total)}</p>
+      </div>
       <hr />
       <div class="renglon"><span>Método de pago</span><span>${r.metodoPago}</span></div>
       ${r.montoRecibido != null ? `<div class="renglon"><span class="muted">Recibido</span><span class="muted">${formatMXN(r.montoRecibido)}</span></div>` : ""}

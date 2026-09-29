@@ -91,7 +91,7 @@ export interface CrearVentaParams {
 }
 
 export type CrearVentaResult =
-  | { ok: true; folio: string; total: number; cambio: number }
+  | { ok: true; folio: string; total: number; cambio: number; sucursal: string | null; atendioPor: string | null }
   | { ok: false; error: string };
 
 export async function crearVentaAction(params: CrearVentaParams): Promise<CrearVentaResult> {
@@ -136,7 +136,17 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true, code: true } });
+    // branch.name/usuarioActual.name — 2026-09-29, a petición de Carlos
+    // ("quiero... el nombre de quien atendió y la sucursal donde se
+    // compró" en el rediseño del ticket) — se resuelven aquí, junto con la
+    // validación de sucursal, para no hacer un segundo viaje a la base solo
+    // por esto; van al ticket vía CrearVentaResult, nunca se guardan en
+    // Sale (que ya tiene branchId/userId — esto es solo para mostrar el
+    // NOMBRE, no un dato nuevo del modelo).
+    const [branch, usuarioActual] = await Promise.all([
+      db.branch.findUnique({ where: { id: branchId }, select: { id: true, code: true, name: true } }),
+      db.user.findUnique({ where: { id: dbUser.id }, select: { name: true } }),
+    ]);
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
 
     const cajaAbierta = await db.cashSession.findFirst({
@@ -408,7 +418,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       });
     }
 
-    return { ok: true, folio, total, cambio };
+    return { ok: true, folio, total, cambio, sucursal: branch.name, atendioPor: usuarioActual?.name ?? null };
   } catch (err: any) {
     if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
       return { ok: false, error: "No tienes acceso a este recurso" };

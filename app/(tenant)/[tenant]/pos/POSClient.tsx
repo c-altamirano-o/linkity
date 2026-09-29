@@ -410,6 +410,8 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           folio: res.folio,
           cliente: clienteTicket,
           telefono: clienteTelefonoTicket,
+          sucursal: res.sucursal,
+          atendioPor: res.atendioPor,
           renglones: renglonesTicket,
           subtotal: subtotalTicket,
           iva: ivaTicket,

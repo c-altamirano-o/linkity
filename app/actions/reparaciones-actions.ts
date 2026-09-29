@@ -669,7 +669,16 @@ const NOTA_POR_ESTADO: Record<NuevoEstadoReparacion, string> = {
 const NOTA_CORRECCION_REGRESO_A_TALLER =
   "Regresado a taller — corrección de \"Enviar a tienda\" (posible error de captura)";
 
-export type AccionSimpleResult = { ok: true } | { ok: false; error: string };
+// sucursal/atendioPor — 2026-09-29, a petición de Carlos (rediseño del
+// ticket: "el nombre de quien atendió y la sucursal donde se compró").
+// Opcionales porque la mayoría de las llamadas a avanzarEstadoAction no
+// necesitan armar un ticket (solo cambia el estatus) — se resuelven solo
+// cuando nuevoEstado === "DELIVERED" (el único caso que hoy arma un
+// ReciboData del lado del cliente, ver handleEntregarSinCobro en
+// ReparacionesClient.tsx/AduanaClient.tsx).
+export type AccionSimpleResult =
+  | { ok: true; sucursal?: string | null; atendioPor?: string | null }
+  | { ok: false; error: string };
 
 export async function avanzarEstadoAction(params: {
   tenantSlug: string;
@@ -691,7 +700,7 @@ export async function avanzarEstadoAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, publicToken: true, folio: true, customerId: true } });
+    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, publicToken: true, folio: true, customerId: true, branchId: true } });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
     // A propósito SIN puedeOperarSucursal — ver el comentario en
     // agregarPiezaReparacionAction (taller centralizado, varias sucursales).
@@ -771,6 +780,18 @@ export async function avanzarEstadoAction(params: {
     revalidatePath(`/${tenantSlug}/reparaciones`);
     revalidatePath(`/${tenantSlug}/dashboard`);
     revalidatePath(`/rep/${repair.publicToken}`);
+
+    // sucursal/atendioPor solo para DELIVERED — es el único caso donde el
+    // cliente arma un ticket ("Entregar sin cobro", ver el comentario largo
+    // arriba de AccionSimpleResult) — evita el viaje extra a la base en los
+    // otros 6 cambios de estatus, que nunca imprimen nada.
+    if (nuevoEstado === "DELIVERED") {
+      const [branch, usuarioActual] = await Promise.all([
+        db.branch.findUnique({ where: { id: repair.branchId }, select: { name: true } }),
+        db.user.findUnique({ where: { id: resuelto.dbUser.id }, select: { name: true } }),
+      ]);
+      return { ok: true, sucursal: branch?.name ?? null, atendioPor: usuarioActual?.name ?? null };
+    }
     return { ok: true };
   } catch (err: any) {
     if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {

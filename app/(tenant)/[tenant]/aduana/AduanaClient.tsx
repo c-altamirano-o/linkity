@@ -190,7 +190,16 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
 
   const seleccionada = reparaciones.find((r) => r.id === seleccionadaId) ?? null;
 
-  function ejecutar(promesa: () => Promise<{ ok: boolean; error?: string }>, alTerminar?: () => void) {
+  // Generic (2026-09-29, a petición de Carlos: el ticket de "Entregar sin
+  // cobro" ahora necesita sucursal/atendioPor que devuelve
+  // avanzarEstadoAction) — `alTerminar` recibe el resultado ya angosto a la
+  // rama {ok:true}, así handleEntregarSinCobro puede leer sus campos extra
+  // sin que los demás llamados de ejecutar() tengan que cambiar (siguen
+  // ignorando el argumento, como antes).
+  function ejecutar<T extends { ok: boolean; error?: string }>(
+    promesa: () => Promise<T>,
+    alTerminar?: (res: Extract<T, { ok: true }>) => void
+  ) {
     setError(null);
     startTransition(async () => {
       const res = await promesa();
@@ -198,7 +207,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
         setError(res.error ?? "No se pudo completar la acción");
         return;
       }
-      alTerminar?.();
+      alTerminar?.(res as Extract<T, { ok: true }>);
       router.refresh();
     });
   }
@@ -261,12 +270,14 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
     const repair = seleccionada;
     ejecutar(
       () => avanzarEstadoAction({ tenantSlug, repairId: repair.id, nuevoEstado: "DELIVERED" }),
-      async () => {
+      async (res) => {
         const recibo: ReciboData = {
           tipoDocumento: "Reparación — Devolución",
           folio: repair.folio,
           cliente: repair.cliente,
           telefono: repair.telefono,
+          sucursal: res.sucursal,
+          atendioPor: res.atendioPor,
           renglones: [{ nombre: `${repair.marca} ${repair.modelo}`.trim(), cantidad: 1, precioUnitario: 0 }],
           subtotal: 0,
           iva: 0,
