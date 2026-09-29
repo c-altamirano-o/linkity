@@ -582,8 +582,23 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                   recepcionista sin ese módulo nunca ve este botón; para él la
                   pantalla queda igual que siempre. Nunca cobra aquí mismo —
                   solo manda a /pos con la reparación precargada, el mismo
-                  camino que ya usa este botón en /reparaciones. */}
-              {puedeCobrar && (seleccionada.estado === "SHOP_READY" || seleccionada.estado === "SHOP_RETURN") && (
+                  camino que ya usa este botón en /reparaciones.
+                  2026-09-29, corrigiendo un bug real (reportado por Carlos:
+                  quedaba atorado intentando "Cobrar y entregar" una
+                  devolución en un negocio SIN "cobrar en devolución"
+                  activo — crearVentaAction lo rechaza del lado del servidor
+                  porque SHOP_RETURN -> DELIVERED directo no es válido en ese
+                  caso): SHOP_READY siempre cobra (igual que antes), pero
+                  SHOP_RETURN solo ofrece este atajo a POS si el negocio
+                  activó cobrarEnDevolucion. Si no lo activó, este atajo
+                  simplemente NO se muestra — la entrega sin cobro de esa
+                  devolución ya la ofrece "Cambiar estatus" más arriba
+                  ("Entregar (sin cobro)", vía SIGUIENTES_ESTADOS.SHOP_RETURN
+                  + handleEntregarSinCobro), mostrar un segundo botón aquí
+                  para la misma acción sería redundante. Mismo criterio que
+                  ya tenía correcto ReparacionesClient.tsx (ver sus botones
+                  "Entregar"). */}
+              {puedeCobrar && (seleccionada.estado === "SHOP_READY" || (seleccionada.estado === "SHOP_RETURN" && cobrarEnDevolucion)) && (
                 <div className="mt-4">
                   <button
                     onClick={handleCobrar}
