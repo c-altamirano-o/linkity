@@ -433,16 +433,23 @@ export default function TenantShell({
 
   const handleSignOut = async () => {
     if (modo === "staff") {
-      // 2026-09-23, a petición de Carlos: si la sucursal de este empleado
-      // tiene una caja abierta, cerrarSesionPersonalAction ahora rechaza el
-      // cierre (ver el comentario largo ahí) — en vez de dejarlo "colgado"
-      // sin explicación, se le avisa y se le manda directo a Caja para que
-      // pueda hacer el corte, en lugar de a la puerta del negocio.
+      // 2026-09-29, corregido a petición de Carlos (ver el comentario largo
+      // en cerrarSesionPersonalAction): antes, si la sucursal tenía una
+      // caja abierta, esta acción rechazaba el cierre y se mandaba al
+      // empleado a /caja para que hiciera el corte — pero un empleado sin
+      // permiso sobre Caja (ej. Asesor de Ventas) se quedaba sin ninguna
+      // salida real, atascado. Ahora cerrarSesionPersonalAction YA NO
+      // rechaza nada por esto — solo informa (cajaAbiertaEnSucursal) para
+      // mostrar un recordatorio no bloqueante antes de continuar, así
+      // cualquiera puede cambiar de usuario y que sea la siguiente persona
+      // (con permiso sobre Caja) quien la cierre.
       const res = await cerrarSesionPersonalAction();
       if (!res.ok) {
         window.alert(res.error);
-        window.location.href = `/${tenant}/caja`;
         return;
+      }
+      if (res.cajaAbiertaEnSucursal) {
+        window.alert("Recuerda: la caja de esta sucursal sigue abierta. La próxima persona que entre con permiso sobre Caja debe hacer el corte.");
       }
       window.location.href = `/${tenant}`;
       return;

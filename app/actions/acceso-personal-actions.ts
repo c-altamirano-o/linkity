@@ -127,7 +127,11 @@ export async function iniciarSesionPersonalAction(params: {
 // solo al ENTRAR (iniciarSesionPersonalAction). Reusar el tipo de arriba
 // obligaba a TenantShell.tsx a manejar una rama de autorización que aquí
 // nunca ocurre; con esto, `res.error` narrowa directo sin el `in` extra.
-export type AccionCerrarSesionResult = { ok: true } | { ok: false; error: string };
+//
+// cajaAbiertaEnSucursal (2026-09-29, ver el comentario largo en la función
+// de abajo): ya NO bloquea el cierre de sesión, solo lo informa para que
+// TenantShell muestre un aviso no bloqueante.
+export type AccionCerrarSesionResult = { ok: true; cajaAbiertaEnSucursal?: boolean } | { ok: false; error: string };
 
 export async function cerrarSesionPersonalAction(): Promise<AccionCerrarSesionResult> {
   // Se lee la sesión ANTES de borrar la cookie para poder cerrar su fila de
@@ -138,21 +142,34 @@ export async function cerrarSesionPersonalAction(): Promise<AccionCerrarSesionRe
 
   // 2026-09-23, a petición de Carlos: "al cerrar una sesión que tenga
   // punto de venta, no debe permitir cerrarla hasta hacer corte de caja" —
-  // si la sucursal de este empleado tiene una caja ABIERTA, se rechaza el
-  // cierre de sesión (TenantShell manda al empleado a /caja en vez de
-  // dejarlo salir). Deliberadamente por SUCURSAL, no por quién la abrió:
-  // el propio "cambio de turno" (ver el comentario en CashSession,
-  // schema.prisma) permite que otro empleado cierre una caja que abrió
-  // alguien más, así que lo que importa es que ALGUIEN la cierre antes de
-  // que el mostrador se quede sin nadie, no que sea la misma persona.
+  // se bloqueaba el cierre de sesión/cambio de usuario si la sucursal tenía
+  // una caja ABIERTA (TenantShell mandaba al empleado a /caja en vez de
+  // dejarlo salir).
+  //
+  // 2026-09-29, corregido a petición de Carlos, tras un caso real: un
+  // empleado con el puesto "Asesor de Ventas" (sin permiso sobre el módulo
+  // Caja) se quedaba SIN NINGUNA SALIDA — no podía hacer el corte él mismo
+  // (no tiene acceso a Caja) y tampoco podía cambiar de usuario para que
+  // alguien más lo hiciera (este mismo bloqueo se lo impedía). Su petición
+  // textual: "que no se cierre caja, pero que puedan cambiar de usuario
+  // para hacerlo".
+  //
+  // Ya NO se bloquea — la caja es por SUCURSAL, no por quién la abrió (ver
+  // el comentario de "cambio de turno" en CashSession, schema.prisma), así
+  // que sigue abierta y disponible para que CUALQUIER empleado con permiso
+  // sobre Caja la cierre en cuanto entre con su PIN; solo se informa
+  // (cajaAbiertaEnSucursal) para que TenantShell muestre un recordatorio no
+  // bloqueante en vez de trabar la salida. La red de seguridad real para
+  // que nadie la olvide sigue siendo el aviso periódico de
+  // /api/cron/revisar-horarios-caja (notifica a quien sí puede cerrarla si
+  // se pasa de la hora configurada), no este check al momento de salir.
+  let cajaAbiertaEnSucursal = false;
   if (sesion) {
     const cajaAbierta = await prisma.cashSession.findFirst({
       where: { tenantId: sesion.tenantId, branchId: sesion.branchId, status: CashSessionStatus.OPEN },
       select: { id: true },
     });
-    if (cajaAbierta) {
-      return { ok: false, error: "Tienes una caja abierta en tu sucursal — haz corte de caja antes de cerrar sesión o cambiar de usuario." };
-    }
+    cajaAbiertaEnSucursal = cajaAbierta != null;
   }
 
   if (sesion?.loginSessionId) {
@@ -162,5 +179,5 @@ export async function cerrarSesionPersonalAction(): Promise<AccionCerrarSesionRe
     });
   }
   await cerrarSesionPersonal();
-  return { ok: true };
+  return { ok: true, cajaAbiertaEnSucursal };
 }
