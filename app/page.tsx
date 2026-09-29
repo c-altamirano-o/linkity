@@ -157,7 +157,7 @@ export default function LandingPage() {
                   <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#FFBD2E]" />
                   <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#27C93F]" />
                 </div>
-                <Image src="/images/Cap-2.png" width={1200} height={800} className="w-full h-auto" alt="Dashboard principal" priority />
+                <Image src="/images/cap-2.png" width={1200} height={800} className="w-full h-auto" alt="Dashboard principal" priority />
               </div>
 
               {/* Elemento 4: Mockup Inferior Izquierdo (Punto de Venta) */}
@@ -165,7 +165,7 @@ export default function LandingPage() {
                 <div className="bg-muted/60 border-b border-border/50 px-2.5 py-1.5 sm:px-3 sm:py-2 flex gap-1.5 backdrop-blur-sm">
                   <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground">Punto de Venta</span>
                 </div>
-                <Image src="/images/Cap-4.png" width={800} height={500} className="w-full h-auto" alt="Módulo POS" />
+                <Image src="/images/cap-4.png" width={800} height={500} className="w-full h-auto" alt="Módulo POS" />
               </div>
 
               {/* Elemento 1: Mockup Superior Izquierdo (Inventario) */}
@@ -173,12 +173,12 @@ export default function LandingPage() {
                 <div className="bg-muted/60 border-b border-border/50 px-3 py-2 flex gap-1.5 backdrop-blur-sm">
                   <span className="text-[10px] font-medium text-muted-foreground">Inventario</span>
                 </div>
-                <Image src="/images/Cap-1.png" width={600} height={400} className="w-full h-auto" alt="Módulo Inventario" />
+                <Image src="/images/cap-1.png" width={600} height={400} className="w-full h-auto" alt="Módulo Inventario" />
               </div>
               
               {/* Elemento 3: Tarjeta Flotante Superior Derecha */}
               <div className="absolute z-40 right-2 sm:right-[-5%] top-[10%] sm:top-[15%] w-[45%] sm:w-[35%] lg:w-[30%] drop-shadow-xl transition-transform duration-700 rounded-xl overflow-hidden">
-                <Image src="/images/Cap-3.png" width={400} height={200} className="w-full h-auto object-contain" alt="Elemento 3" />
+                <Image src="/images/cap-3.png" width={400} height={200} className="w-full h-auto object-contain" alt="Elemento 3" />
               </div>
             </div>
           </div>
