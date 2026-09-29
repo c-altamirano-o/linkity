@@ -265,19 +265,64 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
 // técnico, NUNCA piezas/costos por separado, NUNCA datos de otras
 // sucursales/negocio.
 
+// 2026-09-29, a petición de Carlos tras revisar capturas de la página
+// pública: el texto original usaba "listo" para CUALQUIER estatus donde el
+// equipo ya no se estaba reparando (incluido WORKSHOP_READY, cuando el
+// equipo sigue físicamente en el taller) — un cliente que lee "tu equipo ya
+// quedó listo" puede presentarse en la tienda de inmediato, generando una
+// mala experiencia. Ahora "listo para que lo recojas" se reserva
+// EXCLUSIVAMENTE para los dos estatus donde el cliente de verdad puede
+// pasar por su equipo (SHOP_READY/SHOP_RETURN); el resto describe el
+// avance sin usar esa palabra. Aprobado por Carlos, tabla completa.
 export const ESTADO_CLIENTE_TEXTO: Record<EstadoReparacion, string> = {
   RECEIVED: "Recibimos tu equipo",
-  DIAGNOSING: "Tu equipo está en diagnóstico",
+  DIAGNOSING: "Estamos revisando tu equipo",
   IN_REPAIR: "Tu equipo está en reparación",
-  WAITING_PARTS: "En espera de una refacción",
+  WAITING_PARTS: "Esperamos una refacción para tu equipo",
   READY: "Tu equipo está listo",
-  WORKSHOP_READY: "¡Tu equipo ya quedó listo!",
-  WORKSHOP_RETURN: "Se acordó la devolución de tu equipo",
-  SHOP_READY: "Tu equipo está en tienda, listo para que lo recojas",
-  SHOP_RETURN: "Tu equipo está en tienda para devolución",
+  WORKSHOP_READY: "Terminamos la reparación de tu equipo",
+  WORKSHOP_RETURN: "No fue posible reparar tu equipo",
+  SHOP_READY: "Tu equipo está listo para que lo recojas",
+  SHOP_RETURN: "Tu equipo está listo para que lo recojas (sin reparar)",
   DELIVERED: "Equipo entregado",
   CANCELLED: "Reparación cancelada",
 };
+
+// Mismo criterio que ESTADO_CLIENTE_TEXTO pero en tiempo de "checkpoint"
+// (qué acabamos de hacer) en vez de estatus actual — usado solo por la
+// lista "Avance" de la página pública (ver textoClienteParaCheckpoint más
+// abajo). Deliberadamente un diccionario aparte: por ejemplo IN_REPAIR se
+// lee "Tu equipo está en reparación" como estatus, pero "Comenzamos la
+// reparación" como evento del historial.
+const ESTADO_CLIENTE_CHECKPOINT_TEXTO: Record<EstadoReparacion, string> = {
+  RECEIVED: "Recibimos tu equipo",
+  DIAGNOSING: "Comenzamos a revisar tu equipo",
+  IN_REPAIR: "Comenzamos la reparación",
+  WAITING_PARTS: "Esperamos una refacción para tu equipo",
+  READY: "Tu equipo está listo",
+  WORKSHOP_READY: "Terminamos la reparación de tu equipo",
+  WORKSHOP_RETURN: "No fue posible reparar tu equipo",
+  SHOP_READY: "Tu equipo está listo para que lo recojas",
+  SHOP_RETURN: "Tu equipo está listo para que lo recojas (sin reparar)",
+  DELIVERED: "Equipo entregado",
+  CANCELLED: "Reparación cancelada",
+};
+
+// El único checkpoint visible al cliente que NO corresponde a un cambio de
+// estatus real es "Asignado a <puesto>" (agregarPiezaReparacionAction /
+// crearReparacionAction en reparaciones-actions.ts crean ese registro con el
+// MISMO status que el checkpoint anterior, típicamente RECEIVED) — así que
+// no se puede distinguir por status, se detecta por el prefijo de la nota
+// interna. Cualquier otro checkpoint (incluida la nota dinámica que arma
+// crearVentaAction en pos-actions.ts para el cobro por POS) se traduce por
+// su status, nunca mostrando la nota interna tal cual — así el cliente
+// nunca ve referencias a "taller", "tienda", folios de venta o método de
+// pago, sin importar qué tan detallada sea la nota que use el negocio
+// internamente.
+function textoClienteParaCheckpoint(status: EstadoReparacion, notes: string | null): string {
+  if (notes?.startsWith("Asignado a ")) return "Comenzamos a revisar tu equipo";
+  return ESTADO_CLIENTE_CHECKPOINT_TEXTO[status] ?? "Actualización de tu equipo";
+}
 
 // Paso (0-4) de la barra de progreso simple — colapsa los estatus "gemelos"
 // (taller/tienda, listo/devolución) en el mismo escalón visual.
@@ -295,7 +340,10 @@ export const PASO_PROGRESO: Record<EstadoReparacion, number> = {
   CANCELLED: -1,
 };
 
-export const PASOS_PROGRESO_TEXTO = ["Recibido", "En reparación", "Listo", "En tienda", "Entregado"];
+// 2026-09-29: "Listo" -> "Equipo terminado" (mismo motivo que
+// ESTADO_CLIENTE_TEXTO — evitar que "listo" a secas se lea como "ya puedes
+// venir por él" cuando el paso 2 en realidad es "listo en taller").
+export const PASOS_PROGRESO_TEXTO = ["Recibido", "En reparación", "Equipo terminado", "En tienda", "Entregado"];
 
 export interface CheckpointPublico {
   texto: string;
@@ -343,7 +391,7 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
       history: {
         where: { visibleCliente: true },
         orderBy: { createdAt: "asc" },
-        select: { notes: true, createdAt: true },
+        select: { notes: true, createdAt: true, status: true },
       },
     },
   });
@@ -359,7 +407,10 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
 
   const checkpoints: CheckpointPublico[] = repair.history
     .filter((h) => !h.notes?.startsWith(PREFIJO_ALERTA_CLIENTE))
-    .map((h) => ({ texto: h.notes ?? "", fecha: h.createdAt.toISOString() }));
+    .map((h) => ({
+      texto: textoClienteParaCheckpoint(h.status as EstadoReparacion, h.notes),
+      fecha: h.createdAt.toISOString(),
+    }));
 
   return {
     folio: repair.folio,

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { CheckCircle2, Circle, MessageCircle, Wrench } from "lucide-react";
+import { MessageCircle, Wrench } from "lucide-react";
 import { getReparacionPublica, PASOS_PROGRESO_TEXTO } from "@/lib/reparaciones-data";
 
 /**
@@ -59,21 +59,51 @@ export default async function ReparacionPublicaPage({
           </div>
 
           {!cancelado && (
-            <div className="flex items-center justify-between">
-              {PASOS_PROGRESO_TEXTO.map((texto, i) => (
-                <div key={texto} className="flex-1 flex flex-col items-center gap-1">
-                  <div className={`w-full h-1.5 rounded-full ${i === 0 ? "" : "ml-[-50%]"}`} />
-                  {i <= rep.paso ? (
-                    <CheckCircle2 className="w-5 h-5 text-primary" />
-                  ) : (
-                    <Circle className="w-5 h-5 text-muted-foreground/40" />
-                  )}
-                  <span className={`text-[10px] text-center leading-tight ${i <= rep.paso ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                    {texto}
-                  </span>
+            // 2026-09-29, rediseño a petición de Carlos (el círculo se
+            // desalineaba cuando una etiqueta ocupaba 2 líneas, y la barra
+            // "conectora" era un div vacío sin color, nunca se vio como tal).
+            // Ahora es un grid de 2 filas: la fila de arriba (altura fija,
+            // h-5) tiene la línea + los círculos superpuestos con posición
+            // absoluta, así el texto de abajo nunca puede mover un círculo.
+            // La línea se rellena del color del tema hasta la mitad del
+            // segmento siguiente al último paso completado (igual que el
+            // dibujo de referencia de Carlos), nunca hasta el punto
+            // siguiente completo — eso se reserva para cuando ese paso en
+            // verdad se complete.
+            (() => {
+              const segmentos = PASOS_PROGRESO_TEXTO.length - 1;
+              const porcentajeSegmento = 80 / segmentos;
+              const relleno = rep.paso >= segmentos ? 80 : rep.paso * porcentajeSegmento + porcentajeSegmento / 2;
+              return (
+                <div className="grid gap-y-1.5" style={{ gridTemplateColumns: `repeat(${PASOS_PROGRESO_TEXTO.length}, 1fr)` }}>
+                  <div className="col-span-full relative h-5">
+                    <div className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-muted" style={{ left: "10%", right: "10%" }} />
+                    <div className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-primary" style={{ left: "10%", width: `${relleno}%` }} />
+                    <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${PASOS_PROGRESO_TEXTO.length}, 1fr)` }}>
+                      {PASOS_PROGRESO_TEXTO.map((texto, i) => (
+                        <div key={texto} className="flex items-center justify-center">
+                          <div
+                            className={
+                              i <= rep.paso
+                                ? "w-5 h-5 rounded-full bg-primary"
+                                : "w-5 h-5 rounded-full bg-card border-2 border-muted-foreground/40"
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {PASOS_PROGRESO_TEXTO.map((texto, i) => (
+                    <span
+                      key={texto}
+                      className={`text-[10px] text-center leading-tight ${i <= rep.paso ? "text-foreground font-bold" : "text-muted-foreground"}`}
+                    >
+                      {texto}
+                    </span>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })()
           )}
         </div>
 
