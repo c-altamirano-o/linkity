@@ -355,6 +355,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     // cobrar, no el carrito ya vacío que queda después.
     const renglonesTicket = carrito.map((i) => ({ nombre: i.nombre, cantidad: i.cantidad, precioUnitario: i.precio }));
     const clienteTicket = clienteSeleccionado?.name ?? null;
+    const clienteTelefonoTicket = clienteSeleccionado?.phone ?? null;
     const metodoPagoAlCobrar = metodoPago;
     const subtotalTicket = subtotal;
     const ivaTicket = iva;
@@ -408,7 +409,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           tipoDocumento: tipoDocumentoTicket,
           folio: res.folio,
           cliente: clienteTicket,
-          telefono: null,
+          telefono: clienteTelefonoTicket,
           renglones: renglonesTicket,
           subtotal: subtotalTicket,
           iva: ivaTicket,
