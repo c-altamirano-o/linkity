@@ -119,7 +119,7 @@ export interface CrearReparacionParams {
 }
 
 export type CrearReparacionResult =
-  | { ok: true; id: string; folio: string; publicToken: string }
+  | { ok: true; id: string; folio: string; publicToken: string; sucursal: string | null; atendioPor: string | null }
   | { ok: false; error: string };
 
 export async function crearReparacionAction(params: CrearReparacionParams): Promise<CrearReparacionResult> {
@@ -165,7 +165,7 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true, code: true } });
+    const branch = await db.branch.findUnique({ where: { id: branchId }, select: { id: true, code: true, name: true } });
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
 
     // "Otro" (ver crearProductoPersonalizado, arriba del todo del archivo):
@@ -324,7 +324,19 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
     revalidatePath(`/${tenantSlug}/taller`);
     revalidatePath(`/${tenantSlug}/dashboard`);
 
-    return { ok: true, id: repair.id, folio: repair.folio, publicToken: repair.publicToken };
+    // sucursal/atendioPor — 2026-09-29, mismo criterio que crearVentaAction
+    // (pos-actions.ts): van al ticket de recepción que se imprime de una
+    // vez tras crear la reparación (ver abrirTicketImprimible más abajo en
+    // ReparacionesClient.tsx).
+    const usuarioActual = await db.user.findUnique({ where: { id: dbUser.id }, select: { name: true } });
+    return {
+      ok: true,
+      id: repair.id,
+      folio: repair.folio,
+      publicToken: repair.publicToken,
+      sucursal: branch.name,
+      atendioPor: usuarioActual?.name ?? null,
+    };
   } catch (err: any) {
     if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
       return { ok: false, error: "No tienes acceso a este recurso" };

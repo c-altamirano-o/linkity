@@ -152,6 +152,14 @@ interface TicketData {
   // la URL de /rep/[token] (ver app/rep/[token]/page.tsx, sin necesidad de
   // cuenta) para el QR que se imprime en abrirTicketImprimible.
   publicToken: string;
+  // sucursal/atendioPor — 2026-09-29, mismo rediseño que abrirReciboImprimible
+  // (ver el comentario largo de esa función, lib/recibo-imprimible.ts):
+  // sucursalNombre/tecnico ya existían en ReparacionUI (tecnico ES quien
+  // registró, no el técnico asignado — ver el comentario de
+  // ReparacionUI.tecnico en lib/reparaciones-data.ts) para la reimpresión;
+  // CrearReparacionResult los agrega para el ticket recién creado.
+  sucursal: string | null;
+  atendioPor: string | null;
 }
 
 // Texto plano para el mensaje de WhatsApp del ticket digital — mismo
@@ -198,26 +206,47 @@ function textoTicketWhatsapp(t: TicketData, negocio: string): string {
  * cuando la promesa de QRCode.toString ya se resolvió.
  *
  * `formato` (Tenant.reciboFormato, 2026-09-26, tercera petición el mismo
- * día: formato de impresión configurable) — se recibe aparte de `negocio`
- * (que aquí sigue siendo un string plano, no el DatosNegocioRecibo completo
- * — ver el comentario de negocio/nombreNegocio más abajo) porque este
- * ticket usa estilosImpresionTicket, la MISMA función que
- * abrirReciboImprimible (lib/recibo-imprimible.ts), para que ambos tickets
- * respeten el formato elegido por el negocio sin duplicar el CSS.
+ * día: formato de impresión configurable) — este ticket usa
+ * estilosImpresionTicket, la MISMA función que abrirReciboImprimible
+ * (lib/recibo-imprimible.ts), para que ambos tickets respeten el formato
+ * elegido por el negocio sin duplicar el CSS.
+ *
+ * 2026-09-29, a petición de Carlos ("aplica el mismo diseño [de
+ * abrirReciboImprimible], para ambos, más el logo del doble del tamaño
+ * actual"): mismo rediseño minimalista/monocromático, y `negocio` ahora es
+ * el DatosNegocioRecibo COMPLETO (antes era un string plano con solo el
+ * nombre — este ticket nunca mostraba logo, dirección, teléfono ni RFC,
+ * a diferencia de abrirReciboImprimible desde 2026-09-26). El HTML/CSS del
+ * encabezado, la línea/franja de sucursal-atendió y el total están
+ * deliberadamente duplicados de recibo-imprimible.ts en vez de compartir
+ * una función — mismo criterio que ya seguía este archivo (ver el
+ * comentario de arriba: "con su propio HTML pero la MISMA impresora
+ * física"), porque el contenido del cuerpo es distinto (equipo/falla/firma
+ * vs. desglose de IVA/método de pago) y forzar una sola función para ambos
+ * habría significado un montón de ramas condicionales por encima de
+ * cualquier ahorro real de código.
  */
-async function abrirTicketImprimible(t: TicketData, negocio: string, formato: FormatoTicket | null | undefined) {
+async function abrirTicketImprimible(t: TicketData, negocio: DatosNegocioRecibo, formato: FormatoTicket | null | undefined) {
   if (typeof window === "undefined") return;
   const subtotalPiezas = t.piezas.reduce((s, p) => s + p.price * p.quantity, 0);
+  // Renglones sin <table> — mismo criterio que abrirReciboImprimible (ver
+  // el comentario largo ahí): un .renglon-item por pieza, nombre+cantidad a
+  // la izquierda e importe a la derecha.
   const filasPiezas = t.piezas
     .map(
       (p) => `
-        <tr>
-          <td>${p.productName}</td>
-          <td style="text-align:center">${p.quantity}</td>
-          <td style="text-align:right">${formatMXN(p.price)}</td>
-          <td style="text-align:right">${formatMXN(p.price * p.quantity)}</td>
-        </tr>`
+        <div class="renglon-item">
+          <span>${p.productName}${p.quantity !== 1 ? `<span class="cant"> ×${p.quantity}</span>` : ""}</span>
+          <span>${formatMXN(p.price * p.quantity)}</span>
+        </div>`
     )
+    .join("");
+
+  const badges = [
+    t.sucursal ? `<span class="badge">Sucursal: ${t.sucursal}</span>` : "",
+    t.atendioPor ? `<span class="badge">Atendió: ${t.atendioPor}</span>` : "",
+  ]
+    .filter(Boolean)
     .join("");
 
   const win = window.open("", "_blank", "width=420,height=720");
@@ -236,17 +265,30 @@ async function abrirTicketImprimible(t: TicketData, negocio: string, formato: Fo
       <title>Ticket ${t.folio}</title>
       <style>
         * { box-sizing: border-box; }
-        body { font-family: Arial, Helvetica, sans-serif; padding: 20px; color: #111827; font-size: 13px; max-width: 380px; margin: 0 auto; }
-        h1 { font-size: 16px; margin: 0 0 2px; }
+        body { font-family: Arial, Helvetica, sans-serif; padding: 20px; color: #111827; font-size: 13px; max-width: 380px; margin: 0 auto; text-align: center; }
+        h1 { font-size: 16px; margin: 0; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; }
         .muted { color: #6b7280; font-size: 11px; margin: 0; }
         hr { border: none; border-top: 1px dashed #9ca3af; margin: 10px 0; }
         p { margin: 4px 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+        /* th/td se quedan aquí solo para no romper estilosImpresionTicket
+           en tenants que aún no recargaron esta pestaña — este ticket ya no
+           genera ninguna <table>. */
         th, td { padding: 4px 2px; font-size: 11.5px; border-bottom: 1px solid #f3f4f6; }
         th { text-align: left; color: #6b7280; font-weight: 600; }
-        .total { font-size: 15px; font-weight: bold; text-align: right; margin-top: 8px; }
-        .aviso { margin-top: 14px; font-size: 10.5px; color: #4b5563; border-top: 1px dashed #9ca3af; padding-top: 8px; }
+        .renglon { display: flex; justify-content: space-between; text-align: left; }
+        .renglon-item { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; text-align: left; padding: 4px 0; border-bottom: 1px solid #f3f4f6; font-size: 12px; }
+        .renglon-item .cant { color: #9ca3af; font-size: 10px; }
+        .detalle { text-align: left; }
+        .total-envoltura { margin-top: 10px; padding-top: 10px; border-top: 2px solid #111827; }
+        .total-envoltura .etiqueta { font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: #6b7280; }
+        .total { font-size: 22px; font-weight: 800; margin: 2px 0 0; }
+        .aviso { margin-top: 14px; font-size: 10.5px; color: #4b5563; border-top: 1px dashed #9ca3af; padding-top: 8px; text-align: center; }
         .firma { margin-top: 40px; border-top: 1px solid #374151; padding-top: 4px; font-size: 11px; text-align: center; color: #374151; }
+        .encabezado { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .encabezado img { width: 80px; height: 80px; object-fit: contain; border-radius: 12px; }
+        .barra { width: 42px; height: 2px; background: #111827; margin: 10px auto; }
+        .badges { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+        .badge { border: 1px solid #9ca3af; border-radius: 999px; padding: 2px 9px; font-size: 10px; color: #374151; }
         .qr { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
         .qr svg { width: 96px; height: 96px; }
         @media print { body { padding: 0; } }
@@ -254,27 +296,38 @@ async function abrirTicketImprimible(t: TicketData, negocio: string, formato: Fo
       </style>
     </head>
     <body>
-      <h1>${negocio}</h1>
+      <div class="encabezado">
+        ${negocio.logoUrl ? `<img src="${negocio.logoUrl}" alt="" />` : ""}
+        <h1>${negocio.nombre}</h1>
+        ${negocio.direccion ? `<p class="muted">${negocio.direccion}</p>` : ""}
+        ${negocio.telefono || negocio.rfc
+          ? `<p class="muted">${[negocio.telefono, negocio.rfc ? `RFC: ${negocio.rfc}` : null].filter(Boolean).join(" · ")}</p>`
+          : ""
+        }
+      </div>
+      <div class="barra"></div>
       <p class="muted">Recibo de reparación · ${t.folio}</p>
       <p class="muted">${new Date().toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</p>
       ${t.telefonoSoporte ? `<p class="muted">Soporte: ${t.telefonoSoporte}</p>` : ""}
+      ${badges ? `<div class="badges">${badges}</div>` : ""}
       <hr />
-      <p><strong>Cliente:</strong> ${t.cliente}${t.telefono ? ` · ${t.telefono}` : ""}</p>
-      <p><strong>Equipo:</strong> ${t.marca} ${t.modelo}</p>
-      <p><strong>Falla reportada:</strong> ${t.falla}</p>
+      <div class="detalle">
+        <p><strong>Cliente:</strong> ${t.cliente}${t.telefono ? ` · ${t.telefono}` : ""}</p>
+        <p><strong>Equipo:</strong> ${t.marca} ${t.modelo}</p>
+        <p><strong>Falla reportada:</strong> ${t.falla}</p>
+      </div>
       ${
         t.piezas.length > 0
           ? `<hr />
-      <table>
-        <thead><tr><th>Pieza/Servicio</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
-        <tbody>${filasPiezas}</tbody>
-      </table>
-      <p class="muted" style="text-align:right">Subtotal: ${formatMXN(subtotalPiezas)}</p>`
+      ${filasPiezas}
+      <div class="renglon" style="margin-top:6px;"><span class="muted">Subtotal</span><span class="muted">${formatMXN(subtotalPiezas)}</span></div>`
           : ""
       }
-      <hr />
-      <p class="total">Costo estimado: ${t.costoEstimado != null ? formatMXN(t.costoEstimado) : "Por definir"}</p>
-      ${t.fechaEstimada ? `<p class="muted" style="text-align:right">Fecha estimada de entrega: ${formatFecha(t.fechaEstimada)}</p>` : ""}
+      <div class="total-envoltura">
+        <div class="etiqueta">Costo estimado</div>
+        <p class="total">${t.costoEstimado != null ? formatMXN(t.costoEstimado) : "Por definir"}</p>
+      </div>
+      ${t.fechaEstimada ? `<p class="muted">Fecha estimada de entrega: ${formatFecha(t.fechaEstimada)}</p>` : ""}
       <p class="aviso">Este costo es un estimado y puede ajustarse tras el diagnóstico completo del equipo. Cualquier cambio se te notificará antes de proceder con la reparación.</p>
       ${
         qrSvg
@@ -296,7 +349,7 @@ async function abrirTicketImprimible(t: TicketData, negocio: string, formato: Fo
    control de piezas/costo/estatus/técnico vive en /aduana. ── */
 function VistaTienda({
   reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, onEntregarSinCobro, pending, onNuevaClick,
-  negocio, telefonoNegocio, formatoTicket, cobrarEnDevolucion,
+  negocio, negocioRecibo, telefonoNegocio, formatoTicket, cobrarEnDevolucion,
 }: {
   reparaciones: ReparacionUI[];
   labels: LabelDictionary;
@@ -307,6 +360,10 @@ function VistaTienda({
   pending: boolean;
   onNuevaClick: () => void;
   negocio: string;
+  // 2026-09-29, a petición de Carlos (mismo rediseño de abrirTicketImprimible
+  // — ver el comentario largo ahí): el ticket de recepción ahora necesita
+  // logo/dirección/teléfono/RFC del negocio, no solo el nombre.
+  negocioRecibo: DatosNegocioRecibo;
   telefonoNegocio: string | null;
   formatoTicket: FormatoTicket | null | undefined;
   cobrarEnDevolucion: boolean;
@@ -473,8 +530,14 @@ function VistaTienda({
                       fechaEstimada: seleccionada.fechaEstimada,
                       telefonoSoporte: telefonoNegocio,
                       publicToken: seleccionada.publicToken,
+                      sucursal: seleccionada.sucursalNombre,
+                      // seleccionada.tecnico ES quien registró/atendió la
+                      // recepción, no el técnico asignado a trabajarla — ver
+                      // el comentario de ReparacionUI.tecnico en
+                      // lib/reparaciones-data.ts.
+                      atendioPor: seleccionada.tecnico,
                     },
-                    negocio,
+                    negocioRecibo,
                     formatoTicket
                   )
                 }
@@ -898,8 +961,10 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
             fechaEstimada: nuevaFechaEstimada ? `${nuevaFechaEstimada}T00:00:00` : null,
             telefonoSoporte: telefonoNegocio,
             publicToken: res.publicToken,
+            sucursal: res.sucursal,
+            atendioPor: res.atendioPor,
           },
-          negocio,
+          negocioRecibo,
           negocioRecibo.formato
         );
         setModalNuevaAbierto(false);
@@ -919,7 +984,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
       <div className="flex-1 overflow-hidden">
         <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={handleCobrarClick} onEntregarSinCobro={handleEntregarSinCobro} pending={pendingAccion}
-          onNuevaClick={() => setModalNuevaAbierto(true)} negocio={negocio} telefonoNegocio={telefonoNegocio} formatoTicket={negocioRecibo.formato} cobrarEnDevolucion={cobrarEnDevolucion} />
+          onNuevaClick={() => setModalNuevaAbierto(true)} negocio={negocio} negocioRecibo={negocioRecibo} telefonoNegocio={telefonoNegocio} formatoTicket={negocioRecibo.formato} cobrarEnDevolucion={cobrarEnDevolucion} />
       </div>
 
       {modalNuevaAbierto && (

@@ -277,7 +277,7 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
         .aviso { margin-top: 14px; font-size: 10.5px; color: #4b5563; border-top: 1px dashed #9ca3af; padding-top: 8px; text-align: center; }
         .extra { margin-top: 10px; font-size: 11px; color: #374151; white-space: pre-wrap; text-align: center; }
         .encabezado { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-        .encabezado img { width: 40px; height: 40px; object-fit: contain; border-radius: 8px; }
+        .encabezado img { width: 80px; height: 80px; object-fit: contain; border-radius: 12px; }
         .barra { width: 42px; height: 2px; background: #111827; margin: 10px auto; }
         .badges { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
         .badge { border: 1px solid #9ca3af; border-radius: 999px; padding: 2px 9px; font-size: 10px; color: #374151; }
