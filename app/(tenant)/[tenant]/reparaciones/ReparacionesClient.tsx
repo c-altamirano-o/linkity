@@ -242,9 +242,13 @@ async function abrirTicketImprimible(t: TicketData, negocio: DatosNegocioRecibo,
     )
     .join("");
 
+  // Total de piezas — mismo criterio que abrirReciboImprimible (ver el
+  // comentario largo ahí): solo con 2+ renglones distintos.
+  const totalPiezas = t.piezas.reduce((s, p) => s + p.quantity, 0);
   const badges = [
     t.sucursal ? `<span class="badge">Sucursal: ${t.sucursal}</span>` : "",
     t.atendioPor ? `<span class="badge">Atendió: ${t.atendioPor}</span>` : "",
+    t.piezas.length > 1 ? `<span class="badge">${totalPiezas} pieza${totalPiezas !== 1 ? "s" : ""}</span>` : "",
   ]
     .filter(Boolean)
     .join("");

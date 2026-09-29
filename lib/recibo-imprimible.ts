@@ -243,9 +243,18 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
   // para cualquiera de los dos que venga; ninguno es obligatorio (un tenant
   // de una sola sucursal, o una acción sin actor resuelto, simplemente no
   // agrega su badge, igual que negocio.direccion/telefono de siempre).
+  //
+  // Total de piezas — 2026-09-29, sugerencia aceptada por Carlos tras el
+  // rediseño ("Cantidad total de piezas... útil para que el cliente cuadre
+  // rápido cuántos artículos se llevó"). Solo aparece con 2+ renglones
+  // distintos: con uno solo, la cantidad ya es obvia en ese mismo renglón
+  // (o ni se muestra, si es 1 — ver `filas` arriba), así que un badge extra
+  // ahí sería ruido, no información nueva.
+  const totalPiezas = r.renglones.reduce((s, l) => s + l.cantidad, 0);
   const badges = [
     r.sucursal ? `<span class="badge">Sucursal: ${r.sucursal}</span>` : "",
     r.atendioPor ? `<span class="badge">Atendió: ${r.atendioPor}</span>` : "",
+    r.renglones.length > 1 ? `<span class="badge">${totalPiezas} artículo${totalPiezas !== 1 ? "s" : ""}</span>` : "",
   ]
     .filter(Boolean)
     .join("");
