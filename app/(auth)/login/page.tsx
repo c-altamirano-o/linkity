@@ -41,6 +41,18 @@ export default function LoginPage() {
       return;
     }
 
+    // 2026-09-29, a petición de Carlos (mismo hueco que el del PIN de
+    // personal, ver iniciarSesionPersonalAction en acceso-personal-actions.ts):
+    // "un mismo usuario, inclusive un administrador o dueño, solo puede
+    // tener un login a la vez". scope "others" cierra cualquier OTRA sesión
+    // de esta MISMA cuenta (otro dispositivo/navegador) sin afectar la que
+    // se acaba de abrir aquí — Supabase revoca el refresh token de esas
+    // otras sesiones, así que el dispositivo viejo queda fuera en cuanto su
+    // propio access token (de corta duración) intente renovarse; no es al
+    // segundo exacto en que esto corre, pero sí en su siguiente intento de
+    // uso real, igual que con el PIN de personal.
+    await supabase.auth.signOut({ scope: "others" });
+
     if (!tenantSlug) {
       // No tiene negocio asociado — puede ser un administrador de Panel
       // Maestro (esas cuentas no son User de ningún tenant a propósito).

@@ -1398,6 +1398,14 @@ enum StaffLoginCloseReason {
   // cualquier request, que el Staff dueño de la sesión ya no está activo
   // (lo desactivaron desde Personal mientras tenía la sesión abierta).
   STAFF_INACTIVO
+  // 2026-09-29, a petición de Carlos (hueco de seguridad detectado): un
+  // mismo empleado no debe poder tener más de una sesión de PIN abierta a
+  // la vez. iniciarSesionPersonalAction (acceso-personal-actions.ts) cierra
+  // con este motivo cualquier sesión que ese empleado ya tuviera abierta en
+  // OTRO dispositivo/navegador en cuanto abre una nueva; verificarSesionPersonalVigente
+  // (lib/asistencia.ts) es quien de verdad expulsa al dispositivo viejo, en
+  // su siguiente acción, al ver que su propia fila ya no está abierta.
+  NUEVO_LOGIN
 }
 
 // Pagos de nómina efectivamente generados/dispersados a cada miembro del personal.

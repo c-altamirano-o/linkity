@@ -98,6 +98,26 @@ export async function iniciarSesionPersonalAction(params: {
     return { ok: false, necesitaAutorizacion: true, token };
   }
 
+  // 2026-09-29, a petición de Carlos (hueco de seguridad detectado): "un
+  // mismo usuario, inclusive un administrador o dueño, solo puede tener un
+  // login a la vez" — antes, nada impedía que el mismo PIN abriera sesión
+  // en dos dispositivos distintos al mismo tiempo sin que ninguno se
+  // enterara del otro. Se cierra aquí cualquier StaffLoginSession que ESTE
+  // empleado (mismo staffId) todavía tuviera abierta en otro
+  // dispositivo/navegador — updateMany + checkOut:null por si ya se había
+  // cerrado sola por otro camino (cambio de día, "Cambiar de usuario",
+  // desactivación). El dispositivo viejo no se entera al instante, pero
+  // queda invalidado en su SIGUIENTE acción: verificarSesionPersonalVigente()
+  // (lib/asistencia.ts) revisa que la fila de su propia sesión siga
+  // abierta, y aquí acabamos de cerrarla. Nótese que esto NO afecta a otros
+  // empleados de la misma sucursal — varios cajeros distintos siguen
+  // pudiendo tener sesión abierta al mismo tiempo, sin problema; el límite
+  // es por empleado, no por sucursal.
+  await prisma.staffLoginSession.updateMany({
+    where: { staffId: staff.id, checkOut: null },
+    data: { checkOut: new Date(), closedBy: "NUEVO_LOGIN" },
+  });
+
   // Abre la fila de asistencia por login (lib/asistencia.ts) — separado del
   // registro manual de Personal (modelo Attendance, que no se toca aquí).
   // Su id viaja dentro de la cookie de sesión para poder cerrarla después,

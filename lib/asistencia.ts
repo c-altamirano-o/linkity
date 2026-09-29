@@ -97,10 +97,24 @@ export async function verificarSesionPersonalVigente(): Promise<SesionPersonal |
   // este cambio, "Desactivar" en Personal solo bloqueaba abrir una sesión
   // NUEVA (ver iniciarSesionPersonalAction en acceso-personal-actions.ts);
   // una sesión ya abierta seguía funcionando sin límite hasta medianoche.
-  const staff = await prisma.staff.findUnique({
-    where: { id: sesion.staffId },
-    select: { isActive: true },
-  });
+  //
+  // 2026-09-29, a petición de Carlos (hueco de seguridad detectado): un
+  // mismo empleado no debe poder tener más de una sesión de PIN abierta a
+  // la vez. iniciarSesionPersonalAction cierra (closedBy NUEVO_LOGIN) la
+  // fila de StaffLoginSession del dispositivo VIEJO en cuanto ese empleado
+  // abre una sesión nueva desde OTRO dispositivo — así que si la fila que
+  // corresponde a ESTA cookie ya no está abierta (checkOut != null), es
+  // porque un login más nuevo la reemplazó en otro lado, y este dispositivo
+  // debe quedar fuera aquí mismo, sin esperar a que expire su cookie de 12h.
+  const [staff, loginSession] = await Promise.all([
+    prisma.staff.findUnique({ where: { id: sesion.staffId }, select: { isActive: true } }),
+    prisma.staffLoginSession.findUnique({ where: { id: sesion.loginSessionId }, select: { checkOut: true } }),
+  ]);
+
+  if (!loginSession || loginSession.checkOut !== null) {
+    await cerrarSesionPersonal();
+    return null;
+  }
 
   if (!staff || !staff.isActive) {
     await prisma.staffLoginSession.updateMany({
