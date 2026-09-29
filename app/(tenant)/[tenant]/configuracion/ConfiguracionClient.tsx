@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateDatosTicket } from "@/app/actions/tenant";
+import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateDatosTicket, guardarWhatsappBusinessAction, desconectarWhatsappBusinessAction, probarWhatsappBusinessAction } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
@@ -21,6 +21,7 @@ import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
   LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock, Phone, Undo2,
   Bell, RefreshCw, Smartphone, X, Wrench, Circle, ArrowRight, Receipt,
+  MessageCircle, Send, Unlink,
 } from "lucide-react";
 import type { EstadoTallerChecklist } from "@/lib/roles-server";
 
@@ -118,6 +119,11 @@ interface ConfiguracionClientProps {
   mensajePieTicketInicial: string | null;
   extraTicketInicial: string | null;
   formatoTicketInicial: FormatoTicket;
+  // whatsappTieneTokenInicial (nunca el token real, ver el comentario largo
+  // en page.tsx) — solo dice si YA hay uno guardado, para mostrar
+  // "conectado" sin exponer el valor.
+  whatsappPhoneNumberIdInicial: string | null;
+  whatsappTieneTokenInicial: boolean;
   checklistTaller: EstadoTallerChecklist;
 }
 
@@ -140,6 +146,8 @@ export default function ConfiguracionClient({
   mensajePieTicketInicial,
   extraTicketInicial,
   formatoTicketInicial,
+  whatsappPhoneNumberIdInicial,
+  whatsappTieneTokenInicial,
   checklistTaller,
 }: ConfiguracionClientProps) {
   const router = useRouter();
@@ -305,6 +313,73 @@ export default function ConfiguracionClient({
         router.refresh();
         setTimeout(() => setDatosTicketMensaje(""), 3000);
       }
+    });
+  };
+
+  // ── WhatsApp Business del negocio (2026-09-29) ───────────────
+  // Ver el comentario largo en lib/whatsapp-tenant.ts para la arquitectura
+  // completa. whatsappAccessTokenInput arranca SIEMPRE vacío (el valor real
+  // nunca llega aquí, ver whatsappTieneTokenInicial) — dejarlo vacío al
+  // guardar significa "no cambiar el token ya guardado", nunca "bórralo".
+  const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState(whatsappPhoneNumberIdInicial ?? "");
+  const [whatsappAccessTokenInput, setWhatsappAccessTokenInput] = useState("");
+  const [whatsappMostrarToken, setWhatsappMostrarToken] = useState(false);
+  const [whatsappTieneToken, setWhatsappTieneToken] = useState(whatsappTieneTokenInicial);
+  const [whatsappPending, startWhatsappTransition] = useTransition();
+  const [whatsappMensaje, setWhatsappMensaje] = useState("");
+  const [whatsappError, setWhatsappError] = useState("");
+
+  const guardarWhatsapp = () => {
+    setWhatsappError("");
+    startWhatsappTransition(async () => {
+      const result = await guardarWhatsappBusinessAction(tenantSlug, {
+        phoneNumberId: whatsappPhoneNumberId,
+        accessToken: whatsappAccessTokenInput,
+      });
+      if (!result.success) {
+        setWhatsappError(result.error ?? "Error al guardar");
+        return;
+      }
+      if (whatsappAccessTokenInput.trim()) {
+        setWhatsappTieneToken(true);
+        setWhatsappAccessTokenInput("");
+      }
+      setWhatsappMensaje("Guardado correctamente.");
+      router.refresh();
+      setTimeout(() => setWhatsappMensaje(""), 3000);
+    });
+  };
+
+  const desconectarWhatsapp = () => {
+    if (!window.confirm("¿Desconectar WhatsApp Business de este negocio? Ya no se mandará ningún mensaje automático hasta que lo vuelvas a conectar.")) return;
+    setWhatsappError("");
+    startWhatsappTransition(async () => {
+      const result = await desconectarWhatsappBusinessAction(tenantSlug);
+      if (!result.success) {
+        setWhatsappError(result.error ?? "Error al desconectar");
+        return;
+      }
+      setWhatsappPhoneNumberId("");
+      setWhatsappTieneToken(false);
+      setWhatsappMensaje("WhatsApp Business desconectado.");
+      router.refresh();
+      setTimeout(() => setWhatsappMensaje(""), 3000);
+    });
+  };
+
+  const [whatsappTelefonoPrueba, setWhatsappTelefonoPrueba] = useState("");
+  const [whatsappPruebaPending, startWhatsappPruebaTransition] = useTransition();
+  const [whatsappPruebaResultado, setWhatsappPruebaResultado] = useState<{ ok: boolean; texto: string } | null>(null);
+
+  const enviarPruebaWhatsapp = () => {
+    setWhatsappPruebaResultado(null);
+    startWhatsappPruebaTransition(async () => {
+      const result = await probarWhatsappBusinessAction(tenantSlug, whatsappTelefonoPrueba);
+      setWhatsappPruebaResultado(
+        result.success
+          ? { ok: true, texto: "Mensaje de prueba enviado — revisa el WhatsApp de ese número." }
+          : { ok: false, texto: result.error ?? "No se pudo enviar" }
+      );
     });
   };
 
@@ -1085,6 +1160,120 @@ export default function ConfiguracionClient({
             </button>
             {datosTicketMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{datosTicketMensaje}</span>}
           </div>
+        </div>
+      </div>
+
+      {/* ── WhatsApp Business ───────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <MessageCircle className="w-5 h-5 text-primary-text" />
+          <h2 className="text-base font-semibold text-foreground">WhatsApp Business</h2>
+          {whatsappTieneToken && (
+            <span className="ml-auto text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">Conectado</span>
+          )}
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-muted-foreground mb-2">
+            Conecta la cuenta de WhatsApp Business de TU negocio (gratis, directo con Meta) para que tus
+            clientes reciban un WhatsApp automático cuando reciban su equipo y cada vez que cambie de estatus —
+            sin depender de nadie más marcando "avisar" a mano.
+          </p>
+          <p className="text-sm text-muted-foreground mb-5">
+            Necesitas dos cosas de tu propia cuenta de Meta for Developers (developers.facebook.com): el{" "}
+            <strong>Phone Number ID</strong> y un <strong>Access Token</strong> permanente, y además tener
+            aprobada una plantilla de mensaje llamada exactamente <code className="text-xs bg-muted px-1 py-0.5 rounded">actualizacion_reparacion_linkity</code>{" "}
+            (categoría Utilidad, idioma Español MX, cuerpo con un solo parámetro <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{1}}"}</code>).
+            Pídeme la guía paso a paso si no la tienes todavía.
+          </p>
+
+          <div className="max-w-sm space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Phone Number ID</label>
+              <input
+                type="text"
+                value={whatsappPhoneNumberId}
+                onChange={(e) => setWhatsappPhoneNumberId(e.target.value)}
+                placeholder="Ej. 123456789012345"
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                Access Token{" "}
+                {whatsappTieneToken && <span className="font-normal text-muted-foreground">(ya hay uno guardado — déjalo vacío para no cambiarlo)</span>}
+              </label>
+              <div className="relative">
+                <input
+                  type={whatsappMostrarToken ? "text" : "password"}
+                  value={whatsappAccessTokenInput}
+                  onChange={(e) => setWhatsappAccessTokenInput(e.target.value)}
+                  placeholder={whatsappTieneToken ? "•••••••••••••••••••••" : "Pega aquí tu Access Token"}
+                  className="w-full px-3 py-2.5 pr-10 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setWhatsappMostrarToken((v) => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {whatsappMostrarToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 flex items-center gap-3 flex-wrap border-t border-border pt-5">
+            <button
+              onClick={guardarWhatsapp}
+              disabled={whatsappPending}
+              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              {whatsappPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              {whatsappPending ? "Aplicando..." : "Guardar cambios"}
+            </button>
+            {whatsappTieneToken && (
+              <button
+                onClick={desconectarWhatsapp}
+                disabled={whatsappPending}
+                className="px-4 py-2.5 bg-muted hover:bg-accent text-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                <Unlink className="w-3.5 h-3.5" /> Desconectar
+              </button>
+            )}
+            {whatsappMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{whatsappMensaje}</span>}
+            {whatsappError && <span className="text-sm font-medium text-destructive animate-in fade-in">{whatsappError}</span>}
+          </div>
+
+          {whatsappTieneToken && (
+            <div className="mt-5 border-t border-border pt-5 max-w-sm">
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Enviar mensaje de prueba</label>
+              <p className="text-xs text-muted-foreground mb-2">Escribe un número con código de país (ej. 5215512345678) para verificar que todo quedó bien conectado.</p>
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  value={whatsappTelefonoPrueba}
+                  onChange={(e) => setWhatsappTelefonoPrueba(e.target.value)}
+                  placeholder="5215512345678"
+                  className="flex-1 px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+                <button
+                  onClick={enviarPruebaWhatsapp}
+                  disabled={whatsappPruebaPending || !whatsappTelefonoPrueba.trim()}
+                  className="px-4 py-2.5 bg-[#25D366] hover:bg-[#22c35e] disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all flex items-center gap-2 flex-shrink-0"
+                >
+                  {whatsappPruebaPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  Enviar prueba
+                </button>
+              </div>
+              {whatsappPruebaResultado && (
+                <p className={`text-xs mt-2 ${whatsappPruebaResultado.ok ? "text-emerald-600" : "text-destructive"}`}>
+                  {whatsappPruebaResultado.texto}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

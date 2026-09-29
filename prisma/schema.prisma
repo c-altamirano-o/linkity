@@ -54,6 +54,26 @@ model Tenant {
   // existente ve cambiar su ticket hasta que entre a Configuración y elija
   // el formato de su impresora real.
   reciboFormato ReciboFormato @default(CARTA)
+
+  // WhatsApp Business PROPIO del negocio (2026-09-29, a petición de Carlos:
+  // "conectemos todo" — cada tenant conecta SU PROPIA cuenta de WhatsApp
+  // Business Cloud API de Meta, gratis vía developers.facebook.com, NO hay
+  // ninguna cuenta compartida de Linkity de por medio (a diferencia de
+  // notificaciones-suscripcion.ts, que sí usa una sola cuenta de Linkity
+  // para avisarle A LOS TENANTS de su propia suscripción — esto es al
+  // revés: cada tenant avisando a SUS clientes). Ver lib/whatsapp-tenant.ts
+  // para el envío y el comentario largo ahí sobre la plantilla de mensaje
+  // que cada negocio debe tener aprobada por Meta.
+  //
+  // whatsappAccessToken es SENSIBLE (permite mandar mensajes en nombre del
+  // negocio) — NUNCA debe seleccionarse en ninguna consulta que llegue a un
+  // Client Component ni a una respuesta de API; solo se lee del lado
+  // servidor dentro de enviarWhatsappTenant. whatsappPhoneNumberId no es
+  // secreto (es solo un identificador de cuenta, hace falta para armar la
+  // URL de la API) — sí es seguro mostrarlo de vuelta en Configuración.
+  whatsappPhoneNumberId String?
+  whatsappAccessToken   String?
+
   themePreset  ThemePreset @default(LUMIA_COBALT)
 
   // Intensidad de color del tema (2026-09-23, a petición de Carlos: "hazlas

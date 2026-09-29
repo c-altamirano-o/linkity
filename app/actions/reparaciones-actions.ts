@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { RepairStatus, Priority, ProductType } from "@prisma/client";
 import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
 import { PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
+import { ESTADO_CLIENTE_TEXTO, type EstadoReparacion } from "@/lib/reparaciones-data";
+import { avisarWhatsappReparacion, enviarWhatsappReparacionManual } from "@/lib/whatsapp-tenant";
 
 /**
  * "Otro" — pieza o servicio personalizado, para cuando no está guardado en
@@ -300,6 +302,22 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
       });
 
       return nuevo;
+    });
+
+    // WhatsApp automático de recepción (2026-09-29, a petición de Carlos:
+    // "también cada cambio de estatus" — este es el primero, la recepción
+    // misma). Mejor esfuerzo — avisarWhatsappReparacion nunca lanza, así que
+    // esto jamás puede tumbar la creación de la reparación, que ya se guardó
+    // arriba. Mismo texto que ya ve el cliente en la página pública
+    // (ESTADO_CLIENTE_TEXTO.RECEIVED), para que WhatsApp y la página jamás
+    // se contradigan.
+    await avisarWhatsappReparacion({
+      db,
+      tenantId: tenant.id,
+      customerId: finalCustomerId,
+      folio: repair.folio,
+      publicToken: repair.publicToken,
+      estadoTexto: ESTADO_CLIENTE_TEXTO.RECEIVED,
     });
 
     revalidatePath(`/${tenantSlug}/reparaciones`);
@@ -673,7 +691,7 @@ export async function avanzarEstadoAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, publicToken: true } });
+    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, publicToken: true, folio: true, customerId: true } });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
     // A propósito SIN puedeOperarSucursal — ver el comentario en
     // agregarPiezaReparacionAction (taller centralizado, varias sucursales).
@@ -732,6 +750,23 @@ export async function avanzarEstadoAction(params: {
       });
     });
 
+    // WhatsApp automático de cambio de estatus (2026-09-29, a petición de
+    // Carlos: "también cada cambio de estatus") — mejor esfuerzo, nunca
+    // lanza. Se omite en la corrección interna de "Enviar a tienda" por
+    // error (esCorreccionRegresoATaller): ese caso ya se marca
+    // visibleCliente:false arriba porque no es un avance real, así que
+    // tampoco debe generar un aviso que confunda/alarme al cliente.
+    if (!esCorreccionRegresoATaller) {
+      await avisarWhatsappReparacion({
+        db,
+        tenantId: tenant.id,
+        customerId: repair.customerId,
+        folio: repair.folio,
+        publicToken: repair.publicToken,
+        estadoTexto: ESTADO_CLIENTE_TEXTO[nuevoEstado],
+      });
+    }
+
     revalidatePath(`/${tenantSlug}/aduana`);
     revalidatePath(`/${tenantSlug}/reparaciones`);
     revalidatePath(`/${tenantSlug}/dashboard`);
@@ -772,12 +807,34 @@ export async function marcarWhatsappEnviadoAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, branchId: true } });
+    const repair = await db.repair.findUnique({
+      where: { id: repairId },
+      select: { id: true, branchId: true, status: true, folio: true, publicToken: true, customerId: true },
+    });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
     // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
     // modificar reparaciones de SU sucursal.
     if (!puedeOperarSucursal(resuelto, repair.branchId)) {
       return { ok: false, error: "No tienes acceso a esa sucursal" };
+    }
+
+    // 2026-09-29 — este botón antes solo marcaba la bandera whatsappSent sin
+    // mandar nada de verdad (hallazgo reportado a Carlos en la auditoría de
+    // WhatsApp). Ahora manda el mensaje real, con el texto del estatus
+    // ACTUAL de la reparación (el mismo que ya ve el cliente en su página
+    // pública), y solo marca whatsappSent si Meta de verdad lo aceptó — así
+    // el botón deja de "mentir" cuando el negocio no tiene WhatsApp
+    // conectado o el envío falla.
+    const res = await enviarWhatsappReparacionManual({
+      db,
+      tenantId: tenant.id,
+      customerId: repair.customerId,
+      folio: repair.folio,
+      publicToken: repair.publicToken,
+      estadoTexto: ESTADO_CLIENTE_TEXTO[repair.status as EstadoReparacion] ?? "Actualización de tu equipo",
+    });
+    if (!res.enviado) {
+      return { ok: false, error: res.motivo ?? "No se pudo enviar el WhatsApp" };
     }
 
     await db.repair.update({ where: { id: repairId }, data: { whatsappSent: true } });

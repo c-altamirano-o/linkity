@@ -4,6 +4,8 @@ import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { PaymentMethod, MixedPaymentMethod, SaleStatus, CashSessionStatus, RepairStatus } from "@prisma/client";
 import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
+import { ESTADO_CLIENTE_TEXTO } from "@/lib/reparaciones-data";
+import { avisarWhatsappReparacion } from "@/lib/whatsapp-tenant";
 
 /**
  * Server Action que persiste una venta real de POS: crea Sale + SaleItem(s)
@@ -171,7 +173,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     const repairsRaw = repairIds.length
       ? await db.repair.findMany({
           where: { id: { in: repairIds } },
-          select: { id: true, status: true, branchId: true, folio: true, publicToken: true },
+          select: { id: true, status: true, branchId: true, folio: true, publicToken: true, customerId: true },
         })
       : [];
     if (repairsRaw.length !== new Set(repairIds).size) {
@@ -218,7 +220,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       tipo: "producto"; productId: string; quantity: number; price: number; subtotal: number; tax: number; isService: boolean;
     };
     type LineaReparacion = {
-      tipo: "reparacion"; repairId: string; price: number; subtotal: number; tax: 0; folio: string; publicToken: string;
+      tipo: "reparacion"; repairId: string; price: number; subtotal: number; tax: 0; folio: string; publicToken: string; customerId: string;
     };
     const lineas: (LineaProducto | LineaReparacion)[] = [];
     for (const it of items) {
@@ -248,7 +250,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
         const precio = Math.round((it.monto ?? 0) * 100) / 100;
         subtotal += precio;
         total += precio;
-        lineas.push({ tipo: "reparacion", repairId: r.id, price: precio, subtotal: precio, tax: 0, folio: r.folio, publicToken: r.publicToken });
+        lineas.push({ tipo: "reparacion", repairId: r.id, price: precio, subtotal: precio, tax: 0, folio: r.folio, publicToken: r.publicToken, customerId: r.customerId });
       }
     }
     subtotal = Math.round(subtotal * 100) / 100;
@@ -389,6 +391,21 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       revalidatePath(`/${tenantSlug}/reparaciones`);
       revalidatePath(`/${tenantSlug}/aduana`);
       revalidatePath(`/rep/${l.publicToken}`);
+    }
+
+    // WhatsApp automático de entrega vía POS (2026-09-29, a petición de
+    // Carlos: "también cada cambio de estatus") — mejor esfuerzo, nunca
+    // lanza, la venta ya se guardó arriba de todas formas.
+    for (const l of lineas) {
+      if (l.tipo !== "reparacion") continue;
+      await avisarWhatsappReparacion({
+        db,
+        tenantId: tenant.id,
+        customerId: l.customerId,
+        folio: l.folio,
+        publicToken: l.publicToken,
+        estadoTexto: ESTADO_CLIENTE_TEXTO.DELIVERED,
+      });
     }
 
     return { ok: true, folio, total, cambio };

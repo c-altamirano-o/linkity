@@ -5,6 +5,7 @@ import { ReciboFormato } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { resolverActor } from "@/lib/actor";
 import { parseColoresPersonalizados, TEMA_PERSONALIZADO_ID } from "@/lib/theme-presets";
+import { enviarWhatsappTenant, construirMensajeReparacion } from "@/lib/whatsapp-tenant";
 
 // intensity: 0–200 (100 = paleta original, ver INTENSIDAD_DEFAULT en
 // lib/theme-presets.ts). Se guarda junto con el preset porque ambos valores
@@ -288,4 +289,109 @@ export async function updateWeekStartDay(tenantSlug: string, weekStartDay: numbe
     console.error("Error al actualizar el día de inicio de semana:", error);
     return { success: false, error: "No se pudo actualizar el día de inicio de semana" };
   }
+}
+
+// ============================================
+// WhatsApp Business del tenant (2026-09-29)
+// ============================================
+// Ver el comentario largo en lib/whatsapp-tenant.ts para la arquitectura
+// completa (por qué cada negocio conecta SU PROPIA cuenta, y la plantilla
+// exacta que Meta debe tener aprobada). Aquí solo se guardan/leen las 2
+// credenciales — accessToken es sensible, ver el comentario en
+// Tenant.whatsappAccessToken (schema.prisma): jamás se regresa su valor real
+// al cliente, por eso guardarWhatsappBusinessAction solo lo SOBREESCRIBE
+// cuando llega un valor no vacío (dejar el campo en blanco en el formulario
+// significa "no cambiar el token ya guardado", nunca "bórralo") — para
+// borrarlo de verdad existe desconectarWhatsappBusinessAction aparte, un
+// botón explícito, nunca un efecto secundario de guardar con el campo vacío.
+
+export async function guardarWhatsappBusinessAction(
+  tenantSlug: string,
+  datos: { phoneNumberId: string; accessToken: string }
+) {
+  const phoneNumberId = datos.phoneNumberId.trim();
+  const accessToken = datos.accessToken.trim();
+
+  if (!phoneNumberId) {
+    return { success: false, error: "El Phone Number ID es obligatorio" };
+  }
+  if (!/^\d+$/.test(phoneNumberId)) {
+    return { success: false, error: "El Phone Number ID de Meta es solo números" };
+  }
+
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
+  try {
+    await prisma.tenant.update({
+      where: { id: resuelto.tenant.id },
+      data: {
+        whatsappPhoneNumberId: phoneNumberId,
+        // Ver el comentario largo arriba: cadena vacía = "no lo toques".
+        ...(accessToken ? { whatsappAccessToken: accessToken } : {}),
+      },
+    });
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al guardar WhatsApp Business:", error);
+    return { success: false, error: "No se pudo guardar" };
+  }
+}
+
+export async function desconectarWhatsappBusinessAction(tenantSlug: string) {
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
+  try {
+    await prisma.tenant.update({
+      where: { id: resuelto.tenant.id },
+      data: { whatsappPhoneNumberId: null, whatsappAccessToken: null },
+    });
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al desconectar WhatsApp Business:", error);
+    return { success: false, error: "No se pudo desconectar" };
+  }
+}
+
+/**
+ * Manda un mensaje de prueba al teléfono que el administrador escriba en
+ * Configuración — la única forma de verificar, sin esperar a la próxima
+ * reparación real, que el Phone Number ID/Access Token son correctos Y que
+ * la plantilla "actualizacion_reparacion_linkity" ya está aprobada por
+ * Meta. Regresa el motivo tal cual lo mandó Meta (res.motivo) para que el
+ * negocio pueda diagnosticar sin tener que pedirte ayuda por cada error.
+ */
+export async function probarWhatsappBusinessAction(tenantSlug: string, telefonoPrueba: string) {
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: resuelto.tenant.id },
+    select: { name: true, whatsappPhoneNumberId: true, whatsappAccessToken: true },
+  });
+  if (!tenant) return { success: false, error: "Negocio no encontrado" };
+
+  // Sin selector de país en el campo de prueba (a diferencia del teléfono de
+  // un cliente, que sí trae uno) — se le pide al administrador escribir el
+  // número completo CON código de país (ej. "5215512345678"), y aquí solo
+  // se limpia cualquier separador/espacio/+ que haya escrito.
+  const numero = telefonoPrueba.replace(/\D/g, "");
+  if (!numero) return { success: false, error: "Escribe un teléfono válido para la prueba, con código de país (ej. 521XXXXXXXXXX)" };
+
+  const mensaje = construirMensajeReparacion({
+    negocio: tenant.name,
+    clientePrimerNombre: "Cliente de prueba",
+    folio: "PRUEBA-001",
+    estadoTexto: "Este es un mensaje de prueba de configuración de WhatsApp Business.",
+    urlSeguimiento: "https://linkitysoluciones.mx",
+  });
+
+  const res = await enviarWhatsappTenant(tenant, numero, mensaje);
+  if (!res.enviado) return { success: false, error: res.motivo ?? "No se pudo enviar" };
+  return { success: true };
 }
