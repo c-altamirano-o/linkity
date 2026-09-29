@@ -340,10 +340,11 @@ export const PASO_PROGRESO: Record<EstadoReparacion, number> = {
   CANCELLED: -1,
 };
 
-// 2026-09-29: "Listo" -> "Equipo terminado" (mismo motivo que
-// ESTADO_CLIENTE_TEXTO — evitar que "listo" a secas se lea como "ya puedes
-// venir por él" cuando el paso 2 en realidad es "listo en taller").
-export const PASOS_PROGRESO_TEXTO = ["Recibido", "En reparación", "Equipo terminado", "En tienda", "Entregado"];
+// 2026-09-29, ajuste final de texto (mismo motivo que ESTADO_CLIENTE_TEXTO
+// — evitar que "listo"/"en tienda" a secas se lean como "ya puedes venir
+// por él" o revelen el traslado interno taller->tienda) — Carlos pidió
+// estas etiquetas exactas como versión definitiva.
+export const PASOS_PROGRESO_TEXTO = ["Recibido", "En Reparación", "Proceso Terminado", "Disponible para Recoger", "Entregado"];
 
 export interface CheckpointPublico {
   texto: string;
