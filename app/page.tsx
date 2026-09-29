@@ -3,26 +3,7 @@ import Link from "next/link";
 import {
   ArrowRight, ShoppingCart, Wrench, GitBranch, FileText, BarChart3, ShieldCheck,
   Smartphone, Car, Bike, Scissors, Stethoscope, PawPrint, Store, Check,
-  ClipboardList, Users, TrendingUp, ChevronDown, Building2, Quote,
 } from "lucide-react";
-
-// Colores cíclicos para el círculo de iniciales de cada reseña — mismo
-// espíritu que chipPorCategoria (POS/Catálogo): nada de fotos de stock
-// haciéndose pasar por la persona, solo sus iniciales.
-const COLOR_INICIALES = [
-  "bg-primary/10 text-primary",
-  "bg-green-500/10 text-green-600",
-  "bg-orange-500/10 text-orange-600",
-];
-
-function iniciales(nombre: string) {
-  return nombre
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase())
-    .join("");
-}
 
 const FEATURES = [
   {
@@ -43,7 +24,7 @@ const FEATURES = [
   {
     icon: FileText,
     title: "Facturación CFDI",
-    desc: "Genera el documento de factura directo desde tus ventas, con folio y los datos fiscales de tu cliente.",
+    desc: "Genera y timbra facturas directo desde tus ventas, con el folio y los datos fiscales de tu cliente.",
   },
   {
     icon: BarChart3,
@@ -100,70 +81,6 @@ const PLANES = [
       "200 folios CFDI al mes incluidos"
     ],
     destacado: false,
-  },
-];
-
-const PASOS = [
-  {
-    icon: ClipboardList,
-    title: "Elige tu rubro y regístrate",
-    desc: "Al crear tu cuenta eliges el giro de tu negocio — celulares, taller automotriz, barbería y más — y Linkity ajusta nombres, catálogo de arranque y flujos a tu operación.",
-  },
-  {
-    icon: Users,
-    title: "Configura tu equipo y sucursales",
-    desc: "Da de alta tus sucursales, tu personal con PIN propio y los roles que necesites, sin quedarte con plantillas genéricas.",
-  },
-  {
-    icon: TrendingUp,
-    title: "Vende y da seguimiento",
-    desc: "Cobra en el punto de venta, da seguimiento a cada reparación paso a paso y revisa todo en tu Dashboard, sin armar reportes a mano.",
-  },
-];
-
-// Reseñas reales de gente que ya usa el sistema en las sucursales que
-// administra Carlos — solo nombre y puesto, a petición explícita suya
-// (2026-09-28: decidido con Carlos no usar reseñas ficticias en la landing
-// ya pública; estas 3 sí son de personas reales, el contenido y la
-// atribución los dio él mismo).
-const TESTIMONIOS = [
-  {
-    nombre: "Andrea Salcido",
-    puesto: "Dueña",
-    texto: "Muy fácil de entender, antes no sabía cómo administrar mi negocio.",
-  },
-  {
-    nombre: "Rodrigo Orozco",
-    puesto: "Supervisor de tiendas",
-    texto: "Excelente la opción de ver el historial de días anteriores.",
-  },
-  {
-    nombre: "Kevin Zamora",
-    puesto: "Cajero",
-    texto: "Es muy rápido dar de alta los artículos o importarlos desde mi viejo sistema.",
-  },
-];
-
-const FAQS = [
-  {
-    q: "¿Necesito instalar algo?",
-    a: "No. Linkity funciona 100% desde el navegador — solo necesitas internet, ya sea en una computadora, tablet o celular.",
-  },
-  {
-    q: "¿Mis datos se mezclan con los de otros negocios?",
-    a: "No. Cada negocio vive en su propio espacio de datos, completamente aislado — nadie más puede ver tu información, ni tú la de otros negocios en la plataforma.",
-  },
-  {
-    q: "¿Puedo cancelar cuando quiera?",
-    a: "Sí. No hay contrato forzoso — eliges la vigencia (1, 3, 6 o 12 meses) al registrarte y decides si renuevas o no.",
-  },
-  {
-    q: "¿Qué pasa si mi negocio crece y necesito más sucursales o usuarios?",
-    a: "Puedes cambiar de plan cuando quieras, sin perder tu información ni tener que reconfigurar nada.",
-  },
-  {
-    q: "¿Cómo funciona la facturación CFDI?",
-    a: "Linkity genera el documento de venta con el formato y los datos fiscales que pide un CFDI, directo desde cada venta. El timbrado directo con el SAT está en desarrollo — te avisaremos en cuanto esté disponible.",
   },
 ];
 
@@ -229,45 +146,39 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Columna Derecha: Composición Visual Enriquecida para Móvil y Desktop */}
+            {/* Columna Derecha: Composición Visual Enriquecida */}
             <div className="lg:col-span-7 relative w-full h-[320px] sm:h-[450px] lg:h-[650px] flex items-center justify-center mt-6 sm:mt-0">
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] h-[90%] bg-gradient-to-tr from-primary/30 to-purple-500/20 blur-[90px] rounded-full pointer-events-none" />
               
-              {/* Dashboard Principal */}
+              {/* Elemento 2: Dashboard Principal (Centro) */}
               <div className="absolute z-10 w-[95%] sm:w-[85%] lg:right-0 shadow-2xl rounded-xl sm:rounded-2xl overflow-hidden border border-border/50 bg-background transition-transform duration-700">
                 <div className="bg-muted/60 border-b border-border/50 px-3 py-2 sm:px-4 sm:py-2.5 flex gap-1.5 backdrop-blur-sm">
                   <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#FF5F56]" />
                   <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#FFBD2E]" />
                   <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#27C93F]" />
                 </div>
-                <Image src="/images/dashboard-preview.png" width={1200} height={800} className="w-full h-auto" alt="Dashboard principal" priority />
+                <Image src="/images/Cap-2.png" width={1200} height={800} className="w-full h-auto" alt="Dashboard principal" priority />
               </div>
 
-              {/* Mockup POS Secundario (Visible también en Móvil con escala adecuada) */}
+              {/* Elemento 4: Mockup Inferior Izquierdo (Punto de Venta) */}
               <div className="absolute z-20 w-[65%] sm:w-[55%] lg:w-[45%] -bottom-4 sm:-bottom-8 left-2 sm:-left-12 shadow-[0_20px_50px_rgba(0,0,0,0.4)] rounded-xl overflow-hidden border border-border bg-background">
                 <div className="bg-muted/60 border-b border-border/50 px-2.5 py-1.5 sm:px-3 sm:py-2 flex gap-1.5 backdrop-blur-sm">
                   <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground">Punto de Venta</span>
                 </div>
-                <Image src="/images/POS-preview.png" width={800} height={500} className="w-full h-auto" alt="Módulo POS" />
+                <Image src="/images/Cap-4.png" width={800} height={500} className="w-full h-auto" alt="Módulo POS" />
               </div>
 
-              {/* Mockup Inventario (Visible en pantallas medianas y grandes) */}
+              {/* Elemento 1: Mockup Superior Izquierdo (Inventario) */}
               <div className="hidden sm:block absolute z-30 w-[40%] -top-6 -left-4 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-xl overflow-hidden border border-border bg-background">
                 <div className="bg-muted/60 border-b border-border/50 px-3 py-2 flex gap-1.5 backdrop-blur-sm">
                   <span className="text-[10px] font-medium text-muted-foreground">Inventario</span>
                 </div>
-                <Image src="/images/inventario-preview.png" width={600} height={400} className="w-full h-auto" alt="Módulo Inventario" />
+                <Image src="/images/Cap-1.png" width={600} height={400} className="w-full h-auto" alt="Módulo Inventario" />
               </div>
               
-              {/* Tarjeta de Ventas Flotante */}
-              <div className="absolute z-40 right-2 sm:right-[-5%] top-[10%] sm:top-[15%] bg-background/95 backdrop-blur-md border border-border/50 p-3 sm:p-4 rounded-xl sm:rounded-2xl shadow-xl flex items-center gap-3 sm:gap-4">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500/10 rounded-full flex items-center justify-center text-green-500 shrink-0">
-                  <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6" />
-                </div>
-                <div>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground font-medium uppercase tracking-wider">Ventas de hoy</p>
-                  <p className="text-base sm:text-xl font-bold">+$12,450.00</p>
-                </div>
+              {/* Elemento 3: Tarjeta Flotante Superior Derecha */}
+              <div className="absolute z-40 right-2 sm:right-[-5%] top-[10%] sm:top-[15%] w-[45%] sm:w-[35%] lg:w-[30%] drop-shadow-xl transition-transform duration-700 rounded-xl overflow-hidden">
+                <Image src="/images/Cap-3.png" width={400} height={200} className="w-full h-auto object-contain" alt="Elemento 3" />
               </div>
             </div>
           </div>
@@ -294,40 +205,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* SECCIÓN DE CREDIBILIDAD (honesta: sin nombres/reseñas inventadas — ver
-          decisión con Carlos 2026-09-28: la landing ya es pública y no hay
-          clientes reales todavía, así que en vez de testimonios ficticios se
-          respalda con hechos verificables sobre quién y cómo se construyó
-          Linkity) */}
       <section className="border-t border-border">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
-          <div className="max-w-3xl mx-auto text-center">
-            <div className="inline-flex items-center justify-center gap-2 bg-primary/10 text-primary rounded-full w-14 h-14 mb-6">
-              <Building2 className="w-6 h-6" />
-            </div>
-            <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">Hecho por quien repara celulares todos los días</h2>
-            <p className="text-muted-foreground mt-4 text-base sm:text-lg leading-relaxed">
-              Linkity no nació en una mesa de planeación genérica: quien está detrás de Linkity administra sus propias sucursales de reparación de celulares y, antes de este sistema, ya operaba con un sistema propio hecho a la medida. Cada módulo — desde el PIN de personal hasta el ticket de recepción con seguimiento — responde a algo que pasó de verdad en un mostrador.
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-4 sm:gap-8 mt-12 max-w-3xl mx-auto text-center">
-            <div>
-              <p className="text-2xl sm:text-4xl font-extrabold text-primary">20+</p>
-              <p className="text-muted-foreground text-xs sm:text-sm mt-1 font-medium">Giros de negocio soportados</p>
-            </div>
-            <div>
-              <p className="text-2xl sm:text-4xl font-extrabold text-primary">14</p>
-              <p className="text-muted-foreground text-xs sm:text-sm mt-1 font-medium">Módulos en un solo sistema</p>
-            </div>
-            <div>
-              <p className="text-2xl sm:text-4xl font-extrabold text-primary">100%</p>
-              <p className="text-muted-foreground text-xs sm:text-sm mt-1 font-medium">Datos aislados por negocio</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-t border-border bg-muted/30">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
           <h2 className="text-2xl sm:text-4xl font-bold text-center tracking-tight">Para el giro de tu negocio</h2>
           <p className="text-muted-foreground text-center mt-3 max-w-lg mx-auto text-base sm:text-lg">
@@ -350,58 +228,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* CÓMO FUNCIONA */}
-      <section className="border-t border-border">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
-          <h2 className="text-2xl sm:text-4xl font-bold text-center tracking-tight">Cómo funciona</h2>
-          <p className="text-muted-foreground text-center mt-3 max-w-lg mx-auto text-base sm:text-lg">
-            De registrarte a tener tu negocio operando, en el mismo día.
-          </p>
-          <div className="grid sm:grid-cols-3 gap-6 sm:gap-8 mt-12 sm:mt-16 max-w-5xl mx-auto">
-            {PASOS.map((p, i) => (
-              <div key={p.title} className="relative bg-background border border-border rounded-2xl p-6 sm:p-8">
-                <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold flex items-center justify-center shadow-sm">
-                  {i + 1}
-                </span>
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-5">
-                  <p.icon className="w-6 h-6 text-primary" />
-                </div>
-                <h3 className="font-bold text-lg mb-2">{p.title}</h3>
-                <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{p.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* TESTIMONIOS */}
       <section className="border-t border-border bg-muted/30">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
-          <h2 className="text-2xl sm:text-4xl font-bold text-center tracking-tight">Lo que dice quien ya lo usa</h2>
-          <div className="grid sm:grid-cols-3 gap-6 sm:gap-8 mt-12 sm:mt-16 max-w-6xl mx-auto">
-            {TESTIMONIOS.map((t, i) => (
-              <div key={t.nombre} className="bg-background border border-border rounded-2xl p-6 sm:p-8 flex flex-col">
-                <Quote className="w-7 h-7 text-primary/30 mb-4" />
-                <p className="text-foreground/90 leading-relaxed text-sm sm:text-base flex-1">
-                  “{t.texto}”
-                </p>
-                <div className="flex items-center gap-3 mt-6 pt-6 border-t border-border">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${COLOR_INICIALES[i % COLOR_INICIALES.length]}`}>
-                    {iniciales(t.nombre)}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm">{t.nombre}</p>
-                    <p className="text-muted-foreground text-xs">{t.puesto}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* SECCIÓN DE PLANES */}
-      <section className="border-t border-border">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
           <div className="text-center max-w-2xl mx-auto">
             <span className="inline-block bg-green-500/10 text-green-600 font-semibold px-3.5 py-1 rounded-full text-xs sm:text-sm mb-4 border border-green-500/20">
@@ -453,26 +280,6 @@ export default function LandingPage() {
                   Empezar prueba gratis <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="border-t border-border bg-muted/30">
-        <div className="mx-auto max-w-3xl px-4 sm:px-6 py-16 sm:py-24">
-          <h2 className="text-2xl sm:text-4xl font-bold text-center tracking-tight">Preguntas frecuentes</h2>
-          <div className="mt-10 sm:mt-12 space-y-3">
-            {FAQS.map((f) => (
-              <details key={f.q} className="group bg-background border border-border rounded-xl px-5 sm:px-6 py-1 open:shadow-sm">
-                <summary className="flex items-center justify-between gap-4 py-4 sm:py-5 cursor-pointer list-none font-semibold text-sm sm:text-base marker:content-none [&::-webkit-details-marker]:hidden">
-                  {f.q}
-                  <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground shrink-0 transition-transform duration-200 group-open:rotate-180" />
-                </summary>
-                <p className="text-muted-foreground text-sm sm:text-base leading-relaxed pb-4 sm:pb-5 pr-8">
-                  {f.a}
-                </p>
-              </details>
             ))}
           </div>
         </div>
