@@ -264,15 +264,20 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     });
   };
 
-  // Se llama con lo que detecta la cámara de EscanearModal.tsx (o lo que
-  // el cajero escribió a mano ahí mismo). Busca el producto por barcode
-  // exacto o, si no hay match, por SKU exacto (sin distinguir mayúsculas)
-  // — un código de barras real nunca es un match parcial, así que aquí sí
-  // se compara completo, a diferencia del buscador de texto de arriba.
+  // Se llama con lo que el lector físico de código de barras (USB/Bluetooth,
+  // ver EscanearModal.tsx) o el cajero escribió a mano ahí mismo. Busca el
+  // producto por barcode exacto o, si no hay match, por SKU exacto (sin
+  // distinguir mayúsculas) — un código de barras real nunca es un match
+  // parcial, así que aquí sí se compara completo, a diferencia del buscador
+  // de texto de arriba.
   const handleCodigoEscaneado = (codigoCrudo: string) => {
     const codigo = codigoCrudo.trim();
     if (!codigo) return;
 
+    // Evita procesar el MISMO código dos veces si el lector físico llega a
+    // disparar Enter más de una vez muy seguido (guarda de seguridad barata
+    // — ya no hay cámara viendo el código en varios frames, así que esto
+    // rara vez se activa hoy, pero no estorba dejarlo).
     const ahora = Date.now();
     if (ultimoEscaneoRef.current?.codigo === codigo && ahora - ultimoEscaneoRef.current.ts < 2000) return;
     ultimoEscaneoRef.current = { codigo, ts: ahora };
