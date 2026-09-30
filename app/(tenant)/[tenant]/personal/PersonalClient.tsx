@@ -4,7 +4,7 @@ import { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Search, Plus, Users, UserCheck, Clock, Wallet, LogIn, LogOut, Pencil,
-  Banknote, X, Check, Ban, KeyRound, Shield, Sparkles,
+  Banknote, X, Check, Ban, KeyRound, Shield, Sparkles, HelpCircle, ChevronDown, ChevronUp,
 } from "lucide-react";
 import type { PersonalData, EmpleadoUI, EsquemaPago, BaseComision, Frecuencia, EstadoPago, MetodoPago } from "@/lib/personal-data";
 import { label, type LabelDictionary } from "@/lib/labels";
@@ -137,6 +137,13 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
   const { empleados } = data;
   const [modalRoles, setModalRoles] = useState(false);
   const [modalAsistente, setModalAsistente] = useState(false);
+  // 2026-09-30, a petición de Carlos: quien llega aquí desde "Da de alta a
+  // tu equipo" (checklist de Bienvenida) caía directo a esta pantalla sin
+  // ninguna explicación de qué es un Rol, qué es un Puesto, o para qué
+  // sirve cada uno de los 3 botones — friccion real para alguien que nunca
+  // usó el sistema. Colapsado por default (no estorba a quien ya sabe
+  // usarlo) — solo memoria de componente, se vuelve a colapsar al recargar.
+  const [guiaAbierta, setGuiaAbierta] = useState(false);
 
   // Permite enlazar directo al asistente con /[tenant]/personal?asistente=1
   // (2026-09-24) — pensado para engancharlo después desde otros puntos de
@@ -470,6 +477,41 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 ))}
               </div>
             </div>
+            {/* 2026-09-30, a petición de Carlos — ver el comentario largo
+                junto a guiaAbierta, arriba. */}
+            <button
+              type="button"
+              onClick={() => setGuiaAbierta((v) => !v)}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <HelpCircle className="w-3 h-3" />
+              ¿Qué es un rol o un puesto?
+              {guiaAbierta ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+            {guiaAbierta && (
+              <div className="bg-muted/50 border border-border rounded-lg p-2.5 text-[11px] text-muted-foreground space-y-1.5 leading-snug">
+                <p>
+                  <span className="font-semibold text-foreground">Rol:</span> define a qué módulos puede
+                  entrar el empleado (ej. un Cajero solo ve POS y Caja) — se le asigna uno al darlo de alta.
+                </p>
+                <p>
+                  <span className="font-semibold text-foreground">Puesto:</span> solo el nombre de su cargo
+                  (ej. &quot;Cajero de mostrador&quot;) — es una etiqueta informativa, no cambia lo que puede ver o hacer.
+                </p>
+                <p>
+                  <span className="font-semibold text-foreground">Nuevo empleado:</span> da de alta a la
+                  persona real — nombre, PIN, rol y sueldo.
+                </p>
+                <p>
+                  <span className="font-semibold text-foreground">Roles y permisos:</span> crea o edita los
+                  roles disponibles y qué módulos ve cada uno.
+                </p>
+                <p>
+                  <span className="font-semibold text-foreground">Asistente de puestos:</span> te sugiere
+                  puestos comunes según tu giro, solo para llenar más rápido el campo Puesto.
+                </p>
+              </div>
+            )}
             <div className="flex gap-1.5">
               <button onClick={abrirNuevoEmpleado}
                 className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium rounded-lg">

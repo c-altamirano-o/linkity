@@ -255,29 +255,41 @@ export default async function TenantLayout({
     }
   }
 
-  // "Primeros pasos" — atajo en el encabezado, visible desde CUALQUIER
-  // módulo, cuando el negocio todavía no termina el checklist de
-  // bienvenida (2026-09-29, a petición de Carlos: "si das de alta
-  // artículos, ya no tienes como regresar a la checklist de primeros
-  // pasos" — antes, en cuanto salías de /bienvenida a completar un paso,
-  // no había forma de volver). Solo para "admin" (dueño/gerente con cuenta
-  // real): el checklist está pensado para quien arma el negocio, no para
-  // el personal de PIN que solo entra a operar un módulo puntual. No se
-  // calcula si ya estás DENTRO de /bienvenida (no tiene caso mostrar un
-  // atajo hacia la pantalla en la que ya estás) — se reusa el mismo header
-  // de pathname que ya leen los guards de arriba.
-  let onboardingPendiente = false;
+  // "Primeros pasos" — indicador en el encabezado, visible desde CUALQUIER
+  // módulo, del avance del checklist de bienvenida (2026-09-29, a petición
+  // de Carlos: "si das de alta artículos, ya no tienes como regresar a la
+  // checklist de primeros pasos" — antes, en cuanto salías de /bienvenida a
+  // completar un paso, no había forma de volver). Solo para "admin"
+  // (dueño/gerente con cuenta real): el checklist está pensado para quien
+  // arma el negocio, no para el personal de PIN que solo entra a operar un
+  // módulo puntual. No se calcula si ya estás DENTRO de /bienvenida (no
+  // tiene caso mostrar el mismo resumen de la pantalla en la que ya estás)
+  // — se reusa el mismo header de pathname que ya leen los guards de
+  // arriba. `onboardingPasos` (2026-09-30, a petición de Carlos: "marcar en
+  // rojo/verde... y desplegar una lista de los que falten") trae el
+  // detalle de cada paso para el desplegable de TenantShell — mismos 5
+  // textos que BienvenidaClient.tsx, un solo lugar (lib/onboarding.ts) que
+  // decide si cada uno ya está listo.
+  let mostrarOnboarding = false;
   let onboardingCompletados = 0;
   let onboardingTotal = 0;
+  let onboardingPasos: { id: string; titulo: string; done: boolean; href: string }[] = [];
   if (dbTenant && modo === "admin") {
     const headerList = await headers();
     const pathname = headerList.get("x-pathname") ?? "";
     const yaEnBienvenida = pathname === `/${tenant}/bienvenida`;
     if (!yaEnBienvenida) {
       const estado = await obtenerEstadoPasosBienvenida(dbTenant.id, dbTenant.themePreset);
+      mostrarOnboarding = true;
       onboardingCompletados = estado.completados;
       onboardingTotal = estado.total;
-      onboardingPendiente = estado.completados < estado.total;
+      onboardingPasos = [
+        { id: "personalizacion", titulo: "Personaliza tu negocio", done: estado.personalizado, href: `/${tenant}/configuracion` },
+        { id: "catalogo", titulo: "Arma tu catálogo", done: estado.tieneCatalogo, href: `/${tenant}/catalogo` },
+        { id: "equipo", titulo: "Da de alta a tu equipo", done: estado.tieneEquipo, href: `/${tenant}/personal` },
+        { id: "caja", titulo: "Abre tu caja", done: estado.tieneCaja, href: `/${tenant}/caja` },
+        { id: "venta", titulo: "Registra tu primera venta", done: estado.tieneVenta, href: `/${tenant}/pos` },
+      ];
     }
   }
 
@@ -295,9 +307,10 @@ export default async function TenantLayout({
         logoUrl={dbTenant?.logo ?? null}
         notificacionesIniciales={notificacionesIniciales}
         notificacionesNoLeidasIniciales={notificacionesNoLeidas}
-        onboardingPendiente={onboardingPendiente}
+        mostrarOnboarding={mostrarOnboarding}
         onboardingCompletados={onboardingCompletados}
         onboardingTotal={onboardingTotal}
+        onboardingPasos={onboardingPasos}
       >
         {children}
       </TenantShell>

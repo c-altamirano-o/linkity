@@ -86,7 +86,13 @@ export interface CrearVentaParams {
   customerId: string | null;
   items: CrearVentaItem[];
   metodoPago: MetodoPago;
-  montoRecibido?: number; // solo "efectivo" — para validar y guardar el cambio
+  // Solo "efectivo" — para validar y guardar el cambio. 2026-09-30, a
+  // petición de Carlos ("que no sea obligatorio poner la cantidad con la
+  // que paga el cliente, ya que muchos no lo hacen"): `undefined` ya NO se
+  // trata como "recibió $0" (que antes rechazaba la venta casi siempre) —
+  // significa "el cajero no especificó, se asume pago exacto", ver el
+  // bloque de "efectivo" más abajo.
+  montoRecibido?: number;
   mixto?: { efectivo: number; tarjeta: number; transferencia: number };
 }
 
@@ -271,10 +277,20 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     let metadata: { montoRecibido: number; cambio: number } | undefined;
 
     if (metodoPago === "efectivo") {
-      const recibido = montoRecibido ?? 0;
+      // 2026-09-30: `montoRecibido` ausente (el cajero dejó el campo en
+      // blanco) se asume pago exacto — nunca $0. Antes, en blanco llegaba
+      // como 0 desde el cliente y esto rechazaba la venta casi siempre
+      // ("El monto recibido es menor al total"), así que en la práctica
+      // era obligatorio teclearlo. Cuando SÍ viene un monto explícito y no
+      // alcanza, la venta se sigue rechazando — esa validación real no
+      // cambió. `metadata` solo se guarda cuando el cajero de verdad
+      // escribió un monto: si se asumió el pago exacto, no hay ningún dato
+      // real que registrar (nunca se inventa un "recibido" para el cuadre).
+      const seEspecifico = montoRecibido !== undefined;
+      const recibido = seEspecifico ? montoRecibido : total;
       if (recibido < total) return { ok: false, error: "El monto recibido es menor al total" };
       cambio = Math.round((recibido - total) * 100) / 100;
-      metadata = { montoRecibido: recibido, cambio };
+      metadata = seEspecifico ? { montoRecibido: recibido, cambio } : undefined;
     } else if (metodoPago === "mixto") {
       const efec = mixto?.efectivo ?? 0;
       const tarj = mixto?.tarjeta ?? 0;

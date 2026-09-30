@@ -221,9 +221,20 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const iva = Math.round((total - subtotal) * 100) / 100;
   const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
 
-  const montoNum = parseFloat(montoRecibido.replace(/,/g, "")) || 0;
+  // 2026-09-30, a petición de Carlos: "que no sea obligatorio poner la
+  // cantidad con la que paga el cliente, ya que muchos no lo hacen" — antes,
+  // un campo en blanco se leía como $0 (montoNum = 0), lo que SIEMPRE
+  // bloqueaba el botón Cobrar en efectivo (0 < total, ver puedeCobar más
+  // abajo) hasta que alguien tecleara algo. Ahora, en blanco se asume pago
+  // exacto (sin cambio) — el cajero solo necesita teclear un monto cuando
+  // de verdad recibió más del total y hay que calcular el cambio. Si SÍ
+  // escribió algo y es menor al total, eso sigue bloqueando el cobro (esa
+  // validación real no cambia — nunca se asume que alcanzó si el cajero
+  // mismo tecleó que no).
+  const montoIngresado = montoRecibido.trim() !== "";
+  const montoNum = montoIngresado ? parseFloat(montoRecibido.replace(/,/g, "")) || 0 : total;
   const cambio = montoNum > total ? montoNum - total : 0;
-  const faltaEfec = montoNum < total && montoNum > 0;
+  const faltaEfec = montoIngresado && montoNum < total;
 
   const mEfec = parseFloat(mixtoEfectivo.replace(/,/g, "")) || 0;
   const mTarj = parseFloat(mixtoTarjeta.replace(/,/g, "")) || 0;
@@ -362,6 +373,11 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     const clienteTicket = clienteSeleccionado?.name ?? null;
     const clienteTelefonoTicket = clienteSeleccionado?.phone ?? null;
     const metodoPagoAlCobrar = metodoPago;
+    // 2026-09-30: si el cajero dejó "Monto recibido" en blanco (pago
+    // exacto asumido, ver montoIngresado más arriba), no se manda ni se
+    // imprime un "recibido"/"cambio" inventado — ni al server ni al ticket
+    // se le hace creer que el cajero SÍ tecleó un monto cuando no lo hizo.
+    const montoIngresadoAlCobrar = montoIngresado;
     const subtotalTicket = subtotal;
     const ivaTicket = iva;
     // Si esta venta incluyó el cobro de una reparación, se limpia el
@@ -397,7 +413,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             : { productId: i.productId, cantidad: i.cantidad }
         ),
         metodoPago,
-        montoRecibido: metodoPago === "efectivo" ? montoNum : undefined,
+        montoRecibido: metodoPago === "efectivo" && montoIngresadoAlCobrar ? montoNum : undefined,
         mixto: metodoPago === "mixto" ? { efectivo: mEfec, tarjeta: mTarj, transferencia: mTrans } : undefined,
       });
 
@@ -422,7 +438,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           iva: ivaTicket,
           total: res.total,
           metodoPago: METODO_PAGO_TEXTO_TICKET[metodoPagoAlCobrar],
-          montoRecibido: metodoPagoAlCobrar === "efectivo" ? montoNum : null,
+          montoRecibido: metodoPagoAlCobrar === "efectivo" && montoIngresadoAlCobrar ? montoNum : null,
           cambio: res.cambio > 0 ? res.cambio : null,
           qrUrl: qrUrlTicket,
           qrEtiqueta: qrEtiquetaTicket,
@@ -455,8 +471,11 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     ? "La caja de esta sucursal está cerrada"
     : carrito.length === 0
     ? "Agrega al menos un producto o servicio al carrito"
-    : metodoPago === "efectivo" && montoNum < total
-    ? "Escribe cuánto recibiste en \"Monto recibido\" para continuar"
+    // 2026-09-30: con "Monto recibido" ya opcional (ver montoIngresado más
+    // arriba), esto solo puede dispararse cuando el cajero SÍ escribió un
+    // monto y ese monto no alcanza — dejarlo en blanco ya nunca bloquea.
+    : metodoPago === "efectivo" && faltaEfec
+    ? "Lo que escribiste en \"Monto recibido\" no alcanza a cubrir el total"
     : metodoPago === "mixto" && !mixtoOk
     ? "Completa el desglose de pago hasta cubrir el total"
     : null;
@@ -725,7 +744,9 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 flex-wrap a la fila como respaldo, para que si algo no cabe se
                 apile en vez de desbordar. */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="text-sm text-muted-foreground">Monto recibido</span>
+              <span className="text-sm text-muted-foreground">
+                Monto recibido <span className="text-muted-foreground/60">(opcional)</span>
+              </span>
               <div className="flex items-center gap-2">
                 {/* Atajo para el caso más común (pago exacto) — a propósito
                     ya NO se usa el total como placeholder (Carlos,
@@ -741,13 +762,28 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                   type="number"
                   value={montoRecibido}
                   onChange={(e) => setMontoRecibido(e.target.value)}
+                  // 2026-09-30, a petición de Carlos ("que el proceso vaya
+                  // siguiendo su curso con Enter"): con el campo ya no
+                  // obligatorio, Enter aquí cierra la venta directo —
+                  // igual que si el cajero le diera clic a "Cobrar".
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && puedeCobar) {
+                      e.preventDefault();
+                      handleCobrar();
+                    }
+                  }}
                   placeholder="$0"
-                  autoFocus
+                  // Ya NO autoFocus (2026-09-30): con el atajo nuevo de
+                  // "escribe y Enter" en el buscador de productos de arriba,
+                  // este campo apareciendo y robando el foco justo al
+                  // agregar el primer artículo cortaba esa cadena — el
+                  // cajero quería seguir tecleando el SIGUIENTE producto, no
+                  // el monto. Ahora el foco se queda donde el cajero lo dejó.
                   className="w-28 text-right px-2.5 py-2 border border-primary/40 rounded-lg text-sm font-semibold focus:outline-none focus:border-primary bg-card text-foreground placeholder:text-muted-foreground"
                 />
               </div>
             </div>
-            {montoNum > 0 && (
+            {montoIngresado && (
               <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg ${
                 cambio > 0 ? "bg-emerald-50 border border-emerald-200" :
                 faltaEfec ? "bg-red-50 border border-red-200" :
@@ -906,6 +942,23 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
+              // 2026-09-30, a petición de Carlos ("que se pueda seleccionar
+              // los artículos con la tecla Tab y que el proceso vaya
+              // siguiendo su curso con Enter"): las fichas de producto de
+              // abajo ya son <button> reales, así que Tab + Enter para
+              // agregarlas ya funcionaba de forma nativa; lo que faltaba
+              // era esto — Enter aquí agrega directo el PRIMER resultado
+              // filtrado (igual que un lector de código de barras) y limpia
+              // el campo sin quitarle el foco, para teclear el siguiente
+              // artículo sin tocar el mouse ni volver a dar clic.
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                const primero = productosFiltrados[0];
+                if (!primero) return;
+                agregarAlCarrito(primero);
+                setBusqueda("");
+              }}
               placeholder="Buscar producto o servicio"
               className="w-full pl-11 pr-4 py-3 rounded-full text-base bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
             />

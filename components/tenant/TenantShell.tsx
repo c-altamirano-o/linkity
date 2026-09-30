@@ -16,7 +16,7 @@ import {
   Warehouse, DollarSign, UserCog, BarChart3, FileText,
   GitBranch, BookOpen, LogOut, Bell, ChevronDown, Settings,
   Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck, CalendarDays,
-  Unlock, Lock, AlertTriangle, Smartphone, Check, ListChecks,
+  Unlock, Lock, AlertTriangle, Smartphone, Check, ListChecks, CheckCircle2, Circle,
 } from "lucide-react";
 
 // Tipo real de NotificacionUI (lib/notificaciones.ts) — se reusa aquí en
@@ -130,9 +130,10 @@ export default function TenantShell({
   logoUrl = null,
   notificacionesIniciales = [],
   notificacionesNoLeidasIniciales = 0,
-  onboardingPendiente = false,
+  mostrarOnboarding = false,
   onboardingCompletados = 0,
   onboardingTotal = 0,
+  onboardingPasos = [],
 }: {
   children: React.ReactNode;
   tenant: string;
@@ -179,14 +180,20 @@ export default function TenantShell({
   // en TenantLayout.
   notificacionesIniciales?: NotificacionUI[];
   notificacionesNoLeidasIniciales?: number;
-  // Atajo "Primeros pasos" (2026-09-29, a petición de Carlos) — true cuando
-  // el negocio (modo "admin" siempre — TenantLayout nunca lo calcula para
-  // "staff") todavía no termina el checklist de /bienvenida. Se calcula en
-  // el servidor (TenantLayout, vía lib/onboarding.ts) para no tener que
-  // volver a traer aquí los mismos conteos con otra consulta.
-  onboardingPendiente?: boolean;
+  // Indicador "Primeros pasos" (2026-09-29/30, a petición de Carlos) —
+  // mostrarOnboarding es true cuando el negocio está en modo "admin"
+  // (TenantLayout nunca lo calcula para "staff") y no está ya dentro de
+  // /bienvenida. Se calcula en el servidor (TenantLayout, vía
+  // lib/onboarding.ts) para no tener que volver a traer aquí los mismos
+  // conteos con otra consulta. onboardingPasos trae el detalle de cada uno
+  // de los 5 pasos (mismos textos que BienvenidaClient.tsx) para el
+  // desplegable de abajo — 2026-09-30: "marcar en rojo cuando están
+  // incompletos y en verde cuando esté listo... y desplegar una lista de
+  // los que falten".
+  mostrarOnboarding?: boolean;
   onboardingCompletados?: number;
   onboardingTotal?: number;
+  onboardingPasos?: { id: string; titulo: string; done: boolean; href: string }[];
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -204,8 +211,12 @@ export default function TenantShell({
   // está abierto (ver el useEffect de abajo).
   const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
   const [menuNotifAbierto, setMenuNotifAbierto] = useState(false);
+  // Desplegable del indicador "Primeros pasos" (2026-09-30) — mismo patrón
+  // que la campanita de arriba (ref + cierre al hacer clic afuera).
+  const [menuOnboardingAbierto, setMenuOnboardingAbierto] = useState(false);
   const menuUsuarioRef = useRef<HTMLDivElement>(null);
   const menuNotifRef = useRef<HTMLDivElement>(null);
+  const menuOnboardingRef = useRef<HTMLDivElement>(null);
 
   const [notificaciones, setNotificaciones] = useState<NotificacionUI[]>(notificacionesIniciales);
   const [notifNoLeidas, setNotifNoLeidas] = useState(notificacionesNoLeidasIniciales);
@@ -229,6 +240,7 @@ export default function TenantShell({
     const handleClickFuera = (e: MouseEvent) => {
       if (menuUsuarioRef.current && !menuUsuarioRef.current.contains(e.target as Node)) setMenuUsuarioAbierto(false);
       if (menuNotifRef.current && !menuNotifRef.current.contains(e.target as Node)) setMenuNotifAbierto(false);
+      if (menuOnboardingRef.current && !menuOnboardingRef.current.contains(e.target as Node)) setMenuOnboardingAbierto(false);
     };
     document.addEventListener("mousedown", handleClickFuera);
     return () => document.removeEventListener("mousedown", handleClickFuera);
@@ -711,21 +723,73 @@ export default function TenantShell({
             {/* "Primeros pasos" (2026-09-29, a petición de Carlos): antes,
                 en cuanto salías de /bienvenida a completar un paso (ej. dar
                 de alta artículos en Catálogo), no había forma de regresar
-                al checklist — este atajo queda visible en CUALQUIER módulo
-                mientras el negocio no termine los 5 pasos, y desaparece
-                solo cuando ya los completó (onboardingPendiente, calculado
-                en TenantLayout). */}
-            {onboardingPendiente && (
-              <Link
-                href={`/${tenant}/bienvenida`}
-                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 text-[12.5px] font-medium text-primary-text transition-colors flex-shrink-0"
-              >
-                <ListChecks className="w-3.5 h-3.5" />
-                Primeros pasos
-                <span className="text-[10.5px] px-1.5 py-0.5 rounded-full bg-primary/15">
-                  {onboardingCompletados}/{onboardingTotal}
-                </span>
-              </Link>
+                al checklist — este indicador queda visible en CUALQUIER
+                módulo mientras haya sesión de admin (mostrarOnboarding,
+                calculado en TenantLayout). 2026-09-30, a petición de
+                Carlos: en vez de solo un link, ahora es un botón que
+                despliega la lista de lo que falta, y cambia de rojo
+                (incompleto) a verde (los 5 pasos listos) en vez de
+                desaparecer — así sigue sirviendo como confirmación de que
+                ya quedó todo armado. */}
+            {mostrarOnboarding && (
+              <div className="relative" ref={menuOnboardingRef}>
+                {(() => {
+                  const listo = onboardingCompletados >= onboardingTotal && onboardingTotal > 0;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setMenuOnboardingAbierto((v) => !v)}
+                      className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12.5px] font-medium transition-colors flex-shrink-0 ${
+                        listo
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                      }`}
+                    >
+                      {listo ? <CheckCircle2 className="w-3.5 h-3.5" /> : <ListChecks className="w-3.5 h-3.5" />}
+                      Primeros pasos
+                      <span
+                        className={`text-[10.5px] px-1.5 py-0.5 rounded-full ${listo ? "bg-emerald-100" : "bg-red-100"}`}
+                      >
+                        {onboardingCompletados}/{onboardingTotal}
+                      </span>
+                    </button>
+                  );
+                })()}
+
+                {menuOnboardingAbierto && (
+                  <div className="absolute right-0 top-full mt-1.5 w-72 bg-card border border-border rounded-xl shadow-lg z-30 overflow-hidden">
+                    <p className="px-3 py-2 text-xs font-semibold text-foreground border-b border-border">
+                      Primeros pasos
+                    </p>
+                    {onboardingCompletados >= onboardingTotal ? (
+                      <p className="px-3 py-4 text-xs text-emerald-700 text-center flex items-center justify-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> ¡Ya completaste los {onboardingTotal} pasos!
+                      </p>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {onboardingPasos.filter((p) => !p.done).map((p) => (
+                          <Link
+                            key={p.id}
+                            href={p.href}
+                            onClick={() => setMenuOnboardingAbierto(false)}
+                            className="flex items-center gap-2 px-3 py-2.5 hover:bg-muted/60 transition-colors"
+                          >
+                            <Circle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                            <span className="text-[12.5px] text-foreground">{p.titulo}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                    <Link
+                      href={`/${tenant}/bienvenida`}
+                      onClick={() => setMenuOnboardingAbierto(false)}
+                      className="block px-3 py-2 text-[11.5px] font-medium text-primary-text hover:underline border-t border-border"
+                    >
+                      Ver checklist completo
+                    </Link>
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="relative" ref={menuNotifRef}>
