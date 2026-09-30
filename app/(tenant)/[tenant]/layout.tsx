@@ -14,6 +14,7 @@ import type { LabelDictionary } from "@/lib/labels";
 import { calcularEstadoCiclo } from "@/lib/ciclo-suscripcion";
 import CuentaBloqueada from "@/components/tenant/CuentaBloqueada";
 import { getNotificaciones, contarNotificacionesNoLeidas } from "@/lib/notificaciones";
+import { obtenerEstadoPasosBienvenida } from "@/lib/onboarding";
 
 export const metadata: Metadata = {
   title: "Linkity",
@@ -254,6 +255,32 @@ export default async function TenantLayout({
     }
   }
 
+  // "Primeros pasos" — atajo en el encabezado, visible desde CUALQUIER
+  // módulo, cuando el negocio todavía no termina el checklist de
+  // bienvenida (2026-09-29, a petición de Carlos: "si das de alta
+  // artículos, ya no tienes como regresar a la checklist de primeros
+  // pasos" — antes, en cuanto salías de /bienvenida a completar un paso,
+  // no había forma de volver). Solo para "admin" (dueño/gerente con cuenta
+  // real): el checklist está pensado para quien arma el negocio, no para
+  // el personal de PIN que solo entra a operar un módulo puntual. No se
+  // calcula si ya estás DENTRO de /bienvenida (no tiene caso mostrar un
+  // atajo hacia la pantalla en la que ya estás) — se reusa el mismo header
+  // de pathname que ya leen los guards de arriba.
+  let onboardingPendiente = false;
+  let onboardingCompletados = 0;
+  let onboardingTotal = 0;
+  if (dbTenant && modo === "admin") {
+    const headerList = await headers();
+    const pathname = headerList.get("x-pathname") ?? "";
+    const yaEnBienvenida = pathname === `/${tenant}/bienvenida`;
+    if (!yaEnBienvenida) {
+      const estado = await obtenerEstadoPasosBienvenida(dbTenant.id, dbTenant.themePreset);
+      onboardingCompletados = estado.completados;
+      onboardingTotal = estado.total;
+      onboardingPendiente = estado.completados < estado.total;
+    }
+  }
+
   return (
     <div id={TENANT_THEME_ROOT_ID} style={activePreset as React.CSSProperties} className="contents">
       <TenantShell
@@ -268,6 +295,9 @@ export default async function TenantLayout({
         logoUrl={dbTenant?.logo ?? null}
         notificacionesIniciales={notificacionesIniciales}
         notificacionesNoLeidasIniciales={notificacionesNoLeidas}
+        onboardingPendiente={onboardingPendiente}
+        onboardingCompletados={onboardingCompletados}
+        onboardingTotal={onboardingTotal}
       >
         {children}
       </TenantShell>

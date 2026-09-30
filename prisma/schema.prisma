@@ -74,7 +74,16 @@ model Tenant {
   whatsappPhoneNumberId String?
   whatsappAccessToken   String?
 
-  themePreset  ThemePreset @default(LUMIA_COBALT)
+  // 2026-09-29, a petición de Carlos: el default pasó de LUMIA_COBALT a
+  // MATERIAL_INDIGO (el tema más nuevo, ver MATERIAL_THEMES en
+  // lib/theme-presets.ts) — es el que se le asigna a un negocio nuevo hasta
+  // que el propio cliente lo cambie desde Configuración. Ver el comentario
+  // largo junto a BienvenidaClient.tsx/bienvenida/page.tsx: el Paso 1
+  // ("Personaliza tu negocio") ahora compara contra ESTE mismo valor para
+  // saber si el negocio de verdad ya personalizó su tema, así que si este
+  // default cambia otra vez en el futuro, hay que actualizar los dos
+  // lugares juntos.
+  themePreset  ThemePreset @default(MATERIAL_INDIGO)
 
   // Intensidad de color del tema (2026-09-23, a petición de Carlos: "hazlas
   // personalizables para subir o bajar la intensidad de los colores", sobre

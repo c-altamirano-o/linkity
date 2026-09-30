@@ -16,7 +16,7 @@ import {
   Warehouse, DollarSign, UserCog, BarChart3, FileText,
   GitBranch, BookOpen, LogOut, Bell, ChevronDown, Settings,
   Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck, CalendarDays,
-  Unlock, Lock, AlertTriangle, Smartphone, Check,
+  Unlock, Lock, AlertTriangle, Smartphone, Check, ListChecks,
 } from "lucide-react";
 
 // Tipo real de NotificacionUI (lib/notificaciones.ts) — se reusa aquí en
@@ -130,6 +130,9 @@ export default function TenantShell({
   logoUrl = null,
   notificacionesIniciales = [],
   notificacionesNoLeidasIniciales = 0,
+  onboardingPendiente = false,
+  onboardingCompletados = 0,
+  onboardingTotal = 0,
 }: {
   children: React.ReactNode;
   tenant: string;
@@ -176,6 +179,14 @@ export default function TenantShell({
   // en TenantLayout.
   notificacionesIniciales?: NotificacionUI[];
   notificacionesNoLeidasIniciales?: number;
+  // Atajo "Primeros pasos" (2026-09-29, a petición de Carlos) — true cuando
+  // el negocio (modo "admin" siempre — TenantLayout nunca lo calcula para
+  // "staff") todavía no termina el checklist de /bienvenida. Se calcula en
+  // el servidor (TenantLayout, vía lib/onboarding.ts) para no tener que
+  // volver a traer aquí los mismos conteos con otra consulta.
+  onboardingPendiente?: boolean;
+  onboardingCompletados?: number;
+  onboardingTotal?: number;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -697,6 +708,26 @@ export default function TenantShell({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* "Primeros pasos" (2026-09-29, a petición de Carlos): antes,
+                en cuanto salías de /bienvenida a completar un paso (ej. dar
+                de alta artículos en Catálogo), no había forma de regresar
+                al checklist — este atajo queda visible en CUALQUIER módulo
+                mientras el negocio no termine los 5 pasos, y desaparece
+                solo cuando ya los completó (onboardingPendiente, calculado
+                en TenantLayout). */}
+            {onboardingPendiente && (
+              <Link
+                href={`/${tenant}/bienvenida`}
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 text-[12.5px] font-medium text-primary-text transition-colors flex-shrink-0"
+              >
+                <ListChecks className="w-3.5 h-3.5" />
+                Primeros pasos
+                <span className="text-[10.5px] px-1.5 py-0.5 rounded-full bg-primary/15">
+                  {onboardingCompletados}/{onboardingTotal}
+                </span>
+              </Link>
+            )}
+
             <div className="relative" ref={menuNotifRef}>
               <button onClick={handleToggleNotif} className="relative p-2 rounded-lg hover:bg-muted transition-colors">
                 <Bell className="w-4 h-4 text-muted-foreground" />

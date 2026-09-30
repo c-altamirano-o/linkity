@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCatalogoArranque } from "@/lib/catalogo-arranque";
+import { obtenerEstadoPasosBienvenida } from "@/lib/onboarding";
 import BienvenidaClient from "./BienvenidaClient";
 
 export default async function BienvenidaPage({
@@ -17,27 +18,23 @@ export default async function BienvenidaPage({
 
   if (!tenant) notFound();
 
-  // Los 4 conteos vienen de datos reales (nunca una bandera fabricada) para
-  // que el checklist de BienvenidaClient sepa qué pasos ya están hechos,
-  // incluso si el negocio los completó desde el menú normal en vez de
-  // seguir el flujo lineal de esta pantalla.
-  const [productCount, staffCount, cashSessionCount, saleCount] = await Promise.all([
-    prisma.product.count({ where: { tenantId: tenant.id } }),
-    prisma.staff.count({ where: { tenantId: tenant.id } }),
-    prisma.cashSession.count({ where: { tenantId: tenant.id } }),
-    prisma.sale.count({ where: { tenantId: tenant.id } }),
-  ]);
+  // 2026-09-29: el cálculo de los 4 conteos + la comparación de tema ahora
+  // vive en lib/onboarding.ts (obtenerEstadoPasosBienvenida), compartido con
+  // TenantLayout.tsx (el atajo "Primeros pasos" del encabezado) — un solo
+  // criterio para los dos, para no repetir el bug que ya pasó una vez
+  // (Paso 1 comparando contra un default de tema que ya no era el real).
+  const estado = await obtenerEstadoPasosBienvenida(tenant.id, tenant.themePreset);
 
   return (
     <BienvenidaClient
       tenantSlug={tenantSlug}
       businessName={tenant.name}
-      personalizado={tenant.themePreset !== "NEUTRAL_TECH"}
-      tieneCatalogo={productCount > 0}
+      personalizado={estado.personalizado}
+      tieneCatalogo={estado.tieneCatalogo}
       tieneArranque={getCatalogoArranque(tenant.businessType).length > 0}
-      tieneEquipo={staffCount > 0}
-      tieneCaja={cashSessionCount > 0}
-      tieneVenta={saleCount > 0}
+      tieneEquipo={estado.tieneEquipo}
+      tieneCaja={estado.tieneCaja}
+      tieneVenta={estado.tieneVenta}
     />
   );
 }

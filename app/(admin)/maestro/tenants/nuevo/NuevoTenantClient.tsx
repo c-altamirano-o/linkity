@@ -105,8 +105,14 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
                 <p className="font-medium">Negocio creado correctamente.</p>
                 <p>Tenant: <span className="font-mono">{result.tenantSlug}</span></p>
                 <p>Password temporal: <span className="font-mono">{result.tempPassword}</span></p>
+                {/* 2026-09-29, a petición de Carlos: antes mandaba directo a
+                    /dashboard, saltándose por completo el checklist de
+                    Bienvenida (el que sí ve un negocio auto-registrado
+                    después de /primer-acceso) — un negocio dado de alta
+                    aquí desde Panel Maestro se quedaba sin esa guía. Ahora
+                    apunta a /bienvenida, igual que el otro camino. */}
                 <Link
-                  href={`/${result.tenantSlug}/dashboard`}
+                  href={`/${result.tenantSlug}/bienvenida`}
                   className="inline-block mt-2 text-[#4F46E5] underline"
                 >
                   Ir al negocio
