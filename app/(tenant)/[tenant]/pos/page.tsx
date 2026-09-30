@@ -93,10 +93,20 @@ export default async function POSPage({
       ? repairParaCobro.branchId
       : sucursalDeEmpleado ?? (branches.find((b) => b.id === userBranchId)?.id ?? branches[0]?.id ?? null);
 
-  const [data, labels] = await Promise.all([
+  const [data, labels, moduloReparacionesInactivo] = await Promise.all([
     getPosData(tenant.id, branchesTenant),
     getTenantLabels(tenant.id, tenant.businessType),
+    // Acceso directo a Reparaciones junto a las píldoras de categoría
+    // (2026-09-30, a petición de Carlos) — se oculta si el propio negocio
+    // desactivó el módulo (rubros sin taller, ej. barbería/estética, ver
+    // modulos-rubro.ts), mismo criterio que el guard de módulo inactivo en
+    // [tenant]/layout.tsx.
+    prisma.tenantModule.findFirst({
+      where: { tenantId: tenant.id, module: { code: "reparaciones" }, isActive: false },
+      select: { tenantId: true },
+    }),
   ]);
+  const mostrarAccesoReparaciones = !moduloReparacionesInactivo;
 
   // Datos reales del negocio para el ticket impreso (2026-09-26, ver el
   // comentario largo en lib/recibo-imprimible.ts) — el nombre se conserva
@@ -124,6 +134,7 @@ export default async function POSPage({
       negocio={negocio}
       repairParaCobro={repairParaCobro}
       clienteInicialId={clienteId ?? null}
+      mostrarAccesoReparaciones={mostrarAccesoReparaciones}
     />
   );
 }

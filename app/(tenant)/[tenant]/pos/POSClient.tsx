@@ -42,6 +42,13 @@ interface POSClientProps {
   // el comentario en pos/page.tsx); si no coincide con ningún cliente de
   // este tenant simplemente no preselecciona nada.
   clienteInicialId?: string | null;
+  // Acceso directo a Reparaciones junto a las píldoras de categoría
+  // (2026-09-30, a petición de Carlos: "hay que agregar un acceso a
+  // Reparaciones junto a las burbujas") — false cuando el propio negocio
+  // desactivó el módulo "reparaciones" (ver TenantModule/modulos-rubro.ts,
+  // mismo criterio que el resto de la app: un rubro tipo barbería/estética
+  // no necesita este atajo si de plano no usa Reparaciones).
+  mostrarAccesoReparaciones?: boolean;
 }
 
 type CartItem = {
@@ -74,7 +81,7 @@ const SIN_CATEGORIA_ID = "__sin_categoria__";
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
-export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, negocio, repairParaCobro, clienteInicialId }: POSClientProps) {
+export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, negocio, repairParaCobro, clienteInicialId, mostrarAccesoReparaciones = true }: POSClientProps) {
   const { categorias, productos, clientes, cajaAbiertaPorSucursal } = data;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -157,6 +164,19 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   // "viendo" el código en cuadro por varios frames mientras el usuario
   // reacciona, y decodeFromVideoDevice llama a su callback en cada uno.
   const ultimoEscaneoRef = useRef<{ codigo: string; ts: number } | null>(null);
+
+  // 2026-09-30, a petición de Carlos ("el flujo del Enter debe saltarse la
+  // cantidad del producto, por ejemplo ahorita si seleccionas un articulo y
+  // le das enter solo incrementa la cantidad de los articulos"): las fichas
+  // de producto son <button> reales, así que después de agregar una vía
+  // clic o Tab+Enter, el foco se quedaba EN ESA MISMA ficha — cualquier
+  // Enter extra (o el auto-repeat del teclado si se detiene un instante de
+  // más con la tecla presionada) volvía a disparar el mismo clic y subía la
+  // cantidad sin que el cajero lo buscara. Cada ficha ahora regresa el foco
+  // aquí (al buscador) justo después de agregar, para que el siguiente
+  // Enter/tecleo continúe el flujo (buscar el siguiente artículo) en vez de
+  // quedarse repitiendo el mismo.
+  const busquedaInputRef = useRef<HTMLInputElement>(null);
 
   const stockDe = (p: ProductoPOS) =>
     p.isService ? Infinity : (branchId ? p.stockPorSucursal[branchId] ?? 0 : 0);
@@ -939,6 +959,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           <div className="relative flex-1 min-w-[160px]">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
             <input
+              ref={busquedaInputRef}
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
@@ -987,6 +1008,20 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               {cat.name}
             </button>
           ))}
+          {/* Acceso directo a Reparaciones (2026-09-30, a petición de
+              Carlos: "agregar un acceso a Reparaciones junto a las
+              burbujas") — a propósito con un estilo distinto (borde
+              punteado, ícono) al de las píldoras de arriba: esto NO filtra
+              el catálogo, navega a otro módulo, así que no debe verse como
+              una opción más de categoría. Oculto si el negocio desactivó
+              el módulo (rubros sin taller, ver modulos-rubro.ts). */}
+          {mostrarAccesoReparaciones && (
+            <Link href={`/${tenantSlug}/reparaciones`}
+              className="flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap border border-dashed border-primary/50 text-primary-text hover:bg-primary/5 transition-colors flex-shrink-0">
+              <Wrench className="w-3.5 h-3.5" />
+              {label(labels, "module.repair.name")}
+            </Link>
+          )}
         </div>
 
         {productosFiltrados.length === 0 ? (
@@ -1044,7 +1079,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               // (rounded-l-xl más abajo), sin necesitar clip del padre.
               const fichaBg = chip ? `var(--chip-${chip})` : "var(--primary)";
               return (
-                <button key={producto.id} onClick={() => agregarAlCarrito(producto)} disabled={agotado}
+                <button key={producto.id} onClick={() => { agregarAlCarrito(producto); busquedaInputRef.current?.focus(); }} disabled={agotado}
                   className={`relative flex items-stretch rounded-xl bg-card border transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)] ${
                     cantidadEnCarrito > 0 ? "border-primary ring-2 ring-primary/25" : "border-border hover:border-primary/40"
                   }`}>
