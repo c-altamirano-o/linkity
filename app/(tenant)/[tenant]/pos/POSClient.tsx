@@ -256,8 +256,74 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const totalOriginal = carrito.reduce((s, i) => s + i.precio * i.cantidad, 0);
   const subtotalOriginal = carrito.reduce((s, i) => s + (i.precio * i.cantidad) / (1 + i.taxRate / 100), 0);
   
-  // 2. AQUÍ INYECTAREMOS LA LÓGICA DE DESCUENTOS EN EL SIGUIENTE PASO
-  const descuentoAplicado = 0; 
+  // 2. FUNCIÓN DE DESCUENTOS: Analiza el carrito y los descuentos aplicables
+  const calcularDescuento = () => {
+    if (!discounts || discounts.length === 0 || carrito.length === 0) return 0;
+
+    let totalDescuento = 0;
+    const subtotalCarrito = totalOriginal; // Precio base de donde descontar
+
+    for (const desc of discounts) {
+      // 2.1 Validar mínimo de compra general
+      if (desc.minPurchase && subtotalCarrito < Number(desc.minPurchase)) continue;
+
+      let descuentoLinea = 0;
+
+      // 2.2 Aplicar según el alcance (Scope)
+      if (desc.scope === "SALE") {
+        if (desc.valueType === "PERCENTAGE") {
+          descuentoLinea = subtotalCarrito * (Number(desc.value) / 100);
+        } else {
+          descuentoLinea = Number(desc.value);
+        }
+      } else if (desc.scope === "PRODUCT") {
+        const productIds = desc.products?.map((p: any) => p.productId) || [];
+        const itemsAplicables = carrito.filter(i => productIds.includes(i.productId) && !i.repairId);
+        const subtotalAplicable = itemsAplicables.reduce((s, i) => s + i.precio * i.cantidad, 0);
+
+        if (subtotalAplicable > 0) {
+          if (desc.valueType === "PERCENTAGE") {
+            descuentoLinea = subtotalAplicable * (Number(desc.value) / 100);
+          } else {
+            descuentoLinea = Number(desc.value);
+          }
+        }
+      } else if (desc.scope === "CATEGORY") {
+        const categoryIds = desc.categories?.map((c: any) => c.categoryId) || [];
+        const itemsAplicables = carrito.filter(i => {
+          if (i.repairId) return false;
+          const prod = productos.find(p => p.id === i.productId);
+          return prod && prod.categoryId && categoryIds.includes(prod.categoryId);
+        });
+        const subtotalAplicable = itemsAplicables.reduce((s, i) => s + i.precio * i.cantidad, 0);
+
+        if (subtotalAplicable > 0) {
+          if (desc.valueType === "PERCENTAGE") {
+            descuentoLinea = subtotalAplicable * (Number(desc.value) / 100);
+          } else {
+            descuentoLinea = Number(desc.value);
+          }
+        }
+      }
+
+      // 2.3 Aplicar tope máximo del descuento si existe
+      if (desc.maxDiscount && descuentoLinea > Number(desc.maxDiscount)) {
+        descuentoLinea = Number(desc.maxDiscount);
+      }
+
+      totalDescuento += descuentoLinea;
+
+      // 2.4 Si el descuento no es acumulable, terminamos de buscar
+      if (!desc.accumulable && descuentoLinea > 0) {
+        break;
+      }
+    }
+
+    // El descuento nunca puede ser mayor al costo de los productos
+    return Math.min(totalDescuento, subtotalCarrito);
+  };
+
+  const descuentoAplicado = calcularDescuento(); 
   
   // 3. Totales finales ajustados
   const total = Math.round(Math.max(0, totalOriginal - descuentoAplicado) * 100) / 100;
