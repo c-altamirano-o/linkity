@@ -182,6 +182,13 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       return { ok: false, error: "Uno o más productos ya no están disponibles" };
     }
 
+    // Consultamos los descuentos activos en la base de datos para recalcularlos seguros
+    const activeDiscounts = await db.discount.findMany({
+      where: { tenantId: tenant.id, isActive: true },
+      include: { products: true, categories: true },
+      orderBy: { priority: 'desc' }
+    });
+
     // Reparaciones a cobrar (2026-09-25, ver el comentario largo arriba del
     // archivo) — se validan aquí, junto con los productos, ANTES de armar
     // los renglones: existencia, mismo tenant (getTenantPrisma ya lo filtra
@@ -214,40 +221,19 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       return { ok: false, error: `La reparación ${r.folio} no está lista para cobro` };
     }
 
-    // Product.price es el precio de lista que ve el cliente (ej. "Barba,
-    // $80") y SIEMPRE incluye el IVA — así lo pidió Carlos explícitamente:
-    // el cliente paga exactamente ese número, nunca $80 + IVA encima. Por
-    // eso aquí NO se suma taxRate al precio: se desglosa hacia atrás
-    // (precio final ÷ (1 + tasa)) solo para reportar cuánto de esa venta
-    // corresponde a IVA — ese desglose es informativo/contable (Sale.tax,
-    // Sale.subtotal), nunca cambia lo que el cliente paga (Sale.total).
-    //
-    // Se calcula línea por línea (no con un solo IVA global) porque cada
-    // producto puede tener su propia taxRate — aunque hoy todos usan el
-    // default de 16%, el modelo ya lo permite por producto. Restar el neto
-    // del total de la línea (en vez de redondear el IVA aparte) garantiza
-    // que subtotal + tax == total exacto, sin desfases de centavos.
-    //
-    // El renglón de una reparación NO desglosa IVA (tax: 0, subtotal ==
-    // price) — mismo criterio que ya tenía cobrarYEntregarAction, que
-    // reemplaza: el cobro final de una reparación es un monto negociado, no
-    // un precio de catálogo con tasa conocida.
-    let subtotal = 0;
-    let tax = 0;
-    let total = 0;
+    let subtotalBruto = 0;
     type LineaProducto = {
-      tipo: "producto"; productId: string; quantity: number; price: number; subtotal: number; tax: number; isService: boolean;
+      tipo: "producto"; productId: string; categoryId: string | null; quantity: number; price: number; subtotal: number; tax: number; isService: boolean; discountLine: number;
     };
     type LineaReparacion = {
-      tipo: "reparacion"; repairId: string; price: number; subtotal: number; tax: 0; folio: string; publicToken: string; customerId: string;
+      tipo: "reparacion"; repairId: string; price: number; subtotal: number; tax: 0; folio: string; publicToken: string; customerId: string; discountLine: 0;
     };
-    const lineas: (LineaProducto | LineaReparacion)[] = [];
+    const lineasPreparadas: (LineaProducto | LineaReparacion)[] = [];
+
+    // PRIMERA PASADA: Armar líneas con sus precios (sin descuentos ni IVA aún)
     for (const it of items) {
       if (it.productId) {
         const p = products.find((pr) => pr.id === it.productId)!;
-        // Cast a string: comparar el enum de Prisma (ProductType) directo
-        // contra un literal de texto puede marcarse en TS como "comparación
-        // sin traslape" (mismo tipo de error que ya se corrigió en seed.ts).
         const isService = (p.type as string) === "SERVICE";
         if (!isService) {
           const stockActual = p.inventory[0]?.stock ?? 0;
@@ -256,34 +242,136 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
           }
         }
         
-        // <-- ¡AQUÍ ESTÁ LA MAGIA DEL BACKEND!
-        // Determinamos el precio real a cobrar. Si el cliente es mayorista y
-        // el producto tiene un precio de mayoreo registrado (> 0), cobramos
-        // ese precio. De lo contrario, cobramos el precio público normal.
         const precioNormal = Number(p.price);
         const precioMayoreo = p.wholesalePrice != null ? Number(p.wholesalePrice) : 0;
         const precioFinal = isWholesaler && precioMayoreo > 0 ? precioMayoreo : precioNormal;
         
-        const tasa = Number(p.taxRate);
-        const lineaTotal = Math.round(precioFinal * it.cantidad * 100) / 100;
-        const lineaNeto = Math.round((lineaTotal / (1 + tasa / 100)) * 100) / 100;
-        const lineaIva = Math.round((lineaTotal - lineaNeto) * 100) / 100;
-        
-        subtotal += lineaNeto;
-        tax += lineaIva;
-        total += lineaTotal;
-        lineas.push({ tipo: "producto", productId: p.id, quantity: it.cantidad, price: precioFinal, subtotal: lineaTotal, tax: lineaIva, isService });
+        const lineaBruto = Math.round(precioFinal * it.cantidad * 100) / 100;
+        subtotalBruto += lineaBruto;
+
+        lineasPreparadas.push({ 
+          tipo: "producto", 
+          productId: p.id, 
+          categoryId: p.categoryId, 
+          quantity: it.cantidad, 
+          price: precioFinal, 
+          subtotal: lineaBruto, 
+          tax: 0, 
+          isService,
+          discountLine: 0
+        });
       } else {
         const r = repairsRaw.find((rr) => rr.id === it.repairId)!;
         const precio = Math.round((it.monto ?? 0) * 100) / 100;
-        subtotal += precio;
-        total += precio;
-        lineas.push({ tipo: "reparacion", repairId: r.id, price: precio, subtotal: precio, tax: 0, folio: r.folio, publicToken: r.publicToken, customerId: r.customerId });
+        subtotalBruto += precio;
+        
+        lineasPreparadas.push({ 
+          tipo: "reparacion", 
+          repairId: r.id, 
+          price: precio, 
+          subtotal: precio, 
+          tax: 0, 
+          folio: r.folio, 
+          publicToken: r.publicToken, 
+          customerId: r.customerId,
+          discountLine: 0
+        });
       }
     }
-    subtotal = Math.round(subtotal * 100) / 100;
-    tax = Math.round(tax * 100) / 100;
-    total = Math.round(total * 100) / 100;
+
+    // CALCULAR DESCUENTOS EN EL SERVIDOR
+    let totalDiscountGeneral = 0;
+    
+    if (activeDiscounts.length > 0 && subtotalBruto > 0) {
+      for (const desc of activeDiscounts) {
+        if (desc.minPurchase && subtotalBruto < Number(desc.minPurchase)) continue;
+
+        let descuentoIteracion = 0;
+
+        if (desc.scope === "SALE") {
+          const v = desc.valueType === "PERCENTAGE" 
+            ? subtotalBruto * (Number(desc.value) / 100) 
+            : Number(desc.value);
+          descuentoIteracion = v;
+          
+          if (desc.maxDiscount && descuentoIteracion > Number(desc.maxDiscount)) {
+            descuentoIteracion = Number(desc.maxDiscount);
+          }
+          
+          totalDiscountGeneral += descuentoIteracion;
+        } 
+        else if (desc.scope === "PRODUCT" || desc.scope === "CATEGORY") {
+          const isProduct = desc.scope === "PRODUCT";
+          const idsAplicables = isProduct 
+            ? desc.products.map(p => p.productId)
+            : desc.categories.map(c => c.categoryId);
+            
+          let sumAplicable = 0;
+          
+          for (let l of lineasPreparadas) {
+            if (l.tipo !== "producto") continue;
+            
+            const match = isProduct 
+              ? idsAplicables.includes(l.productId)
+              : idsAplicables.includes(l.categoryId || "");
+              
+            if (match) {
+              sumAplicable += l.subtotal;
+            }
+          }
+
+          if (sumAplicable > 0) {
+            let descLinea = desc.valueType === "PERCENTAGE" 
+              ? sumAplicable * (Number(desc.value) / 100) 
+              : Number(desc.value);
+            
+            if (desc.maxDiscount && descLinea > Number(desc.maxDiscount)) {
+              descLinea = Number(desc.maxDiscount);
+            }
+            
+            totalDiscountGeneral += descLinea;
+          }
+        }
+
+        if (!desc.accumulable && descuentoIteracion > 0) break;
+      }
+    }
+
+    totalDiscountGeneral = Math.min(totalDiscountGeneral, subtotalBruto);
+    const proporcionDescuento = subtotalBruto > 0 ? ((subtotalBruto - totalDiscountGeneral) / subtotalBruto) : 1;
+
+    // SEGUNDA PASADA: Aplicar descuentos proporcionales e IVA
+    let subtotalFinal = 0;
+    let taxFinal = 0;
+    let totalFinal = 0;
+
+    for (let l of lineasPreparadas) {
+      if (l.tipo === "producto") {
+        const p = products.find((pr) => pr.id === l.productId)!;
+        const tasa = Number(p.taxRate);
+        
+        // 1. Calculamos el nuevo subtotal cobrado ya restando su parte del descuento
+        const subtotalConDescuento = Math.round((l.subtotal * proporcionDescuento) * 100) / 100;
+        l.discountLine = Math.round((l.subtotal - subtotalConDescuento) * 100) / 100;
+        
+        // 2. Desglosamos el IVA del nuevo monto cobrado
+        const lineaNeto = Math.round((subtotalConDescuento / (1 + tasa / 100)) * 100) / 100;
+        l.tax = Math.round((subtotalConDescuento - lineaNeto) * 100) / 100;
+        
+        subtotalFinal += lineaNeto;
+        taxFinal += l.tax;
+        totalFinal += subtotalConDescuento;
+      } else {
+        // Reparaciones no llevan IVA y actualmente no se les aplica descuento en este flujo
+        subtotalFinal += l.subtotal;
+        totalFinal += l.subtotal;
+      }
+    }
+
+    const subtotal = Math.round(subtotalFinal * 100) / 100;
+    const tax = Math.round(taxFinal * 100) / 100;
+    const total = Math.round(totalFinal * 100) / 100;
+    const dbDiscount = Math.round(totalDiscountGeneral * 100) / 100;
 
     let cambio = 0;
     let metadata: { montoRecibido: number; cambio: number } | undefined;
@@ -351,7 +439,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
           folio,
           subtotal,
           tax,
-          discount: 0,
+          discount: dbDiscount,
           total,
           paymentMethod: METODO_A_ENUM[metodoPago],
           status: SaleStatus.COMPLETED,
@@ -359,15 +447,15 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
         },
       });
 
-      for (const l of lineas) {
+      for (const l of lineasPreparadas) {
         await tx.saleItem.create({
           data: {
             saleId: sale.id,
             ...(l.tipo === "producto" ? { productId: l.productId } : { repairId: l.repairId }),
             quantity: l.tipo === "producto" ? l.quantity : 1,
             price: l.price,
-            discount: 0,
-            subtotal: l.subtotal,
+            discount: l.discountLine,
+            subtotal: l.subtotal - l.discountLine,
           },
         });
       }
@@ -378,7 +466,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       // separadas y sin Sale de por medio). visibleCliente:true — es la
       // confirmación de su propio cobro/entrega, mismo criterio que ya usaba
       // cobrarYEntregarAction.
-      for (const l of lineas) {
+      for (const l of lineasPreparadas) {
         if (l.tipo !== "reparacion") continue;
         await tx.repair.update({
           where: { id: l.repairId },
@@ -408,7 +496,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
         }
       }
 
-      for (const l of lineas) {
+      for (const l of lineasPreparadas) {
         if (l.tipo !== "producto" || l.isService) continue;
         await tx.inventory.upsert({
           where: { productId_branchId: { productId: l.productId, branchId } },
@@ -424,7 +512,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     revalidatePath(`/${tenantSlug}/catalogo`);
     // Reparaciones cobradas en esta venta (2026-09-25) — sus pantallas y su
     // página pública de seguimiento cambiaron de estatus.
-    for (const l of lineas) {
+    for (const l of lineasPreparadas) {
       if (l.tipo !== "reparacion") continue;
       revalidatePath(`/${tenantSlug}/reparaciones`);
       revalidatePath(`/${tenantSlug}/aduana`);
@@ -434,7 +522,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     // WhatsApp automático de entrega vía POS (2026-09-29, a petición de
     // Carlos: "también cada cambio de estatus") — mejor esfuerzo, nunca
     // lanza, la venta ya se guardó arriba de todas formas.
-    for (const l of lineas) {
+    for (const l of lineasPreparadas) {
       if (l.tipo !== "reparacion") continue;
       await avisarWhatsappReparacion({
         db,
