@@ -1,3 +1,4 @@
+// ruta: C:\linkity\app\actions\pos-actions.ts
 "use server";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
@@ -163,9 +164,11 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       return { ok: false, error: "La caja de esta sucursal está cerrada. Ábrela antes de cobrar (módulo Caja)." };
     }
 
+    let isWholesaler = false;
     if (customerId) {
-      const customer = await db.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+      const customer = await db.customer.findUnique({ where: { id: customerId }, select: { id: true, isWholesaler: true } });
       if (!customer) return { ok: false, error: "Cliente no encontrado" };
+      isWholesaler = customer.isWholesaler;
     }
 
     const productIds = items.filter((i) => i.productId).map((i) => i.productId!);
@@ -252,15 +255,24 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
             return { ok: false, error: `Stock insuficiente de "${p.name}" (disponible: ${stockActual})` };
           }
         }
-        const precio = Number(p.price); // precio final al cliente, ya incluye IVA
+        
+        // <-- ¡AQUÍ ESTÁ LA MAGIA DEL BACKEND!
+        // Determinamos el precio real a cobrar. Si el cliente es mayorista y
+        // el producto tiene un precio de mayoreo registrado (> 0), cobramos
+        // ese precio. De lo contrario, cobramos el precio público normal.
+        const precioNormal = Number(p.price);
+        const precioMayoreo = p.wholesalePrice != null ? Number(p.wholesalePrice) : 0;
+        const precioFinal = isWholesaler && precioMayoreo > 0 ? precioMayoreo : precioNormal;
+        
         const tasa = Number(p.taxRate);
-        const lineaTotal = Math.round(precio * it.cantidad * 100) / 100;
+        const lineaTotal = Math.round(precioFinal * it.cantidad * 100) / 100;
         const lineaNeto = Math.round((lineaTotal / (1 + tasa / 100)) * 100) / 100;
         const lineaIva = Math.round((lineaTotal - lineaNeto) * 100) / 100;
+        
         subtotal += lineaNeto;
         tax += lineaIva;
         total += lineaTotal;
-        lineas.push({ tipo: "producto", productId: p.id, quantity: it.cantidad, price: precio, subtotal: lineaTotal, tax: lineaIva, isService });
+        lineas.push({ tipo: "producto", productId: p.id, quantity: it.cantidad, price: precioFinal, subtotal: lineaTotal, tax: lineaIva, isService });
       } else {
         const r = repairsRaw.find((rr) => rr.id === it.repairId)!;
         const precio = Math.round((it.monto ?? 0) * 100) / 100;

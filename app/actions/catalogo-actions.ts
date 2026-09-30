@@ -1,3 +1,4 @@
+// ruta: C:\linkity\app\actions\catalogo-actions.ts
 "use server";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
@@ -86,6 +87,7 @@ export interface DatosProducto {
   sku?: string | null;
   price: number;
   cost?: number | null;
+  wholesalePrice?: number | null;
   type: TipoProductoInput;
   categoryId?: string | null;
   emoji?: string | null;
@@ -101,6 +103,7 @@ function validarDatosProducto(datos: DatosProducto): string | null {
   if (!datos.name?.trim()) return "El nombre es obligatorio";
   if (!Number.isFinite(datos.price) || datos.price <= 0) return "El precio debe ser mayor a cero";
   if (datos.cost != null && (!Number.isFinite(datos.cost) || datos.cost < 0)) return "El costo no puede ser negativo";
+  if (datos.wholesalePrice != null && (!Number.isFinite(datos.wholesalePrice) || datos.wholesalePrice < 0)) return "El precio de mayoreo no puede ser negativo";
   if (!["PRODUCT", "PART", "SERVICE"].includes(datos.type)) return "Tipo de producto inválido";
   return null;
 }
@@ -136,6 +139,7 @@ export async function crearProductoAction(
         sku: datos.sku?.trim() || null,
         price: datos.price,
         cost: datos.cost ?? null,
+        wholesalePrice: datos.wholesalePrice ?? null,
         type: datos.type,
         categoryId: datos.categoryId || null,
         emoji: datos.emoji?.trim() || null,
@@ -202,6 +206,7 @@ export async function editarProductoAction(
         // editar el precio o el nombre del producto. `undefined` (la llave
         // ausente) dentro de `data` le dice a Prisma "no toques este campo".
         ...(datos.cost !== undefined ? { cost: datos.cost } : {}),
+        wholesalePrice: datos.wholesalePrice ?? null,
         type: datos.type,
         categoryId: datos.categoryId || null,
         emoji: datos.emoji?.trim() || null,

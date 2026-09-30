@@ -1,3 +1,4 @@
+// ruta: C:\linkity\prisma\schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -214,14 +215,14 @@ model Tenant {
   supportTickets SupportTicket[]
   staffLoginSessions StaffLoginSession[]
   appointments Appointment[]
-  patientRecords    PatientRecord[]
-  clinicalNotes     ClinicalNote[]
+  patientRecords     PatientRecord[]
+  clinicalNotes      ClinicalNote[]
   odontogramaTeeth  OdontogramaTooth[]
   treatmentPlans    TreatmentPlan[]
   informedConsents  InformedConsent[]
   prescriptions     Prescription[]
   notificaciones    Notificacion[]
-  pushSubscriptions      PushSubscription[]
+  pushSubscriptions     PushSubscription[]
   solicitudesDispositivo SolicitudDispositivo[]
 }
 
@@ -598,22 +599,22 @@ model Subscription {
   // da 7 días de gracia + hasta 60 de "espera" antes de cancelar; Shopify
   // conserva los datos de una tienda desactivada 2 años). Carlos definió
   // 4 avisos, todos contados en días desde `endDate`:
-  //   día 0  → "tu suscripción venció, tienes 7 días de gracia" (acceso OK)
-  //   día 7  → fin de gracia: ACCESO BLOQUEADO desde aquí (ver
-  //            lib/ciclo-suscripcion.ts, calculado en vivo, no es un status
-  //            aparte) + aviso de bloqueo/renovación
-  //   día 30 → recordatorio de renovación (sigue bloqueada)
-  //   día 90 → aviso de que su información se eliminará + Panel Maestro
-  //            (Suscripciones) lo marca "lista para revisar" — Carlos
-  //            decide a mano si la borra (nunca automático, ver
-  //            eliminarTenantAction en maestro/tenants/actions.ts)
+  //  día 0  → "tu suscripción venció, tienes 7 días de gracia" (acceso OK)
+  //  día 7  → fin de gracia: ACCESO BLOQUEADO desde aquí (ver
+  //           lib/ciclo-suscripcion.ts, calculado en vivo, no es un status
+  //           aparte) + aviso de bloqueo/renovación
+  //  día 30 → recordatorio de renovación (sigue bloqueada)
+  //  día 90 → aviso de que su información se eliminará + Panel Maestro
+  //           (Suscripciones) lo marca "lista para revisar" — Carlos
+  //           decide a mano si la borra (nunca automático, ver
+  //           eliminarTenantAction en maestro/tenants/actions.ts)
   // Cada campo guarda CUÁNDO se mandó ese aviso (null = todavía no se
   // manda) para que el cron de app/api/cron/revisar-suscripciones no lo
   // reenvíe cada día — los 4 se limpian al renovar (ver
   // renovarSuscripcionAction), así un negocio que vuelve a pagar arranca
   // el ciclo desde cero la próxima vez que venza.
-  expiredNoticeSentAt   DateTime?
-  blockNoticeSentAt     DateTime?
+  expiredNoticeSentAt  DateTime?
+  blockNoticeSentAt    DateTime?
   renewalReminderSentAt DateTime?
   deletionNoticeSentAt  DateTime?
 
@@ -700,6 +701,7 @@ model Product {
   type        ProductType
   price       Decimal     @db.Decimal(10, 2)
   cost        Decimal?    @db.Decimal(10, 2)
+  wholesalePrice Decimal? @db.Decimal(10, 2)
   taxRate     Decimal     @default(16) @db.Decimal(5, 2)
   emoji       String?
   // Foto propia del producto (2026-09-28, a petición de Carlos) — guardada
@@ -785,15 +787,16 @@ model Customer {
   rfc       String?
   address   String?
   points    Int      @default(0)
+  isWholesaler Boolean @default(false)
   metadata  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id])
-  sales        Sale[]
-  repairs      Repair[]
-  invoices     Invoice[]
-  appointments Appointment[]
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  sales         Sale[]
+  repairs       Repair[]
+  invoices      Invoice[]
+  appointments  Appointment[]
   patientRecord    PatientRecord?
   clinicalNotes    ClinicalNote[]
   odontogramaTeeth OdontogramaTooth[]
@@ -866,10 +869,10 @@ model SaleItem {
 // Desglose de una venta con método de pago "Mixto": un renglón por cada
 // método realmente utilizado (ej. parte en efectivo, parte con tarjeta).
 model SaleMixedPayment {
-  id     String             @id @default(cuid())
-  saleId String
-  method MixedPaymentMethod
-  amount Decimal            @db.Decimal(10, 2)
+  id      String             @id @default(cuid())
+  saleId  String
+  method  MixedPaymentMethod
+  amount  Decimal            @db.Decimal(10, 2)
 
   sale Sale @relation(fields: [saleId], references: [id])
 }
@@ -1037,19 +1040,19 @@ model CashSession {
   // porque las sesiones ya cerradas antes de este cambio no tienen este
   // dato.
   closedByUserId String?
-  openingCash  Decimal           @db.Decimal(10, 2)
-  closingCash  Decimal?          @db.Decimal(10, 2)
-  expectedCash Decimal?          @db.Decimal(10, 2)
-  difference   Decimal?          @db.Decimal(10, 2)
-  status       CashSessionStatus @default(OPEN)
-  openedAt     DateTime          @default(now())
+  openingCash  Decimal            @db.Decimal(10, 2)
+  closingCash  Decimal?           @db.Decimal(10, 2)
+  expectedCash Decimal?           @db.Decimal(10, 2)
+  difference   Decimal?           @db.Decimal(10, 2)
+  status       CashSessionStatus  @default(OPEN)
+  openedAt     DateTime           @default(now())
   closedAt     DateTime?
   notes        String?
 
-  tenant    Tenant         @relation(fields: [tenantId], references: [id])
-  branch    Branch         @relation(fields: [branchId], references: [id])
-  user      User           @relation("CashSessionAbiertaPor", fields: [userId], references: [id])
-  closedBy  User?          @relation("CashSessionCerradaPor", fields: [closedByUserId], references: [id])
+  tenant   Tenant         @relation(fields: [tenantId], references: [id])
+  branch   Branch         @relation(fields: [branchId], references: [id])
+  user     User           @relation("CashSessionAbiertaPor", fields: [userId], references: [id])
+  closedBy User?          @relation("CashSessionCerradaPor", fields: [closedByUserId], references: [id])
   movements CashMovement[]
 }
 
@@ -1145,18 +1148,18 @@ enum NotificacionTipo {
 // sí queda visible en la lista del administrador) para saber cuándo
 // aprobar/rechazar y seguir — o no — con el login.
 model SolicitudDispositivo {
-  id         String                     @id @default(cuid())
-  tenantId   String
-  branchId   String
+  id                 String                     @id @default(cuid())
+  tenantId           String
+  branchId           String
   // Token opaco que solo conoce el navegador que hizo la solicitud —
   // separado del `id` (que sí es visible para el administrador en la
   // lista de pendientes) para que un navegador en espera nunca pueda, con
   // solo adivinar/probar ids, consultar ni resolver la solicitud de OTRO
   // dispositivo.
-  token      String                     @unique
-  status     SolicitudDispositivoStatus @default(PENDIENTE)
-  userAgent  String?
-  createdAt  DateTime                   @default(now())
+  token              String                     @unique
+  status             SolicitudDispositivoStatus @default(PENDIENTE)
+  userAgent          String?
+  createdAt          DateTime                   @default(now())
   resueltoEn DateTime?
   // Quién la resolvió (administrador) — para dejar rastro de auditoría de
   // quién autorizó qué equipo.
@@ -1267,17 +1270,17 @@ model Staff {
   // explícita de "quién le reporta a quién" (simplificación deliberada: no
   // existe un organigrama en el sistema, y modelarlo sería un proyecto
   // aparte). teamCommissionBase null = "no lidera un equipo".
-  paymentScheme       PaymentScheme    @default(FIJO)
-  baseSalary          Decimal          @db.Decimal(10, 2)
-  commissionRate      Decimal          @default(0) @db.Decimal(5, 2)
-  commissionBase      CommissionBase   @default(VENTAS)
-  paymentFrequency    PaymentFrequency @default(QUINCENAL)
+  paymentScheme        PaymentScheme    @default(FIJO)
+  baseSalary           Decimal          @db.Decimal(10, 2)
+  commissionRate       Decimal          @default(0) @db.Decimal(5, 2)
+  commissionBase       CommissionBase   @default(VENTAS)
+  paymentFrequency     PaymentFrequency @default(QUINCENAL)
   commissionFrequency PaymentFrequency @default(QUINCENAL)
   // Monto fijo por unidad de trabajo ("salario por unidad de obra" /
   // destajo) — solo tiene efecto cuando paymentScheme = DESTAJO. Qué cuenta
   // como "una unidad" lo decide commissionBase (VENTAS = por venta,
   // REPARACIONES = por reparación entregada); UTILIDAD no aplica a destajo.
-  pieceRate           Decimal          @default(0) @db.Decimal(10, 2)
+  pieceRate            Decimal          @default(0) @db.Decimal(10, 2)
   teamCommissionRate  Decimal          @default(0) @db.Decimal(5, 2)
   teamCommissionBase  CommissionBase?
   // Método con el que se le paga a este empleado — determina si clabe es
@@ -1445,17 +1448,17 @@ enum StaffPaymentStatus {
 // ============================================
 
 model Supplier {
-  id        String   @id @default(cuid())
-  tenantId  String
-  name      String
-  phone     String?
-  email     String?
-  rfc       String?
-  address   String?
-  isActive  Boolean  @default(true)
+  id       String   @id @default(cuid())
+  tenantId String
+  name     String
+  phone    String?
+  email    String?
+  rfc      String?
+  address  String?
+  isActive Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  tenant   Tenant     @relation(fields: [tenantId], references: [id])
   purchases Purchase[]
 }
 
@@ -1705,13 +1708,13 @@ model ClinicalNote {
 // (11-18, 21-28, 31-38, 41-48 para dentición permanente — Fase 1 no cubre
 // dentición temporal/infantil, fuera de alcance de esta primera versión).
 model OdontogramaTooth {
-  id            String         @id @default(cuid())
-  tenantId      String
-  customerId    String
-  toothNumber   Int
-  condition     ToothCondition @default(SANO)
-  notes         String?
-  updatedAt     DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  tenantId        String
+  customerId      String
+  toothNumber     Int
+  condition       ToothCondition @default(SANO)
+  notes           String?
+  updatedAt       DateTime       @updatedAt
   updatedByUserId String?
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
@@ -1762,10 +1765,10 @@ model TreatmentPlan {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  tenant   Tenant              @relation(fields: [tenantId], references: [id])
-  branch   Branch              @relation(fields: [branchId], references: [id])
-  customer Customer            @relation(fields: [customerId], references: [id])
-  user     User                @relation(fields: [userId], references: [id])
+  tenant   Tenant             @relation(fields: [tenantId], references: [id])
+  branch   Branch             @relation(fields: [branchId], references: [id])
+  customer Customer           @relation(fields: [customerId], references: [id])
+  user     User               @relation(fields: [userId], references: [id])
   items    TreatmentPlanItem[]
 }
 
@@ -1781,24 +1784,24 @@ model TreatmentPlan {
 // tenantModels en lib/prisma.ts): siempre se lee/escribe a través de un
 // TreatmentPlan ya aislado por tenant, nunca por su cuenta.
 model TreatmentPlanItem {
-  id              String                  @id @default(cuid())
-  treatmentPlanId String
-  description     String
+  id                String                  @id @default(cuid())
+  treatmentPlanId   String
+  description       String
   // FDI, igual que OdontogramaTooth.toothNumber — opcional porque no todo
   // tratamiento es de un diente específico (ej. "Ortodoncia completa",
   // "Limpieza general").
-  toothNumber     Int?
-  cost            Decimal                 @db.Decimal(10, 2)
-  status          TreatmentPlanItemStatus @default(PROPUESTO)
-  order           Int                     @default(0)
-  paidAt          DateTime?
+  toothNumber       Int?
+  cost              Decimal                 @db.Decimal(10, 2)
+  status            TreatmentPlanItemStatus @default(PROPUESTO)
+  order             Int                     @default(0)
+  paidAt            DateTime?
   // Mismo enum PaymentMethod que ya usa Sale — es la misma "caja física"
   // del negocio la que recibe este cobro (ver cobrarTreatmentPlanItemAction
   // en expediente-actions.ts, calcado de cobrarYEntregarAction de
   // Reparaciones: solo CASH genera un CashMovement real).
-  paymentMethod   PaymentMethod?
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+  paymentMethod     PaymentMethod?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 
   treatmentPlan     TreatmentPlan      @relation(fields: [treatmentPlanId], references: [id])
   // Opcional — un consentimiento puede generarse suelto (ej. "tratamiento
@@ -1847,9 +1850,9 @@ model InformedConsent {
   treatmentPlanItemId String?
   createdAt         DateTime  @default(now())
 
-  tenant           Tenant             @relation(fields: [tenantId], references: [id])
-  customer         Customer           @relation(fields: [customerId], references: [id])
-  user             User               @relation(fields: [userId], references: [id])
+  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+  customer          Customer           @relation(fields: [customerId], references: [id])
+  user              User               @relation(fields: [userId], references: [id])
   treatmentPlanItem TreatmentPlanItem? @relation(fields: [treatmentPlanItemId], references: [id])
 }
 

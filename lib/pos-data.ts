@@ -1,3 +1,4 @@
+// ruta: C:\linkity\lib\pos-data.ts
 import "server-only";
 
 import { getTenantPrisma } from "@/lib/prisma";
@@ -34,6 +35,7 @@ export interface ProductoPOS {
   type: TipoPOS;
   isService: boolean;
   price: number;
+  wholesalePrice: number | null; // <-- ¡NUEVO CAMPO!
   taxRate: number;
   // SKU/código de barras (Product.sku/barcode) — 2026-09-22, pendiente
   // registrado: el botón "Escanear" de POS no hacía nada todavía. Se usan
@@ -52,6 +54,7 @@ export interface ClientePOS {
   id: string;
   name: string;
   phone: string | null;
+  isWholesaler: boolean; // <-- ¡NUEVO CAMPO!
 }
 
 export interface PosData {
@@ -125,6 +128,7 @@ export async function getPosData(
       type,
       isService,
       price: Number(p.price),
+      wholesalePrice: p.wholesalePrice != null ? Number(p.wholesalePrice) : null,
       taxRate: Number(p.taxRate),
       sku: p.sku,
       barcode: p.barcode,
@@ -136,6 +140,7 @@ export async function getPosData(
     id: c.id,
     name: c.name,
     phone: c.phone,
+    isWholesaler: c.isWholesaler,
   }));
 
   const cajaAbiertaPorSucursal: Record<string, boolean> = {};

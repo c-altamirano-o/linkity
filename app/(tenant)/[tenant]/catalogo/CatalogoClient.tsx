@@ -1,3 +1,4 @@
+// ruta: C:\linkity\app\(tenant)\[tenant]\catalogo\CatalogoClient.tsx
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
@@ -49,6 +50,7 @@ interface FormProducto {
   sku: string;
   price: string;
   cost: string;
+  wholesalePrice: string;
   type: TipoProductoInput;
   categoryId: string;
   emoji: string;
@@ -66,7 +68,7 @@ interface FormProducto {
 }
 
 const FORM_VACIO: FormProducto = {
-  name: "", sku: "", price: "", cost: "", type: "PRODUCT", categoryId: "", emoji: "", image: null, isActive: true, stock: "1",
+  name: "", sku: "", price: "", cost: "", wholesalePrice: "", type: "PRODUCT", categoryId: "", emoji: "", image: null, isActive: true, stock: "1",
 };
 
 const TIPO_LABELS: Record<TipoCatalogo, string> = {
@@ -303,7 +305,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       encabezado,
       ejemplo,
     ].join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -493,6 +495,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       sku: p.sku ?? "",
       price: String(p.price),
       cost: p.cost ? String(p.cost) : "",
+      wholesalePrice: p.wholesalePrice != null ? String(p.wholesalePrice) : "",
       type: p.type,
       categoryId: p.categoryId ?? "",
       emoji: p.emoji ?? "",
@@ -559,6 +562,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
         name: form.name,
         sku: form.sku || null,
         price: Number(form.price),
+        wholesalePrice: form.wholesalePrice ? Number(form.wholesalePrice) : null,
         // 2026-09-24: el campo "Costo" ni se le muestra a este rol cuando
         // !puedeVerMontos (ver el formulario arriba) — no se manda la llave
         // en absoluto (en vez de mandar `null`) para que editarProductoAction
@@ -659,27 +663,29 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   // Contenido del sidebar (reutilizado en desktop y drawer móvil)
   const sidebarContent = (
     <>
-      <div className="flex items-center justify-between px-3 py-3 border-b border-border gap-1.5">
-        <span className="text-sm font-medium text-foreground">{label(labels, "module.catalog.name")}</span>
+      <div className="flex flex-col px-3 py-3 border-b border-border gap-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-foreground">{label(labels, "module.catalog.name")}</span>
+          <button onClick={() => setSidebarMovil(false)}
+            className="md:hidden w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
         <div className="flex items-center gap-1.5">
           <button
             onClick={abrirModalAutoIconos}
             title="Auto-asignar íconos a productos que se quedaron con el genérico"
-            className="w-6 h-6 flex-shrink-0 flex items-center justify-center bg-muted text-muted-foreground rounded-lg hover:bg-muted/70">
-            <Wand2 className="w-3 h-3" />
+            className="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-muted text-muted-foreground rounded-lg hover:bg-muted/70">
+            <Wand2 className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => { setModalImportar(true); setErrorImportar(null); setResultadoImportar(null); }}
             title="Importar catálogo desde CSV o Excel"
-            className="flex items-center gap-1 bg-muted text-muted-foreground text-[11.5px] font-medium px-2 py-1.5 rounded-lg hover:bg-muted/70">
-            <Upload className="w-2.5 h-2.5" /> Importar
+            className="flex-1 flex items-center justify-center gap-1 bg-muted text-muted-foreground text-[11.5px] font-medium px-2 py-1.5 rounded-lg hover:bg-muted/70">
+            <Upload className="w-3 h-3" /> Importar
           </button>
-          <button onClick={abrirNuevo} className="flex items-center gap-1 bg-primary text-primary-foreground text-[11.5px] font-medium px-2 py-1.5 rounded-lg">
-            <Plus className="w-2.5 h-2.5" /> Nuevo
-          </button>
-          <button onClick={() => setSidebarMovil(false)}
-            className="md:hidden w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground">
-            <X className="w-4 h-4" />
+          <button onClick={abrirNuevo} className="flex-1 flex items-center justify-center gap-1 bg-primary text-primary-foreground text-[11.5px] font-medium px-2 py-1.5 rounded-lg">
+            <Plus className="w-3 h-3" /> Nuevo
           </button>
         </div>
       </div>
@@ -919,6 +925,9 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                           Role.verMontosCaja, igual que en Inventario. */}
                       {puedeVerMontos && !p.isService && p.cost > 0 && (
                         <p className="text-[10.5px] text-muted-foreground">Costo: {formatMXN(p.cost)}</p>
+                      )}
+                      {p.wholesalePrice != null && p.wholesalePrice > 0 && (
+                        <p className="text-[10.5px] text-muted-foreground">Mayoreo: {formatMXN(p.wholesalePrice)}</p>
                       )}
                     </div>
                   </div>
@@ -1213,18 +1222,22 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   />
                 )}
               </div>
-              {/* 2026-09-24: "Costo" es precio de compra (margen del
-                  negocio) — el campo se omite por completo (no solo se
-                  deshabilita) para quien no tiene Role.verMontosCaja, mismo
-                  criterio que la ficha inline de arriba. Sin ese campo,
-                  "Precio de venta" ocupa el ancho completo. */}
-              <div className={`grid gap-3 ${puedeVerMontos ? "grid-cols-2" : "grid-cols-1"}`}>
+              <div className={`grid gap-3 ${puedeVerMontos ? "grid-cols-3" : "grid-cols-2"}`}>
                 <div>
-                  <label className="text-[12.5px] font-medium text-muted-foreground">Precio de venta *</label>
+                  <label className="text-[12.5px] font-medium text-muted-foreground">Precio público *</label>
                   <input
                     type="number" min={0} step="0.01"
                     value={form.price}
                     onChange={(e) => setForm({ ...form, price: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="text-[12.5px] font-medium text-muted-foreground">Precio mayoreo</label>
+                  <input
+                    type="number" min={0} step="0.01"
+                    value={form.wholesalePrice}
+                    onChange={(e) => setForm({ ...form, wholesalePrice: e.target.value })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
                   />
                 </div>

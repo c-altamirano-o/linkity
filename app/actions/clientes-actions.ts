@@ -1,3 +1,4 @@
+// ruta: C:\linkity\app\actions\clientes-actions.ts
 "use server";
 
 import { getTenantPrisma } from "@/lib/prisma";
@@ -36,6 +37,7 @@ export interface DatosCliente {
   email?: string | null;
   rfc?: string | null;
   address?: string | null;
+  isWholesaler?: boolean; // <-- ¡NUEVO CAMPO!
 }
 
 function validarDatosCliente(datos: DatosCliente): string | null {
@@ -68,6 +70,7 @@ export async function crearClienteAction(
         email: datos.email?.trim() || null,
         rfc: datos.rfc?.trim() || null,
         address: datos.address?.trim() || null,
+        isWholesaler: datos.isWholesaler ?? false, // Se guarda el flag
       },
     });
 
@@ -108,6 +111,7 @@ export async function editarClienteAction(
         email: datos.email?.trim() || null,
         rfc: datos.rfc?.trim() || null,
         address: datos.address?.trim() || null,
+        isWholesaler: datos.isWholesaler ?? false, // Se actualiza el flag
       },
     });
 

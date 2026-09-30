@@ -1,3 +1,4 @@
+// ruta: C:\linkity\lib\clientes-data.ts
 import "server-only";
 
 import { getTenantPrisma } from "@/lib/prisma";
@@ -43,6 +44,7 @@ export interface ClienteUI {
   email: string | null;
   rfc: string | null;
   address: string | null;
+  isWholesaler: boolean;
   createdAt: string; // ISO
   visitas: number;
   totalGastado: number;
@@ -170,6 +172,7 @@ export async function getClientesData(tenantId: string): Promise<ClienteUI[]> {
       email: c.email,
       rfc: c.rfc,
       address: c.address,
+      isWholesaler: c.isWholesaler,
       createdAt: c.createdAt.toISOString(),
       visitas: ventasComoVisita + c.repairs.length,
       totalGastado,

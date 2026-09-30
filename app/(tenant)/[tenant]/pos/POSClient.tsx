@@ -1,3 +1,4 @@
+// ruta: C:\linkity\app\(tenant)\[tenant]\pos\POSClient.tsx
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -188,6 +189,32 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   // enterarse hasta el final).
   const cajaAbierta = branchId ? cajaAbiertaPorSucursal[branchId] ?? false : false;
 
+  const clienteSeleccionado = clientes.find((c) => c.id === clienteId) ?? null;
+  const isWholesaler = clienteSeleccionado?.isWholesaler ?? false;
+  const clientesFiltrados = clientes
+    .filter((c) => c.name.toLowerCase().includes(clienteQuery.toLowerCase()))
+    .slice(0, 8);
+
+  // 2026-09-30: Si se cambia el cliente seleccionado (a un mayorista o de regreso a uno normal),
+  // se recalculan los precios del carrito para que coincidan con la lógica del servidor.
+  useEffect(() => {
+    setCarrito((prev) => {
+      let changed = false;
+      const newCart = prev.map((item) => {
+        if (item.repairId) return item; // Las reparaciones tienen monto manual, no se ajustan por catálogo
+        const p = productos.find((prod) => prod.id === item.productId);
+        if (!p) return item;
+        const precioActivo = (isWholesaler && p.wholesalePrice != null && p.wholesalePrice > 0) ? p.wholesalePrice : p.price;
+        if (item.precio !== precioActivo) {
+          changed = true;
+          return { ...item, precio: precioActivo };
+        }
+        return item;
+      });
+      return changed ? newCart : prev;
+    });
+  }, [isWholesaler, productos]);
+
   /* ── Categorías (con "Todos" y "Sin categoría" sintéticas) ── */
   const hayNoCategorizados = productos.some((p) => p.categoryId === null);
   const categoriasOpciones = [
@@ -274,24 +301,22 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       (metodoPago === "efectivo" && montoNum >= total) ||
       (metodoPago === "mixto" && mixtoOk));
 
-  const clienteSeleccionado = clientes.find((c) => c.id === clienteId) ?? null;
-  const clientesFiltrados = clientes
-    .filter((c) => c.name.toLowerCase().includes(clienteQuery.toLowerCase()))
-    .slice(0, 8);
-
   /* ── Acciones ── */
   const agregarAlCarrito = (p: ProductoPOS) => {
     const disponible = stockDe(p);
     if (!p.isService && disponible <= 0) return;
     setUltimaVenta(null);
     setErrorVenta(null);
+    
+    const precioActivo = (isWholesaler && p.wholesalePrice != null && p.wholesalePrice > 0) ? p.wholesalePrice : p.price;
+
     setCarrito((prev) => {
       const existe = prev.find((i) => i.productId === p.id);
       if (existe) {
         if (!p.isService && existe.cantidad + 1 > disponible) return prev;
-        return prev.map((i) => (i.productId === p.id ? { ...i, cantidad: i.cantidad + 1 } : i));
+        return prev.map((i) => (i.productId === p.id ? { ...i, cantidad: i.cantidad + 1, precio: precioActivo } : i));
       }
-      return [...prev, { productId: p.id, nombre: p.name, precio: p.price, taxRate: p.taxRate, cantidad: 1, isService: p.isService }];
+      return [...prev, { productId: p.id, nombre: p.name, precio: precioActivo, taxRate: p.taxRate, cantidad: 1, isService: p.isService }];
     });
   };
 
@@ -539,6 +564,11 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             <div className="flex items-center gap-1.5 text-sm text-foreground min-w-0">
               <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
               <span className="truncate font-medium">{clienteSeleccionado.name}</span>
+              {isWholesaler && (
+                <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0">
+                  Mayorista
+                </span>
+              )}
             </div>
             <button onClick={() => setClienteId(null)} className="text-muted-foreground hover:text-foreground flex-shrink-0">
               <X className="w-4 h-4" />
@@ -575,9 +605,10 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 <button
                   key={c.id}
                   onClick={() => { setClienteId(c.id); setClientePickerAbierto(false); setClienteQuery(""); }}
-                  className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted truncate"
+                  className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted truncate flex justify-between items-center"
                 >
-                  {c.name}
+                  <span className="truncate">{c.name}</span>
+                  {c.isWholesaler && <span className="text-[10px] text-amber-700 font-medium">Mayorista</span>}
                 </button>
               ))}
               {clientesFiltrados.length === 0 && (
@@ -937,7 +968,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           encoger al ancho real disponible, y cada hijo (la barra de
           categorías ya trae su propio overflow-x-auto, la cuadrícula de
           productos ya se ajusta con sus columnas responsivas) se acomoda
-          dentro de ese espacio en vez de forzar el desbordamiento global. */}
+          dento de ese espacio en vez de forzar el desbordamiento global. */}
       <div className="flex-1 flex flex-col lg:border-r lg:border-border min-h-0 min-w-0">
 
         <div className="flex items-center gap-2.5 px-5 py-4 flex-wrap">
@@ -1045,6 +1076,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             {productosFiltrados.map((producto) => {
               const stock = stockDe(producto);
               const agotado = !producto.isService && stock <= 0;
+              const precioActivo = (isWholesaler && producto.wholesalePrice != null && producto.wholesalePrice > 0) ? producto.wholesalePrice : producto.price;
               // "Seleccionado" = ya está en el carrito actual (2026-09-23, a
               // petición de Carlos: "efecto de mouseover o select para que
               // lo ilumine cuando se pase el cursor o se seleccione") — el
@@ -1109,7 +1141,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                     <p className="text-xs font-medium text-foreground leading-tight line-clamp-2">{producto.name}</p>
                     <p className="text-[10.5px] text-muted-foreground truncate">{producto.sku || "Sin SKU"}</p>
                     <div className="flex items-center justify-between gap-1 mt-0.5">
-                      <span className="text-xs font-bold text-primary-text">{formatMXN(producto.price)}</span>
+                      <div className="flex items-baseline gap-1.5 min-w-0">
+                        <span className="text-xs font-bold text-primary-text truncate">{formatMXN(precioActivo)}</span>
+                        {precioActivo < producto.price && (
+                          <span className="text-[10px] text-muted-foreground line-through truncate">{formatMXN(producto.price)}</span>
+                        )}
+                      </div>
                       {!producto.isService && (
                         <span className={`text-[10.5px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap ${
                           agotado ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"

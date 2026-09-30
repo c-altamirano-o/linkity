@@ -1,3 +1,4 @@
+// ruta: C:\linkity\lib\catalogo-data.ts
 import "server-only";
 
 import { getTenantPrisma } from "@/lib/prisma";
@@ -35,6 +36,7 @@ export interface ProductoCatalogo {
   isService: boolean;
   price: number;
   cost: number;
+  wholesalePrice: number | null;
   stock: number;
   minStock: number;
   isActive: boolean;
@@ -167,6 +169,7 @@ export async function getCatalogoData(
       isService,
       price: Number(p.price),
       cost: p.cost != null ? Number(p.cost) : 0,
+      wholesalePrice: p.wholesalePrice != null ? Number(p.wholesalePrice) : null,
       stock: isService ? 0 : p.inventory.reduce((s, i) => s + i.stock, 0),
       minStock: isService ? 0 : p.inventory.reduce((s, i) => s + i.minStock, 0),
       isActive: p.isActive,

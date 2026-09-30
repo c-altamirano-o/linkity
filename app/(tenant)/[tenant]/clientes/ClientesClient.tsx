@@ -1,3 +1,4 @@
+// ruta: C:\linkity\app\(tenant)\[tenant]\clientes\ClientesClient.tsx
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
@@ -386,7 +387,7 @@ function whatsappHref(phone: string | null, countryCode: string | null): string 
 
 type FiltroHistorial = "Todo" | "Compras" | "Reparaciones";
 
-const FORM_VACIO: DatosCliente = { name: "", phone: "", phoneCountryCode: PAIS_TELEFONO_DEFAULT, email: "", rfc: "", address: "" };
+const FORM_VACIO: DatosCliente = { name: "", phone: "", phoneCountryCode: PAIS_TELEFONO_DEFAULT, email: "", rfc: "", address: "", isWholesaler: false };
 
 export default function ClientesClient({
   clientes, labels, tenantSlug, reparacionesActiva, expedienteActiva, odontogramaActivo, expedientes,
@@ -844,6 +845,7 @@ export default function ClientesClient({
       email: c.email ?? "",
       rfc: c.rfc ?? "",
       address: c.address ?? "",
+      isWholesaler: c.isWholesaler ?? false,
     });
     setFormError(null);
     setModalAbierto(true);
@@ -946,6 +948,19 @@ export default function ClientesClient({
                 placeholder="opcional"
               />
             </div>
+          </div>
+          <div className="pt-2">
+            <label className="flex items-center gap-2 text-[12.5px] text-foreground/80 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.isWholesaler}
+                onChange={(e) => setForm({ ...form, isWholesaler: e.target.checked })}
+              />
+              Es cliente mayorista
+            </label>
+            <p className="text-[10.5px] text-muted-foreground mt-1 ml-5">
+              Si está marcado, se le aplicarán los precios de mayoreo en el punto de venta automáticamente.
+            </p>
           </div>
           {formError && <p className="text-xs text-red-600">{formError}</p>}
         </div>
@@ -1095,7 +1110,14 @@ export default function ClientesClient({
                     {inicialesDe(seleccionado.name)}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm sm:text-[15px] font-semibold text-foreground">{seleccionado.name}</p>
+                    <p className="text-sm sm:text-[15px] font-semibold text-foreground flex items-center gap-2">
+                      {seleccionado.name}
+                      {seleccionado.isWholesaler && (
+                        <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">
+                          Mayorista
+                        </span>
+                      )}
+                    </p>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                       <Phone className="w-3 h-3 flex-shrink-0" />
                       <span>{formatoTelefono(seleccionado.phone, seleccionado.phoneCountryCode) ?? "Sin teléfono"}</span>
