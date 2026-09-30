@@ -409,16 +409,18 @@ function VistaTienda({
   const totalEntregados = reparaciones.filter((r) => r.estado === "DELIVERED").length;
   const activoLabel = label(labels, "entity.repair.asset");
 
-  if (!seleccionada) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-10 text-center">
-        <Wrench className="w-8 h-8 text-muted-foreground/40 mb-2" />
-        <p className="text-sm font-medium text-foreground mb-1">Sin {label(labels, "entity.repair.plural").toLowerCase()} registradas</p>
-      </div>
-    );
-  }
-
-  const isDev = seleccionada.estado === "SHOP_RETURN";
+  // 2026-09-30, corrigiendo un bug real que Carlos reportó ("el
+  // administrador no puede ingresar equipos a reparación... aparece en
+  // blanco"): antes, cuando el tenant todavía no tenía NINGUNA reparación
+  // registrada (negocio recién creado), `seleccionada` quedaba en null y
+  // esta función regresaba de golpe una pantalla vacía SIN el encabezado
+  // ni el botón "Nueva" — es decir, no había ninguna manera de llegar al
+  // modal de "Nueva reparación" para dar de alta el primer equipo, salvo
+  // el atajo desde la ficha de un cliente (clienteInicialId). Ahora el
+  // panel izquierdo (encabezado + botón "Nueva" + buscador + lista) SIEMPRE
+  // se muestra, y solo el panel derecho (detalle) cambia a un estado vacío
+  // cuando todavía no hay ninguna reparación seleccionable.
+  const isDev = seleccionada?.estado === "SHOP_RETURN";
 
   return (
     <div className="flex h-full">
@@ -465,7 +467,7 @@ function VistaTienda({
           ) : tiendaReps.map((rep) => (
             <div key={rep.id} onClick={() => { setSeleccionadaId(rep.id); setMostrarDetalle(true); }}
               className={`p-3 rounded-xl border mb-2 cursor-pointer transition-all ${
-                seleccionada.id === rep.id ? "bg-primary/5 border-primary" : "bg-card border-border hover:border-foreground/30"
+                seleccionada?.id === rep.id ? "bg-primary/5 border-primary" : "bg-card border-border hover:border-foreground/30"
               } ${rep.estado === "SHOP_READY" ? "border-l-2 border-l-emerald-500" : rep.estado === "SHOP_RETURN" ? "border-l-2 border-l-amber-400" : ""}`}>
               <div className="flex items-center gap-2 mb-2">
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11.5px] font-semibold flex-shrink-0 ${ESTADO_BADGE[rep.estado]}`}>
@@ -503,6 +505,14 @@ function VistaTienda({
       </div>
 
       <div className={`${mostrarDetalle ? "flex" : "hidden md:flex"} flex-1 flex-col bg-muted overflow-hidden`}>
+        {!seleccionada ? (
+          <div className="flex flex-col items-center justify-center h-full p-10 text-center">
+            <Wrench className="w-8 h-8 text-muted-foreground/40 mb-2" />
+            <p className="text-sm font-medium text-foreground mb-1">Sin {label(labels, "entity.repair.plural").toLowerCase()} registradas</p>
+            <p className="text-xs text-muted-foreground">Da clic en &quot;Nueva&quot; para registrar el primer {label(labels, "entity.repair.asset").toLowerCase()}</p>
+          </div>
+        ) : (
+        <>
         <div className="bg-card border-b border-border px-4 sm:px-5 py-3">
           <button onClick={() => setMostrarDetalle(false)} className="md:hidden flex items-center gap-1 text-primary-text text-xs font-medium mb-3">
             <ChevronLeft className="w-4 h-4" /> Volver a la lista
@@ -668,6 +678,8 @@ function VistaTienda({
             </div>
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
