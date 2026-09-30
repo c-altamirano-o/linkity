@@ -127,7 +127,7 @@ export default async function POSPage({
 
   // Consultar descuentos activos para este tenant
   const discountsResponse = await getActiveDiscounts(tenant.id);
-  const activeDiscounts = discountsResponse.success ? discountsResponse.data : [];
+  const activeDiscounts = discountsResponse.data ?? [];
 
   return (
     <POSClient
