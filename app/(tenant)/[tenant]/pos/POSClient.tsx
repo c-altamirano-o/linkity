@@ -545,6 +545,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           atendioPor: res.atendioPor,
           renglones: renglonesTicket,
           subtotal: subtotalTicket,
+          descuento: descuentoAplicado,
           iva: ivaTicket,
           total: res.total,
           metodoPago: METODO_PAGO_TEXTO_TICKET[metodoPagoAlCobrar],

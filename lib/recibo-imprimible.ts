@@ -193,6 +193,8 @@ export interface ReciboData {
   atendioPor?: string | null;
   renglones: ReciboRenglon[];
   subtotal: number;
+  /** Descuento total aplicado a la venta. */
+  descuento?: number;
   iva: number;
   total: number;
   /** Texto ya formateado para mostrar (ej. "Efectivo", "Tarjeta", "Efectivo + Tarjeta"). */
@@ -315,6 +317,7 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
       <hr />
       ${filas}
       <div class="renglon" style="margin-top:6px;"><span class="muted">Subtotal</span><span class="muted">${formatMXN(r.subtotal)}</span></div>
+      ${r.descuento ? `<div class="renglon"><span class="muted">Descuento</span><span class="muted">- ${formatMXN(r.descuento)}</span></div>` : ""}
       <div class="renglon"><span class="muted">IVA</span><span class="muted">${formatMXN(r.iva)}</span></div>
       <div class="total-envoltura">
         <div class="etiqueta">Total</div>
