@@ -50,8 +50,9 @@ interface POSClientProps {
   // mismo criterio que el resto de la app: un rubro tipo barbería/estética
   // no necesita este atajo si de plano no usa Reparaciones).
   mostrarAccesoReparaciones?: boolean;
+  // Descuentos activos traídos desde el servidor
+  discounts: any[];
 }
-
 type CartItem = {
   productId: string;
   nombre: string;
@@ -82,7 +83,7 @@ const SIN_CATEGORIA_ID = "__sin_categoria__";
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
-export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, negocio, repairParaCobro, clienteInicialId, mostrarAccesoReparaciones = true }: POSClientProps) {
+export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, negocio, repairParaCobro, clienteInicialId, mostrarAccesoReparaciones = true, discounts }: POSClientProps) {
   const { categorias, productos, clientes, cajaAbiertaPorSucursal } = data;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -243,10 +244,6 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         : categoriaActiva === SIN_CATEGORIA_ID
         ? p.categoryId === null
         : p.categoryId === categoriaActiva;
-    // También busca por SKU/código de barras, no solo por nombre — así
-    // un lector físico de código de barras (que "escribe" el código en
-    // cualquier input enfocado) ya funciona aquí sin abrir el escáner de
-    // cámara siquiera, con solo tener el foco en este buscador.
     const busquedaNorm = busqueda.toLowerCase();
     const matchSearch =
       p.name.toLowerCase().includes(busquedaNorm) ||
@@ -255,16 +252,18 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     return matchCat && matchSearch;
   });
 
-  // i.precio es el precio de lista (el que ve el cliente en el catálogo) y
-  // YA incluye IVA — el total a cobrar es exactamente ese precio × cantidad,
-  // nunca precio + IVA encima. Subtotal/IVA aquí son solo el desglose
-  // informativo (se calcula hacia atrás, precio ÷ (1 + tasa)) para que el
-  // cliente vea qué parte de lo que paga corresponde a IVA — igual criterio
-  // que crearVentaAction en el servidor (fuente de verdad real de la venta).
-  const total = Math.round(carrito.reduce((s, i) => s + i.precio * i.cantidad, 0) * 100) / 100;
-  const subtotal = Math.round(
-    carrito.reduce((s, i) => s + (i.precio * i.cantidad) / (1 + i.taxRate / 100), 0) * 100
-  ) / 100;
+  // 1. Calculamos el total original sin descuentos
+  const totalOriginal = carrito.reduce((s, i) => s + i.precio * i.cantidad, 0);
+  const subtotalOriginal = carrito.reduce((s, i) => s + (i.precio * i.cantidad) / (1 + i.taxRate / 100), 0);
+  
+  // 2. AQUÍ INYECTAREMOS LA LÓGICA DE DESCUENTOS EN EL SIGUIENTE PASO
+  const descuentoAplicado = 0; 
+  
+  // 3. Totales finales ajustados
+  const total = Math.round(Math.max(0, totalOriginal - descuentoAplicado) * 100) / 100;
+  const proporcion = totalOriginal > 0 ? (total / totalOriginal) : 1;
+  
+  const subtotal = Math.round((subtotalOriginal * proporcion) * 100) / 100;
   const iva = Math.round((total - subtotal) * 100) / 100;
   const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
 
@@ -743,6 +742,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             <span className="text-sm text-muted-foreground">Subtotal</span>
             <span className="text-sm text-foreground">{formatMXN(subtotal)}</span>
           </div>
+          {descuentoAplicado > 0 && (
+            <div className="flex justify-between">
+              <span className="text-sm text-emerald-600 font-medium">Descuento</span>
+              <span className="text-sm text-emerald-600 font-bold">- {formatMXN(descuentoAplicado)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-sm text-muted-foreground">IVA</span>
             <span className="text-sm text-foreground">{formatMXN(iva)}</span>

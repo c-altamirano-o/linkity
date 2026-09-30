@@ -23,7 +23,6 @@ model Tenant {
   state        String?
   rfc          String?
   businessType String?
-  discounts Discount[]
   // 2026-09-26, a petición de Carlos ("¿existe un apartado para
   // personalizar el ticket?"): mensaje libre que reemplaza el pie fijo
   // "¡Gracias por tu preferencia!" de lib/recibo-imprimible.ts — null usa
@@ -232,81 +231,6 @@ model Tenant {
 // Si un tenant no tiene fila para una key, el resolver cae al default del
 // rubro (businessType) y, si tampoco existe, al default genérico del sistema
 // — ambos niveles de default viven en código (lib/labels.ts), no en la BD.
-
-enum DiscountType {
-  SEASONAL
-  CUSTOMER
-  ONE_TIME
-}
-
-enum DiscountValueType {
-  PERCENTAGE
-  FIXED
-}
-
-enum DiscountScope {
-  SALE
-  PRODUCT
-  CATEGORY
-}
-
-model Discount {
-  id                String             @id @default(cuid())
-  tenantId          String
-  customerId        String?
-  name              String
-  code              String?
-  type              DiscountType
-  valueType         DiscountValueType
-  scope             DiscountScope
-  value             Decimal            @db.Decimal(10, 2)
-  minPurchase       Decimal?           @db.Decimal(10, 2)
-  maxDiscount       Decimal?           @db.Decimal(10, 2)
-  startsAt          DateTime?
-  endsAt            DateTime?
-  usageLimit        Int?
-  usageCount        Int                @default(0)
-  oncePerCustomer   Boolean            @default(false)
-  accumulable       Boolean            @default(false)
-  priority          Int                @default(0)
-  maxStacked        Int                @default(1)
-  isActive          Boolean            @default(true)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-
-  tenant            Tenant             @relation(fields: [tenantId], references: [id])
-  customer          Customer?          @relation(fields: [customerId], references: [id])
-  products          DiscountProduct[]
-  categories        DiscountCategory[]
-
-  @@index([tenantId, isActive])
-  @@index([tenantId, type])
-  @@index([tenantId, startsAt, endsAt])
-  @@index([customerId])
-  @@unique([tenantId, code])
-}
-
-model DiscountProduct {
-  discountId  String
-  productId   String
-
-  discount    Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@id([discountId, productId])
-  @@index([productId])
-}
-
-model DiscountCategory {
-  discountId  String
-  categoryId  String
-
-  discount    Discount  @relation(fields: [discountId], references: [id], onDelete: Cascade)
-  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@id([discountId, categoryId])
-  @@index([categoryId])
-}
 model TenantLabel {
   id        String   @id @default(cuid())
   tenantId  String
@@ -758,7 +682,6 @@ model Category {
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
   products Product[]
-  discountCategories DiscountCategory[]
 }
 
 enum CategoryType {
@@ -817,7 +740,6 @@ model Product {
   saleItems     SaleItem[]
   repairItems   RepairItem[]
   purchaseItems PurchaseItem[]
-  discountProducts DiscountProduct[]
 
   @@unique([tenantId, sku])
   @@unique([tenantId, barcode])
@@ -872,7 +794,6 @@ model Customer {
 
   tenant        Tenant        @relation(fields: [tenantId], references: [id])
   sales         Sale[]
-  discounts     Discount[]
   repairs       Repair[]
   invoices      Invoice[]
   appointments  Appointment[]

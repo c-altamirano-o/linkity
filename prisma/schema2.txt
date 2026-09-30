@@ -1,3 +1,5 @@
+// Dentro del modelo Tenant existente, agrega esta línea:
+discounts Discount[]
 // ruta: C:\linkity\prisma\schema.prisma
 generator client {
   provider = "prisma-client-js"
@@ -23,7 +25,6 @@ model Tenant {
   state        String?
   rfc          String?
   businessType String?
-  discounts Discount[]
   // 2026-09-26, a petición de Carlos ("¿existe un apartado para
   // personalizar el ticket?"): mensaje libre que reemplaza el pie fijo
   // "¡Gracias por tu preferencia!" de lib/recibo-imprimible.ts — null usa
@@ -199,6 +200,7 @@ model Tenant {
   esquema   PlanEsquema? @relation(fields: [esquemaId], references: [id])
 
   branches     Branch[]
+  discounts    Discount[]
   users        User[]
   modules      TenantModule[]
   subscription Subscription?
@@ -1954,4 +1956,21 @@ model Prescription {
   tenant   Tenant   @relation(fields: [tenantId], references: [id])
   customer Customer @relation(fields: [customerId], references: [id])
   user     User     @relation(fields: [userId], references: [id])
+}
+
+
+model Discount {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String   // Nombre del descuento (ej. "Verano 2026", "Cliente Frecuente")
+  type        String   // "PERCENTAGE" o "FIXED"
+  value       Decimal  // El valor (ej. 10 para 10% o 50 para $50)
+  isPermanent Boolean  @default(false) // true para cliente frecuente, false si tiene vigencia
+  startDate   DateTime? // Fecha de inicio (si no es permanente)
+  endDate     DateTime? // Fecha de fin (si no es permanente)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

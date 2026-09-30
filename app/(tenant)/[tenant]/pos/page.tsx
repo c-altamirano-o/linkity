@@ -7,6 +7,7 @@ import { getRepairParaCobro, type RepairParaCobro } from "@/lib/reparaciones-dat
 import { getTenantLabels } from "@/lib/labels-server";
 import { nombreNegocioDeSlug, type DatosNegocioRecibo } from "@/lib/recibo-imprimible";
 import POSClient from "./POSClient";
+import { getActiveDiscounts } from "@/app/actions/discounts";
 
 export default async function POSPage({
   params,
@@ -124,6 +125,10 @@ export default async function POSPage({
     formato: tenant.reciboFormato,
   };
 
+  // Consultar descuentos activos para este tenant
+  const discountsResponse = await getActiveDiscounts(tenant.id);
+  const activeDiscounts = discountsResponse.success ? discountsResponse.data : [];
+
   return (
     <POSClient
       data={data}
@@ -135,6 +140,7 @@ export default async function POSPage({
       repairParaCobro={repairParaCobro}
       clienteInicialId={clienteId ?? null}
       mostrarAccesoReparaciones={mostrarAccesoReparaciones}
+      discounts={activeDiscounts}
     />
   );
 }
