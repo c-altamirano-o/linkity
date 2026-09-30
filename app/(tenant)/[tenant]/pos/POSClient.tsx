@@ -166,17 +166,17 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const ultimoEscaneoRef = useRef<{ codigo: string; ts: number } | null>(null);
 
   // 2026-09-30, a petición de Carlos ("el flujo del Enter debe saltarse la
-  // cantidad del producto, por ejemplo ahorita si seleccionas un articulo y
-  // le das enter solo incrementa la cantidad de los articulos"): las fichas
-  // de producto son <button> reales, así que después de agregar una vía
-  // clic o Tab+Enter, el foco se quedaba EN ESA MISMA ficha — cualquier
-  // Enter extra (o el auto-repeat del teclado si se detiene un instante de
-  // más con la tecla presionada) volvía a disparar el mismo clic y subía la
-  // cantidad sin que el cajero lo buscara. Cada ficha ahora regresa el foco
-  // aquí (al buscador) justo después de agregar, para que el siguiente
-  // Enter/tecleo continúe el flujo (buscar el siguiente artículo) en vez de
-  // quedarse repitiendo el mismo.
-  const busquedaInputRef = useRef<HTMLInputElement>(null);
+  // cantidad del producto... el focus deberia cambiar al botón Cobrar"):
+  // primer intento (regresar el foco al buscador) no era lo que pedía —
+  // aquí el flujo de venta rápida es: buscar/seleccionar UN artículo y que
+  // el siguiente Enter ya esté listo para cobrar, sin pasar por ningún
+  // control de cantidad de por medio. Cada vez que se agrega un producto
+  // (búsqueda+Enter o clic/Enter en una ficha), el foco salta derecho al
+  // botón "Cobrar" — un Enter más (o clic) cierra la venta. Si el cajero
+  // necesita agregar más de un artículo, vuelve a dar clic o Tab hacia el
+  // buscador como de costumbre; esto no se lo bloquea, solo deja de ser el
+  // destino automático del foco.
+  const cobrarBtnRef = useRef<HTMLButtonElement>(null);
 
   const stockDe = (p: ProductoPOS) =>
     p.isService ? Infinity : (branchId ? p.stockPorSucursal[branchId] ?? 0 : 0);
@@ -876,6 +876,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             de Cobrar es el elemento más grande y llamativo de la
             pantalla"). */}
         <button
+          ref={cobrarBtnRef}
           onClick={handleCobrar}
           disabled={!puedeCobar}
           className="w-full h-16 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-bold rounded-2xl text-lg transition-colors flex items-center justify-center gap-2.5"
@@ -959,19 +960,17 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           <div className="relative flex-1 min-w-[160px]">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
             <input
-              ref={busquedaInputRef}
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               // 2026-09-30, a petición de Carlos ("que se pueda seleccionar
               // los artículos con la tecla Tab y que el proceso vaya
-              // siguiendo su curso con Enter"): las fichas de producto de
-              // abajo ya son <button> reales, así que Tab + Enter para
-              // agregarlas ya funcionaba de forma nativa; lo que faltaba
-              // era esto — Enter aquí agrega directo el PRIMER resultado
-              // filtrado (igual que un lector de código de barras) y limpia
-              // el campo sin quitarle el foco, para teclear el siguiente
-              // artículo sin tocar el mouse ni volver a dar clic.
+              // siguiendo su curso con Enter" / "el focus deberia cambiar al
+              // botón Cobrar"): Enter agrega directo el PRIMER resultado
+              // filtrado (igual que un lector de código de barras), limpia
+              // el campo, y manda el foco al botón "Cobrar" — venta de un
+              // solo artículo en dos Enters: uno para agregarlo, otro para
+              // cobrar, sin pasar por ningún control de cantidad.
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault();
@@ -979,6 +978,15 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 if (!primero) return;
                 agregarAlCarrito(primero);
                 setBusqueda("");
+                // setTimeout(0), no llamada directa: el botón "Cobrar" puede
+                // estar deshabilitado (carrito todavía vacío) en el momento
+                // exacto de este clic/Enter — un <button disabled> no puede
+                // recibir foco. React recién quita el disabled cuando
+                // procesa el setCarrito de agregarAlCarrito y vuelve a
+                // renderizar, lo cual pasa DESPUÉS de que este handler
+                // termine; el setTimeout(0) espera ese repintado antes de
+                // intentar el foco.
+                setTimeout(() => cobrarBtnRef.current?.focus(), 0);
               }}
               placeholder="Buscar producto o servicio"
               className="w-full pl-11 pr-4 py-3 rounded-full text-base bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
@@ -1079,7 +1087,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               // (rounded-l-xl más abajo), sin necesitar clip del padre.
               const fichaBg = chip ? `var(--chip-${chip})` : "var(--primary)";
               return (
-                <button key={producto.id} onClick={() => { agregarAlCarrito(producto); busquedaInputRef.current?.focus(); }} disabled={agotado}
+                <button key={producto.id} onClick={() => { agregarAlCarrito(producto); setTimeout(() => cobrarBtnRef.current?.focus(), 0); }} disabled={agotado}
                   className={`relative flex items-stretch rounded-xl bg-card border transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)] ${
                     cantidadEnCarrito > 0 ? "border-primary ring-2 ring-primary/25" : "border-border hover:border-primary/40"
                   }`}>
