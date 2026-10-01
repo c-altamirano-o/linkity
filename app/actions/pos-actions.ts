@@ -183,8 +183,21 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     }
 
     // Consultamos los descuentos activos en la base de datos para recalcularlos seguros
+    //
+    // 2026-10-01: el `where` original no filtraba por `customerId` en
+    // absoluto — un descuento con Discount.customerId apuntando a UN cliente
+    // específico se aplicaba igual a CUALQUIER venta, tuviera o no
+    // seleccionado a ese cliente (o a otro distinto). Ahora: los descuentos
+    // generales (customerId null) siempre califican; uno con customerId
+    // asignado SOLO califica si esta venta trae exactamente ese cliente
+    // seleccionado — si no hay cliente en la venta, ningún descuento
+    // "de cliente" puede aplicar.
     const activeDiscounts = await db.discount.findMany({
-      where: { tenantId: tenant.id, isActive: true },
+      where: {
+        tenantId: tenant.id,
+        isActive: true,
+        OR: customerId ? [{ customerId: null }, { customerId }] : [{ customerId: null }],
+      },
       include: { products: true, categories: true },
       orderBy: { priority: 'desc' }
     });
@@ -280,84 +293,111 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     }
 
     // CALCULAR DESCUENTOS EN EL SERVIDOR
-    let totalDiscountGeneral = 0;
-    
+    //
+    // 2026-10-01, corrigiendo dos bugs reales de la primera versión (Carlos
+    // los encontró al pedirme que revisara sus cambios manuales):
+    //
+    // (a) "no acumulable" solo cortaba el ciclo para alcance "Venta
+    //     completa" (dependía de `descuentoIteracion`, una variable que
+    //     SOLO se llenaba en esa rama) — un descuento de Producto o
+    //     Categoría marcado como no acumulable nunca detenía el ciclo, así
+    //     que sí terminaba combinándose con el siguiente descuento aunque
+    //     dijera que no debía.
+    //
+    // (b) el monto descontado se repartía con una sola `proporcionDescuento`
+    //     aplicada a TODAS las líneas por igual, sin importar si esa línea
+    //     en particular calificaba para el descuento — un descuento de
+    //     categoría "Accesorios" también le quitaba una rebanada a un
+    //     producto de otra categoría en el mismo carrito. El total cobrado
+    //     salía bien, pero el desglose (y por lo tanto el IVA) por renglón
+    //     quedaba mal atribuido.
+    //
+    // Ahora cada línea de producto acumula su PROPIO `discountLine` según
+    // qué descuentos de verdad le aplican — un descuento de Producto/
+    // Categoría solo resta de las líneas que calificaron (repartido entre
+    // ELLAS, proporcional a su peso dentro de ese subconjunto); uno de
+    // Venta completa sí reparte entre todas las líneas de producto. Las
+    // reparaciones nunca reciben descuento en este flujo (ver el comentario
+    // de `discountLine: 0` en LineaReparacion, arriba) — si el carrito es
+    // puro reparaciones, un descuento de "Venta completa" simplemente no
+    // tiene base sobre la que aplicar y no hace nada.
+    const lineasProducto = lineasPreparadas.filter((l): l is LineaProducto => l.tipo === "producto");
+    const subtotalProductosBruto = lineasProducto.reduce((s, l) => s + l.subtotal, 0);
+
     if (activeDiscounts.length > 0 && subtotalBruto > 0) {
       for (const desc of activeDiscounts) {
         if (desc.minPurchase && subtotalBruto < Number(desc.minPurchase)) continue;
 
-        let descuentoIteracion = 0;
+        let montoAplicado = 0;
 
-        if (desc.scope === "SALE") {
-          const v = desc.valueType === "PERCENTAGE" 
-            ? subtotalBruto * (Number(desc.value) / 100) 
+        if (desc.scope === "SALE" && subtotalProductosBruto > 0) {
+          // El % se calcula sobre el total del carrito (reparaciones
+          // incluidas — así se compara contra minPurchase de forma
+          // intuitiva), pero nunca puede restar más de lo que las propias
+          // líneas de producto pueden absorber.
+          let monto = desc.valueType === "PERCENTAGE"
+            ? subtotalBruto * (Number(desc.value) / 100)
             : Number(desc.value);
-          descuentoIteracion = v;
-          
-          if (desc.maxDiscount && descuentoIteracion > Number(desc.maxDiscount)) {
-            descuentoIteracion = Number(desc.maxDiscount);
-          }
-          
-          totalDiscountGeneral += descuentoIteracion;
-        } 
-        else if (desc.scope === "PRODUCT" || desc.scope === "CATEGORY") {
-          const isProduct = desc.scope === "PRODUCT";
-          const idsAplicables = isProduct 
-            ? desc.products.map(p => p.productId)
-            : desc.categories.map(c => c.categoryId);
-            
-          let sumAplicable = 0;
-          
-          for (let l of lineasPreparadas) {
-            if (l.tipo !== "producto") continue;
-            
-            const match = isProduct 
-              ? idsAplicables.includes(l.productId)
-              : idsAplicables.includes(l.categoryId || "");
-              
-            if (match) {
-              sumAplicable += l.subtotal;
+          if (desc.maxDiscount && monto > Number(desc.maxDiscount)) monto = Number(desc.maxDiscount);
+          monto = Math.min(monto, subtotalProductosBruto);
+
+          if (monto > 0) {
+            for (const l of lineasProducto) {
+              l.discountLine += Math.round((monto * (l.subtotal / subtotalProductosBruto)) * 100) / 100;
             }
+            montoAplicado = monto;
           }
+        } else if (desc.scope === "PRODUCT" || desc.scope === "CATEGORY") {
+          const isProduct = desc.scope === "PRODUCT";
+          const idsAplicables = isProduct
+            ? desc.products.map((p) => p.productId)
+            : desc.categories.map((c) => c.categoryId);
+
+          const lineasAplicables = lineasProducto.filter((l) =>
+            isProduct ? idsAplicables.includes(l.productId) : idsAplicables.includes(l.categoryId || "")
+          );
+          const sumAplicable = lineasAplicables.reduce((s, l) => s + l.subtotal, 0);
 
           if (sumAplicable > 0) {
-            let descLinea = desc.valueType === "PERCENTAGE" 
-              ? sumAplicable * (Number(desc.value) / 100) 
+            let monto = desc.valueType === "PERCENTAGE"
+              ? sumAplicable * (Number(desc.value) / 100)
               : Number(desc.value);
-            
-            if (desc.maxDiscount && descLinea > Number(desc.maxDiscount)) {
-              descLinea = Number(desc.maxDiscount);
+            if (desc.maxDiscount && monto > Number(desc.maxDiscount)) monto = Number(desc.maxDiscount);
+            monto = Math.min(monto, sumAplicable);
+
+            if (monto > 0) {
+              for (const l of lineasAplicables) {
+                l.discountLine += Math.round((monto * (l.subtotal / sumAplicable)) * 100) / 100;
+              }
+              montoAplicado = monto;
             }
-            
-            totalDiscountGeneral += descLinea;
           }
         }
 
-        if (!desc.accumulable && descuentoIteracion > 0) break;
+        if (!desc.accumulable && montoAplicado > 0) break;
       }
     }
 
-    totalDiscountGeneral = Math.min(totalDiscountGeneral, subtotalBruto);
-    const proporcionDescuento = subtotalBruto > 0 ? ((subtotalBruto - totalDiscountGeneral) / subtotalBruto) : 1;
-
-    // SEGUNDA PASADA: Aplicar descuentos proporcionales e IVA
+    // SEGUNDA PASADA: aplicar el descuento ya atribuido línea por línea y
+    // desglosar el IVA sobre el monto que de verdad se cobra por línea.
     let subtotalFinal = 0;
     let taxFinal = 0;
     let totalFinal = 0;
 
-    for (let l of lineasPreparadas) {
+    for (const l of lineasPreparadas) {
       if (l.tipo === "producto") {
         const p = products.find((pr) => pr.id === l.productId)!;
         const tasa = Number(p.taxRate);
-        
-        // 1. Calculamos el nuevo subtotal cobrado ya restando su parte del descuento
-        const subtotalConDescuento = Math.round((l.subtotal * proporcionDescuento) * 100) / 100;
-        l.discountLine = Math.round((l.subtotal - subtotalConDescuento) * 100) / 100;
-        
-        // 2. Desglosamos el IVA del nuevo monto cobrado
+
+        // Tope defensivo: una línea nunca puede terminar "regalada" más
+        // allá de su propio subtotal, aunque se hayan acumulado varios
+        // descuentos encima (accumulable: true).
+        l.discountLine = Math.round(Math.min(l.discountLine, l.subtotal) * 100) / 100;
+        const subtotalConDescuento = Math.round((l.subtotal - l.discountLine) * 100) / 100;
+
         const lineaNeto = Math.round((subtotalConDescuento / (1 + tasa / 100)) * 100) / 100;
         l.tax = Math.round((subtotalConDescuento - lineaNeto) * 100) / 100;
-        
+
         subtotalFinal += lineaNeto;
         taxFinal += l.tax;
         totalFinal += subtotalConDescuento;
@@ -371,7 +411,11 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     const subtotal = Math.round(subtotalFinal * 100) / 100;
     const tax = Math.round(taxFinal * 100) / 100;
     const total = Math.round(totalFinal * 100) / 100;
-    const dbDiscount = Math.round(totalDiscountGeneral * 100) / 100;
+    // Suma real de lo aplicado por línea DESPUÉS del tope defensivo de
+    // arriba — así Sale.discount siempre cuadra exacto con la suma de
+    // SaleItem.discount, incluso en el caso raro de varios descuentos
+    // acumulables que juntos hubieran superado el subtotal de una línea.
+    const dbDiscount = Math.round(lineasProducto.reduce((s, l) => s + l.discountLine, 0) * 100) / 100;
 
     let cambio = 0;
     let metadata: { montoRecibido: number; cambio: number } | undefined;

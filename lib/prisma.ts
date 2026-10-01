@@ -86,6 +86,22 @@ export const getTenantPrisma = (tenantId: string) => {
     // primer commit de este modelo, no después de un susto de aislamiento
     // multi-tenant como pasó con Appointment.
     "Notificacion",
+    // Discount (2026-10-01) — este SÍ se coló con el mismo descuido que
+    // Appointment: Carlos construyó pos-actions.ts asumiendo (el comentario
+    // que dejó ahí dice literalmente "mismo tenant, getTenantPrisma ya lo
+    // filtra solo") que este modelo ya estaba en esta lista, cuando en
+    // realidad nunca se agregó. Por suerte esa única consulta existente
+    // (getActiveDiscounts/pos-actions.ts) sí traía su propio `where:
+    // {tenantId}` escrito a mano, así que no llegó a filtrar datos de otro
+    // tenant — pero el CRUD de administración de descuentos que se agrega
+    // junto con este comentario sí hace update/delete por id, y SIN esta
+    // entrada esas dos operaciones no habrían verificado ownership antes de
+    // tocar la fila (exactamente el hueco que describe el comentario de
+    // arriba, en la validación de update/delete). DiscountProduct y
+    // DiscountCategory NO van aquí a propósito, mismo criterio que
+    // SaleItem/RepairItem: no tienen tenantId propio, siempre se leen/
+    // escriben a través de su Discount padre, que sí queda protegido aquí.
+    "Discount",
   ];
 
   return prisma.$extends({

@@ -21,7 +21,7 @@ import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
   LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock, Phone, Undo2,
   Bell, RefreshCw, Smartphone, X, Wrench, Circle, ArrowRight, Receipt,
-  MessageCircle, Send, Unlink,
+  MessageCircle, Send, Unlink, Percent,
 } from "lucide-react";
 import type { EstadoTallerChecklist } from "@/lib/roles-server";
 
@@ -1421,6 +1421,26 @@ export default function ConfiguracionClient({
               {modulosMensaje.texto}
             </p>
           )}
+        </div>
+      </div>
+
+      {/* ── Descuentos y promociones ───────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <Percent className="w-5 h-5 text-primary-text" />
+          <h2 className="text-base font-semibold text-foreground">Descuentos y promociones</h2>
+        </div>
+        <div className="p-5 flex items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground">
+            Crea descuentos por porcentaje o monto fijo — para toda la venta, un producto o una
+            categoría — y se aplicarán automáticamente en el Punto de Venta.
+          </p>
+          <Link
+            href={`/${tenantSlug}/configuracion/descuentos`}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground flex-shrink-0"
+          >
+            Administrar <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
       </div>
 

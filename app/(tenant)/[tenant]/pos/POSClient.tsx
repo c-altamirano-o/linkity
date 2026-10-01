@@ -264,7 +264,15 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     const subtotalCarrito = totalOriginal; // Precio base de donde descontar
 
     for (const desc of discounts) {
-      // 2.1 Validar mínimo de compra general
+      // 2.1 Un descuento asignado a un cliente específico (Discount.customerId)
+      // solo cuenta aquí si es justo el cliente que está seleccionado en esta
+      // venta — mismo criterio que el servidor en pos-actions.ts (donde de
+      // verdad se cobra); sin este filtro la vista previa mostraba un
+      // descuento que crearVentaAction después NO aplicaba, confundiendo al
+      // cajero con un total que no coincidía con el ticket real.
+      if (desc.customerId && desc.customerId !== clienteId) continue;
+
+      // 2.2 Validar mínimo de compra general
       if (desc.minPurchase && subtotalCarrito < Number(desc.minPurchase)) continue;
 
       let descuentoLinea = 0;
