@@ -24,10 +24,16 @@ import AduanaClient from "./AduanaClient";
  */
 export default async function AduanaPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tenant: string }>;
+  // ?folio=... (2026-10-01) — la notificación de una alerta de técnico
+  // (ver el comentario largo en AduanaClientProps.folioInicial) manda aquí
+  // con este parámetro para preseleccionar el folio en cuestión.
+  searchParams: Promise<{ folio?: string }>;
 }) {
   const { tenant: tenantSlug } = await params;
+  const { folio } = await searchParams;
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
@@ -75,6 +81,7 @@ export default async function AduanaPage({
       puedeCobrar={puedeCobrar}
       negocioRecibo={negocioRecibo}
       cobrarEnDevolucion={tenant.cobrarEnDevolucion}
+      folioInicial={folio ?? null}
     />
   );
 }

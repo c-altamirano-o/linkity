@@ -7,6 +7,7 @@ import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
 import { PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
 import { ESTADO_CLIENTE_TEXTO, type EstadoReparacion } from "@/lib/reparaciones-data";
 import { avisarWhatsappReparacion, enviarWhatsappReparacionManual } from "@/lib/whatsapp-tenant";
+import { crearNotificacionAlertaTaller } from "@/lib/notificaciones";
 
 /**
  * "Otro" — pieza o servicio personalizado, para cuando no está guardado en
@@ -921,7 +922,13 @@ export async function enviarAlertaTallerAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, assignedToStaffId: true, publicToken: true } });
+    const repair = await db.repair.findUnique({
+      where: { id: repairId },
+      select: {
+        id: true, status: true, assignedToStaffId: true, publicToken: true,
+        folio: true, branchId: true, branch: { select: { name: true } },
+      },
+    });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
     // Un técnico solo puede alertar sobre SU propio folio asignado — mismo
     // criterio de aislamiento que el filtro por miStaffId en TallerClient,
@@ -944,6 +951,22 @@ export async function enviarAlertaTallerAction(params: {
         visibleCliente: paraCliente === true,
       },
     });
+
+    // "Capa 1" del sistema de alertas (2026-10-01, a petición de Carlos: ver
+    // el comentario largo en crearNotificacionAlertaTaller,
+    // lib/notificaciones.ts) — antes de esto, la nota de arriba era TODO lo
+    // que pasaba: nadie se enteraba a menos que abriera justo este folio.
+    // Mejor esfuerzo: si el aviso falla (Realtime caído, push sin VAPID,
+    // etc.) la alerta ya quedó guardada en el Historial de todas formas, no
+    // se le hace fallar al técnico por esto.
+    await crearNotificacionAlertaTaller({
+      tenantId: tenant.id,
+      tenantSlug,
+      branchId: repair.branchId,
+      branchName: repair.branch.name,
+      folio: repair.folio,
+      mensaje,
+    }).catch((err) => console.error("No se pudo crear la notificación de alerta de taller:", err));
 
     revalidatePath(`/${tenantSlug}/aduana`);
     revalidatePath(`/${tenantSlug}/reparaciones`);

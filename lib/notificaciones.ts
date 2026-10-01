@@ -30,6 +30,9 @@ export interface NotificacionUI {
   // Solo en tipo DISPOSITIVO_PENDIENTE — ver el comentario largo junto a
   // Notificacion.solicitudDispositivoId, schema.prisma.
   solicitudDispositivoId: string | null;
+  // A dónde navegar al dar clic (ver el comentario largo junto a
+  // Notificacion.url, schema.prisma) — null = no es clicable.
+  url: string | null;
 }
 
 const LIMITE_NOTIFICACIONES = 30;
@@ -49,6 +52,7 @@ export async function getNotificaciones(tenantId: string): Promise<NotificacionU
     leida: r.leida,
     fecha: r.createdAt.toISOString(),
     solicitudDispositivoId: r.solicitudDispositivoId ?? null,
+    url: r.url ?? null,
   }));
 }
 
@@ -170,4 +174,62 @@ export async function crearNotificacionDispositivo(params: {
     body: mensaje,
     url: `/${tenantSlug}/configuracion?dispositivos=1`,
   }).catch((err) => console.error("No se pudo enviar el push de dispositivo pendiente:", err));
+}
+
+/**
+ * Alerta de taller hacia Aduana/Recepción/Tienda (2026-10-01, "Capa 1" del
+ * sistema de alertas — a petición de Carlos, tras notar que la alerta de un
+ * técnico (enviarAlertaTallerAction, reparaciones-actions.ts) solo quedaba
+ * en el Historial de la reparación sin avisarle a nadie en realidad). Mismo
+ * criterio que crearNotificacionDispositivo (arriba): persistida + broadcast
+ * en vivo + push al teléfono, para que de verdad no dependa de que alguien
+ * esté viendo la pantalla justo en ese momento. A propósito tenant-wide, sin
+ * filtrar por rol (mismo criterio ya usado por CAJA_* / DISPOSITIVO_PENDIENTE
+ * — este sistema de notificaciones no filtra por rol para ningún tipo
+ * todavía; ver el comentario largo en NotificacionTipo.ALERTA_TALLER,
+ * schema.prisma, sobre por qué se decidió así para esta primera fase).
+ * `url` apunta a Aduana (no a Reparaciones/Tienda) porque es el único rol
+ * que puede de verdad ATENDER la alerta — asignar técnico, cambiar estatus,
+ * ajustar costo/piezas cotizadas (ver el comentario largo en
+ * app/(tenant)/[tenant]/aduana/page.tsx).
+ */
+export async function crearNotificacionAlertaTaller(params: {
+  tenantId: string;
+  tenantSlug: string;
+  branchId: string;
+  branchName: string;
+  folio: string;
+  mensaje: string;
+}): Promise<void> {
+  const { tenantId, tenantSlug, branchId, branchName, folio, mensaje } = params;
+  const db = getTenantPrisma(tenantId);
+  const texto = `Alerta de taller — ${folio}: ${mensaje}`;
+  const url = `/${tenantSlug}/aduana?folio=${encodeURIComponent(folio)}`;
+
+  const notificacion = await db.notificacion.create({
+    data: { tenantId, branchId, tipo: NotificacionTipo.ALERTA_TALLER, mensaje: texto, url },
+  });
+
+  try {
+    const supabase = createAdminClient();
+    await supabase.channel(`notificaciones:${tenantId}`).send({
+      type: "broadcast",
+      event: "alerta_taller",
+      payload: {
+        id: notificacion.id,
+        mensaje: texto,
+        branchName,
+        fecha: notificacion.createdAt.toISOString(),
+        url,
+      },
+    });
+  } catch (err) {
+    console.error("No se pudo enviar el broadcast de alerta de taller (el aviso ya quedó guardado):", err);
+  }
+
+  await enviarPushTenant(tenantId, {
+    title: `Alerta de taller — ${folio}`,
+    body: mensaje,
+    url,
+  }).catch((err) => console.error("No se pudo enviar el push de alerta de taller:", err));
 }

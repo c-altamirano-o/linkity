@@ -1243,6 +1243,18 @@ model Notificacion {
   // el pop-up del momento.
   solicitudDispositivoId String?
 
+  // 2026-10-01, a petición de Carlos ("cómo le puedo hacer para que la
+  // página se actualice y muestre alertas en tiempo real... tendría que
+  // estar monitoreando ese equipo en particular para notarlo") — a dónde
+  // navegar al dar clic en este aviso. Genérico (una URL ya armada, no un
+  // FK a Repair/otra tabla) a propósito, para que cualquier tipo de
+  // notificación futuro pueda usar el mismo campo sin pedir una columna
+  // nueva cada vez — ver ALERTA_TALLER abajo, el primer tipo que la usa
+  // (AduanaClient.tsx: `/[tenant]/aduana?folio=...`). Null = sin destino
+  // clicable (comportamiento de siempre para CAJA_*/DISPOSITIVO_PENDIENTE,
+  // que no lo necesitan).
+  url String?
+
   tenant Tenant  @relation(fields: [tenantId], references: [id])
   branch Branch? @relation(fields: [branchId], references: [id])
   solicitudDispositivo SolicitudDispositivo? @relation(fields: [solicitudDispositivoId], references: [id])
@@ -1268,6 +1280,15 @@ enum NotificacionTipo {
   // Aprobar/Rechazar — ver ESTILO_NOTIFICACION y el bloque de acción en
   // TenantShell.tsx.
   DISPOSITIVO_PENDIENTE
+  // 2026-10-01, a petición de Carlos ("Capa 1" del sistema de alertas de
+  // taller — ver el comentario largo en enviarAlertaTallerAction,
+  // app/actions/reparaciones-actions.ts): hasta ahora la alerta de un
+  // técnico hacia Aduana/Recepción/Tienda SOLO se guardaba como nota en el
+  // Historial de la reparación (RepairHistory) — nadie se enteraba a menos
+  // que abriera justo ese folio. Reutiliza la misma campanita/toast/push de
+  // CAJA_*/DISPOSITIVO_PENDIENTE, con `url` (ver Notificacion.url) apuntando
+  // a `/[tenant]/aduana?folio=...` para que un clic lleve directo al folio.
+  ALERTA_TALLER
 }
 
 // 2026-09-23, a petición de Carlos ("que ningún empleado pueda entrar desde

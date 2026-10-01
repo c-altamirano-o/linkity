@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Wrench, Package, Stethoscope, Check, CheckCircle, AlertCircle,
@@ -53,6 +53,15 @@ interface AduanaClientProps {
   // comentario largo en SIGUIENTES_ESTADOS abajo), así que no tiene caso
   // mostrar un botón que solo va a truene con un error.
   cobrarEnDevolucion: boolean;
+  // Folio a preseleccionar al llegar aquí (2026-10-01, "Capa 1" del sistema
+  // de alertas de taller — ver el comentario largo en
+  // crearNotificacionAlertaTaller, lib/notificaciones.ts): la notificación
+  // de una alerta de técnico trae un link a `/aduana?folio=...` para que dar
+  // clic lleve directo al folio en cuestión, en vez de que Aduana tenga que
+  // buscarlo a mano. null = comportamiento de siempre (llegada normal,
+  // selecciona el primero de la lista). Mismo patrón que clienteInicialId en
+  // ReparacionesClient.tsx/POSClient.tsx.
+  folioInicial?: string | null;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -150,7 +159,7 @@ const formatFecha = (iso: string) =>
 const formatFechaHora = (iso: string) =>
   new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true });
 
-export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, negocioRecibo, cobrarEnDevolucion }: AduanaClientProps) {
+export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, negocioRecibo, cobrarEnDevolucion, folioInicial }: AduanaClientProps) {
   const { reparaciones, productos, tecnicos } = data;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -159,6 +168,25 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
   const [busqueda, setBusqueda] = useState("");
   const [soloActivas, setSoloActivas] = useState(true);
   const [seleccionadaId, setSeleccionadaId] = useState<string | null>(reparaciones[0]?.id ?? null);
+
+  // Seed de `folioInicial` (2026-10-01, ver el comentario largo junto a ese
+  // prop arriba) — useRef en vez de depender de folioInicial en el arreglo
+  // de dependencias, mismo patrón que clienteSeedAplicado en
+  // ReparacionesClient.tsx: corre UNA sola vez al montar, nunca se repite si
+  // el usuario luego selecciona otro folio a mano.
+  const folioSeedAplicado = useRef(false);
+  useEffect(() => {
+    if (folioSeedAplicado.current || !folioInicial) return;
+    folioSeedAplicado.current = true;
+    const match = reparaciones.find((r) => r.folio === folioInicial);
+    if (!match) return;
+    setSeleccionadaId(match.id);
+    // Si el folio ya se entregó/canceló, "Solo activas" lo escondería de la
+    // lista aunque sí esté seleccionado — se apaga para que de verdad se
+    // vea, no solo para que quede seleccionado "a ciegas".
+    if (match.estado === "DELIVERED" || match.estado === "CANCELLED") setSoloActivas(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folioInicial]);
 
   const [costoEdit, setCostoEdit] = useState("");
   const [piezaNuevaId, setPiezaNuevaId] = useState("");

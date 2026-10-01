@@ -40,6 +40,14 @@ const ESTILO_NOTIFICACION: Record<TipoNotificacion, { icon: typeof Unlock; bg: s
   // SolicitudDispositivo, schema.prisma. Azul para distinguirlo a simple
   // vista de los avisos de caja (verde/gris/rojo).
   DISPOSITIVO_PENDIENTE: { icon: Smartphone, bg: "bg-blue-50", color: "text-blue-600" },
+  // "Capa 1" del sistema de alertas de taller (2026-10-01, a petición de
+  // Carlos — ver el comentario largo en NotificacionTipo.ALERTA_TALLER,
+  // schema.prisma). Ámbar: necesita atención, pero no es una falla del
+  // negocio como CAJA_NO_ABIERTA/CAJA_NO_CERRADA (rojo) — es información
+  // operativa que alguien debe atender, mismo criterio que
+  // DISPOSITIVO_PENDIENTE (azul) pero con su propio color para distinguirse
+  // a simple vista.
+  ALERTA_TALLER: { icon: Wrench, bg: "bg-amber-50", color: "text-amber-600" },
 };
 
 function esAlertaUrgente(tipo: TipoNotificacion): boolean {
@@ -226,7 +234,7 @@ export default function TenantShell({
   // solos. La campanita es la copia persistente; esto es solo el "aviso
   // ahora mismo".
   const [toasts, setToasts] = useState<
-    { id: string; mensaje: string; tipo: TipoNotificacion; solicitudDispositivoId: string | null }[]
+    { id: string; mensaje: string; tipo: TipoNotificacion; solicitudDispositivoId: string | null; url: string | null }[]
   >([]);
   // Ids de SolicitudDispositivo ya resueltas DESDE ESTA pestaña (2026-09-23)
   // — para ocultar los botones Aprobar/Rechazar apenas se usan, sin esperar
@@ -259,11 +267,11 @@ export default function TenantShell({
     const canal = supabase.channel(`notificaciones:${tenantId}`);
 
     const recibir = (tipo: TipoNotificacion) => (msg: {
-      payload: { id: string; mensaje: string; branchName: string | null; fecha: string; solicitudDispositivoId?: string };
+      payload: { id: string; mensaje: string; branchName: string | null; fecha: string; solicitudDispositivoId?: string; url?: string };
     }) => {
-      const { id, mensaje, branchName, fecha, solicitudDispositivoId } = msg.payload;
+      const { id, mensaje, branchName, fecha, solicitudDispositivoId, url } = msg.payload;
       setNotificaciones((prev) =>
-        [{ id, tipo, mensaje, branchName, leida: false, fecha, solicitudDispositivoId: solicitudDispositivoId ?? null }, ...prev].slice(0, 30)
+        [{ id, tipo, mensaje, branchName, leida: false, fecha, solicitudDispositivoId: solicitudDispositivoId ?? null, url: url ?? null }, ...prev].slice(0, 30)
       );
       setNotifNoLeidas((n) => n + 1);
 
@@ -272,7 +280,7 @@ export default function TenantShell({
       // los informativos de Fase 1 — son más importantes de no perderse de
       // vista (el de dispositivo, además, trae una acción con vencimiento).
       const toastId = `${id}-${Date.now()}`;
-      setToasts((prev) => [...prev, { id: toastId, mensaje, tipo, solicitudDispositivoId: solicitudDispositivoId ?? null }]);
+      setToasts((prev) => [...prev, { id: toastId, mensaje, tipo, solicitudDispositivoId: solicitudDispositivoId ?? null, url: url ?? null }]);
       const duracion = esAlertaUrgente(tipo) || tipo === "DISPOSITIVO_PENDIENTE" ? 15000 : 7000;
       setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), duracion);
     };
@@ -285,6 +293,8 @@ export default function TenantShell({
       .on("broadcast", { event: "caja_no_cerrada" }, recibir("CAJA_NO_CERRADA"))
       // Fase 3 (2026-09-23) — ver dispositivos-actions.ts.
       .on("broadcast", { event: "dispositivo_pendiente" }, recibir("DISPOSITIVO_PENDIENTE"))
+      // "Capa 1" de alertas de taller (2026-10-01) — ver lib/notificaciones.ts.
+      .on("broadcast", { event: "alerta_taller" }, recibir("ALERTA_TALLER"))
       .subscribe();
 
     return () => {
@@ -512,7 +522,17 @@ export default function TenantShell({
                   <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${estilo.bg} ${estilo.color}`}>
                     <Icono className="w-3.5 h-3.5" />
                   </div>
-                  <p className="text-[12.5px] text-foreground leading-snug">{t.mensaje}</p>
+                  {/* Clicable solo si el aviso trae `url` (ver el comentario
+                      largo en Notificacion.url, schema.prisma) — hoy
+                      únicamente ALERTA_TALLER, lleva directo al folio en
+                      Aduana en vez de que alguien tenga que buscarlo a mano. */}
+                  {t.url ? (
+                    <Link href={t.url} className="text-[12.5px] text-foreground leading-snug hover:underline">
+                      {t.mensaje}
+                    </Link>
+                  ) : (
+                    <p className="text-[12.5px] text-foreground leading-snug">{t.mensaje}</p>
+                  )}
                   <button
                     onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
                     className="ml-auto text-muted-foreground hover:text-foreground flex-shrink-0"
@@ -817,19 +837,33 @@ export default function TenantShell({
                         // ej. si el administrador no lo vio a tiempo).
                         const necesitaAccion =
                           n.tipo === "DISPOSITIVO_PENDIENTE" && n.solicitudDispositivoId && !solicitudesResueltas.has(n.solicitudDispositivoId);
+                        // Clicable solo si trae `url` (ver el comentario largo
+                        // en Notificacion.url, schema.prisma) — hoy
+                        // únicamente ALERTA_TALLER. Cierra la campanita al
+                        // dar clic, igual que cualquier link de navegación la
+                        // cerraría de todos modos al cambiar de página.
+                        const contenido = (
+                          <div className="flex items-start gap-2">
+                            <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${estilo.bg} ${estilo.color}`}>
+                              <Icono className="w-3 h-3" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[11.5px] text-foreground leading-snug">{n.mensaje}</p>
+                              <p className="text-[10.5px] text-muted-foreground mt-0.5">
+                                {new Date(n.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}
+                              </p>
+                            </div>
+                          </div>
+                        );
                         return (
                           <div key={n.id} className="px-3 py-2.5 flex flex-col gap-2 hover:bg-muted/60">
-                            <div className="flex items-start gap-2">
-                              <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${estilo.bg} ${estilo.color}`}>
-                                <Icono className="w-3 h-3" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-[11.5px] text-foreground leading-snug">{n.mensaje}</p>
-                                <p className="text-[10.5px] text-muted-foreground mt-0.5">
-                                  {new Date(n.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}
-                                </p>
-                              </div>
-                            </div>
+                            {n.url ? (
+                              <Link href={n.url} onClick={() => setMenuNotifAbierto(false)}>
+                                {contenido}
+                              </Link>
+                            ) : (
+                              contenido
+                            )}
                             {necesitaAccion && (
                               <div className="flex items-center gap-2 pl-7">
                                 <button
