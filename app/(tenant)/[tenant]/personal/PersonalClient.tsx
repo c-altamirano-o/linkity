@@ -507,8 +507,9 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   roles disponibles y qué módulos ve cada uno.
                 </p>
                 <p>
-                  <span className="font-semibold text-foreground">Asistente de puestos:</span> te sugiere
-                  puestos comunes según tu giro, solo para llenar más rápido el campo Puesto.
+                  <span className="font-semibold text-foreground">Asistente de puestos:</span> configura de
+                  un jalón los Roles reales (con sus permisos) según tu giro — sí cambia lo que puede ver o
+                  hacer cada quien. No solo llena el campo Puesto.
                 </p>
               </div>
             )}
@@ -569,6 +570,20 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               <Users className="w-8 h-8 text-muted-foreground/40 mb-2" />
               <p className="text-sm font-medium text-foreground mb-1">Sin empleados registrados</p>
               <button onClick={abrirNuevoEmpleado} className="text-xs text-primary-text mt-1">+ Registrar el primero</button>
+              {/* 2026-10-01, a petición de Carlos: empujón único para un
+                  tenant recién creado (todavía sin ningún empleado) — sugiere
+                  el Asistente antes de que use el alta manual, para que los
+                  Roles queden bien configurados desde el principio en vez de
+                  descubrir el Asistente después. Solo aplica cuando
+                  empleados.length === 0 (negocio nuevo), no cuando el estado
+                  viene de una búsqueda sin resultados — ese caso ya tiene su
+                  propio mensaje "Sin resultados" en la lista. */}
+              {empleados.length === 0 && (
+                <button onClick={() => setModalAsistente(true)}
+                  className="flex items-center gap-1.5 mt-3 px-3 py-1.5 border border-primary/40 bg-primary/5 hover:bg-primary/10 text-xs font-medium rounded-lg text-primary-text">
+                  <Sparkles className="w-3.5 h-3.5" /> Antes de dar de alta a alguien, prueba el Asistente de puestos
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -759,6 +774,12 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   <datalist id="puestos-sugeridos-datalist">
                     {puestosSugeridos.map((p) => <option key={p} value={p} />)}
                   </datalist>
+                  {/* 2026-10-01, a petición de Carlos (confusión reportada por
+                      usuarios piloto): este campo se parece mucho al de Rol
+                      pero no tiene ningún efecto en los permisos — se deja
+                      explícito aquí, visible siempre, no solo en la guía
+                      colapsada de arriba. */}
+                  <p className="text-[11.5px] text-muted-foreground mt-1">Solo una etiqueta — no cambia su acceso.</p>
                 </div>
               </div>
 
@@ -808,6 +829,12 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ROL — DETERMINA SU ACCESO AL SISTEMA</label>
                   <button type="button" onClick={() => setModalRoles(true)} className="text-[11.5px] text-primary-text hover:underline">Roles y permisos</button>
                 </div>
+                {/* 2026-10-01, a petición de Carlos: esta frase va siempre
+                    visible (antes solo aparecía la descripción del rol, y
+                    solo después de elegir uno) para que quede claro desde
+                    antes de abrir el selector que este campo sí decide qué
+                    puede ver y hacer el empleado. */}
+                <p className="text-[11.5px] text-muted-foreground mt-1">Define qué módulos puede ver y usar en el sistema.</p>
                 <select value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                   <option value="">Selecciona un rol...</option>

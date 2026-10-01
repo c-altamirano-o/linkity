@@ -125,10 +125,35 @@ export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
 // seguir siendo explícito sobre qué hace cada uno (quien arma roles necesita
 // la descripción completa, no solo el nombre bonito), así que el texto de
 // aquí queda entre paréntesis junto al nombre nuevo.
+// 2026-10-01, a petición de Carlos (fricción reportada por usuarios piloto
+// al armar roles "a ciegas", sin saber qué hace cada módulo): explicación en
+// una línea, en español llano, para los módulos que antes se mostraban en
+// RolesManager.tsx/AsistentePersonal.tsx solo con su nombre corto de
+// MODULE_CATALOG. "taller" y "aduana" ya tenían su propio texto completo
+// arriba (con nombre + explicación juntos) y no se tocan. Mapa parcial a
+// propósito: un módulo sin entrada aquí simplemente no agrega nada entre
+// paréntesis (ver el fallback abajo).
+const EXPLICACION_MODULO: Partial<Record<ModuloKey, string>> = {
+  pos: "cobrar ventas de productos y servicios",
+  reparaciones: "recibir equipos con folio y cobrar/entregar cuando estén listos",
+  citas: "agendar y ver la agenda de clientes/pacientes",
+  "expediente-clinico": "historial y notas clínicas del paciente",
+  clientes: "ficha y datos de contacto de cada cliente",
+  catalogo: "ver productos, servicios y precios",
+  inventario: "existencias y stock de productos",
+  compras: "registrar entradas de mercancía de proveedores",
+  caja: "abrir/cerrar turno y ver el corte de efectivo",
+  sucursales: "alta y datos de las sucursales del negocio",
+  reportes: "ventas, cortes y métricas del negocio",
+  soporte: "contactar al equipo de soporte",
+};
+
 export function nombreModulo(m: ModuloKey): string {
   if (m === "taller") return "Mis Reparaciones (el técnico, solo ve lo asignado, sin editar)";
   if (m === "aduana") return "Taller (Recepción/Aduana — asigna técnico, estatus y costo)";
-  return MODULE_CATALOG[m]?.name ?? m;
+  const nombre = MODULE_CATALOG[m]?.name ?? m;
+  const explicacion = EXPLICACION_MODULO[m];
+  return explicacion ? `${nombre} (${explicacion})` : nombre;
 }
 
 // dashboard siempre incluido — es la pantalla de aterrizaje, no tiene

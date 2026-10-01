@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { X, Plus, Trash2, Pencil, Check, Shield } from "lucide-react";
+import { X, Plus, Trash2, Pencil, Check, Shield, AlertTriangle } from "lucide-react";
 import { MODULOS, MODULOS_BASE_EXCLUIDOS, nombreModulo, type ModuloKey, type RolTenantUI } from "@/lib/roles";
 import {
   listarRolesTenantAction, crearRolAction, actualizarRolAction, eliminarRolAction,
 } from "@/app/actions/roles-tenant-actions";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
+import { detectarAdvertencias, type AdvertenciaAsistente } from "@/lib/asistente-roles";
 
 /**
  * "Roles y permisos" (2026-09-17) — editor de los roles/puestos de este
@@ -160,6 +161,28 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
     });
   };
 
+  // 2026-10-01, a petición de Carlos (fricción de usuarios piloto al armar
+  // roles) — reutiliza la misma lógica de detección del "Asistente de
+  // puestos" (lib/asistente-roles.ts) pero aplicada en vivo, mientras se
+  // edita o crea un rol desde aquí, en vez de dejarla encerrada solo en el
+  // wizard. Compara el rol tentativo (el que se está editando/creando,
+  // todavía sin guardar) contra el resto de los roles YA guardados de este
+  // negocio, y se queda solo con las advertencias que mencionan al
+  // tentativo — las que son entre dos roles ya existentes no son nuevas
+  // noticias para quien está parado aquí.
+  const advertenciasParaRolTentativo = (
+    idExcluir: string | null,
+    nombreTentativo: string,
+    modulosTentativos: Set<ModuloKey>
+  ): AdvertenciaAsistente[] => {
+    const nombre = nombreTentativo.trim() || "(sin nombre)";
+    const otros = roles
+      .filter((r) => r.id !== idExcluir)
+      .map((r) => ({ name: r.name, modulos: r.modulosPermitidos }));
+    const todos = [...otros, { name: nombre, modulos: Array.from(modulosTentativos) }];
+    return detectarAdvertencias(todos).filter((a) => a.puestos.includes(nombre));
+  };
+
   const eliminarRol = (rol: RolTenantUI) => {
     if (!confirm(`¿Eliminar el rol "${rol.name}"? Esta acción no se puede deshacer.`)) return;
     setError(null);
@@ -219,6 +242,12 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                       Supervisor de sucursales: ve Reportes/Inventario/Caja/Sucursales (y el Dashboard) de TODAS las sucursales, no solo la suya
                     </label>
                   )}
+                  {advertenciasParaRolTentativo(rol.id, nombreEdit, modulosEdit).map((adv, i) => (
+                    <div key={i} className="flex items-start gap-2 text-[11.5px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                      <span>{adv.mensaje}</span>
+                    </div>
+                  ))}
                   <div className="flex justify-end gap-2">
                     <button onClick={() => setEditandoId(null)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
                     <button disabled={pending} onClick={guardarEdicion}
@@ -295,6 +324,12 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                   Supervisor de sucursales: ve Reportes/Inventario/Caja/Sucursales (y el Dashboard) de TODAS las sucursales, no solo la suya
                 </label>
               )}
+              {advertenciasParaRolTentativo(null, nombreNuevo, modulosNuevo).map((adv, i) => (
+                <div key={i} className="flex items-start gap-2 text-[11.5px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                  <span>{adv.mensaje}</span>
+                </div>
+              ))}
               <div className="flex justify-end gap-2">
                 <button onClick={() => setCreando(false)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
                 <button disabled={pending} onClick={crearRol}
