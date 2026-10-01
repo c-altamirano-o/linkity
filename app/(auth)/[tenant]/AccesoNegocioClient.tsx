@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Image from "next/image";
 import { Building2, Delete, ArrowLeft, Lock, Mail, Eye, EyeOff, ShieldCheck, XCircle, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getTenantAccesoBySupabaseId } from "../login/actions";
@@ -22,6 +23,17 @@ import { consultarSolicitudDispositivoAction } from "@/app/actions/dispositivos-
  * no existe: la protección de este punto de entrada son las dos fichas en
  * sí, más el PIN de 6 dígitos (antes 4, subido el mismo día a petición de
  * Carlos — ver lib/staff-auth.ts, pinValido).
+ *
+ * 2026-10-01, rediseño a petición de Carlos (validado primero con un mockup
+ * HTML aparte antes de tocar este archivo): ya no recibe el tema del
+ * negocio (ver el comentario largo en page.tsx) — los colores son siempre
+ * los de marca de Linkity. Lo único que identifica al negocio aquí es su
+ * logo (logoUrl) si ya subió uno; si no, un ícono con su inicial hace de
+ * respaldo en el MISMO lugar — nunca los dos a la vez. El nombre del
+ * negocio ahora SIEMPRE se muestra como texto debajo de ese ícono (logo o
+ * inicial), a diferencia del sidebar del dashboard (TenantShell.tsx) donde
+ * logo y nombre son alternativos — aquí Carlos pidió explícitamente verlos
+ * juntos, uno debajo del otro, ambos centrados.
  */
 
 const PIN_LARGO = 6;
@@ -43,15 +55,37 @@ function iniciales(nombre: string): string {
   return ((partes[0]?.[0] ?? "") + (partes[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
+// Fondo degradado muy sutil, a petición de Carlos al validar el mockup
+// ("que no se sienta flotando sobre blanco liso") — dos radiales del morado
+// de marca (var(--primary), SIEMPRE el de Linkity aquí, ver el comentario
+// largo arriba) a muy baja opacidad, nunca el tema del negocio.
+const FONDO_DEGRADADO: React.CSSProperties = {
+  backgroundImage:
+    "radial-gradient(circle at 15% 8%, color-mix(in oklch, var(--primary) 14%, transparent) 0%, transparent 45%), " +
+    "radial-gradient(circle at 85% 95%, color-mix(in oklch, var(--primary) 10%, transparent) 0%, transparent 45%)",
+};
+
+// Inicial para el ícono de respaldo cuando el negocio no tiene logo — a
+// propósito solo la PRIMERA letra (no "iniciales" de 2 letras como en el
+// selector de empleado de abajo): en un ícono cuadrado de 52px una sola
+// letra grande se lee mejor que dos chicas, más parecido a un ícono de app.
+function inicialNegocio(nombre: string): string {
+  return nombre.trim().charAt(0).toUpperCase() || "?";
+}
+
 export default function AccesoNegocioClient({
   tenantSlug,
   businessName,
+  logoUrl,
   branches,
   empleados,
   sucursalInicial,
 }: {
   tenantSlug: string;
   businessName: string;
+  // Tenant.logo — null mientras el negocio no haya subido uno (mismo campo
+  // que ya usa TenantShell.tsx/recibo-imprimible.ts).
+  logoUrl: string | null;
   branches: BranchOption[];
   empleados: EmpleadoOption[];
   // ?sucursal=<branchId> de la URL (link fijo de una sucursal específica,
@@ -229,7 +263,7 @@ export default function AccesoNegocioClient({
   // ── Render: esperando autorización del administrador ─────────────────
   if (espera) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6" style={FONDO_DEGRADADO}>
         <div className="w-full max-w-sm text-center">
           {estadoEspera === "pendiente" && (
             <>
@@ -270,9 +304,23 @@ export default function AccesoNegocioClient({
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6" style={FONDO_DEGRADADO}>
+      <div className="w-full max-w-sm bg-card border border-border rounded-[22px] shadow-lg shadow-black/5 p-7">
         <div className="text-center mb-6">
+          <div className="mb-3 flex items-center justify-center min-h-[52px]">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- logo subido por el negocio, dominio/tamaño no se conocen de antemano
+              <img
+                src={logoUrl}
+                alt={`Logo de ${businessName}`}
+                className="max-h-[52px] max-w-[220px] w-auto object-contain"
+              />
+            ) : (
+              <div className="w-[52px] h-[52px] rounded-2xl bg-primary flex items-center justify-center text-primary-foreground text-xl font-bold">
+                {inicialNegocio(businessName)}
+              </div>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground tracking-widest uppercase mb-1">{businessName}</p>
           <h1 className="text-xl font-semibold text-foreground">Iniciar sesión</h1>
         </div>
@@ -459,6 +507,18 @@ export default function AccesoNegocioClient({
             </button>
           </div>
         )}
+
+        {/* Marca de Linkity, discreta — mismo criterio que "by Linkity
+            Soluciones" en el pie del sidebar (TenantShell.tsx), pero AQUÍ sí
+            se muestra siempre (el sidebar la esconde si el negocio tiene
+            logo propio): esta pantalla es la puerta del software antes de
+            entrar a un negocio en particular, así que la marca de la
+            plataforma nunca debería desaparecer, tenga o no logo el
+            negocio. */}
+        <p className="mt-8 flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/60">
+          <Image src="/images/favicon.svg" alt="" width={13} height={13} className="opacity-70" />
+          Protegido por Linkity Soluciones
+        </p>
       </div>
     </div>
   );

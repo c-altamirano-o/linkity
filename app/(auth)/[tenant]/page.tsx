@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { resolverPresetTenant, TENANT_THEME_ROOT_ID } from "@/lib/theme-presets";
 import AccesoNegocioClient from "./AccesoNegocioClient";
 
 /**
@@ -29,6 +28,19 @@ import AccesoNegocioClient from "./AccesoNegocioClient";
  * autenticadas del negocio, /[tenant]/dashboard etc.) porque ese layout no
  * tiene su propio page.tsx en la raíz — sus hijos empiezan en el
  * siguiente segmento.
+ *
+ * 2026-10-01, a petición de Carlos ("remodela la ventana de login... que use
+ * los colores estándar de Linkity, pero agrega el logo del negocio si lo
+ * tiene"): esta pantalla YA NO aplica el tema/colores que el negocio eligió
+ * en Configuración (antes se envolvía todo en #${TENANT_THEME_ROOT_ID} con
+ * resolverPresetTenant, igual que /[tenant]/dashboard y el resto de la app
+ * autenticada) — a propósito: la puerta de entrada es "software de Linkity",
+ * no el negocio ya personalizado de adentro, así que se queda con el morado
+ * de marca por defecto (--primary en app/globals.css, el mismo de la landing
+ * y del ícono de la app) sin importar qué tema tenga ese negocio. Lo único
+ * que SÍ se trae de la identidad del negocio es su logo (Tenant.logo) — si
+ * lo subió, se muestra arriba; si no, un ícono con su inicial hace de
+ * respaldo (ver AccesoNegocioClient).
  */
 export default async function AccesoNegocioPage({
   params,
@@ -50,10 +62,7 @@ export default async function AccesoNegocioPage({
     select: {
       id: true,
       name: true,
-      themePreset: true,
-      themeIntensity: true,
-      themeIntensityFondo: true,
-      themeCustomColors: true,
+      logo: true,
       branches: {
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
@@ -69,19 +78,16 @@ export default async function AccesoNegocioPage({
 
   if (!tenant) notFound();
 
-  const activePreset = resolverPresetTenant(tenant.themePreset, tenant.themeIntensity, tenant.themeIntensityFondo, tenant.themeCustomColors);
-
   return (
-    <div id={TENANT_THEME_ROOT_ID} style={activePreset as React.CSSProperties}>
-      <AccesoNegocioClient
-        tenantSlug={tenantSlug}
-        businessName={tenant.name}
-        branches={tenant.branches}
-        empleados={tenant.staff}
-        sucursalInicial={
-          sucursalInicial && tenant.branches.some((b) => b.id === sucursalInicial) ? sucursalInicial : null
-        }
-      />
-    </div>
+    <AccesoNegocioClient
+      tenantSlug={tenantSlug}
+      businessName={tenant.name}
+      logoUrl={tenant.logo}
+      branches={tenant.branches}
+      empleados={tenant.staff}
+      sucursalInicial={
+        sucursalInicial && tenant.branches.some((b) => b.id === sucursalInicial) ? sucursalInicial : null
+      }
+    />
   );
 }
