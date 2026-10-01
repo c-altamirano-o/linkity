@@ -79,18 +79,30 @@ type CartItem = {
 };
 
 const SIN_CATEGORIA_ID = "__sin_categoria__";
+// "Recientes" (2026-10-01, ver el comentario largo en
+// PosData.recientementeUsados, lib/pos-data.ts) — categoría sintética igual
+// que SIN_CATEGORIA_ID, pero esta sí puede ser el foco inicial de la página
+// (ver el useState de categoriaActiva más abajo).
+const RECIENTES_ID = "__recientes__";
 
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
 export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, negocio, repairParaCobro, clienteInicialId, mostrarAccesoReparaciones = true, discounts }: POSClientProps) {
-  const { categorias, productos, clientes, cajaAbiertaPorSucursal } = data;
+  const { categorias, productos, clientes, cajaAbiertaPorSucursal, recientementeUsados } = data;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const [branchId, setBranchId] = useState<string | null>(branchInicial);
   const [busqueda, setBusqueda] = useState("");
-  const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null);
+  // Arranca en "Recientes" en vez de "Todos" (2026-10-01, a petición de
+  // Carlos: "que no aparezcan Todos los articulos y saturen la vista del
+  // usuario") — solo cuando el negocio ya tiene ventas; si es un tenant
+  // nuevo sin historial, no hay nada que mostrar en "Recientes" así que cae
+  // de vuelta en "Todos" (null) como antes.
+  const [categoriaActiva, setCategoriaActiva] = useState<string | null>(
+    recientementeUsados.length > 0 ? RECIENTES_ID : null
+  );
   const [carrito, setCarrito] = useState<CartItem[]>([]);
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("efectivo");
   const [carritoAbierto, setCarritoAbierto] = useState(false);
@@ -216,9 +228,14 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     });
   }, [isWholesaler, productos]);
 
-  /* ── Categorías (con "Todos" y "Sin categoría" sintéticas) ── */
+  /* ── Categorías (con "Recientes", "Todos" y "Sin categoría" sintéticas) ── */
   const hayNoCategorizados = productos.some((p) => p.categoryId === null);
   const categoriasOpciones = [
+    // "Recientes" va PRIMERO (antes que "Todos") — es la burbuja que arranca
+    // seleccionada por defecto, ver el useState de categoriaActiva arriba.
+    // Oculta si el negocio todavía no tiene ventas (recientementeUsados
+    // vacío) en vez de mostrarse vacía sin razón aparente.
+    ...(recientementeUsados.length > 0 ? [{ id: RECIENTES_ID as string | null, name: "Recientes" }] : []),
     { id: null as string | null, name: "Todos" },
     ...categorias.map((c) => ({ id: c.id as string | null, name: c.name })),
     ...(hayNoCategorizados ? [{ id: SIN_CATEGORIA_ID as string | null, name: "Sin categoría" }] : []),
@@ -243,6 +260,8 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         ? true
         : categoriaActiva === SIN_CATEGORIA_ID
         ? p.categoryId === null
+        : categoriaActiva === RECIENTES_ID
+        ? recientementeUsados.includes(p.id)
         : p.categoryId === categoriaActiva;
     const busquedaNorm = busqueda.toLowerCase();
     const matchSearch =
@@ -251,6 +270,16 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       (!!p.barcode && p.barcode.toLowerCase().includes(busquedaNorm));
     return matchCat && matchSearch;
   });
+  // En "Recientes" el orden importa (el más vendido hace un momento primero)
+  // — `productos` ya viene ordenado alfabéticamente del servidor (ver
+  // pos-data.ts), así que aquí se reordena aparte según la posición de cada
+  // producto en recientementeUsados (que sí viene en orden de más reciente a
+  // menos reciente).
+  if (categoriaActiva === RECIENTES_ID) {
+    productosFiltrados.sort(
+      (a, b) => recientementeUsados.indexOf(a.id) - recientementeUsados.indexOf(b.id)
+    );
+  }
 
   // 1. Calculamos el total original sin descuentos
   const totalOriginal = carrito.reduce((s, i) => s + i.precio * i.cantidad, 0);
@@ -1112,25 +1141,18 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           </button>
         </div>
 
-        {/* Píldoras de categoría — mismo patrón "activo = relleno con
-            --primary" que el resto de la app (2026-09-25; antes iban
-            invertidas para resaltar sobre la ventana a color sólido que ya
-            no existe, ver el comentario de arriba). */}
-        <div className="flex gap-2 px-5 py-1.5 overflow-x-auto">
-          {categoriasOpciones.map((cat) => (
-            <button key={cat.id ?? "todos"} onClick={() => setCategoriaActiva(cat.id)}
-              className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
-                categoriaActiva === cat.id
-                  ? "bg-primary text-primary-foreground shadow-[0_2px_6px_rgba(0,0,0,0.14)]"
-                  : "bg-card border border-border text-muted-foreground hover:border-primary/40"
-              }`}>
-              {cat.name}
-            </button>
-          ))}
+        {/* Fila de Reparaciones + píldoras de categoría. Reparaciones vive
+            FUERA del div con overflow-x-auto (2026-10-01, a petición de
+            Carlos: "fijarla al lado izquierdo", confirmado como "fija de
+            verdad, nunca se mueve con el scroll") — así queda siempre
+            visible sin importar cuánto se recorran las píldoras de abajo,
+            en vez de solo ser la primera en orden (que seguiría scrolleando
+            con las demás). */}
+        <div className="flex items-center gap-2 px-5 py-1.5">
           {/* Acceso directo a Reparaciones (2026-09-30, a petición de
               Carlos: "agregar un acceso a Reparaciones junto a las
               burbujas") — a propósito con un estilo distinto (borde
-              punteado, ícono) al de las píldoras de arriba: esto NO filtra
+              punteado, ícono) al de las píldoras de abajo: esto NO filtra
               el catálogo, navega a otro módulo, así que no debe verse como
               una opción más de categoría. Oculto si el negocio desactivó
               el módulo (rubros sin taller, ver modulos-rubro.ts). */}
@@ -1141,6 +1163,25 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               {label(labels, "module.repair.name")}
             </Link>
           )}
+          {/* Píldoras de categoría — mismo patrón "activo = relleno con
+              --primary" que el resto de la app (2026-09-25; antes iban
+              invertidas para resaltar sobre la ventana a color sólido que ya
+              no existe, ver el comentario de arriba). Incluye "Recientes"
+              (sintética, ver categoriasOpciones arriba) igual que cualquier
+              otra píldora — si el scroll se la lleva, Reparaciones de todas
+              formas se queda fija a la izquierda. */}
+          <div className="flex gap-2 overflow-x-auto flex-1 min-w-0">
+            {categoriasOpciones.map((cat) => (
+              <button key={cat.id ?? "todos"} onClick={() => setCategoriaActiva(cat.id)}
+                className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors flex-shrink-0 ${
+                  categoriaActiva === cat.id
+                    ? "bg-primary text-primary-foreground shadow-[0_2px_6px_rgba(0,0,0,0.14)]"
+                    : "bg-card border border-border text-muted-foreground hover:border-primary/40"
+                }`}>
+                {cat.name}
+              </button>
+            ))}
+          </div>
         </div>
 
         {productosFiltrados.length === 0 ? (
@@ -1148,7 +1189,11 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             <Search className="w-9 h-9 text-muted-foreground/40 mb-2" />
             <p className="text-base font-semibold text-foreground mb-1">Sin resultados</p>
             <p className="text-sm text-muted-foreground">
-              {productos.length === 0 ? "Aún no hay productos en el catálogo." : "Prueba con otra búsqueda o categoría."}
+              {productos.length === 0
+                ? "Aún no hay productos en el catálogo."
+                : categoriaActiva === RECIENTES_ID
+                ? "Aún no hay ventas registradas."
+                : "Prueba con otra búsqueda o categoría."}
             </p>
           </div>
         ) : (

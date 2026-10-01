@@ -1,7 +1,6 @@
-// ruta: C:\linkity\lib\pos-data.ts
 import "server-only";
 
-import { getTenantPrisma } from "@/lib/prisma";
+import { prisma, getTenantPrisma } from "@/lib/prisma";
 import type { Branch } from "@prisma/client";
 import { CashSessionStatus } from "@prisma/client";
 
@@ -35,7 +34,13 @@ export interface ProductoPOS {
   type: TipoPOS;
   isService: boolean;
   price: number;
-  wholesalePrice: number | null; // <-- ¡NUEVO CAMPO!
+  // Precio de mayoreo (Product.wholesalePrice, 2026-09-30, a petición de
+  // Carlos) — null si el producto no tiene uno definido. POSClient.tsx lo
+  // usa en vez de `price` cuando el cliente seleccionado en el carrito
+  // tiene Customer.isWholesaler=true (ver ClientePOS.isWholesaler abajo);
+  // crearVentaAction (pos-actions.ts) vuelve a decidir esto mismo en el
+  // servidor, nunca confía en el precio que mande el cliente.
+  wholesalePrice: number | null;
   taxRate: number;
   // SKU/código de barras (Product.sku/barcode) — 2026-09-22, pendiente
   // registrado: el botón "Escanear" de POS no hacía nada todavía. Se usan
@@ -54,7 +59,9 @@ export interface ClientePOS {
   id: string;
   name: string;
   phone: string | null;
-  isWholesaler: boolean; // <-- ¡NUEVO CAMPO!
+  // 2026-09-30, a petición de Carlos — ver el comentario largo en
+  // ProductoPOS.wholesalePrice.
+  isWholesaler: boolean;
 }
 
 export interface PosData {
@@ -70,6 +77,26 @@ export interface PosData {
   // de una vez sin depender de un viaje aparte al servidor — la validación
   // real (la que de verdad importa) vive en crearVentaAction.
   cajaAbiertaPorSucursal: Record<string, boolean>;
+  // "Usado Recientemente" (2026-10-01, a petición de Carlos: las burbujas de
+  // categoría arrancaban en "Todos", que junta TODO el catálogo de una vez y
+  // satura la vista — sobre todo en negocios con muchos artículos). Hasta 5
+  // productId de los SaleItem más recientes de TODO el negocio (cualquier
+  // sucursal, cualquier cajero), sin repetir producto, en orden del más
+  // reciente al menos reciente. POSClient.tsx la usa como burbuja/categoría
+  // sintética que es el foco inicial del POS en vez de "Todos" (si el
+  // negocio ya tiene ventas) — "Todos" sigue existiendo como una opción más,
+  // nunca se quita.
+  //
+  // Se consulta con el `prisma` base (no getTenantPrisma) porque SaleItem no
+  // tiene tenantId propio (igual que RepairItem/DiscountProduct, ver el
+  // comentario en lib/prisma.ts) — el tenant se filtra a mano vía la
+  // relación `sale.tenantId`. El "distinct por producto, conservando el más
+  // reciente" se hace aquí en JS en vez de `distinct` de Prisma: combinar
+  // `distinct` con `orderBy` sobre un campo de una relación (sale.createdAt)
+  // es frágil entre versiones de Prisma/motor — así es explícito y siempre
+  // correcto, al costo de traer más renglones de los que al final se usan
+  // (barato: son enteros, nada de joins pesados).
+  recientementeUsados: string[];
 }
 
 const TYPE_FALLBACK_EMOJI: Record<TipoPOS, string> = {
@@ -88,7 +115,7 @@ export async function getPosData(
 
   const activeBranchIds = branches.filter((b) => b.isActive).map((b) => b.id);
 
-  const [categoriesRaw, productsRaw, customersRaw, sesionesAbiertas] = await Promise.all([
+  const [categoriesRaw, productsRaw, customersRaw, sesionesAbiertas, saleItemsRecientes] = await Promise.all([
     db.category.findMany({ orderBy: { name: "asc" } }),
     db.product.findMany({
       where: { isActive: true },
@@ -102,6 +129,20 @@ export async function getPosData(
     db.cashSession.findMany({
       where: { branchId: { in: activeBranchIds }, status: CashSessionStatus.OPEN },
       select: { branchId: true },
+    }),
+    // Ver el comentario largo en PosData.recientementeUsados — se trae un
+    // lote amplio (50) de los SaleItem de producto/refacción/servicio más
+    // recientes de TODO el tenant (nunca de reparación: repairId sería el
+    // otro caso de SaleItem, ver el comentario en el schema) y de ahí se
+    // dedupea a mano abajo, quedándonos solo con los primeros 5 productos
+    // distintos. 50 es suficiente margen para que, aun en un negocio que
+    // vende pocos productos distintos muy seguido, de verdad lleguemos a 5
+    // distintos sin tener que traer el historial completo.
+    prisma.saleItem.findMany({
+      where: { productId: { not: null }, sale: { tenantId, status: "COMPLETED" } },
+      orderBy: { sale: { createdAt: "desc" } },
+      select: { productId: true },
+      take: 50,
     }),
   ]);
 
@@ -147,5 +188,15 @@ export async function getPosData(
   for (const id of activeBranchIds) cajaAbiertaPorSucursal[id] = false;
   for (const s of sesionesAbiertas) cajaAbiertaPorSucursal[s.branchId] = true;
 
-  return { categorias, productos, clientes, cajaAbiertaPorSucursal };
+  // Dedupe a mano conservando el orden (el más reciente primero) — ver el
+  // comentario largo en PosData.recientementeUsados.
+  const recientementeUsados: string[] = [];
+  for (const item of saleItemsRecientes) {
+    if (item.productId && !recientementeUsados.includes(item.productId)) {
+      recientementeUsados.push(item.productId);
+      if (recientementeUsados.length === 5) break;
+    }
+  }
+
+  return { categorias, productos, clientes, cajaAbiertaPorSucursal, recientementeUsados };
 }
