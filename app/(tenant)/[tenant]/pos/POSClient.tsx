@@ -14,7 +14,7 @@ import { label, type LabelDictionary } from "@/lib/labels";
 import { crearVentaAction, type MetodoPago } from "@/app/actions/pos-actions";
 import { ProductoIcono } from "@/lib/catalogo-iconos";
 import { CANTIDAD_CHIPS_CATEGORIA } from "@/lib/theme-presets";
-import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData } from "@/lib/recibo-imprimible";
+import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData, type QrDestinoTicket } from "@/lib/recibo-imprimible";
 import EscanearModal from "./EscanearModal";
 
 interface BranchOption {
@@ -52,6 +52,16 @@ interface POSClientProps {
   mostrarAccesoReparaciones?: boolean;
   // Descuentos activos traídos desde el servidor
   discounts: any[];
+  // QR del ticket de VENTA (2026-10-01, a petición de Carlos — ver el
+  // comentario largo en Tenant.reciboMostrarQR/reciboQrDestino,
+  // schema.prisma). SOLO aplica a la venta normal de artículo/servicio: el
+  // cobro de una reparación (repLinea abajo) sigue ignorando estos 4 props
+  // por completo y apuntando siempre a /rep/[publicToken] — ver el cálculo
+  // de qrUrlTicket/qrEtiquetaTicket más abajo.
+  mostrarQRVenta: boolean;
+  qrDestinoVenta: QrDestinoTicket;
+  qrUrlVenta: string | null;
+  qrEtiquetaVenta: string | null;
 }
 type CartItem = {
   productId: string;
@@ -88,7 +98,7 @@ const RECIENTES_ID = "__recientes__";
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
-export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, negocio, repairParaCobro, clienteInicialId, mostrarAccesoReparaciones = true, discounts }: POSClientProps) {
+export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, negocio, repairParaCobro, clienteInicialId, mostrarAccesoReparaciones = true, discounts, mostrarQRVenta, qrDestinoVenta, qrUrlVenta, qrEtiquetaVenta }: POSClientProps) {
   const { categorias, productos, clientes, cajaAbiertaPorSucursal, recientementeUsados } = data;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -540,14 +550,39 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     const repLinea = carrito.find((i) => i.repairId);
     const tipoDocumentoTicket = !repLinea ? "Venta" : repLinea.esDevolucion ? "Reparación — Devolución" : "Reparación — Listo";
     // QR del ticket (2026-09-26, ver el comentario largo en
-    // lib/recibo-imprimible.ts): si esta venta cobra una reparación, apunta a
-    // su página pública de seguimiento de siempre (/rep/[token]); si es una
-    // venta normal de artículo/servicio, a la nueva página pública de
-    // catálogo + sucursales (/pub/[tenant]).
-    const qrUrlTicket = repLinea?.repairPublicToken
-      ? `${window.location.origin}/rep/${repLinea.repairPublicToken}`
-      : `${window.location.origin}/pub/${tenantSlug}`;
-    const qrEtiquetaTicket = repLinea?.repairPublicToken ? "Sigue tu reparación" : "Catálogo y sucursales";
+    // lib/recibo-imprimible.ts; 2026-10-01, ver el comentario largo en
+    // Tenant.reciboMostrarQR/reciboQrDestino, schema.prisma): si esta venta
+    // cobra una reparación, el QR se queda FIJO apuntando a su página
+    // pública de seguimiento de siempre (/rep/[token]) — Carlos confirmó que
+    // ese caso no debe ser apagable, tiene un propósito funcional claro. Solo
+    // la venta normal de artículo/servicio (sin repLinea) respeta lo que el
+    // negocio eligió en Configuración → Personalizar ticket.
+    let qrUrlTicket: string | null;
+    let qrEtiquetaTicket: string | undefined;
+    if (repLinea?.repairPublicToken) {
+      qrUrlTicket = `${window.location.origin}/rep/${repLinea.repairPublicToken}`;
+      qrEtiquetaTicket = "Sigue tu reparación";
+    } else if (!mostrarQRVenta) {
+      qrUrlTicket = null;
+      qrEtiquetaTicket = undefined;
+    } else if (qrDestinoVenta === "CATALOGO") {
+      qrUrlTicket = `${window.location.origin}/pub/${tenantSlug}`;
+      qrEtiquetaTicket = "Catálogo y sucursales";
+    } else if (qrUrlVenta) {
+      // SITIO_WEB/PROMOCION/UBICACION/PERSONALIZADO — los 4 necesitan
+      // Tenant.reciboQrUrl (validado al guardar en Configuración, ver
+      // updateDatosTicket en app/actions/tenant.ts); si por lo que sea
+      // todavía no está capturada, se cae a "sin QR" en vez de uno roto.
+      qrUrlTicket = qrUrlVenta;
+      qrEtiquetaTicket =
+        qrDestinoVenta === "SITIO_WEB" ? "Visítanos en línea"
+        : qrDestinoVenta === "PROMOCION" ? "Promoción especial"
+        : qrDestinoVenta === "UBICACION" ? "Encuéntranos aquí"
+        : qrEtiquetaVenta || "Más información";
+    } else {
+      qrUrlTicket = null;
+      qrEtiquetaTicket = undefined;
+    }
 
     startTransition(async () => {
       const res = await crearVentaAction({

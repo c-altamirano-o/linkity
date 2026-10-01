@@ -98,6 +98,19 @@ export function nombreNegocioDeSlug(tenantSlug: string): string {
 export type FormatoTicket = "TERMICA_58" | "TERMICA_80" | "CARTA";
 
 /**
+ * Tenant.reciboQrDestino — mismo criterio que FormatoTicket arriba (unión de
+ * strings, no el enum de Prisma, porque este módulo lo importan Client
+ * Components: POSClient.tsx para decidir qué URL/etiqueta usar en el QR del
+ * ticket de VENTA, y ConfiguracionClient.tsx para el selector de
+ * Configuración). Ver el comentario largo en schema.prisma (2026-10-01, a
+ * petición de Carlos: "sería opcional para ventas... que el cliente
+ * decidiera si mostrar o no un QR y que eligiera qué se mostraría en él").
+ * Nunca se usa para el QR de reparaciones (ese sigue fijo a
+ * /rep/[publicToken], sin pasar por esta configuración).
+ */
+export type QrDestinoTicket = "CATALOGO" | "SITIO_WEB" | "PROMOCION" | "UBICACION" | "PERSONALIZADO";
+
+/**
  * CSS que ajusta el ticket al formato de salida elegido (ver el comentario
  * largo arriba). Se inyecta al FINAL del bloque <style> de cada ticket
  * (después de las reglas base) para que gane por orden de aparición sobre
@@ -193,9 +206,12 @@ export interface ReciboData {
   atendioPor?: string | null;
   renglones: ReciboRenglon[];
   subtotal: number;
-  /** Descuento total aplicado a la venta. */
-  descuento?: number;
   iva: number;
+  /** Monto total descontado de esta venta (Discount, 2026-09-30) — ya está
+   *  restado de `subtotal`/`iva`/`total` (esos tres son los que de verdad
+   *  se cobraron); este campo es solo para mostrar la línea informativa
+   *  "Descuento" en el ticket. Se omite esa línea si viene null/0. */
+  descuento?: number | null;
   total: number;
   /** Texto ya formateado para mostrar (ej. "Efectivo", "Tarjeta", "Efectivo + Tarjeta"). */
   metodoPago: string;
@@ -218,6 +234,10 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
 
   // margin:0 — el propio contenedor .qr del HTML ya le da espacio en
   // blanco alrededor; un margen extra de la librería solo lo duplicaría.
+  // Esta función sigue sin saber nada de si el QR es "apagable" o no —
+  // dibuja el QR si y solo si el caller le mandó `qrUrl` (ver el comentario
+  // largo en Tenant.reciboMostrarQR, schema.prisma: esa decisión vive en
+  // POSClient.tsx, antes de construir ReciboData, no aquí).
   const qrSvg = r.qrUrl
     ? await QRCode.toString(r.qrUrl, { type: "svg", margin: 0, width: 96 }).catch(() => null)
     : null;
@@ -317,8 +337,8 @@ export async function abrirReciboImprimible(r: ReciboData, negocio: DatosNegocio
       <hr />
       ${filas}
       <div class="renglon" style="margin-top:6px;"><span class="muted">Subtotal</span><span class="muted">${formatMXN(r.subtotal)}</span></div>
-      ${r.descuento ? `<div class="renglon"><span class="muted">Descuento</span><span class="muted">- ${formatMXN(r.descuento)}</span></div>` : ""}
       <div class="renglon"><span class="muted">IVA</span><span class="muted">${formatMXN(r.iva)}</span></div>
+      ${r.descuento != null && r.descuento > 0 ? `<div class="renglon"><span class="muted">Descuento</span><span class="muted">-${formatMXN(r.descuento)}</span></div>` : ""}
       <div class="total-envoltura">
         <div class="etiqueta">Total</div>
         <p class="total">${formatMXN(r.total)}</p>

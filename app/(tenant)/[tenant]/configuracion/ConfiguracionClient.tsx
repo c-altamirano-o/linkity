@@ -9,7 +9,7 @@ import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions"
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/client";
-import type { FormatoTicket } from "@/lib/recibo-imprimible";
+import type { FormatoTicket, QrDestinoTicket } from "@/lib/recibo-imprimible";
 import {
   WINDOWS_THEMES, MATERIAL_THEMES, resolverPresetTenant, TENANT_THEME_ROOT_ID,
   INTENSIDAD_DEFAULT, INTENSIDAD_MIN, INTENSIDAD_MAX,
@@ -92,6 +92,22 @@ const FORMATOS_TICKET: { valor: FormatoTicket; nombre: string; descripcion: stri
   { valor: "CARTA", nombre: "Hoja normal", descripcion: "Carta / A4, o guardar como PDF" },
 ];
 
+// Las 5 opciones de Tenant.reciboQrDestino (2026-10-01, a petición de
+// Carlos: "sería opcional para ventas... que el cliente decidiera si
+// mostrar o no un QR y que eligiera qué se mostraría en él — catálogo, su
+// página, una promoción, la ubicación de las tiendas, etc.") — SOLO aplica
+// al ticket de venta (nunca al de reparación, ver el comentario largo en
+// POSClient.tsx). `necesitaUrl=false` únicamente en CATALOGO, que usa la
+// página pública de catálogo + sucursales de siempre (/pub/[tenantSlug])
+// sin pedir ningún dato — los otros 4 piden el link real en Tenant.reciboQrUrl.
+const DESTINOS_QR_TICKET: { valor: QrDestinoTicket; nombre: string; descripcion: string; necesitaUrl: boolean; placeholderUrl?: string }[] = [
+  { valor: "CATALOGO", nombre: "Catálogo y sucursales", descripcion: "La página pública de tu negocio (de siempre) — automática, sin nada que capturar", necesitaUrl: false },
+  { valor: "SITIO_WEB", nombre: "Mi sitio web o red social", descripcion: "Tu página, Instagram, Facebook, WhatsApp...", necesitaUrl: true, placeholderUrl: "https://instagram.com/tunegocio" },
+  { valor: "PROMOCION", nombre: "Una promoción", descripcion: "Un link a una promoción o descuento vigente", necesitaUrl: true, placeholderUrl: "https://tunegocio.com/promocion" },
+  { valor: "UBICACION", nombre: "Ubicación de mis tiendas", descripcion: "Un link de Google Maps a tu sucursal", necesitaUrl: true, placeholderUrl: "https://maps.app.goo.gl/..." },
+  { valor: "PERSONALIZADO", nombre: "Personalizado", descripcion: "Cualquier otro link, con tu propia etiqueta debajo del QR", necesitaUrl: true, placeholderUrl: "https://..." },
+];
+
 interface ModuloPersonalizable {
   code: string;
   name: string;
@@ -119,6 +135,10 @@ interface ConfiguracionClientProps {
   mensajePieTicketInicial: string | null;
   extraTicketInicial: string | null;
   formatoTicketInicial: FormatoTicket;
+  mostrarQRTicketInicial: boolean;
+  qrDestinoTicketInicial: QrDestinoTicket;
+  qrUrlTicketInicial: string | null;
+  qrEtiquetaTicketInicial: string | null;
   // whatsappTieneTokenInicial (nunca el token real, ver el comentario largo
   // en page.tsx) — solo dice si YA hay uno guardado, para mostrar
   // "conectado" sin exponer el valor.
@@ -146,6 +166,10 @@ export default function ConfiguracionClient({
   mensajePieTicketInicial,
   extraTicketInicial,
   formatoTicketInicial,
+  mostrarQRTicketInicial,
+  qrDestinoTicketInicial,
+  qrUrlTicketInicial,
+  qrEtiquetaTicketInicial,
   whatsappPhoneNumberIdInicial,
   whatsappTieneTokenInicial,
   checklistTaller,
@@ -302,12 +326,22 @@ export default function ConfiguracionClient({
   const [mensajePieTicket, setMensajePieTicket] = useState(mensajePieTicketInicial ?? "");
   const [extraTicket, setExtraTicket] = useState(extraTicketInicial ?? "");
   const [formatoTicket, setFormatoTicket] = useState<FormatoTicket>(formatoTicketInicial);
+  // "No veo la opción de habilitar o deshabilitar el QR en el ticket de
+  // venta" (Carlos, 2026-10-01) — ver el comentario largo en
+  // DatosNegocioRecibo.mostrarQR (lib/recibo-imprimible.ts).
+  const [mostrarQRTicket, setMostrarQRTicket] = useState(mostrarQRTicketInicial);
+  const [qrDestinoTicket, setQrDestinoTicket] = useState<QrDestinoTicket>(qrDestinoTicketInicial);
+  const [qrUrlTicket, setQrUrlTicket] = useState(qrUrlTicketInicial ?? "");
+  const [qrEtiquetaTicket, setQrEtiquetaTicket] = useState(qrEtiquetaTicketInicial ?? "");
   const [datosTicketPending, startDatosTicketTransition] = useTransition();
   const [datosTicketMensaje, setDatosTicketMensaje] = useState("");
 
   const guardarDatosTicket = () => {
     startDatosTicketTransition(async () => {
-      const result = await updateDatosTicket(tenantSlug, { direccion: direccionTicket, rfc: rfcTicket, mensajePie: mensajePieTicket, extra: extraTicket, formato: formatoTicket });
+      const result = await updateDatosTicket(tenantSlug, {
+        direccion: direccionTicket, rfc: rfcTicket, mensajePie: mensajePieTicket, extra: extraTicket, formato: formatoTicket,
+        mostrarQR: mostrarQRTicket, qrDestino: qrDestinoTicket, qrUrl: qrUrlTicket, qrEtiqueta: qrEtiquetaTicket,
+      });
       setDatosTicketMensaje(result.success ? "Ticket actualizado correctamente." : (result.error ?? "Error al actualizar."));
       if (result.success) {
         router.refresh();
@@ -1149,7 +1183,81 @@ export default function ConfiguracionClient({
             </div>
           </div>
 
-          <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
+          {/* QR del ticket de VENTA (2026-10-01, a petición de Carlos: "sería
+              opcional para ventas... que el cliente decidiera si mostrar o
+              no un QR y que eligiera qué se mostraría en él") — a propósito
+              SOLO afecta la venta normal de artículo/servicio; el QR del
+              cobro de una reparación (aunque se cobre desde este mismo POS)
+              se queda fijo apuntando a su página de seguimiento, nunca pasa
+              por aquí (ver el comentario largo en POSClient.tsx). */}
+          <div className="mt-6 border-t border-border pt-5">
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={mostrarQRTicket}
+                onChange={(e) => setMostrarQRTicket(e.target.checked)}
+              />
+              Mostrar código QR en el ticket de venta
+            </label>
+            <p className="text-xs text-muted-foreground mt-1 ml-6">
+              Solo aplica a la venta de un artículo o servicio. El QR del cobro de una reparación siempre va a su página de seguimiento, sin importar lo que elijas aquí.
+            </p>
+
+            {mostrarQRTicket && (
+              <div className="mt-4 ml-6 max-w-xl">
+                <label className="block text-xs font-medium text-muted-foreground mb-2">Qué mostrar en el QR</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {DESTINOS_QR_TICKET.map((d) => (
+                    <button
+                      key={d.valor}
+                      type="button"
+                      onClick={() => setQrDestinoTicket(d.valor)}
+                      className={`text-left p-3 rounded-lg border text-xs transition-all ${
+                        qrDestinoTicket === d.valor
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "border-border bg-muted hover:border-foreground/30"
+                      }`}
+                    >
+                      <p className="font-medium text-foreground">{d.nombre}</p>
+                      <p className="text-muted-foreground mt-0.5">{d.descripcion}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {DESTINOS_QR_TICKET.find((d) => d.valor === qrDestinoTicket)?.necesitaUrl && (
+                  <div className="mt-3">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">Link</label>
+                    <input
+                      type="text"
+                      value={qrUrlTicket}
+                      onChange={(e) => setQrUrlTicket(e.target.value)}
+                      placeholder={DESTINOS_QR_TICKET.find((d) => d.valor === qrDestinoTicket)?.placeholderUrl}
+                      maxLength={500}
+                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    />
+                  </div>
+                )}
+
+                {qrDestinoTicket === "PERSONALIZADO" && (
+                  <div className="mt-3">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                      Etiqueta bajo el QR <span className="font-normal">(ej. &quot;Síguenos&quot;, &quot;Más información&quot;)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={qrEtiquetaTicket}
+                      onChange={(e) => setQrEtiquetaTicket(e.target.value)}
+                      placeholder="Más información"
+                      maxLength={60}
+                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex items-center gap-4 border-t border-border pt-5">
             <button
               onClick={guardarDatosTicket}
               disabled={datosTicketPending}

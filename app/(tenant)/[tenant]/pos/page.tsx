@@ -125,6 +125,20 @@ export default async function POSPage({
     formato: tenant.reciboFormato,
   };
 
+  // QR del ticket de VENTA (2026-10-01, ver el comentario largo en
+  // Tenant.reciboMostrarQR/reciboQrDestino, schema.prisma) — a propósito
+  // APARTE de `negocio` de arriba: esta configuración solo aplica a la venta
+  // normal de artículo/servicio, nunca al cobro de una reparación (ese QR
+  // sigue fijo a /rep/[publicToken], ver el cálculo en POSClient.tsx), así
+  // que no tiene sentido mezclarla con DatosNegocioRecibo (que sí comparten
+  // el ticket de recepción/entrega de Reparaciones y Aduana).
+  const qrVenta = {
+    mostrarQRVenta: tenant.reciboMostrarQR,
+    qrDestinoVenta: tenant.reciboQrDestino,
+    qrUrlVenta: tenant.reciboQrUrl,
+    qrEtiquetaVenta: tenant.reciboQrEtiqueta,
+  };
+
   // Consultar descuentos activos para este tenant
   const discountsResponse = await getActiveDiscounts(tenant.id);
   const activeDiscounts = discountsResponse.data ?? [];
@@ -141,6 +155,7 @@ export default async function POSPage({
       clienteInicialId={clienteId ?? null}
       mostrarAccesoReparaciones={mostrarAccesoReparaciones}
       discounts={activeDiscounts}
+      {...qrVenta}
     />
   );
 }

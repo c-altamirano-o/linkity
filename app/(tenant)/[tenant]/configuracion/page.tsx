@@ -17,6 +17,7 @@ export default async function ConfiguracionPage({
     select: {
       id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, logo: true, weekStartDay: true, phone: true,
       cobrarEnDevolucion: true, montoDevolucion: true, address: true, rfc: true, reciboMensajePie: true, reciboExtra: true, reciboFormato: true,
+      reciboMostrarQR: true, reciboQrDestino: true, reciboQrUrl: true, reciboQrEtiqueta: true,
       // whatsappAccessToken SÍ se selecciona aquí (Server Component, nunca
       // sale de este proceso) pero se convierte a boolean antes de pasarlo
       // a ConfiguracionClient (ver abajo) — es sensible, el valor real
@@ -64,6 +65,10 @@ export default async function ConfiguracionPage({
       mensajePieTicketInicial={tenant.reciboMensajePie}
       extraTicketInicial={tenant.reciboExtra}
       formatoTicketInicial={tenant.reciboFormato}
+      mostrarQRTicketInicial={tenant.reciboMostrarQR}
+      qrDestinoTicketInicial={tenant.reciboQrDestino}
+      qrUrlTicketInicial={tenant.reciboQrUrl}
+      qrEtiquetaTicketInicial={tenant.reciboQrEtiqueta}
       whatsappPhoneNumberIdInicial={tenant.whatsappPhoneNumberId}
       whatsappTieneTokenInicial={Boolean(tenant.whatsappAccessToken)}
       checklistTaller={checklistTaller}

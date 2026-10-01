@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { ReciboFormato } from "@prisma/client";
+import { ReciboFormato, ReciboQrDestino } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { resolverActor } from "@/lib/actor";
 import { parseColoresPersonalizados, TEMA_PERSONALIZADO_ID } from "@/lib/theme-presets";
@@ -165,15 +165,33 @@ export async function updateSupportPhone(tenantSlug: string, phone: string) {
 const MAX_LARGO_DIRECCION = 150;
 const MAX_LARGO_RFC = 20;
 const MAX_LARGO_MENSAJE_PIE = 200;
+// QR del ticket de VENTA (2026-10-01, ver el comentario largo en
+// Tenant.reciboMostrarQR/reciboQrDestino, schema.prisma) — mostrarQR es el
+// interruptor maestro, SOLO afecta el ticket de venta normal (nunca el de
+// reparación, ese sigue fijo a /rep/[publicToken] sin pasar por aquí).
+// qrDestino=CATALOGO no necesita qrUrl (usa /pub/[tenantSlug] de siempre);
+// los otros 4 valores SÍ la necesitan — se valida solo cuando mostrarQR está
+// activo Y el destino elegido la requiere, para no bloquear el resto del
+// formulario si el negocio todavía no tiene ese link a la mano (puede dejar
+// mostrarQR apagado, o CATALOGO, mientras tanto). qrEtiqueta solo aplica (y
+// solo se valida) en PERSONALIZADO — los otros 4 traen su etiqueta fija en
+// POSClient.tsx.
+const MAX_LARGO_QR_URL = 500;
+const MAX_LARGO_QR_ETIQUETA = 60;
 
 export async function updateDatosTicket(
   tenantSlug: string,
-  datos: { direccion: string; rfc: string; mensajePie: string; extra: string; formato: string }
+  datos: {
+    direccion: string; rfc: string; mensajePie: string; extra: string; formato: string;
+    mostrarQR: boolean; qrDestino: string; qrUrl: string; qrEtiqueta: string;
+  }
 ) {
   const direccion = datos.direccion.trim();
   const rfc = datos.rfc.trim().toUpperCase();
   const mensajePie = datos.mensajePie.trim();
   const extra = datos.extra.trim();
+  const qrUrl = datos.qrUrl.trim();
+  const qrEtiqueta = datos.qrEtiqueta.trim();
 
   if (direccion.length > MAX_LARGO_DIRECCION) {
     return { success: false, error: `La dirección no puede pasar de ${MAX_LARGO_DIRECCION} caracteres` };
@@ -186,6 +204,25 @@ export async function updateDatosTicket(
   }
   if (!Object.values(ReciboFormato).includes(datos.formato as ReciboFormato)) {
     return { success: false, error: "Formato de ticket inválido" };
+  }
+  if (!Object.values(ReciboQrDestino).includes(datos.qrDestino as ReciboQrDestino)) {
+    return { success: false, error: "Destino de QR inválido" };
+  }
+  const qrDestino = datos.qrDestino as ReciboQrDestino;
+  const qrNecesitaUrl = datos.mostrarQR && qrDestino !== "CATALOGO";
+  if (qrNecesitaUrl) {
+    if (!qrUrl) {
+      return { success: false, error: "Falta el link para ese tipo de QR" };
+    }
+    if (!/^https?:\/\//i.test(qrUrl)) {
+      return { success: false, error: "El link del QR debe empezar con http:// o https://" };
+    }
+    if (qrUrl.length > MAX_LARGO_QR_URL) {
+      return { success: false, error: `El link del QR no puede pasar de ${MAX_LARGO_QR_URL} caracteres` };
+    }
+  }
+  if (qrEtiqueta.length > MAX_LARGO_QR_ETIQUETA) {
+    return { success: false, error: `La etiqueta del QR no puede pasar de ${MAX_LARGO_QR_ETIQUETA} caracteres` };
   }
 
   const resuelto = await resolverActor(tenantSlug, "configuracion");
@@ -200,6 +237,10 @@ export async function updateDatosTicket(
         reciboMensajePie: mensajePie || null,
         reciboExtra: extra || null,
         reciboFormato: datos.formato as ReciboFormato,
+        reciboMostrarQR: datos.mostrarQR,
+        reciboQrDestino: qrDestino,
+        reciboQrUrl: qrUrl || null,
+        reciboQrEtiqueta: qrEtiqueta || null,
       },
     });
 

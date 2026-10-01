@@ -56,6 +56,47 @@ model Tenant {
   // existente ve cambiar su ticket hasta que entre a Configuración y elija
   // el formato de su impresora real.
   reciboFormato ReciboFormato @default(CARTA)
+  // 2026-10-01, a petición de Carlos: "no veo la opción de habilitar o
+  // deshabilitar el QR en el ticket de venta" → primer intento (ese mismo
+  // día) metió un solo booleano global en abrirReciboImprimible, pero Carlos
+  // corrigió: "habíamos establecido que sería opcional para VENTAS [no
+  // reparaciones] y que el cliente eligiera QUÉ se mostraría en él —
+  // catálogo, su página, una promoción, la ubicación de las tiendas, etc."
+  // Confirmado por AskUserQuestion: (a) alcance SOLO el ticket de venta
+  // normal (artículo/servicio, sin reparación de por medio) — el QR de
+  // reparaciones (recepción, cobro de una reparación aunque se cobre desde
+  // POS, "entregar sin cobro") se queda FIJO apuntando siempre a
+  // /rep/[publicToken], nunca pasa por esta configuración, porque ahí sí
+  // tiene un propósito funcional claro (seguimiento en tiempo real) que no
+  // tendría sentido apagar; (b) mecanismo: lista fija de destinos
+  // predefinidos (ver enum ReciboQrDestino abajo), cada uno pidiendo su
+  // propio dato cuando aplique, en vez de que el negocio tenga que pegar
+  // cualquier URL a mano sin guía.
+  //
+  // reciboMostrarQR: interruptor maestro — SOLO afecta el ticket de venta
+  // normal (POSClient.tsx calcula esto antes de llamar a
+  // abrirReciboImprimible; esa función ya NO sabe nada de esta
+  // configuración, sigue siendo tan genérica como siempre: dibuja el QR si
+  // y solo si el caller le manda `qrUrl`). Default true = comportamiento de
+  // SIEMPRE (nunca se apagó antes de que existiera esta opción).
+  reciboMostrarQR Boolean @default(true)
+  // reciboQrDestino: qué debe mostrar el QR cuando reciboMostrarQR=true.
+  // CATALOGO no necesita ningún dato adicional (usa la página pública de
+  // catálogo + sucursales de siempre, /pub/[tenantSlug] — ver
+  // POSClient.tsx); los otros 4 valores SÍ necesitan reciboQrUrl (el link
+  // real al que debe apuntar). Default CATALOGO = comportamiento de SIEMPRE.
+  reciboQrDestino ReciboQrDestino @default(CATALOGO)
+  // reciboQrUrl: la URL real del QR cuando reciboQrDestino != CATALOGO (su
+  // sitio web o red social, el link de una promoción, un Google Maps de su
+  // ubicación, o cualquier otro link en PERSONALIZADO) — null mientras el
+  // negocio no la haya capturado (updateDatosTicket, app/actions/tenant.ts,
+  // cae de vuelta a sin-QR si falta, nunca a un QR roto).
+  reciboQrUrl String?
+  // reciboQrEtiqueta: el texto que aparece bajo el QR — SOLO se usa (y solo
+  // se pide en Configuración) cuando reciboQrDestino=PERSONALIZADO; los
+  // otros 4 destinos ya traen su propia etiqueta fija en POSClient.tsx
+  // (consistencia visual, el negocio no tiene que redactarla).
+  reciboQrEtiqueta String?
 
   // WhatsApp Business PROPIO del negocio (2026-09-29, a petición de Carlos:
   // "conectemos todo" — cada tenant conecta SU PROPIA cuenta de WhatsApp
@@ -373,6 +414,20 @@ enum ReciboFormato {
   TERMICA_58
   TERMICA_80
   CARTA
+}
+
+// Ver el comentario largo en Tenant.reciboQrDestino — destinos del QR del
+// ticket de VENTA (nunca el de reparación, ese se queda fijo a
+// /rep/[publicToken]). CATALOGO es el único que no necesita Tenant.reciboQrUrl
+// (usa /pub/[tenantSlug], la página pública de catálogo + sucursales ya
+// existente). PERSONALIZADO es el único que además usa Tenant.reciboQrEtiqueta
+// (los otros 4 traen su etiqueta fija en POSClient.tsx).
+enum ReciboQrDestino {
+  CATALOGO
+  SITIO_WEB
+  PROMOCION
+  UBICACION
+  PERSONALIZADO
 }
 
 model Branch {
