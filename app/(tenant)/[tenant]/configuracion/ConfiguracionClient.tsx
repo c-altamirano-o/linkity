@@ -971,7 +971,7 @@ export default function ConfiguracionClient({
                     <Circle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   )}
                   <div>
-                    <p className="text-sm text-foreground font-medium">Recepción / Aduana</p>
+                    <p className="text-sm text-foreground font-medium">Taller (Recepción/Aduana)</p>
                     <p className="text-xs text-muted-foreground">
                       {checklistTaller.rolesAduana.length > 0
                         ? `Recibe el equipo, asigna técnico y ajusta costo/piezas (${checklistTaller.rolesAduana.map((r) => r.nombre).join(", ")}).`
@@ -989,11 +989,11 @@ export default function ConfiguracionClient({
                     <Circle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   )}
                   <div>
-                    <p className="text-sm text-foreground font-medium">Técnico / Taller</p>
+                    <p className="text-sm text-foreground font-medium">Técnico (Mis Reparaciones)</p>
                     <p className="text-xs text-muted-foreground">
                       {checklistTaller.rolesTaller.length > 0
-                        ? `Repara el equipo asignado y puede alertar a Recepción/Aduana (${checklistTaller.rolesTaller.map((r) => r.nombre).join(", ")}).`
-                        : "Repara el equipo asignado y puede alertar a Recepción/Aduana."}
+                        ? `Repara el equipo asignado y puede alertar a Taller (${checklistTaller.rolesTaller.map((r) => r.nombre).join(", ")}).`
+                        : "Repara el equipo asignado y puede alertar a Taller."}
                       {" "}
                       {tallerListo ? "Ya tiene personal asignado." : "Aún no tiene personal asignado."}
                     </p>

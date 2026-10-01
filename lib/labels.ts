@@ -44,8 +44,24 @@ export const DEFAULT_LABELS: LabelDictionary = {
   // módulo tenga su propio nombre, no evitar el solape — así, si un puesto
   // sí necesita más de uno, se ven como pestañas distintas y claras, nunca
   // duplicadas.
-  "module.workshop.name": "Taller",
-  "module.reception.name": "Recepción / Aduana",
+  //
+  // 2026-10-01, a petición de Carlos ("Aduana" le genera confusión a su
+  // personal — no es vocabulario del giro, nadie entiende qué va a
+  // encontrar ahí): el módulo "aduana" (control central: asigna técnico,
+  // cambia estatus, ajusta costo/piezas) pasa a llamarse simplemente
+  // "Taller" — es, en los hechos, el panel de control del taller. Para que
+  // esto NO reviva el bug de arriba, el módulo "taller" (la vista angosta,
+  // de solo lectura, del propio técnico) deja de llamarse "Taller" y pasa a
+  // "Mis Reparaciones" — dos nombres que además describen mejor cada uno
+  // (uno es el panel completo, el otro es "lo mío, nada más"). Administrador/
+  // Gerente/Recepción ven "Taller"; el técnico ve "Mis Reparaciones"; ningún
+  // rol de los catálogos base o por rubro tiene ambos módulos a la vez (ver
+  // lib/roles.ts y lib/roles-rubro.ts), así que no hay pestañas duplicadas —
+  // pero si algún negocio arma desde "Roles y permisos" un puesto con los
+  // dos permisos juntos, sí volverían a verse dos pestañas iguales; eso
+  // queda pendiente de una validación en RolesManager.tsx si Carlos la pide.
+  "module.workshop.name": "Mis Reparaciones",
+  "module.reception.name": "Taller",
   "module.catalog.name": "Catálogo",
   "module.pos.name": "Punto de Venta",
   "module.cash.name": "Caja",

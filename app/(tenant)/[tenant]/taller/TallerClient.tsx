@@ -129,7 +129,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
           <h1 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
-            <Wrench className="w-4 h-4 text-primary-text" /> Taller
+            <Wrench className="w-4 h-4 text-primary-text" /> {label(labels, "module.workshop.name")}
           </h1>
           <p className="text-[12.5px] text-muted-foreground mt-0.5">
             {verTodoTaller
@@ -137,7 +137,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
               : miStaffId
                 ? `${entidadPlural} asignadas a ti`
                 : `${entidadPlural} del taller`}
-            {" "}— consulta el detalle y avisa a Aduana/Recepción si necesitas algo.
+            {" "}— consulta el detalle y avisa a {label(labels, "module.reception.name")} si necesitas algo.
           </p>
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
@@ -186,7 +186,12 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-semibold text-foreground">{r.folio}</span>
+                  <span className="text-[12.5px] font-semibold text-foreground flex items-center gap-1">
+                    {r.folio}
+                    {/* 2026-10-01 — ver el aviso fijo del panel de detalle,
+                        un poco más abajo. */}
+                    {r.alertaTallerPendiente && <AlertCircle className="w-3 h-3 text-amber-600 flex-shrink-0" />}
+                  </span>
                   <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${ESTADO_BADGE[r.estado]}`}>
                     {label(labels, `repair.status.${r.estado}`)}
                   </span>
@@ -229,6 +234,17 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
                   {label(labels, `repair.status.${seleccionada.estado}`)}
                 </span>
               </div>
+
+              {/* 2026-10-01 — ver el comentario largo en
+                  Repair.alertaTallerPendiente (schema.prisma). Solo lectura
+                  aquí a propósito: el técnico ya la mandó, quien la apaga es
+                  Taller (antes Aduana) — ver resolverAlertaTallerAction. */}
+              {seleccionada.alertaTallerPendiente && (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-amber-50 border-amber-300 mt-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                  <p className="text-[11.5px] text-amber-700">Tu alerta sigue sin atender.</p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div className="bg-muted rounded-lg p-2.5">
@@ -319,7 +335,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
                   alertar por ellos. */}
               {!verTodoTaller && seleccionada.estado !== "DELIVERED" && seleccionada.estado !== "CANCELLED" && (
                 <div className="mt-5">
-                  <p className="text-[12.5px] font-semibold text-foreground mb-2">Enviar alerta a Aduana / Recepción / Tienda</p>
+                  <p className="text-[12.5px] font-semibold text-foreground mb-2">Enviar alerta a {label(labels, "module.reception.name")} / Tienda</p>
                   <textarea
                     value={alertaTexto}
                     onChange={(e) => setAlertaTexto(e.target.value)}

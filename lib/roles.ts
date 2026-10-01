@@ -117,9 +117,17 @@ export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
 // distinguirse claramente de "Reparaciones" en ese selector. Vive en este
 // archivo (en vez de repetida en cada componente) por el mismo motivo que
 // MODULOS_BASE_EXCLUIDOS: un solo texto para los dos editores de roles.
+//
+// 2026-10-01: los nombres de menú de estos dos módulos cambiaron (ver el
+// comentario largo junto a "module.workshop.name"/"module.reception.name",
+// lib/labels.ts) — "aduana" ahora se ve como "Taller" y "taller" como "Mis
+// Reparaciones". Este selector de permisos, a diferencia del menú, SÍ debe
+// seguir siendo explícito sobre qué hace cada uno (quien arma roles necesita
+// la descripción completa, no solo el nombre bonito), así que el texto de
+// aquí queda entre paréntesis junto al nombre nuevo.
 export function nombreModulo(m: ModuloKey): string {
-  if (m === "taller") return "Taller (solo ve lo asignado, sin editar)";
-  if (m === "aduana") return "Recepción / Aduana de taller (asigna técnico, estatus y costo)";
+  if (m === "taller") return "Mis Reparaciones (el técnico, solo ve lo asignado, sin editar)";
+  if (m === "aduana") return "Taller (Recepción/Aduana — asigna técnico, estatus y costo)";
   return MODULE_CATALOG[m]?.name ?? m;
 }
 

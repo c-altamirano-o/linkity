@@ -1083,6 +1083,25 @@ model Repair {
   assignedToStaffId String?
   assignedTo        Staff?  @relation("ReparacionesAsignadas", fields: [assignedToStaffId], references: [id])
 
+  // 2026-10-01, a petición de Carlos ("quiero que exista una alerta en
+  // tienda real para que el mismo personal... pueda ver que hay un
+  // pendiente sin concluir con un folio" — tras notar que la alerta del
+  // técnico, aun con push/campanita de "Capa 1", vive y muere en un aviso
+  // que se puede perder: nadie queda OBLIGADO a verla si no abre la
+  // campanita justo quando pasa). Esta bandera persiste en el folio mismo:
+  // true desde que el técnico manda la alerta (enviarAlertaTallerAction)
+  // hasta que alguien de "Taller" (el módulo antes llamado "aduana" — ver
+  // lib/labels.ts) la marca atendida (resolverAlertaTallerAction). Mientras
+  // sea true, Reparaciones (tienda), Taller (aduana) y Mis Reparaciones
+  // (el técnico) la muestran como un aviso FIJO en el folio, no uno que se
+  // autodesaparece como el toast. A propósito solo "Taller" puede
+  // apagarla — Carlos fue explícito: Tienda la ve (para poder avisarle al
+  // cliente) pero no la puede cerrar, porque normalmente no puede resolver
+  // el problema real (falta una pieza, etc.); dejar que cualquiera la
+  // apague volvería a abrir el hueco de "nadie supo/nadie se fijó" que
+  // esto busca cerrar.
+  alertaTallerPendiente Boolean @default(false)
+
   tenant   Tenant          @relation(fields: [tenantId], references: [id])
   branch   Branch          @relation(fields: [branchId], references: [id])
   customer Customer        @relation(fields: [customerId], references: [id])

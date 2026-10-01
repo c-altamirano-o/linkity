@@ -81,6 +81,12 @@ export interface ReparacionUI {
   sucursalCodigo: string | null;
   whatsappSent: boolean;
   publicToken: string;
+  // 2026-10-01, ver el comentario largo en Repair.alertaTallerPendiente
+  // (schema.prisma) — true mientras haya una alerta del técnico sin
+  // atender en este folio. Reparaciones/Aduana/Taller la leen para mostrar
+  // un aviso fijo (no un toast); solo Aduana puede apagarla
+  // (resolverAlertaTallerAction).
+  alertaTallerPendiente: boolean;
   historial: HistorialItem[];
   piezas: PiezaReparacion[];
 }
@@ -207,6 +213,7 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
     sucursalCodigo: r.branch.code,
     whatsappSent: r.whatsappSent,
     publicToken: r.publicToken,
+    alertaTallerPendiente: r.alertaTallerPendiente,
     historial: r.history.map((h) => ({
       estado: h.status as EstadoReparacion,
       nota: h.notes,

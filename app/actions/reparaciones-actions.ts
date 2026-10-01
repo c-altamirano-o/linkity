@@ -943,13 +943,21 @@ export async function enviarAlertaTallerAction(params: {
       }
     }
 
-    await db.repairHistory.create({
-      data: {
-        repairId,
-        status: repair.status,
-        notes: `Alerta del técnico: ${mensaje}`,
-        visibleCliente: paraCliente === true,
-      },
+    // alertaTallerPendiente:true en la misma transacción que la nota del
+    // historial (2026-10-01, "aviso fijo" — ver el comentario largo en
+    // Repair.alertaTallerPendiente, schema.prisma): así el folio queda
+    // marcado con pendiente sin importar que el aviso en vivo de abajo
+    // falle o que nadie abra la campanita a tiempo.
+    await db.$transaction(async (tx: any) => {
+      await tx.repair.update({ where: { id: repairId }, data: { alertaTallerPendiente: true } });
+      await tx.repairHistory.create({
+        data: {
+          repairId,
+          status: repair.status,
+          notes: `Alerta del técnico: ${mensaje}`,
+          visibleCliente: paraCliente === true,
+        },
+      });
     });
 
     // "Capa 1" del sistema de alertas (2026-10-01, a petición de Carlos: ver
@@ -979,5 +987,67 @@ export async function enviarAlertaTallerAction(params: {
     }
     console.error("Error al enviar alerta de taller:", err);
     return { ok: false, error: "No se pudo enviar la alerta" };
+  }
+}
+
+/**
+ * Marca como atendida la alerta de técnico pendiente de un folio (2026-10-01,
+ * a petición de Carlos — ver el comentario largo en
+ * Repair.alertaTallerPendiente, schema.prisma). Exclusivo de "aduana"
+ * (="Taller" en el menú, ver lib/labels.ts): es quien de verdad puede
+ * resolver el problema de fondo (pedir la pieza, cambiar el estatus) — dejar
+ * que Tienda o el propio técnico la apagaran volvería a abrir el hueco de
+ * "nadie supo/nadie se fijó" que esto busca cerrar. Idempotente: si ya
+ * estaba atendida (ej. doble clic, dos pestañas abiertas) no truena ni
+ * duplica la nota de historial.
+ */
+export async function resolverAlertaTallerAction(params: {
+  tenantSlug: string;
+  repairId: string;
+}): Promise<AccionSimpleResult> {
+  const { tenantSlug, repairId } = params;
+
+  const resuelto = await resolverActor(tenantSlug, "aduana");
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const repair = await db.repair.findUnique({
+      where: { id: repairId },
+      select: { id: true, status: true, alertaTallerPendiente: true },
+    });
+    if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    if (!repair.alertaTallerPendiente) return { ok: true };
+
+    // Nombre de quien la atiende, para que el historial deje registro de
+    // QUIÉN — el punto completo de esta bandera es la trazabilidad ("al
+    // momento de deslindar responsabilidades, nadie supo"), mismo patrón ya
+    // usado para "atendioPor" en avanzarEstadoAction (arriba).
+    const usuarioActual = await db.user.findUnique({ where: { id: resuelto.dbUser.id }, select: { name: true } });
+
+    await db.$transaction(async (tx: any) => {
+      await tx.repair.update({ where: { id: repairId }, data: { alertaTallerPendiente: false } });
+      await tx.repairHistory.create({
+        data: {
+          repairId,
+          status: repair.status,
+          notes: `Alerta del técnico atendida${usuarioActual?.name ? ` por ${usuarioActual.name}` : ""}`,
+          visibleCliente: false,
+        },
+      });
+    });
+
+    revalidatePath(`/${tenantSlug}/aduana`);
+    revalidatePath(`/${tenantSlug}/reparaciones`);
+    revalidatePath(`/${tenantSlug}/taller`);
+    return { ok: true };
+  } catch (err: any) {
+    if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
+      return { ok: false, error: "No tienes acceso a este recurso" };
+    }
+    console.error("Error al marcar la alerta de taller como atendida:", err);
+    return { ok: false, error: "No se pudo actualizar" };
   }
 }

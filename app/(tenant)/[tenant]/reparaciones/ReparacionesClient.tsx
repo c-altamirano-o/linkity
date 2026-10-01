@@ -474,7 +474,16 @@ function VistaTienda({
                   {rep.iniciales}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{rep.cliente}</p>
+                  <p className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    {rep.cliente}
+                    {/* 2026-10-01 — ver el comentario largo junto al aviso
+                        fijo del panel de detalle, un poco más abajo. Se
+                        repite aquí, en la lista, para que se note SIN tener
+                        que abrir el folio. */}
+                    {rep.alertaTallerPendiente && (
+                      <AlertCircle className="w-3 h-3 text-amber-600 flex-shrink-0" />
+                    )}
+                  </p>
                   <p className="text-[11.5px] text-muted-foreground truncate">{rep.modelo} · {rep.falla}</p>
                 </div>
                 <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${ESTADO_BADGE[rep.estado]}`}>
@@ -593,6 +602,27 @@ function VistaTienda({
               )}
             </div>
           </div>
+
+          {/* 2026-10-01, a petición de Carlos ("quiero que exista una alerta
+              en tienda real... pueda ver que hay un pendiente sin concluir
+              con un folio" — ver el comentario largo en
+              Repair.alertaTallerPendiente, schema.prisma): aviso FIJO, no un
+              toast que se autodesaparece — se queda aquí mientras alguien de
+              Taller no lo marque atendido. Tienda lo ve (para poder avisarle
+              al cliente) pero no tiene botón para apagarlo — eso es
+              a propósito, ver resolverAlertaTallerAction. */}
+          {seleccionada.alertaTallerPendiente && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-amber-50 border-amber-300 mb-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-amber-700">Alerta del técnico sin atender</p>
+                <p className="text-[11.5px] mt-0.5 text-amber-600">
+                  {seleccionada.historial.find((h) => h.nota?.startsWith("Alerta del técnico: "))?.nota?.slice("Alerta del técnico: ".length)
+                    ?? "Hay un pendiente con este equipo — contacta a Taller."}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* 2026-09-24, corrigiendo un bug real que Carlos reportó con
               capturas: esta franja decía "Equipo listo para entregar/
