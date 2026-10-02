@@ -771,7 +771,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
 
               {/* Piezas — exclusivo de Aduana (ver el comentario en
                   agregarPiezaReparacionAction). */}
-              <div className="mt-4">
+              <div className="mt-4" data-tour="aduana-piezas">
                 <p className="text-[12.5px] font-semibold text-foreground mb-1.5">Piezas y servicios cotizados</p>
                 {seleccionada.piezas.length > 0 && (
                   <div className="flex flex-col gap-1.5 mb-2">

@@ -1097,7 +1097,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
             <div className="p-4 space-y-3">
               {nuevaError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{nuevaError}</div>}
 
-              <div>
+              <div data-tour="reparaciones-cliente">
                 <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">CLIENTE</label>
                 {!modoClienteNuevo ? (
                   <>
@@ -1159,12 +1159,12 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
 
               <div className="grid grid-cols-2 gap-2">
-                <div>
+                <div data-tour="reparaciones-marca">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MARCA</label>
                   <input type="text" value={nuevaMarca} onChange={(e) => setNuevaMarca(e.target.value)}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
-                <div>
+                <div data-tour="reparaciones-modelo">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MODELO</label>
                   <input type="text" value={nuevaModelo} onChange={(e) => setNuevaModelo(e.target.value)}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
@@ -1177,7 +1177,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary resize-none" />
               </div>
 
-              <div>
+              <div data-tour="reparaciones-contrasena">
                 {/* 2026-09-24, a petición de Carlos — el técnico la necesita
                     para trabajar el equipo (ver Repair.deviceUnlockCode,
                     schema.prisma). Opcional, nunca aparece en la página
@@ -1259,7 +1259,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                 <p className="text-[11.5px] text-muted-foreground mt-1">Este es el costo que verá el cliente en su ticket y en el aviso de WhatsApp.</p>
               </div>
 
-              <div>
+              <div data-tour="reparaciones-prioridad">
                 <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PRIORIDAD</label>
                 <select value={nuevaPrioridad} onChange={(e) => setNuevaPrioridad(e.target.value as PrioridadReparacion)}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
@@ -1270,7 +1270,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                 </select>
               </div>
 
-              <div>
+              <div data-tour="reparaciones-fecha">
                 <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">FECHA ESTIMADA DE ENTREGA (OPCIONAL)</label>
                 <input type="date" value={nuevaFechaEstimada} onChange={(e) => setNuevaFechaEstimada(e.target.value)}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />

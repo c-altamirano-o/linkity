@@ -112,6 +112,15 @@ export const TOUR_POS_VENTA: TourStep[] = [
   },
 ];
 
+// 2026-10-02 (revisión de Carlos, tras probar la primera versión): "el
+// problema es en la guía interactiva" — los 4 pasos originales agrupaban
+// varios campos reales en uno solo (ej. "cliente, marca y modelo" dentro del
+// paso de "Describe la falla"), lo que hacía que el tour saltara de largo
+// sobre campos que sí necesitan su propia explicación. Ahora cada campo real
+// del formulario de "Nueva reparación" tiene su propio paso — ver los
+// data-tour nuevos en ReparacionesClient.tsx (reparaciones-cliente,
+// reparaciones-marca, reparaciones-modelo, reparaciones-contrasena,
+// reparaciones-prioridad, reparaciones-fecha).
 export const TOUR_REPARACIONES_RECIBIR: TourStep[] = [
   {
     selector: '[data-tour="reparaciones-nueva"]',
@@ -119,36 +128,75 @@ export const TOUR_REPARACIONES_RECIBIR: TourStep[] = [
     descripcion: "Presiona \"Nueva\" para empezar a recibir un equipo.",
   },
   {
+    selector: '[data-tour="reparaciones-cliente"]',
+    titulo: "2. Elige o registra al cliente",
+    descripcion: "Búscalo por nombre; si no aparece, presiona \"+ Registrar cliente nuevo\" y captura su nombre y teléfono.",
+  },
+  {
+    selector: '[data-tour="reparaciones-marca"]',
+    titulo: "3. Captura la marca",
+    descripcion: "El fabricante del equipo — por ejemplo Samsung, Apple, Huawei o Motorola.",
+  },
+  {
+    selector: '[data-tour="reparaciones-modelo"]',
+    titulo: "4. Captura el modelo",
+    descripcion: "El modelo específico dentro de esa marca (ej. \"A16\", \"iPhone 8\", \"Nova 2\") — lo encuentras en la caja del equipo, en los Ajustes del equipo, o te lo dice el cliente.",
+  },
+  {
     selector: '[data-tour="reparaciones-falla"]',
-    titulo: "2. Describe la falla",
-    descripcion: "Además del cliente, marca y modelo (arriba en el formulario), describe aquí la falla reportada por el cliente.",
+    titulo: "5. Describe la falla reportada",
+    descripcion: "Lo que el cliente dice que le pasa al equipo, o lo que tú notaste al revisarlo y diagnosticarlo.",
+  },
+  {
+    selector: '[data-tour="reparaciones-contrasena"]',
+    titulo: "6. Contraseña de desbloqueo (opcional)",
+    descripcion: "Solo si el equipo tiene bloqueo — es exclusivamente para que el técnico pueda hacer pruebas, nunca se muestra al cliente.",
   },
   {
     selector: '[data-tour="reparaciones-piezas"]',
-    titulo: "3. Agrega al menos una pieza o servicio",
-    descripcion: "Es obligatorio — el sistema no deja crear el folio sin un costo estipulado.",
+    titulo: "7. Agrega piezas y/o servicios cotizados",
+    descripcion: "Indica si se cotizó una pieza, un servicio (mano de obra, diagnóstico) o ambos — es lo que verá el cliente en su ticket, y el sistema no deja crear el folio sin esto.",
+  },
+  {
+    selector: '[data-tour="reparaciones-prioridad"]',
+    titulo: "8. Elige la prioridad",
+    descripcion: "Qué tan urgente es que el equipo quede listo — normalmente te lo indica el propio cliente.",
+  },
+  {
+    selector: '[data-tour="reparaciones-fecha"]',
+    titulo: "9. Fecha estimada de entrega (opcional)",
+    descripcion: "La defines tú según la carga de trabajo del taller, o la que acordaste con el cliente — aparece en su ticket.",
   },
   {
     selector: '[data-tour="reparaciones-crear"]',
-    titulo: "4. Crea el folio",
+    titulo: "10. Crea el folio",
     descripcion: "El sistema genera el folio automáticamente — no se captura a mano.",
   },
 ];
 
+// 2026-10-02 (misma revisión de Carlos que corrigió Reparaciones): "costo" y
+// "piezas" son dos controles reales distintos en la pantalla (dos bloques de
+// UI separados, ver AduanaClient.tsx) — antes compartían un solo paso del
+// tour. Ahora cada uno tiene su propio paso.
 export const TOUR_ADUANA_ASIGNAR: TourStep[] = [
   {
     selector: '[data-tour="aduana-tecnico"]',
     titulo: "1. Asigna un técnico",
-    descripcion: "Elige al técnico responsable de este equipo — se guarda solo con elegirlo, sin botón aparte.",
+    descripcion: "Elige al técnico responsable de este equipo en el selector — se guarda solo con elegirlo, sin botón aparte.",
   },
   {
     selector: '[data-tour="aduana-costo"]',
-    titulo: "2. Ajusta el costo si hace falta",
-    descripcion: "Captura el costo estimado o la pieza cotizada y presiona \"Guardar\".",
+    titulo: "2. Ajusta el costo estimado",
+    descripcion: "Captura o corrige el monto aquí si el costo cambió tras el diagnóstico — queda registrado en el Historial con fecha y hora.",
+  },
+  {
+    selector: '[data-tour="aduana-piezas"]',
+    titulo: "3. Agrega piezas y/o servicios cotizados",
+    descripcion: "Usa el selector y el botón \"+\" para sumar una pieza o servicio del catálogo, o \"Otro\" para un nombre/precio libre.",
   },
   {
     selector: '[data-tour="aduana-estatus"]',
-    titulo: "3. Avanza el estatus",
+    titulo: "4. Avanza el estatus",
     descripcion: "Presiona el botón con el siguiente estatus (ej. \"Listo\") cuando el equipo avance.",
   },
 ];
