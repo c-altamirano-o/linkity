@@ -296,7 +296,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
         <div className="flex items-center gap-2">
           <div className="relative" ref={filtrosRef}>
             <button onClick={() => setMostrarFiltros((v) => !v)}
-              className="flex items-center gap-1.5 px-2.5 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted">
+              className="btn-secondary flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs">
               <SlidersHorizontal className="w-3 h-3" />
               <span className="hidden sm:inline">Filtros</span>
               {filtrosActivos > 0 && (
@@ -315,7 +315,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                 </select>
                 {filtrosActivos > 0 && (
                   <button onClick={() => setCategoriaFiltro(TODAS_CATEGORIAS)}
-                    className="mt-2 text-[11.5px] text-primary-text font-medium hover:underline">
+                    className="btn-ghost mt-2 -mx-1.5 px-1.5 py-0.5 rounded-md text-[11.5px]">
                     Limpiar filtro
                   </button>
                 )}
@@ -324,7 +324,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
           </div>
           <div className="relative" ref={exportRef}>
             <button onClick={() => setMostrarExportMenu((v) => !v)}
-              className="flex items-center gap-1.5 px-2.5 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted">
+              className="btn-secondary flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs">
               <FileDown className="w-3 h-3" />
               <span className="hidden sm:inline">Exportar</span>
               <ChevronDown className={`w-3 h-3 transition-transform ${mostrarExportMenu ? "rotate-180" : ""}`} />
@@ -531,11 +531,11 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
 
             <div className="flex gap-2">
               <button onClick={cancelarModal} disabled={isPending}
-                className="flex-1 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted disabled:opacity-50">
+                className="btn-secondary flex-1 py-2 rounded-lg text-xs">
                 Cancelar
               </button>
               <button onClick={guardarAjuste} disabled={isPending}
-                className="flex-1 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
+                className="btn-primary flex-1 py-2 rounded-lg text-xs">
                 {isPending ? "Guardando…" : "Guardar"}
               </button>
             </div>

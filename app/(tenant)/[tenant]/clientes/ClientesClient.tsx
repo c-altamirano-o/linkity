@@ -967,14 +967,14 @@ export default function ClientesClient({
         <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
           <button
             onClick={cancelarModalCliente}
-            className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+            className="btn-secondary px-4 py-2 text-sm rounded-lg"
           >
             Cancelar
           </button>
           <button
             onClick={handleGuardar}
             disabled={guardando}
-            className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+            className="btn-primary px-4 py-2 text-sm rounded-lg"
           >
             {guardando ? "Guardando…" : "Guardar"}
           </button>
@@ -999,7 +999,7 @@ export default function ClientesClient({
             </p>
             <button
               onClick={abrirModalNuevo}
-              className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-4 py-2 rounded-lg"
+              className="btn-primary inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg"
             >
               <Plus className="w-4 h-4" /> Agregar cliente
             </button>
@@ -1023,7 +1023,7 @@ export default function ClientesClient({
           <span className="text-sm font-medium text-foreground">Clientes</span>
           <button
             onClick={abrirModalNuevo}
-            className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg"
+            className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
           >
             <Plus className="w-3 h-3" /> Nuevo
           </button>
@@ -1127,7 +1127,7 @@ export default function ClientesClient({
                 <div className="flex gap-1.5 sm:gap-2 flex-wrap justify-end flex-shrink-0">
                   <button
                     onClick={() => abrirModalEditar(seleccionado)}
-                    className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted"
+                    className="btn-secondary flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs"
                   >
                     <Edit className="w-3 h-3" />
                     <span className="hidden sm:inline">Editar</span>
@@ -1391,7 +1391,7 @@ export default function ClientesClient({
                       <button
                         onClick={handleGuardarAntecedentes}
                         disabled={antecedentesGuardando}
-                        className="px-4 py-1.5 text-xs rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+                        className="btn-primary px-4 py-1.5 text-xs rounded-lg"
                       >
                         {antecedentesGuardando ? "Guardando…" : "Guardar antecedentes"}
                       </button>
@@ -1493,13 +1493,13 @@ export default function ClientesClient({
                               <button
                                 onClick={handleGuardarDiente}
                                 disabled={dienteGuardando}
-                                className="px-4 py-2 text-xs rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50 whitespace-nowrap"
+                                className="btn-primary px-4 py-2 text-xs rounded-lg whitespace-nowrap"
                               >
                                 {dienteGuardando ? "Guardando…" : "Guardar"}
                               </button>
                               <button
                                 onClick={() => setDienteSeleccionado(null)}
-                                className="px-3 py-2 text-xs rounded-lg border border-border text-muted-foreground hover:bg-muted"
+                                className="btn-secondary px-3 py-2 text-xs rounded-lg"
                               >
                                 Cancelar
                               </button>
@@ -1520,7 +1520,7 @@ export default function ClientesClient({
                       <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PLAN DE TRATAMIENTO</p>
                       <button
                         onClick={abrirModalPlan}
-                        className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg"
+                        className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
                       >
                         <ClipboardList className="w-3 h-3" /> Nuevo plan
                       </button>
@@ -1588,7 +1588,7 @@ export default function ClientesClient({
                                       <button
                                         disabled={itemEnCurso === it.id}
                                         onClick={() => abrirCobro(it.id, it.descripcion, it.costo)}
-                                        className="flex items-center gap-1 px-2 py-1 rounded bg-primary hover:bg-primary/90 text-primary-foreground text-[11.5px] font-medium disabled:opacity-50 shrink-0"
+                                        className="btn-primary flex items-center gap-1 px-2 py-1 rounded text-[11.5px] shrink-0"
                                       >
                                         <DollarSign className="w-3 h-3" /> Cobrar
                                       </button>
@@ -1613,7 +1613,7 @@ export default function ClientesClient({
                       <button
                         onClick={abrirModalConsentimiento}
                         disabled={plantillasConsentimiento.length === 0}
-                        className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg disabled:opacity-50"
+                        className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
                       >
                         <FileSignature className="w-3 h-3" /> Nuevo consentimiento
                       </button>
@@ -1656,7 +1656,7 @@ export default function ClientesClient({
                       <button
                         onClick={abrirModalReceta}
                         disabled={doctores.length === 0}
-                        className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg disabled:opacity-50"
+                        className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
                       >
                         <Pill className="w-3 h-3" /> Nueva receta
                       </button>
@@ -1691,7 +1691,7 @@ export default function ClientesClient({
                       <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NOTAS DE EVOLUCIÓN</p>
                       <button
                         onClick={abrirModalNota}
-                        className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg"
+                        className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
                       >
                         <Plus className="w-3 h-3" /> Nueva nota
                       </button>
@@ -1779,14 +1779,14 @@ export default function ClientesClient({
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
                 onClick={cancelarModalNota}
-                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+                className="btn-secondary px-4 py-2 text-sm rounded-lg"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleGuardarNota}
                 disabled={notaGuardando}
-                className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+                className="btn-primary px-4 py-2 text-sm rounded-lg"
               >
                 {notaGuardando ? "Guardando…" : "Guardar"}
               </button>
@@ -1845,7 +1845,7 @@ export default function ClientesClient({
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Fases del plan *</label>
-                  <button onClick={agregarFilaItem} className="text-xs text-primary-text hover:underline flex items-center gap-0.5">
+                  <button onClick={agregarFilaItem} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex items-center gap-0.5">
                     <Plus className="w-3 h-3" /> Agregar fase
                   </button>
                 </div>
@@ -1903,14 +1903,14 @@ export default function ClientesClient({
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
                 onClick={cancelarModalPlan}
-                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+                className="btn-secondary px-4 py-2 text-sm rounded-lg"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleGuardarPlan}
                 disabled={planGuardando}
-                className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+                className="btn-primary px-4 py-2 text-sm rounded-lg"
               >
                 {planGuardando ? "Guardando…" : "Guardar plan"}
               </button>
@@ -1949,14 +1949,14 @@ export default function ClientesClient({
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
                 onClick={cancelarModalCobro}
-                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+                className="btn-secondary px-4 py-2 text-sm rounded-lg"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConfirmarCobro}
                 disabled={itemEnCurso === cobroModal.itemId}
-                className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+                className="btn-primary px-4 py-2 text-sm rounded-lg"
               >
                 {itemEnCurso === cobroModal.itemId ? "Cobrando…" : "Confirmar cobro"}
               </button>
@@ -2032,14 +2032,14 @@ export default function ClientesClient({
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
                 onClick={cancelarModalConsent}
-                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+                className="btn-secondary px-4 py-2 text-sm rounded-lg"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleGuardarConsentimiento}
                 disabled={consentGuardando}
-                className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+                className="btn-primary px-4 py-2 text-sm rounded-lg"
               >
                 {consentGuardando ? "Guardando…" : "Guardar y firmar"}
               </button>
@@ -2092,7 +2092,7 @@ export default function ClientesClient({
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
                 onClick={() => setConsentVerModal(null)}
-                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+                className="btn-secondary px-4 py-2 text-sm rounded-lg"
               >
                 Cerrar
               </button>
@@ -2156,14 +2156,14 @@ export default function ClientesClient({
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
                 onClick={cancelarModalReceta}
-                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+                className="btn-secondary px-4 py-2 text-sm rounded-lg"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleGuardarReceta}
                 disabled={recetaGuardando}
-                className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+                className="btn-primary px-4 py-2 text-sm rounded-lg"
               >
                 {recetaGuardando ? "Guardando…" : "Guardar y firmar"}
               </button>
@@ -2213,7 +2213,7 @@ export default function ClientesClient({
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
                 onClick={() => setRecetaVerModal(null)}
-                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+                className="btn-secondary px-4 py-2 text-sm rounded-lg"
               >
                 Cerrar
               </button>

@@ -38,7 +38,9 @@ export async function obtenerEstadoPasosBienvenida(
     prisma.sale.count({ where: { tenantId } }),
   ]);
 
-  const personalizado = themePreset !== "MATERIAL_INDIGO";
+  // 2026-10-02: Tenant.themePreset cambió de default (ver el comentario
+  // junto a ese campo en schema.prisma) — MATERIAL_INDIGO → LINKITY.
+  const personalizado = themePreset !== "LINKITY";
   const tieneCatalogo = productCount > 0;
   const tieneEquipo = staffCount > 0;
   const tieneCaja = cashSessionCount > 0;

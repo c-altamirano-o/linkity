@@ -235,7 +235,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
           <span className="text-[14.5px] font-medium text-foreground">{moduloNombre}</span>
           <button
             onClick={abrirModalNueva}
-            className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-[12.5px] font-medium px-2.5 py-1.5 rounded-lg"
+            className="btn-primary flex items-center gap-1 text-[12.5px] px-2.5 py-1.5 rounded-lg"
           >
             <Plus className="w-3 h-3" /> Nueva
           </button>
@@ -311,7 +311,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
           <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
             <Package className="w-8 h-8 text-muted-foreground/40 mb-2" />
             <p className="text-sm text-muted-foreground">No hay compras registradas todavía.</p>
-            <button onClick={abrirModalNueva} className="text-xs text-primary-text mt-1">+ Registrar la primera</button>
+            <button onClick={abrirModalNueva} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-xs mt-1">+ Registrar la primera</button>
           </div>
         ) : (
           <>
@@ -331,7 +331,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                 <div className="flex gap-2">
                   <button
                     onClick={handleImprimir}
-                    className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-[12.5px] text-foreground hover:bg-muted"
+                    className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px]"
                   >
                     <Printer className="w-3 h-3" /> Imprimir
                   </button>
@@ -340,7 +340,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                       <button
                         onClick={() => handleActualizarEstado(seleccionada, "CANCELLED")}
                         disabled={pending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted disabled:opacity-50 rounded-lg text-[12.5px] font-medium text-muted-foreground"
+                        className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px]"
                       >
                         <Ban className="w-3 h-3" /> Cancelar
                       </button>
@@ -484,7 +484,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                   <button
                     type="button"
                     onClick={() => setNvProveedorNuevo((v) => !v)}
-                    className="text-[11.5px] text-primary-text"
+                    className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-[11.5px]"
                   >
                     {nvProveedorNuevo ? "Elegir existente" : "+ Nuevo proveedor"}
                   </button>
@@ -529,7 +529,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PRODUCTOS</label>
-                  <button type="button" onClick={handleAgregarRenglon} className="text-[11.5px] text-primary-text">
+                  <button type="button" onClick={handleAgregarRenglon} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-[11.5px]">
                     + Agregar producto
                   </button>
                 </div>
@@ -597,14 +597,14 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
                 onClick={cancelarModalNueva}
-                className="px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted"
+                className="btn-secondary px-3 py-1.5 rounded-lg text-xs"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleCrearCompra}
                 disabled={guardando}
-                className="px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium"
+                className="btn-primary px-3 py-1.5 rounded-lg text-xs"
               >
                 {guardando ? "Guardando..." : "Crear orden de compra"}
               </button>

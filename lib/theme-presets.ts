@@ -104,8 +104,27 @@ export const WINDOWS_THEMES: Record<WindowsThemeId, WindowsThemeDef> = {
   WINDOWS8_LIGHT: {
     name: "Windows 8 Start",
     baseStyle: "Light",
-    backgroundColor: "#FFFFFF",
-    defaultIconColor: "#000000",
+    // 2026-10-02, bug real reportado por Carlos con capturas ("el tema con
+    // el que más tengo problema es Windows 8 Start. No realza en otro
+    // color la selección o los botones... no se sabe si está activado o
+    // no"). Causa raíz: a diferencia de los otros 9 temas Windows Phone,
+    // este tenía "backgroundColor" (el valor que se vuelve literalmente
+    // "--primary", el acento de botones/menú activo/selección en TODA la
+    // app, ver construirPresetDesdeDef) en blanco puro — y el fondo de
+    // página de un tema "Light" también es casi blanco. Un botón o un
+    // ítem de menú "activo" con acento blanco sobre una página blanca no
+    // tiene NINGÚN contraste, sin importar qué tan bien calculado esté el
+    // color del texto encima (ese es un problema distinto, ya resuelto
+    // por textoLegibleSobre más abajo, pero no alcanza a arreglar esto:
+    // el problema aquí es el RELLENO del botón, no su texto). Se cambia a
+    // "#0078D7" (el azul de acento clásico de Windows 8/10/11, distinto
+    // del "#004E8A" de Lumia Cobalt para que los dos temas se sigan
+    // viendo claramente diferentes). Contraste verificado: ~4.5:1 contra
+    // blanco y contra el fondo de página, por encima del mínimo. El
+    // resto del tema (fondo de página claro, fichas de categoría) no
+    // cambia en nada.
+    backgroundColor: "#0078D7",
+    defaultIconColor: "#FFFFFF",
     tileColors: ["#004E8A", "#00A4A4", "#32CD32", "#D80073", "#F09609"],
   },
   SAPPHIRE_NIGHT: {
@@ -234,6 +253,47 @@ export const MATERIAL_THEMES: Record<MaterialThemeId, WindowsThemeDef> = {
     backgroundColor: "#BB86FC",
     defaultIconColor: "#121212",
     tileColors: ["#03DAC6", "#CF6679", "#FFD54F", "#81D4FA", "#A5D6A7"],
+  },
+};
+
+/* ────────────────────────────────────────────────────────────────────
+ * TEMA "LINKITY" (2026-10-02, a petición de Carlos: "noté que no hay un
+ * tema llamado Linkity que venga por default. usando los colores del
+ * logo como base. Tomando en cuenta que el fondo será blanco")
+ *
+ * Mismo mecanismo que WINDOWS_THEMES/MATERIAL_THEMES (una galería más,
+ * ninguna de las otras dos se toca) — la diferencia es que este es el
+ * único tema derivado de una fuente verificable en vez de a mano: el
+ * color morado se extrajo directamente de public/images/logo-icon.png
+ * (el ícono real de la plataforma, no una aproximación visual) — "#6C4FE5"
+ * es, con mucho, el color dominante de ese archivo. Contraste verificado
+ * (misma fórmula que textoLegibleSobre más abajo): ~5.4:1 contra blanco,
+ * tanto como texto encima del morado como fondo de página detrás de
+ * él — bien por encima del mínimo, así que NO dispara el fallback de
+ * textoLegibleSobre (el tema ya nace con buen contraste, a diferencia del
+ * bug que se acaba de corregir en "Windows 8 Start" arriba).
+ *
+ * Las 5 fichas reutilizan el set de acentos que Carlos ya vio y aprobó en
+ * varios de los otros temas (teal/verde/magenta/ámbar), cambiando solo la
+ * quinta por un violeta más oscuro que amarra con el morado de marca en
+ * vez de un azul genérico.
+ *
+ * Carlos pidió que sea el tema que "venga por default" — eso se resuelve
+ * en prisma/schema.prisma (Tenant.themePreset @default(LINKITY), antes
+ * MATERIAL_INDIGO) para negocios NUEVOS; los tenants que ya existen no se
+ * tocan (siguen con el tema que ya tenían elegido, igual que cualquier
+ * otro cambio de catálogo en este archivo).
+ * ──────────────────────────────────────────────────────────────────── */
+
+export type LinkityThemeId = "LINKITY";
+
+export const LINKITY_THEMES: Record<LinkityThemeId, WindowsThemeDef> = {
+  LINKITY: {
+    name: "Linkity",
+    baseStyle: "Light",
+    backgroundColor: "#6C4FE5",
+    defaultIconColor: "#FFFFFF",
+    tileColors: ["#00A4A4", "#32CD32", "#D80073", "#F09609", "#2D1B69"],
   },
 };
 
@@ -403,6 +463,18 @@ export function construirPresetMaterial(
   intensidadFondo: number = intensidadFicha,
 ): Record<string, string> {
   return construirPresetDesdeDef(MATERIAL_THEMES[id], intensidadFicha, intensidadFondo);
+}
+
+// Misma derivación que construirPresetWindowsPhone/construirPresetMaterial,
+// para el único tema de LINKITY_THEMES (ver el comentario largo junto a esa
+// constante) — función separada por el mismo motivo que las otras dos: que
+// quede explícito en cada punto de llamada de qué galería viene el tema.
+export function construirPresetLinkity(
+  id: LinkityThemeId,
+  intensidadFicha: number = INTENSIDAD_DEFAULT,
+  intensidadFondo: number = intensidadFicha,
+): Record<string, string> {
+  return construirPresetDesdeDef(LINKITY_THEMES[id], intensidadFicha, intensidadFondo);
 }
 
 // 2026-09-24, a petición de Carlos: forma que necesita un tema "Personalizado"
@@ -774,7 +846,7 @@ export const THEME_PRESETS = {
 } as const;
 
 export type LegacyThemePresetId = keyof typeof THEME_PRESETS;
-export type ThemePresetId = WindowsThemeId | MaterialThemeId | LegacyThemePresetId | typeof TEMA_PERSONALIZADO_ID;
+export type ThemePresetId = WindowsThemeId | MaterialThemeId | LinkityThemeId | LegacyThemePresetId | typeof TEMA_PERSONALIZADO_ID;
 
 /**
  * Punto de entrada ÚNICO para resolver el tema real de un tenant — lo usa
@@ -814,6 +886,9 @@ export function resolverPresetTenant(
   }
   if (themePreset in MATERIAL_THEMES) {
     return construirPresetMaterial(themePreset as MaterialThemeId, intensidadFicha, intensidadFondo);
+  }
+  if (themePreset in LINKITY_THEMES) {
+    return construirPresetLinkity(themePreset as LinkityThemeId, intensidadFicha, intensidadFondo);
   }
   if (themePreset in THEME_PRESETS) {
     // Mismo fix de "color"/"colorScheme" que construirPresetDesdeDef (ver

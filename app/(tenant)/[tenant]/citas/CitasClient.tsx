@@ -375,14 +375,14 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
         <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
           <button
             onClick={cancelarModal}
-            className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+            className="btn-secondary px-4 py-2 text-sm rounded-lg"
           >
             Cancelar
           </button>
           <button
             onClick={handleGuardar}
             disabled={guardando}
-            className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+            className="btn-primary px-4 py-2 text-sm rounded-lg"
           >
             {guardando ? "Guardando…" : "Guardar"}
           </button>
@@ -406,7 +406,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
             </p>
             <button
               onClick={abrirModalNueva}
-              className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-4 py-2 rounded-lg"
+              className="btn-primary inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg"
             >
               <Plus className="w-4 h-4" /> Nueva cita
             </button>
@@ -426,7 +426,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
         </div>
         <button
           onClick={abrirModalNueva}
-          className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-3 py-2 rounded-lg"
+          className="btn-primary flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg"
         >
           <Plus className="w-4 h-4" /> Nueva cita
         </button>
@@ -452,7 +452,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
         </div>
         <button
           onClick={() => { setDiaSeleccionado(new Date()); setVerTodas(false); }}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-card border border-border text-muted-foreground hover:bg-muted"
+          className="btn-secondary px-3 py-1.5 rounded-lg text-xs"
         >
           Hoy
         </button>

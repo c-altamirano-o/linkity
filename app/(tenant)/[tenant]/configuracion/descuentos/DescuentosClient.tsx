@@ -358,7 +358,7 @@ export default function DescuentosClient({
           </div>
           <button
             onClick={abrirCrear}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground"
+            className="btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg"
           >
             <Plus className="w-3.5 h-3.5" /> Nuevo descuento
           </button>
@@ -718,14 +718,14 @@ export default function DescuentosClient({
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button
                 onClick={cerrarModal}
-                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted"
+                className="btn-secondary px-4 py-2 text-sm rounded-lg"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleGuardar}
                 disabled={guardando}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+                className="btn-primary flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg"
               >
                 {guardando && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 {guardando ? "Guardando…" : "Guardar"}

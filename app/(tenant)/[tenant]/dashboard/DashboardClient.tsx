@@ -921,7 +921,7 @@ export default function DashboardClient({
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <p className="text-sm font-medium text-foreground">{t("entity.repair.plural")} activas</p>
-              <button onClick={() => setModalAbierto("reparaciones")} className="text-xs text-primary-text hover:underline">Ver todas</button>
+              <button onClick={() => setModalAbierto("reparaciones")} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-xs">Ver todas</button>
             </div>
             <div className="divide-y divide-border/60">
               {data.reparacionesActivas.length === 0 ? (
@@ -1150,11 +1150,11 @@ export default function DashboardClient({
             )}
             <div className="flex items-center justify-between px-5 py-4 border-t border-border flex-shrink-0">
               <button onClick={() => setConfigurandoCategorias(false)}
-                className="px-4 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted/40">
+                className="btn-secondary px-4 py-2 rounded-lg text-xs">
                 Cancelar
               </button>
               <button onClick={guardarConfig} disabled={guardandoCategorias}
-                className="px-5 py-2 bg-primary hover:opacity-90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
+                className="btn-primary px-5 py-2 rounded-lg text-xs">
                 {guardandoCategorias ? "Guardando…" : "Guardar cambios"}
               </button>
             </div>

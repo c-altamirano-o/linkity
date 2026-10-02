@@ -105,7 +105,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
         </div>
         <button
           onClick={abrirModal}
-          className="flex items-center gap-1.5 bg-primary text-primary-foreground text-[13.5px] font-medium px-3 py-2 rounded-lg hover:opacity-90 transition-opacity"
+          className="btn-primary flex items-center gap-1.5 text-[13.5px] px-3 py-2 rounded-lg"
         >
           <Plus className="w-3.5 h-3.5" />
           Nuevo ticket
@@ -119,7 +119,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
           <p className="text-[13.5px] text-muted-foreground mb-4">Si tienes una duda o algo no está funcionando, cuéntanos.</p>
           <button
             onClick={abrirModal}
-            className="text-[13.5px] font-medium text-primary-text hover:underline"
+            className="btn-ghost px-2.5 py-1 rounded-md text-[13.5px]"
           >
             Abrir tu primer ticket
           </button>
@@ -195,7 +195,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
                   <button
                     onClick={enviarRespuesta}
                     disabled={isPending || !respuesta.trim()}
-                    className="p-2.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-50 hover:opacity-90 transition-opacity"
+                    className="btn-primary p-2.5 rounded-lg"
                   >
                     <Send className="w-4 h-4" />
                   </button>
@@ -257,14 +257,14 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
                 onClick={cancelarModal}
-                className="text-[13.5px] text-muted-foreground px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
+                className="btn-ghost text-[13.5px] px-3 py-1.5 rounded-lg"
               >
                 Cancelar
               </button>
               <button
                 onClick={crear}
                 disabled={isPending || !subject.trim() || !body.trim()}
-                className="text-[13.5px] font-medium bg-primary text-primary-foreground px-3 py-1.5 rounded-lg disabled:opacity-50 hover:opacity-90 transition-opacity"
+                className="btn-primary text-[13.5px] px-3 py-1.5 rounded-lg"
               >
                 {isPending ? "Enviando…" : "Enviar ticket"}
               </button>

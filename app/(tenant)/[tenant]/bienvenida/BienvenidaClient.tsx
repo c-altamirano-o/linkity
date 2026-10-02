@@ -223,7 +223,7 @@ export default function BienvenidaClient({
         >
           <button
             onClick={() => setFormEquipoAbierto((v) => !v)}
-            className="flex items-center gap-1 text-xs font-medium text-primary-text hover:underline flex-shrink-0"
+            className="btn-ghost flex items-center gap-1 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex-shrink-0"
           >
             Invitar ahora {formEquipoAbierto ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
@@ -246,20 +246,20 @@ export default function BienvenidaClient({
                 <div className="flex items-center gap-2 mt-2">
                   <button
                     onClick={copiarCredenciales}
-                    className="flex items-center gap-1 text-[12.5px] font-medium text-primary-text hover:underline"
+                    className="btn-ghost flex items-center gap-1 -mx-1.5 px-1.5 py-0.5 rounded-md text-[12.5px]"
                   >
                     {copiado ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                     {copiado ? "Copiado" : "Copiar"}
                   </button>
                   <button
                     onClick={() => { setResultadoInvitar(null); setFormEquipoAbierto(false); }}
-                    className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
+                    className="btn-ghost text-[12.5px] rounded-lg"
                   >
                     Cerrar
                   </button>
                   <button
                     onClick={() => setResultadoInvitar(null)}
-                    className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground ml-auto"
+                    className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-[12.5px] ml-auto"
                   >
                     Invitar a alguien más
                   </button>
@@ -290,14 +290,14 @@ export default function BienvenidaClient({
                 <div className="flex items-center gap-2 justify-end">
                   <button
                     onClick={() => setFormEquipoAbierto(false)}
-                    className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
+                    className="btn-ghost text-[12.5px] rounded-lg"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={invitarEmpleado}
                     disabled={invitando || !nombreEmpleado.trim() || !correoEmpleado.trim()}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12.5px] font-medium transition-colors"
+                    className="btn-primary flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12.5px]"
                   >
                     {invitando && <Loader2 className="w-3 h-3 animate-spin" />}
                     {invitando ? "Creando…" : "Crear cuenta"}
@@ -420,7 +420,7 @@ function PasoShell({
         {!done && children}
         {!done && (
           mostrarComoOmitido ? (
-            <button onClick={onDeshacerOmitir} className="text-[11.5px] text-muted-foreground hover:text-foreground">
+            <button onClick={onDeshacerOmitir} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-[11.5px]">
               Deshacer
             </button>
           ) : (

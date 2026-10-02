@@ -1,4 +1,3 @@
-// ruta: C:\linkity\lib\catalogo-data.ts
 import "server-only";
 
 import { getTenantPrisma } from "@/lib/prisma";
@@ -35,8 +34,12 @@ export interface ProductoCatalogo {
   type: TipoCatalogo;
   isService: boolean;
   price: number;
-  cost: number;
+  // Precio de mayoreo (Product.wholesalePrice, 2026-09-30, a petición de
+  // Carlos) — null si no se definió uno. Puramente informativo aquí
+  // (CatalogoClient.tsx lo muestra bajo cada ficha); POS es quien de
+  // verdad lo cobra, ver ProductoPOS.wholesalePrice en lib/pos-data.ts.
   wholesalePrice: number | null;
+  cost: number;
   stock: number;
   minStock: number;
   isActive: boolean;
@@ -168,8 +171,8 @@ export async function getCatalogoData(
       type,
       isService,
       price: Number(p.price),
-      cost: p.cost != null ? Number(p.cost) : 0,
       wholesalePrice: p.wholesalePrice != null ? Number(p.wholesalePrice) : null,
+      cost: p.cost != null ? Number(p.cost) : 0,
       stock: isService ? 0 : p.inventory.reduce((s, i) => s + i.stock, 0),
       minStock: isService ? 0 : p.inventory.reduce((s, i) => s + i.minStock, 0),
       isActive: p.isActive,

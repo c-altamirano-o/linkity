@@ -542,7 +542,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                   <button
                     onClick={handleGuardarCosto}
                     disabled={pending || cerrada || !costoEdit}
-                    className="px-3 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12.5px] font-medium transition-colors"
+                    className="btn-primary px-3 py-2 rounded-lg text-[12.5px]"
                   >
                     Guardar
                   </button>
@@ -623,7 +623,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                     <button
                       onClick={handleAgregarPieza}
                       disabled={pending || !piezaNuevaId}
-                      className="px-2.5 py-2 bg-muted hover:bg-accent disabled:opacity-40 rounded-lg text-primary-text"
+                      className="btn-secondary px-2.5 py-2 rounded-lg"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
@@ -642,7 +642,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                         key={s.estado}
                         onClick={() => (s.estado === "DELIVERED" ? handleEntregarSinCobro() : handleAvanzar(s.estado))}
                         disabled={pending}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12.5px] font-medium transition-colors"
+                        className="btn-primary flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px]"
                       >
                         <ArrowRight className="w-3.5 h-3.5" /> {s.texto}
                       </button>
@@ -757,11 +757,11 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
               </p>
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setOtroAbierto(false)}
-                  className="flex-1 px-3 py-2 rounded-lg text-xs border border-border text-muted-foreground hover:bg-muted">
+                  className="btn-secondary flex-1 px-3 py-2 rounded-lg text-xs">
                   Cancelar
                 </button>
                 <button type="button" onClick={handleAgregarPiezaPersonalizada} disabled={pending}
-                  className="flex-1 px-3 py-2 rounded-lg text-xs bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 font-medium">
+                  className="btn-primary flex-1 px-3 py-2 rounded-lg text-xs">
                   {pending ? "Agregando..." : "Agregar"}
                 </button>
               </div>

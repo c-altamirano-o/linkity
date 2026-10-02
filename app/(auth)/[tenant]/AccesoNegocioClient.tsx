@@ -295,7 +295,7 @@ export default function AccesoNegocioClient({
               <p className="text-sm text-muted-foreground mt-2">Nadie respondió a tiempo — puedes intentar de nuevo.</p>
             </>
           )}
-          <button onClick={cancelarEspera} className="mt-6 text-xs text-muted-foreground hover:text-foreground underline">
+          <button onClick={cancelarEspera} className="btn-ghost mt-6 px-2.5 py-1 rounded-md text-xs">
             {estadoEspera === "pendiente" ? "Cancelar" : "Volver a intentar"}
           </button>
         </div>
@@ -383,7 +383,7 @@ export default function AccesoNegocioClient({
             <button
               type="submit"
               disabled={pendingAdmin}
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 rounded-lg text-sm transition-all disabled:opacity-60"
+              className="btn-primary w-full py-2.5 rounded-lg text-sm transition-all"
             >
               {pendingAdmin ? "Verificando..." : "Iniciar sesión"}
             </button>

@@ -681,10 +681,10 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
           <button
             onClick={() => { setModalImportar(true); setErrorImportar(null); setResultadoImportar(null); }}
             title="Importar catálogo desde CSV o Excel"
-            className="flex-1 flex items-center justify-center gap-1 bg-muted text-muted-foreground text-[11.5px] font-medium px-2 py-1.5 rounded-lg hover:bg-muted/70">
+            className="btn-secondary flex-1 flex items-center justify-center gap-1 text-[11.5px] px-2 py-1.5 rounded-lg">
             <Upload className="w-3 h-3" /> Importar
           </button>
-          <button onClick={abrirNuevo} className="flex-1 flex items-center justify-center gap-1 bg-primary text-primary-foreground text-[11.5px] font-medium px-2 py-1.5 rounded-lg">
+          <button onClick={abrirNuevo} className="btn-primary flex-1 flex items-center justify-center gap-1 text-[11.5px] px-2 py-1.5 rounded-lg">
             <Plus className="w-3 h-3" /> Nuevo
           </button>
         </div>
@@ -837,7 +837,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   </span>
                 )}
               </button>
-              <button className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted transition-colors flex-shrink-0">
+              <button className="btn-secondary flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-xs flex-shrink-0">
                 <SlidersHorizontal className="w-3 h-3" />
                 <span className="hidden sm:inline">Filtros</span>
               </button>
@@ -849,14 +849,14 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 <p className="text-sm font-medium text-foreground mb-1">Aún no hay nada en tu catálogo</p>
                 <p className="text-xs text-muted-foreground max-w-xs mb-3">Agrega tus primeros productos, refacciones o servicios para empezar a venderlos.</p>
                 <div className="flex flex-col sm:flex-row items-center gap-2">
-                  <button onClick={abrirNuevo} className="flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-medium px-3 py-2 rounded-lg">
+                  <button onClick={abrirNuevo} className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg">
                     <Plus className="w-3.5 h-3.5" /> Agregar producto
                   </button>
                   {businessType && (
                     <button
                       onClick={cargarCatalogoArranque}
                       disabled={cargandoArranque}
-                      className="flex items-center gap-1.5 bg-card border border-border text-foreground text-xs font-medium px-3 py-2 rounded-lg hover:bg-muted disabled:opacity-60 transition-colors">
+                      className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg">
                       {cargandoArranque
                         ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         : <Sparkles className="w-3.5 h-3.5 text-amber-500" />}
@@ -865,7 +865,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   )}
                   <button
                     onClick={() => { setModalImportar(true); setErrorImportar(null); setResultadoImportar(null); }}
-                    className="flex items-center gap-1.5 bg-card border border-border text-foreground text-xs font-medium px-3 py-2 rounded-lg hover:bg-muted transition-colors">
+                    className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg">
                     <Upload className="w-3.5 h-3.5" /> Importar desde archivo
                   </button>
                 </div>
@@ -1329,11 +1329,11 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                         <div className="flex items-center gap-2">
                           <p className="text-[12px] text-foreground/80 flex-1">¿Restaurarlo al catálogo activo?</p>
                           <button type="button" onClick={() => setConfirmarAccionProducto(null)}
-                            className="px-2 py-1 text-[12px] text-muted-foreground hover:text-foreground">
+                            className="btn-ghost px-2 py-1 text-[12px] rounded-lg">
                             Cancelar
                           </button>
                           <button type="button" onClick={() => ejecutarAccionProducto("restaurar")} disabled={isPending}
-                            className="px-2 py-1 text-[12px] font-medium bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg">
+                            className="btn-primary px-2 py-1 text-[12px] rounded-lg">
                             {isPending ? "Restaurando…" : "Confirmar"}
                           </button>
                         </div>
@@ -1352,7 +1352,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                         <div className="flex items-center gap-2">
                           <p className="text-[12px] text-red-700 flex-1">Esto lo borra por completo, sin poder deshacerlo. ¿Continuar?</p>
                           <button type="button" onClick={() => setConfirmarAccionProducto(null)}
-                            className="px-2 py-1 text-[12px] text-muted-foreground hover:text-foreground">
+                            className="btn-ghost px-2 py-1 text-[12px] rounded-lg">
                             Cancelar
                           </button>
                           <button type="button" onClick={() => ejecutarAccionProducto("eliminar")} disabled={isPending}
@@ -1373,11 +1373,11 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                         Se ocultará del catálogo y de POS/Compras/Reparaciones, sin borrar su historial. ¿Continuar?
                       </p>
                       <button type="button" onClick={() => setConfirmarAccionProducto(null)}
-                        className="px-2 py-1 text-[12px] text-muted-foreground hover:text-foreground">
+                        className="btn-ghost px-2 py-1 text-[12px] rounded-lg">
                         Cancelar
                       </button>
                       <button type="button" onClick={() => ejecutarAccionProducto("archivar")} disabled={isPending}
-                        className="px-2 py-1 text-[12px] font-medium bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg">
+                        className="btn-primary px-2 py-1 text-[12px] rounded-lg">
                         {isPending ? "Archivando…" : "Confirmar"}
                       </button>
                     </div>
@@ -1395,14 +1395,14 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
                 onClick={cancelarModalProducto}
-                className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground"
+                className="btn-ghost px-3 py-2 text-[13.5px] rounded-lg"
               >
                 Cancelar
               </button>
               <button
                 onClick={guardarProducto}
                 disabled={isPending || !form.name.trim() || !form.price}
-                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[13.5px] font-medium transition-colors"
+                className="btn-primary px-4 py-2 rounded-lg text-[13.5px] transition-colors"
               >
                 {isPending ? "Guardando…" : editando ? "Guardar cambios" : "Crear producto"}
               </button>
@@ -1499,7 +1499,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
                 onClick={cancelarModalImportar}
-                className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground"
+                className="btn-ghost px-3 py-2 text-[13.5px] rounded-lg"
               >
                 {resultadoImportar ? "Cerrar" : "Cancelar"}
               </button>
@@ -1563,7 +1563,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
               <button
                 onClick={() => setModalAutoIconos(false)}
                 disabled={autoIconosPendiente}
-                className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground disabled:opacity-50"
+                className="btn-ghost px-3 py-2 text-[13.5px] rounded-lg"
               >
                 {autoIconosResultado ? "Cerrar" : "Cancelar"}
               </button>
@@ -1571,7 +1571,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 <button
                   onClick={ejecutarAutoIconos}
                   disabled={autoIconosPendiente}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[13.5px] font-medium transition-colors"
+                  className="btn-primary flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13.5px] transition-colors"
                 >
                   {autoIconosPendiente && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   {autoIconosPendiente ? "Asignando…" : "Ejecutar"}

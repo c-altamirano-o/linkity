@@ -633,7 +633,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   Tienes {empleados.length} empleado(s) desactivado(s) — cambia el filtro de arriba a &quot;Todos&quot; para verlos y reactivar a alguien.
                 </p>
               )}
-              <button onClick={abrirNuevoEmpleado} className="text-xs text-primary-text mt-1">
+              <button onClick={abrirNuevoEmpleado} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-xs mt-1">
                 {empleados.length === 0 ? "+ Registrar el primero" : "+ Registrar un nuevo empleado"}
               </button>
               {/* 2026-10-02, a petición de Carlos ("lo agregó como texto
@@ -888,7 +888,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               <div>
                 <div className="flex items-center justify-between">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ROL — DETERMINA SU ACCESO AL SISTEMA</label>
-                  <button type="button" onClick={() => setModalRoles(true)} className="text-[11.5px] text-primary-text hover:underline">Roles y permisos</button>
+                  <button type="button" onClick={() => setModalRoles(true)} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-[11.5px]">Roles y permisos</button>
                 </div>
                 {/* 2026-10-01, a petición de Carlos: esta frase va siempre
                     visible (antes solo aparecía la descripción del rol, y

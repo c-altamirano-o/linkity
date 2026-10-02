@@ -1,4 +1,3 @@
-// ruta: C:\linkity\lib\clientes-data.ts
 import "server-only";
 
 import { getTenantPrisma } from "@/lib/prisma";
@@ -44,7 +43,6 @@ export interface ClienteUI {
   email: string | null;
   rfc: string | null;
   address: string | null;
-  isWholesaler: boolean;
   createdAt: string; // ISO
   visitas: number;
   totalGastado: number;
@@ -52,6 +50,11 @@ export interface ClienteUI {
   reparacionesActivas: number;
   ultimaVisita: string | null; // ISO
   historial: HistorialClienteItem[];
+  // 2026-09-30, a petición de Carlos: cliente mayorista — POS usa esta
+  // bandera para cobrar Product.wholesalePrice en vez del precio público
+  // cuando este cliente está seleccionado en el carrito (ver POSClient.tsx
+  // y crearVentaAction, pos-actions.ts).
+  isWholesaler: boolean;
 }
 
 const REPARACION_ENTREGADA_O_CANCELADA = new Set(["DELIVERED", "CANCELLED"]);
@@ -172,7 +175,6 @@ export async function getClientesData(tenantId: string): Promise<ClienteUI[]> {
       email: c.email,
       rfc: c.rfc,
       address: c.address,
-      isWholesaler: c.isWholesaler,
       createdAt: c.createdAt.toISOString(),
       visitas: ventasComoVisita + c.repairs.length,
       totalGastado,
@@ -180,6 +182,7 @@ export async function getClientesData(tenantId: string): Promise<ClienteUI[]> {
       reparacionesActivas,
       ultimaVisita,
       historial,
+      isWholesaler: c.isWholesaler,
     };
   });
 }

@@ -427,7 +427,7 @@ function VistaTienda({
       <div className={`${mostrarDetalle ? "hidden md:flex" : "flex"} w-full md:w-72 flex-col bg-card border-r border-border flex-shrink-0`}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="text-sm font-medium text-foreground">{label(labels, "module.repair.name")}</span>
-          <button onClick={onNuevaClick} className="flex items-center gap-1 bg-primary text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg">
+          <button onClick={onNuevaClick} className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg">
             <Plus className="w-3 h-3" /> Nueva
           </button>
         </div>
@@ -565,7 +565,7 @@ function VistaTienda({
                   )
                 }
                 title="Reimprimir ticket de recepción"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors">
+                className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                 <Printer className="w-3 h-3" /> Ticket
               </button>
               <button disabled={pending} onClick={() => onWhatsapp(seleccionada.id)}
@@ -584,19 +584,19 @@ function VistaTienda({
                   (handleEntregarSinCobro), nunca sin ningún comprobante. */}
               {seleccionada.estado === "SHOP_READY" && (
                 <button disabled={pending} onClick={() => onCobrarClick(seleccionada.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
+                  className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                   <CheckCircle className="w-3 h-3" /> Entregar
                 </button>
               )}
               {seleccionada.estado === "SHOP_RETURN" && cobrarEnDevolucion && (
                 <button disabled={pending} onClick={() => onCobrarClick(seleccionada.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
+                  className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                   <CheckCircle className="w-3 h-3" /> Entregar
                 </button>
               )}
               {seleccionada.estado === "SHOP_RETURN" && !cobrarEnDevolucion && (
                 <button disabled={pending} onClick={() => onEntregarSinCobro(seleccionada)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium transition-colors">
+                  className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                   <CheckCircle className="w-3 h-3" /> Entregar
                 </button>
               )}
@@ -1179,7 +1179,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                   <input type="number" min={1} value={piezaNuevaCantidad} onChange={(e) => setPiezaNuevaCantidad(e.target.value)}
                     className="w-14 px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary" />
                   <button type="button" onClick={agregarPiezaNueva} disabled={!piezaNuevaId}
-                    className="px-2.5 py-2 bg-muted hover:bg-accent disabled:opacity-40 rounded-lg text-primary-text">
+                    className="btn-secondary px-2.5 py-2 rounded-lg">
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -1227,11 +1227,11 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
               </div>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
-              <button onClick={cancelarModalNueva} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
+              <button onClick={cancelarModalNueva} className="btn-ghost px-3 py-2 text-xs rounded-lg">
                 Cancelar
               </button>
               <button disabled={creando} onClick={handleCrearReparacion}
-                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
+                className="btn-primary px-4 py-2 rounded-lg text-xs">
                 {creando ? "Creando..." : "Crear"}
               </button>
             </div>
@@ -1283,11 +1283,11 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
               </p>
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setOtroAbierto(false)}
-                  className="flex-1 px-3 py-2 rounded-lg text-xs border border-border text-muted-foreground hover:bg-muted">
+                  className="btn-secondary flex-1 px-3 py-2 rounded-lg text-xs">
                   Cancelar
                 </button>
                 <button type="button" onClick={agregarPiezaPersonalizada}
-                  className="flex-1 px-3 py-2 rounded-lg text-xs bg-primary text-primary-foreground hover:opacity-90 font-medium">
+                  className="btn-primary flex-1 px-3 py-2 rounded-lg text-xs">
                   Agregar
                 </button>
               </div>

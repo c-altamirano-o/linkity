@@ -11,7 +11,7 @@ import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/client";
 import type { FormatoTicket, QrDestinoTicket } from "@/lib/recibo-imprimible";
 import {
-  WINDOWS_THEMES, MATERIAL_THEMES, resolverPresetTenant, TENANT_THEME_ROOT_ID,
+  WINDOWS_THEMES, MATERIAL_THEMES, LINKITY_THEMES, resolverPresetTenant, TENANT_THEME_ROOT_ID,
   INTENSIDAD_DEFAULT, INTENSIDAD_MIN, INTENSIDAD_MAX,
   TEMA_PERSONALIZADO_ID, COLORES_PERSONALIZADOS_DEFAULT, parseColoresPersonalizados,
   type ColoresPersonalizados,
@@ -67,6 +67,16 @@ const THEMES = Object.entries(WINDOWS_THEMES).map(([id, tema]) => ({
 // — misma tarjeta/swatch que los Windows Phone, en una galería aparte para
 // que se note que es un estilo distinto.
 const THEMES_MATERIAL = Object.entries(MATERIAL_THEMES).map(([id, tema]) => ({
+  id,
+  name: tema.name,
+  swatch: tema.backgroundColor,
+}));
+
+// Tema oficial de la plataforma (2026-10-02, a petición de Carlos — ver el
+// comentario largo junto a LINKITY_THEMES en lib/theme-presets.ts). Mismo
+// tipo de tarjeta que las otras dos galerías, pero se muestra PRIMERO y con
+// una etiqueta aparte: es el nuevo default para negocios nuevos.
+const THEMES_LINKITY = Object.entries(LINKITY_THEMES).map(([id, tema]) => ({
   id,
   name: tema.name,
   swatch: tema.backgroundColor,
@@ -706,6 +716,35 @@ export default function ConfiguracionClient({
         <div className="p-5">
           <p className="text-sm text-muted-foreground mb-5">Selecciona la paleta de colores principal para tu interfaz, estilo Windows Phone.</p>
 
+          {/* Tema "Linkity" (2026-10-02) — ver el comentario junto a
+              THEMES_LINKITY arriba. Va primero y con su propia etiqueta
+              para distinguirlo de ser "uno más" de la galería Windows
+              Phone de abajo. */}
+          <div className="mb-6 pb-5 border-b border-border">
+            <p className="text-sm text-muted-foreground mb-4">
+              <span className="font-medium text-foreground">Linkity</span> — el tema oficial de la plataforma, con los colores de tu logo:
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+              {THEMES_LINKITY.map((theme) => (
+                <button
+                  key={theme.id}
+                  onClick={() => seleccionarTema(theme.id)}
+                  className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                    temaSeleccionado === theme.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
+                  }`}
+                >
+                  <div
+                    className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
+                    style={{ backgroundColor: theme.swatch }}
+                  >
+                    {temaSeleccionado === theme.id && <Check className="w-5 h-5 text-white drop-shadow" />}
+                  </div>
+                  <span className="text-xs font-medium text-foreground">{theme.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
             {THEMES.map((theme) => (
               <button
@@ -925,7 +964,7 @@ export default function ConfiguracionClient({
             <button
               onClick={guardarRubro}
               disabled={rubroPending}
-              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
             >
               {rubroPending && <Loader2 className="w-4 h-4 animate-spin" />}
               {rubroPending ? "Aplicando..." : "Guardar cambios"}
@@ -1046,7 +1085,7 @@ export default function ConfiguracionClient({
             <button
               onClick={guardarWeekStartDay}
               disabled={weekStartDayPending}
-              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
             >
               {weekStartDayPending && <Loader2 className="w-4 h-4 animate-spin" />}
               {weekStartDayPending ? "Aplicando..." : "Guardar cambios"}
@@ -1084,7 +1123,7 @@ export default function ConfiguracionClient({
             <button
               onClick={guardarSupportPhone}
               disabled={supportPhonePending}
-              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
             >
               {supportPhonePending && <Loader2 className="w-4 h-4 animate-spin" />}
               {supportPhonePending ? "Aplicando..." : "Guardar cambios"}
@@ -1261,7 +1300,7 @@ export default function ConfiguracionClient({
             <button
               onClick={guardarDatosTicket}
               disabled={datosTicketPending}
-              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
             >
               {datosTicketPending && <Loader2 className="w-4 h-4 animate-spin" />}
               {datosTicketPending ? "Aplicando..." : "Guardar cambios"}
@@ -1336,7 +1375,7 @@ export default function ConfiguracionClient({
             <button
               onClick={guardarWhatsapp}
               disabled={whatsappPending}
-              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
             >
               {whatsappPending && <Loader2 className="w-4 h-4 animate-spin" />}
               {whatsappPending ? "Aplicando..." : "Guardar cambios"}
@@ -1345,7 +1384,7 @@ export default function ConfiguracionClient({
               <button
                 onClick={desconectarWhatsapp}
                 disabled={whatsappPending}
-                className="px-4 py-2.5 bg-muted hover:bg-accent text-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                className="btn-secondary px-4 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
               >
                 <Unlink className="w-3.5 h-3.5" /> Desconectar
               </button>
@@ -1451,7 +1490,7 @@ export default function ConfiguracionClient({
                 <button
                   onClick={guardarMontoDevolucion}
                   disabled={montoDevolucionPending}
-                  className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-sm font-medium transition-colors">
+                  className="btn-primary px-4 py-2 rounded-lg text-sm transition-colors">
                   Guardar
                 </button>
               </div>
@@ -1489,7 +1528,7 @@ export default function ConfiguracionClient({
                 <button
                   onClick={aplicarRecomendado}
                   disabled={aplicandoRecomendado}
-                  className="mt-2 text-xs font-medium text-primary-text hover:underline disabled:opacity-50 flex items-center gap-1.5"
+                  className="btn-ghost mt-2 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex items-center gap-1.5"
                 >
                   {aplicandoRecomendado && <Loader2 className="w-3 h-3 animate-spin" />}
                   Aplicar recomendado para tu rubro
@@ -1592,7 +1631,7 @@ export default function ConfiguracionClient({
                 <button
                   onClick={subirLogo}
                   disabled={!logoFile || logoPending}
-                  className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                  className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
                 >
                   {logoPending && <Loader2 className="w-4 h-4 animate-spin" />}
                   {logoPending ? "Guardando..." : "Subir logo"}
@@ -1601,7 +1640,7 @@ export default function ConfiguracionClient({
                   <button
                     onClick={quitarLogo}
                     disabled={logoPending}
-                    className="px-4 py-2.5 border border-border hover:bg-muted text-muted-foreground text-sm font-medium rounded-lg transition-all disabled:opacity-50"
+                    className="btn-secondary px-4 py-2.5 text-sm rounded-lg transition-all"
                   >
                     Quitar logo
                   </button>
@@ -1645,7 +1684,7 @@ export default function ConfiguracionClient({
               <button
                 onClick={cargarSolicitudes}
                 disabled={solicitudesCargando}
-                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+                className="btn-ghost flex items-center gap-1.5 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${solicitudesCargando ? "animate-spin" : ""}`} /> Actualizar
               </button>
@@ -1677,7 +1716,7 @@ export default function ConfiguracionClient({
                       <button
                         onClick={() => resolverSolicitud(s.id, true)}
                         disabled={solicitudEnCurso === s.id}
-                        className="flex items-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground text-[11.5px] font-medium px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                        className="btn-primary flex items-center gap-1 text-[11.5px] px-2.5 py-1.5 rounded-lg transition-colors"
                       >
                         <Check className="w-3 h-3" /> Aprobar
                       </button>
@@ -1748,7 +1787,7 @@ export default function ConfiguracionClient({
               <button
                 type="submit"
                 disabled={contrasenaPending}
-                className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
               >
                 {contrasenaPending && <Loader2 className="w-4 h-4 animate-spin" />}
                 {contrasenaPending ? "Guardando..." : "Actualizar contraseña"}

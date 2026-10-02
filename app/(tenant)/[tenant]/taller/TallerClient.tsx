@@ -358,7 +358,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
                   <button
                     onClick={() => enviarAlerta(seleccionada.id)}
                     disabled={pending || !alertaTexto.trim()}
-                    className="mt-2 flex items-center gap-1.5 px-3 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[12.5px] font-medium transition-colors"
+                    className="btn-primary mt-2 flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px]"
                   >
                     <Send className="w-3.5 h-3.5" /> Enviar alerta
                   </button>

@@ -221,7 +221,7 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
         {!soloUnaSucursal && (
           <button
             onClick={abrirNueva}
-            className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-[12.5px] font-medium px-3 py-2 rounded-lg transition-colors"
+            className="btn-primary flex items-center gap-1.5 text-[12.5px] px-3 py-2 rounded-lg"
           >
             <Plus className="w-3.5 h-3.5" /> Nueva sucursal
           </button>
@@ -358,7 +358,7 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
                   </button>
                   <button
                     onClick={() => abrirEditar(suc)}
-                    className="flex items-center gap-1 text-[11.5px] text-primary-text font-medium hover:underline"
+                    className="btn-ghost flex items-center gap-1 -mx-1.5 px-1.5 py-0.5 rounded-md text-[11.5px]"
                   >
                     <Pencil className="w-3 h-3" /> Editar
                   </button>
@@ -658,14 +658,14 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
               <button
                 onClick={cancelarModal}
-                className="px-3 py-2 text-[13.5px] font-medium text-foreground/70 hover:text-foreground"
+                className="btn-ghost px-3 py-2 rounded-lg text-[13.5px]"
               >
                 Cancelar
               </button>
               <button
                 onClick={guardarSucursal}
                 disabled={isPending || !form.name.trim()}
-                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-[13.5px] font-medium transition-colors"
+                className="btn-primary px-4 py-2 rounded-lg text-[13.5px]"
               >
                 {isPending ? "Guardando…" : editando ? "Guardar cambios" : "Crear sucursal"}
               </button>
