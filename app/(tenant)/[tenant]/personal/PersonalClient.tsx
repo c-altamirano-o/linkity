@@ -162,7 +162,14 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
   const [busqueda, setBusqueda] = useState("");
   const [filtroSucursal, setFiltroSucursal] = useState("todas");
   const [filtroActivo, setFiltroActivo] = useState<"activos" | "todos">("activos");
-  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(empleados[0]?.id ?? null);
+  // 2026-10-02, a petición de Carlos (bug reportado: en Movilmart, al
+  // desactivar a TODOS los empleados, no aparecía el empujón al Asistente de
+  // puestos) — antes se preseleccionaba empleados[0] sin importar su
+  // estatus, así que si ese primer empleado ya estaba desactivado, el panel
+  // de detalle lo mostraba a él (con su botón "Reactivar") en vez de caer en
+  // el estado "sin empleados activos". Ahora se preselecciona el primer
+  // empleado ACTIVO; si no hay ninguno, arranca sin selección.
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(empleados.find((e) => e.isActive)?.id ?? null);
 
   const [pending, startAccion] = useTransition();
   const [accionError, setAccionError] = useState<string | null>(null);
@@ -218,10 +225,21 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
   const handleToggleActivo = (emp: EmpleadoUI) => {
     setAccionError(null);
+    const nuevoActivo = !emp.isActive;
     startAccion(async () => {
-      const res = await cambiarEstadoEmpleadoAction({ tenantSlug, staffId: emp.id, activo: !emp.isActive });
-      if (res.ok) refrescar();
-      else setAccionError(res.error);
+      const res = await cambiarEstadoEmpleadoAction({ tenantSlug, staffId: emp.id, activo: nuevoActivo });
+      if (res.ok) {
+        // 2026-10-02, a petición de Carlos (ver el comentario junto a
+        // seleccionadoId) — si esta desactivación deja al negocio sin NINGÚN
+        // empleado activo, se limpia la selección para que el panel de
+        // detalle caiga de inmediato en el estado "sin empleados activos" +
+        // el empujón al Asistente, en vez de seguir mostrando a este mismo
+        // empleado (ya inactivo) con su botón "Reactivar".
+        if (!nuevoActivo && totalActivos <= 1) setSeleccionadoId(null);
+        refrescar();
+      } else {
+        setAccionError(res.error);
+      }
     });
   };
 
@@ -568,17 +586,33 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
           {!seleccionado ? (
             <div className="flex flex-col items-center justify-center h-full p-10 text-center">
               <Users className="w-8 h-8 text-muted-foreground/40 mb-2" />
-              <p className="text-sm font-medium text-foreground mb-1">Sin empleados registrados</p>
-              <button onClick={abrirNuevoEmpleado} className="text-xs text-primary-text mt-1">+ Registrar el primero</button>
-              {/* 2026-10-01, a petición de Carlos: empujón único para un
-                  tenant recién creado (todavía sin ningún empleado) — sugiere
-                  el Asistente antes de que use el alta manual, para que los
-                  Roles queden bien configurados desde el principio en vez de
-                  descubrir el Asistente después. Solo aplica cuando
-                  empleados.length === 0 (negocio nuevo), no cuando el estado
-                  viene de una búsqueda sin resultados — ese caso ya tiene su
-                  propio mensaje "Sin resultados" en la lista. */}
-              {empleados.length === 0 && (
+              <p className="text-sm font-medium text-foreground mb-1">
+                {empleados.length === 0 ? "Sin empleados registrados" : "Sin empleados activos"}
+              </p>
+              {/* 2026-10-02, a petición de Carlos (bug: en Movilmart, al
+                  desactivar a todos los empleados no aparecía este bloque) —
+                  antes solo se mostraba cuando empleados.length === 0 (sin
+                  ningún registro). Ahora también cubre "hay empleados, pero
+                  todos están desactivados": mismo mensaje de bienvenida +
+                  empujón al Asistente, más una pista de que sus registros
+                  siguen ahí por si lo que quiere es reactivar a alguien en
+                  vez de dar de alta a alguien nuevo. */}
+              {empleados.length > 0 && (
+                <p className="text-[11.5px] text-muted-foreground mb-1 max-w-[220px]">
+                  Tienes {empleados.length} empleado(s) desactivado(s) — cambia el filtro de arriba a &quot;Todos&quot; para verlos y reactivar a alguien.
+                </p>
+              )}
+              <button onClick={abrirNuevoEmpleado} className="text-xs text-primary-text mt-1">
+                {empleados.length === 0 ? "+ Registrar el primero" : "+ Registrar un nuevo empleado"}
+              </button>
+              {/* 2026-10-01, a petición de Carlos: empujón hacia el
+                  Asistente de puestos antes de que use el alta manual, para
+                  que los Roles queden bien configurados desde el principio.
+                  2026-10-02: la condición cambió de empleados.length === 0 a
+                  totalActivos === 0 — un negocio con todos sus empleados
+                  desactivados está, en la práctica, tan "sin configurar"
+                  como uno recién creado. */}
+              {totalActivos === 0 && (
                 <button onClick={() => setModalAsistente(true)}
                   className="flex items-center gap-1.5 mt-3 px-3 py-1.5 border border-primary/40 bg-primary/5 hover:bg-primary/10 text-xs font-medium rounded-lg text-primary-text">
                   <Sparkles className="w-3.5 h-3.5" /> Antes de dar de alta a alguien, prueba el Asistente de puestos
