@@ -4,6 +4,16 @@ import { getReparacionesData } from "@/lib/reparaciones-data";
 import { getTenantLabels } from "@/lib/labels-server";
 import { puedeAccederModulo } from "@/lib/actor";
 import { nombreNegocioDeSlug, type DatosNegocioRecibo } from "@/lib/recibo-imprimible";
+// Selector de periodo del "Resumen de taller" (2026-10-02, a petición de
+// Carlos: "que fuera por periodo, Día, semana, mes, año o fechas
+// personalizadas, el mismo comportamiento que tiene el dashboard") — reusa
+// resolverPeriodoDashboard/atajosPeriodoDashboard TAL CUAL (lib/dashboard-
+// data.ts, ver el comentario largo ahí): misma resolución de fechas/zona
+// horaria de México y el mismo cálculo de "semana laboral" (depende de
+// Tenant.weekStartDay) que ya usa el Dashboard, en vez de duplicar esa
+// lógica aquí solo porque el nombre del archivo dice "dashboard" — ambas
+// funciones son genéricas, no miran nada específico de esa pantalla.
+import { resolverPeriodoDashboard, atajosPeriodoDashboard } from "@/lib/dashboard-data";
 import AduanaClient from "./AduanaClient";
 
 /**
@@ -30,20 +40,29 @@ export default async function AduanaPage({
   // ?folio=... (2026-10-01) — la notificación de una alerta de técnico
   // (ver el comentario largo en AduanaClientProps.folioInicial) manda aquí
   // con este parámetro para preseleccionar el folio en cuestión.
-  searchParams: Promise<{ folio?: string }>;
+  // ?desde=/?hasta= (2026-10-02, selector de periodo del "Resumen de
+  // taller") — mismo patrón que dashboard/page.tsx: "YYYY-MM-DD", ausentes
+  // o inválidos caen a "Hoy" dentro de resolverPeriodoDashboard.
+  searchParams: Promise<{ folio?: string; desde?: string; hasta?: string }>;
 }) {
   const { tenant: tenantSlug } = await params;
-  const { folio } = await searchParams;
+  const { folio, desde, hasta } = await searchParams;
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
     select: {
       id: true, businessType: true, cobrarEnDevolucion: true,
       logo: true, address: true, phone: true, rfc: true, reciboMensajePie: true, reciboExtra: true, reciboFormato: true,
+      // weekStartDay (2026-10-02) — lo necesita atajosPeriodoDashboard para
+      // el atajo "Semana" (rangoSemanaLaboral depende de este campo).
+      weekStartDay: true,
     },
   });
 
   if (!tenant) notFound();
+
+  const periodo = resolverPeriodoDashboard(desde, hasta, tenant.weekStartDay);
+  const atajosPeriodo = atajosPeriodoDashboard(tenant.weekStartDay);
 
   const [data, labels, puedeCobrar] = await Promise.all([
     getReparacionesData(tenant.id, undefined),
@@ -75,6 +94,13 @@ export default async function AduanaPage({
 
   return (
     <AduanaClient
+      // key con el periodo (2026-10-02) — mismo motivo que ya documenta
+      // dashboard/page.tsx junto a su propio `key`: Next.js reutiliza esta
+      // misma instancia del client component cuando solo cambia el
+      // searchParam de la misma ruta, así que sin esto el useState de
+      // desdeSel/hastaSel (los inputs de fecha personalizada) se quedaría
+      // con los valores del periodo anterior tras navegar a uno nuevo.
+      key={`${periodo.desde}-${periodo.hasta}`}
       data={data}
       labels={labels}
       tenantSlug={tenantSlug}
@@ -82,6 +108,8 @@ export default async function AduanaPage({
       negocioRecibo={negocioRecibo}
       cobrarEnDevolucion={tenant.cobrarEnDevolucion}
       folioInicial={folio ?? null}
+      periodo={periodo}
+      atajosPeriodo={atajosPeriodo}
     />
   );
 }

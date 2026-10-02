@@ -10,6 +10,11 @@ import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } 
 import type {
   ReparacionesData, ReparacionUI, EstadoReparacion, PrioridadReparacion, ProductoParaReparacion, TecnicoOption,
 } from "@/lib/reparaciones-data";
+// Tipos del selector de periodo (2026-10-02) — ver el comentario largo junto
+// al import en aduana/page.tsx: resolverPeriodoDashboard/atajosPeriodoDashboard
+// son genéricos pese al nombre del archivo, reutilizados tal cual del
+// Dashboard en vez de duplicar la lógica de fechas/zona horaria aquí.
+import type { PeriodoDashboard, AtajosPeriodoDashboard } from "@/lib/dashboard-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import {
   asignarTecnicoAction, agregarPiezaReparacionAction, eliminarPiezaReparacionAction,
@@ -63,6 +68,11 @@ interface AduanaClientProps {
   // selecciona el primero de la lista). Mismo patrón que clienteInicialId en
   // ReparacionesClient.tsx/POSClient.tsx.
   folioInicial?: string | null;
+  // Periodo del selector del "Resumen de taller" (2026-10-02, a petición de
+  // Carlos) — ya resuelto por el servidor (aduana/page.tsx), igual que
+  // dashboard/page.tsx se lo resuelve a DashboardClient.
+  periodo: PeriodoDashboard;
+  atajosPeriodo: AtajosPeriodoDashboard;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -104,39 +114,76 @@ const HISTORIAL_ICONOS: Record<EstadoReparacion, { icon: React.ElementType; bg: 
   SHOP_RETURN: { icon: ArrowRight, bg: "bg-red-50", color: "text-red-600" },
 };
 
-// Colores de la dona "Distribución por estatus" (panel de resumen, ver más
-// abajo) — 2026-10-02, a petición de Carlos ("como administrador, qué
-// reportes o métricas podrás poner ahí para ver el desempeño de taller y
-// sus empleados"). A propósito los MISMOS colores que ya asocia la familia
-// de ESTADO_BADGE de arriba (ámbar=espera, morado=en reparación,
-// esmeralda=listo, naranja=devolución de taller, cian=listo en tienda,
-// rojo=devolución a tienda) — el usuario ya aprendió esa asociación viendo
-// las etiquetas de la lista, reusarla aquí es gratis en curva de
-// aprendizaje. Validado con el validador de paletas del skill de dataviz en
-// ESTE orden (de hecho, el orden en el que entran a la dona, ver
-// ESTADO_DONUT_ORDEN): pasa las 4 pruebas en "adjacent" (el caso real de una
-// dona/leyenda en secuencia); en "all-pairs" quedan 2 pares por debajo del
-// piso de daltonismo — por eso la dona SIEMPRE se acompaña de una leyenda
-// con texto (nunca solo color, ver el bloque de abajo), que es exactamente
-// la mitigación que exige ese resultado. DELIVERED/CANCELLED (equipos ya
-// fuera del flujo activo) no entran — nunca se grafican aquí.
-const ESTADO_DONUT_COLOR: Partial<Record<EstadoReparacion, string>> = {
-  RECEIVED: "var(--primary-text)",
-  DIAGNOSING: "#2563EB",
-  WAITING_PARTS: "#F59E0B",
-  IN_REPAIR: "#8B5CF6",
-  READY: "#10B981",
-  WORKSHOP_READY: "#10B981",
-  WORKSHOP_RETURN: "#F97316",
-  SHOP_READY: "#06B6D4",
-  SHOP_RETURN: "#EF4444",
-};
-// Orden de entrada a la dona — mismo criterio: el recorrido real de un
-// equipo por el taller, de recepción a salida a tienda.
-const ESTADO_DONUT_ORDEN: EstadoReparacion[] = [
-  "RECEIVED", "DIAGNOSING", "WAITING_PARTS", "IN_REPAIR",
-  "READY", "WORKSHOP_READY", "WORKSHOP_RETURN", "SHOP_READY", "SHOP_RETURN",
-];
+// Dona "Distribución por estatus" del panel de resumen (ver más abajo) —
+// 2026-10-02, a petición de Carlos, con DOS vueltas de ajuste el mismo día.
+// Primera versión: una franja por cada uno de los 9 estatus activos del
+// enum. Carlos la vio y pidió simplificarla a un total al centro + 3
+// categorías, agrupando Recibido/Diagnóstico/Esperando/En reparación en una
+// sola (AskUserQuestion, "Estatus intermedios" → "Agruparlos en 'En
+// reparación'"). Al verla ya construida, pidió una SEGUNDA vuelta ("pensando
+// mejor la lógica, como dueño o encargado de taller"): separar "Recibido" de
+// nuevo, porque agrupado no se podía distinguir "folios que ni siquiera se
+// han empezado a atender/asignar" de "folios ya en proceso" — justo el caso
+// que "Sin técnico" (más abajo) existe para detectar. Versión final (4
+// categorías):
+//   - Centro: TOTAL de equipos recibidos en el periodo elegido (sin
+//     importar su estatus actual) — "me daría un valor del cual saber que
+//     tantos equipos entran a reparar". Sin cambios entre las 2 vueltas.
+//   - "Recibido": SOLO el estatus RECEIVED — "sí es importante que esté
+//     separado... me dice que hay equipos sin que se asignen o los
+//     reparen".
+//   - "En reparación" (morado): Diagnóstico/Esperando refacción/En
+//     reparación — "englobar cualquier parte del proceso" (ya sin
+//     Recibido).
+//   - "Listo" (verde): READY/WORKSHOP_READY/SHOP_READY — cuenta aunque el
+//     folio ya se haya entregado después ("sin importar que estén listos
+//     en taller, tienda o entregados", ver clasificarPeriodo más abajo).
+//   - "Devoluciones" (rojo): WORKSHOP_RETURN/SHOP_RETURN — "cuántos no se
+//     pudieron reparar", igual de explícito: cuenta aunque ya se haya
+//     entregado ("y lo mismo para las devoluciones en rojo").
+// "Recibido" usa var(--primary-text) (el mismo tratamiento que ya tenía ese
+// estatus en la primera versión de 9 franjas — varía por tema, así que no
+// se puede meter al validador de paletas; siempre va acompañado de la
+// leyenda de texto, igual que el resto). Los otros 3 colores (morado/verde/
+// rojo) están validados en este orden, en modo "all-pairs" (el más
+// estricto): pasan las 4 pruebas. Aun así la dona sigue acompañada de
+// leyenda de texto siempre (nunca solo color).
+const GRUPO_DONUT_COLOR = {
+  recibido: "var(--primary-text)",
+  reparacion: "#8B5CF6",
+  listo: "#10B981",
+  devolucion: "#EF4444",
+} as const;
+type GrupoDonut = keyof typeof GRUPO_DONUT_COLOR;
+const ESTADOS_LISTO: EstadoReparacion[] = ["READY", "WORKSHOP_READY", "SHOP_READY"];
+const ESTADOS_DEVOLUCION: EstadoReparacion[] = ["WORKSHOP_RETURN", "SHOP_RETURN"];
+// Estatus "aún no sale" — todo lo que no sea Listo/Devolución/Entregado/
+// Cancelado. Úsalo para "Atrasados"/"Sin técnico" más abajo — a propósito
+// SÍ incluye RECEIVED ahí (un folio recién recibido sin técnico asignado es
+// justo el caso que "Sin técnico" debe detectar) aunque la dona ya lo
+// muestre en su propia franja separada — son dos usos distintos del mismo
+// concepto "sigue abierto".
+const ESTADOS_ABIERTOS: EstadoReparacion[] = ["RECEIVED", "DIAGNOSING", "WAITING_PARTS", "IN_REPAIR"];
+
+/**
+ * Clasifica un folio para la dona mirando su HISTORIAL completo, no solo el
+ * estatus actual (2026-10-02, a petición de Carlos: "listos"/"devoluciones"
+ * deben contar "aunque aún estén en tienda o ya se hayan entregado"). Un
+ * folio cae en exactamente UNA categoría (a diferencia de las fichas del
+ * Dashboard, aquí son rebanadas de una misma dona: deben sumar el 100% del
+ * total del centro) — devolución tiene prioridad sobre listo (si alguna vez
+ * se marcó devolución, ya pasó lo importante, aunque después alguien haya
+ * usado "Regresar a taller" y hoy esté de nuevo en proceso); si no hay
+ * ningún checkpoint de los dos grupos, se mira el estatus ACTUAL para
+ * distinguir "Recibido" (aún sin empezar) de "En reparación" (ya en
+ * proceso) — y "en reparación" es también el cajón por default de un
+ * CANCELLED que nunca llegó a listo ni devolución.
+ */
+function clasificarPeriodo(r: ReparacionUI): GrupoDonut {
+  if (r.historial.some((h) => ESTADOS_DEVOLUCION.includes(h.estado))) return "devolucion";
+  if (r.historial.some((h) => ESTADOS_LISTO.includes(h.estado))) return "listo";
+  return r.estado === "RECEIVED" ? "recibido" : "reparacion";
+}
 
 // Botones de avance de estatus ofrecidos aquí — mismo mapa de transiciones
 // válidas que TRANSICIONES_VALIDAS en reparaciones-actions.ts (el servidor
@@ -194,7 +241,18 @@ const formatFecha = (iso: string) =>
 const formatFechaHora = (iso: string) =>
   new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true });
 
-export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, negocioRecibo, cobrarEnDevolucion, folioInicial }: AduanaClientProps) {
+// "10 sep" — para el rango del selector de periodo del "Resumen de taller"
+// (2026-10-02). Copia textual de la misma función en DashboardClient.tsx
+// (mismo criterio ya usado en varias pantallas de este proyecto: un
+// formateador de fecha chico se duplica por archivo en vez de compartirse,
+// ver también ClientesClient.tsx/CitasClient.tsx).
+const MESES_CORTO_PERIODO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function formatFechaCortaPeriodo(fechaStr: string): string {
+  const [, m, d] = fechaStr.split("-").map(Number);
+  return `${d} ${MESES_CORTO_PERIODO[m - 1]}`;
+}
+
+export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, negocioRecibo, cobrarEnDevolucion, folioInicial, periodo, atajosPeriodo }: AduanaClientProps) {
   const { reparaciones, productos, tecnicos } = data;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -203,6 +261,26 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
   const [busqueda, setBusqueda] = useState("");
   const [soloActivas, setSoloActivas] = useState(true);
   const [seleccionadaId, setSeleccionadaId] = useState<string | null>(reparaciones[0]?.id ?? null);
+
+  // Selector de periodo del "Resumen de taller" (2026-10-02) — mismo patrón
+  // que cambiarPeriodo en DashboardClient.tsx: navega a ?desde=&hasta=, el
+  // servidor (aduana/page.tsx) resuelve el nuevo periodo y, gracias al
+  // `key` que le puso ahí, este componente se remonta completo con los
+  // datos ya filtrados.
+  const cambiarPeriodo = (desde: string, hasta: string) => {
+    router.push(`/${tenantSlug}/aduana?${new URLSearchParams({ desde, hasta }).toString()}`);
+  };
+  const [desdeSel, setDesdeSel] = useState(periodo.desde);
+  const [hastaSel, setHastaSel] = useState(periodo.hasta);
+  const etiquetaPeriodo = (() => {
+    switch (periodo.atajo) {
+      case "hoy": return "hoy";
+      case "semana": return "esta semana";
+      case "mes": return "este mes";
+      case "año": return "este año";
+      default: return `del ${formatFechaCortaPeriodo(periodo.desde)} al ${formatFechaCortaPeriodo(periodo.hasta)}`;
+    }
+  })();
 
   // Seed de `folioInicial` (2026-10-01, ver el comentario largo junto a ese
   // prop arriba) — useRef en vez de depender de folioInicial en el arreglo
@@ -380,57 +458,90 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
   // mucho espacio desperdiciado del lado derecho... qué reportes o métricas
   // podrás colocar ahí para ver el desempeño de taller y sus empleados").
   // Se calcula aquí mismo, en el cliente, a partir de los datos que esta
-  // pantalla YA recibe (reparaciones + técnicos) — no hace falta ni un
-  // query ni un campo nuevo. A propósito usa `reparaciones`/`activas`
+  // pantalla YA recibe (reparaciones + técnicos, con su `historial`
+  // completo) — no hace falta ni un query ni un campo nuevo para el
+  // selector de periodo tampoco: `periodo.start`/`periodo.end` ya vienen
+  // resueltos del servidor. A propósito usa `reparaciones`/`activas`
   // completas (de TODO el negocio), sin importar el toggle "Activas/Todas"
   // de la lista de la izquierda ni la búsqueda — este panel responde "cómo
   // va el taller en general", no "qué estoy viendo en la lista ahora".
+  //
+  // 2026-10-02, segunda vuelta (AskUserQuestion "Alcance periodo" → "Todo
+  // el panel"): Carlos pidió que el selector de periodo filtre TODO este
+  // panel, no solo la dona. "Activos en taller" (debajo) es la ÚNICA
+  // excepción deliberada — sigue siendo una foto del momento, mismo
+  // criterio que "Reparaciones activas" en el Dashboard (no tiene sentido
+  // acotar "cuántos hay AHORITA en el taller" a un rango de fechas
+  // pasado). El resto se ancla en `fechaRecibido` dentro del periodo.
   const hoy = new Date();
-  const atrasados = activas.filter((r) => r.fechaEstimada && new Date(r.fechaEstimada) < hoy);
-  const sinTecnico = activas.filter((r) => !r.tecnicoAsignadoId);
-  const alertasPendientes = reparaciones.filter((r) => r.alertaTallerPendiente);
+  const inicioPeriodoMs = periodo.start.getTime();
+  const finPeriodoMs = periodo.end.getTime();
+  const recibidosPeriodo = reparaciones.filter((r) => {
+    const t = new Date(r.fechaRecibido).getTime();
+    return t >= inicioPeriodoMs && t < finPeriodoMs;
+  });
+  const atrasados = recibidosPeriodo.filter(
+    (r) => ESTADOS_ABIERTOS.includes(r.estado) && r.fechaEstimada && new Date(r.fechaEstimada) < hoy
+  );
+  const sinTecnico = recibidosPeriodo.filter((r) => ESTADOS_ABIERTOS.includes(r.estado) && !r.tecnicoAsignadoId);
+  const alertasPendientes = recibidosPeriodo.filter((r) => r.alertaTallerPendiente);
 
-  const estadoCounts = ESTADO_DONUT_ORDEN
-    .map((estado) => ({
-      estado,
-      label: label(labels, `repair.status.${estado}`),
-      color: ESTADO_DONUT_COLOR[estado] ?? "var(--muted-foreground)",
-      value: activas.filter((r) => r.estado === estado).length,
+  // Dona "Distribución por estatus" — ver el comentario largo junto a
+  // clasificarPeriodo/GRUPO_DONUT_COLOR arriba. El centro muestra
+  // recibidosPeriodo.length (el total "cuántos entran a reparar" que pidió
+  // Carlos); las 4 franjas clasifican ESE MISMO conjunto, así que siempre
+  // suman el 100% del centro.
+  const totalRecibidosPeriodo = recibidosPeriodo.length;
+  const GRUPO_DONUT_LABEL: Record<GrupoDonut, string> = {
+    recibido: "Recibido",
+    reparacion: "En reparación",
+    listo: "Listo",
+    devolucion: "Devoluciones",
+  };
+  const estadoCounts = (["recibido", "reparacion", "listo", "devolucion"] as GrupoDonut[])
+    .map((grupo) => ({
+      grupo,
+      label: GRUPO_DONUT_LABEL[grupo],
+      color: GRUPO_DONUT_COLOR[grupo],
+      value: recibidosPeriodo.filter((r) => clasificarPeriodo(r) === grupo).length,
     }))
     .filter((e) => e.value > 0);
 
-  // Ranking de técnicos — carga actual (equipos activos YA asignados a
-  // él), entregados en los últimos 30 días (productividad reciente) y
-  // tiempo promedio recepción→entrega en TODO su historial de entregados
-  // (estabilidad: 30 días de muestra puede ser muy poco para un taller
-  // chico). No existe un timestamp de "cuándo se le asignó" en el schema
-  // (Repair.assignedToStaffId no trae fecha propia) — fechaRecibido es la
-  // mejor aproximación disponible sin tocar el schema; si un folio cambió
-  // de técnico a medio camino, ese tiempo se le "regala" al que lo entregó,
-  // mismo criterio que ya acepta tecnico (quien registró, no quien trabajó)
-  // en otras partes de este módulo.
-  const haceTreintaDias = new Date(hoy.getTime() - 30 * 24 * 60 * 60 * 1000);
+  // Ranking de técnicos — "carga actual" (debajo) es la OTRA excepción
+  // deliberada, mismo motivo que "Activos en taller": el punto de ese
+  // número es detectar sobrecarga/desbalance AHORA MISMO, y si se acotara
+  // al periodo elegido, con "Hoy" casi cualquier técnico mostraría 0 (su
+  // trabajo en curso casi siempre se recibió días antes) — justo lo
+  // contrario de lo que esta tarjeta necesita mostrar. "Entregados"/
+  // "tiempo promedio" sí siguen el periodo elegido (reemplazan la ventana
+  // fija de 30 días que tenía esto antes) — para un periodo corto ("Hoy")
+  // la muestra puede ser chica o incluso 0, igual que ya le pasa a
+  // "Ventas del día" en el Dashboard: efecto esperado de filtrar por
+  // periodo, no un bug.
   const rankingTecnicos = tecnicos
     .map((t: TecnicoOption) => {
       const propias = reparaciones.filter((r) => r.tecnicoAsignadoId === t.id);
-      const entregadas = propias.filter((r) => r.estado === "DELIVERED" && r.fechaEntregado);
-      const entregadas30d = entregadas.filter((r) => new Date(r.fechaEntregado as string) >= haceTreintaDias);
+      const entregadasPeriodo = propias.filter((r) => {
+        if (r.estado !== "DELIVERED" || !r.fechaEntregado) return false;
+        const t2 = new Date(r.fechaEntregado).getTime();
+        return t2 >= inicioPeriodoMs && t2 < finPeriodoMs;
+      });
       const diasPromedio =
-        entregadas.length > 0
-          ? entregadas.reduce((sum, r) => {
+        entregadasPeriodo.length > 0
+          ? entregadasPeriodo.reduce((sum, r) => {
               const dias = (new Date(r.fechaEntregado as string).getTime() - new Date(r.fechaRecibido).getTime()) / (24 * 60 * 60 * 1000);
               return sum + Math.max(0, dias);
-            }, 0) / entregadas.length
+            }, 0) / entregadasPeriodo.length
           : null;
       return {
         id: t.id,
         nombre: t.name,
         carga: propias.filter((r) => r.estado !== "DELIVERED" && r.estado !== "CANCELLED").length,
-        entregados30d: entregadas30d.length,
+        entregadosPeriodo: entregadasPeriodo.length,
         diasPromedio,
       };
     })
-    .sort((a, b) => b.carga - a.carga || b.entregados30d - a.entregados30d);
+    .sort((a, b) => b.carga - a.carga || b.entregadosPeriodo - a.entregadosPeriodo);
 
   const cerrada = seleccionada?.estado === "DELIVERED" || seleccionada?.estado === "CANCELLED";
   // Con "cobrar en devolución" activo, SHOP_RETURN -> DELIVERED directo NO
@@ -824,49 +935,124 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
             <p className="text-[12.5px] font-semibold text-foreground">Resumen de taller</p>
           </div>
 
+          {/* Selector de periodo (2026-10-02, a petición de Carlos: "que
+              fuera por periodo, Día, semana, mes, año o fechas
+              personalizadas, el mismo comportamiento que tiene el
+              dashboard") — mismo patrón que el selector de
+              DashboardClient.tsx, en dos renglones por el ancho angosto de
+              este panel (320px) en vez de uno solo. Los atajos ya vienen
+              resueltos del servidor (atajosPeriodoDashboard,
+              lib/dashboard-data.ts) porque "Semana" depende de
+              Tenant.weekStartDay. */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 flex-wrap">
+              {(
+                [
+                  { key: "hoy", label: "Hoy", rango: atajosPeriodo.hoy },
+                  { key: "semana", label: "Semana", rango: atajosPeriodo.semana },
+                  { key: "mes", label: "Mes", rango: atajosPeriodo.mes },
+                  { key: "año", label: "Año", rango: atajosPeriodo.año },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => cambiarPeriodo(opt.rango.desde, opt.rango.hasta)}
+                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                    periodo.atajo === opt.key ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={desdeSel}
+                max={hastaSel}
+                onChange={(e) => e.target.value && setDesdeSel(e.target.value)}
+                className="flex-1 min-w-0 px-1.5 py-1 border border-border rounded-lg text-[11px] bg-muted text-foreground focus:outline-none focus:border-primary"
+              />
+              <span className="text-[11px] text-muted-foreground">–</span>
+              <input
+                type="date"
+                value={hastaSel}
+                min={desdeSel}
+                onChange={(e) => e.target.value && setHastaSel(e.target.value)}
+                className="flex-1 min-w-0 px-1.5 py-1 border border-border rounded-lg text-[11px] bg-muted text-foreground focus:outline-none focus:border-primary"
+              />
+              <button
+                onClick={() => cambiarPeriodo(desdeSel, hastaSel)}
+                disabled={desdeSel === periodo.desde && hastaSel === periodo.hasta}
+                className="text-[10.5px] font-medium px-2 py-1 rounded-lg text-primary-text bg-primary/10 hover:opacity-80 disabled:opacity-40 flex-shrink-0"
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+
           {/* KPIs operativos — mismo patrón visual de "ficha" que ya usa
               Dashboard (bg-muted/50, valor grande + etiqueta chica), para
               que se sienta parte de la misma app. Rojo/ámbar solo cuando
               el número es un problema real (>0) — en 0 se ve neutro, no
               hay que entrenar al ojo a ignorar un color de alerta que casi
-              siempre está encendido. */}
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { valor: activas.length, texto: "Activos en taller", alerta: false },
-              { valor: atrasados.length, texto: "Atrasados", alerta: atrasados.length > 0 },
-              { valor: sinTecnico.length, texto: "Sin técnico", alerta: sinTecnico.length > 0 },
-              { valor: alertasPendientes.length, texto: "Alertas sin atender", alerta: alertasPendientes.length > 0 },
-            ].map((k) => (
-              <div key={k.texto} className={`rounded-xl p-2.5 text-center ${k.alerta ? "bg-red-50" : "bg-muted/50"}`}>
-                <p className={`text-base font-semibold ${k.alerta ? "text-red-600" : "text-foreground"}`}>{k.valor}</p>
-                <p className={`text-[10.5px] mt-0.5 ${k.alerta ? "text-red-600/80" : "text-muted-foreground"}`}>{k.texto}</p>
-              </div>
-            ))}
+              siempre está encendido. "Activos en taller" es foto del
+              momento (no sigue el periodo); los otros 3 sí — ver el
+              comentario largo junto a `atrasados` más arriba. */}
+          <div className="space-y-1">
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { valor: activas.length, texto: "Activos en taller", alerta: false },
+                { valor: atrasados.length, texto: "Atrasados", alerta: atrasados.length > 0 },
+                { valor: sinTecnico.length, texto: "Sin técnico", alerta: sinTecnico.length > 0 },
+                { valor: alertasPendientes.length, texto: "Alertas sin atender", alerta: alertasPendientes.length > 0 },
+              ].map((k) => (
+                <div key={k.texto} className={`rounded-xl p-2.5 text-center ${k.alerta ? "bg-red-50" : "bg-muted/50"}`}>
+                  <p className={`text-base font-semibold ${k.alerta ? "text-red-600" : "text-foreground"}`}>{k.valor}</p>
+                  <p className={`text-[10.5px] mt-0.5 ${k.alerta ? "text-red-600/80" : "text-muted-foreground"}`}>{k.texto}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground px-0.5">
+              Activos en taller: ahora mismo · el resto: recibidos {etiquetaPeriodo}
+            </p>
           </div>
 
-          {/* Distribución por estatus — dona con leyenda de texto siempre
-              visible (nunca solo color, ver el comentario largo junto a
-              ESTADO_DONUT_COLOR arriba). */}
+          {/* Distribución por estatus — dona con el total recibido al
+              centro (2026-10-02, a petición de Carlos: "eso me daría un
+              valor del cual saber que tantos equipos entran a reparar") y
+              leyenda de texto siempre visible (nunca solo color, ver el
+              comentario largo junto a GRUPO_DONUT_COLOR arriba). */}
           <div className="bg-card border border-border rounded-xl p-3">
-            <p className="text-[12px] font-medium text-foreground mb-2">Distribución por estatus</p>
-            {estadoCounts.length === 0 ? (
-              <p className="text-[11.5px] text-muted-foreground text-center py-4">Taller vacío por ahora.</p>
+            <p className="text-[12px] font-medium text-foreground mb-2">
+              Distribución por estatus <span className="font-normal text-muted-foreground">· {etiquetaPeriodo}</span>
+            </p>
+            {totalRecibidosPeriodo === 0 ? (
+              <p className="text-[11.5px] text-muted-foreground text-center py-4">
+                No se recibieron {entidadPlural.toLowerCase()} en este periodo.
+              </p>
             ) : (
               <>
-                <ResponsiveContainer width="100%" height={120}>
-                  <PieChart>
-                    <Pie data={estadoCounts} cx="50%" cy="50%" innerRadius={28} outerRadius={46} dataKey="value" nameKey="label" paddingAngle={2}>
-                      {estadoCounts.map((e) => <Cell key={e.estado} fill={e.color} />)}
-                    </Pie>
-                    <RechartsTooltip
-                      contentStyle={{ backgroundColor: "var(--card)", borderColor: "var(--border)", borderRadius: 8, fontSize: 12 }}
-                      formatter={(v: any, nombre: any) => [`${v} ${Number(v) === 1 ? activo.toLowerCase() : entidadPlural.toLowerCase()}`, nombre]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div className="relative">
+                  <ResponsiveContainer width="100%" height={120}>
+                    <PieChart>
+                      <Pie data={estadoCounts} cx="50%" cy="50%" innerRadius={32} outerRadius={48} dataKey="value" nameKey="label" paddingAngle={2}>
+                        {estadoCounts.map((e) => <Cell key={e.grupo} fill={e.color} />)}
+                      </Pie>
+                      <RechartsTooltip
+                        contentStyle={{ backgroundColor: "var(--card)", borderColor: "var(--border)", borderRadius: 8, fontSize: 12 }}
+                        formatter={(v: any, nombre: any) => [`${v} ${Number(v) === 1 ? activo.toLowerCase() : entidadPlural.toLowerCase()}`, nombre]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <p className="text-lg font-semibold text-foreground leading-none">{totalRecibidosPeriodo}</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">recibidos</p>
+                  </div>
+                </div>
                 <div className="space-y-1 mt-1">
                   {estadoCounts.map((e) => (
-                    <div key={e.estado} className="flex items-center justify-between">
+                    <div key={e.grupo} className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: e.color }} />
                         <span className="text-[11px] text-muted-foreground truncate">{e.label}</span>
@@ -882,10 +1068,9 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
           {/* Ranking de técnicos — "reportes por técnico" que teníamos
               pendiente en el backlog, aquí a la vista todo el tiempo en
               vez de una pantalla aparte. Carga = equipos activos que trae
-              asignados AHORA MISMO (para detectar sobrecarga/desbalance);
-              30 días = productividad reciente; promedio = recepción→
-              entrega de TODO su historial (ver el comentario largo junto a
-              rankingTecnicos). */}
+              asignados AHORA MISMO (foto del momento, ver el comentario
+              largo junto a rankingTecnicos); entregas/promedio = dentro
+              del periodo elegido arriba. */}
           <div className="bg-card border border-border rounded-xl p-3">
             <p className="text-[12px] font-medium text-foreground mb-2">Técnicos</p>
             {rankingTecnicos.length === 0 ? (
@@ -903,7 +1088,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                       </span>
                     </div>
                     <p className="text-[10.5px] text-muted-foreground mt-0.5">
-                      {t.entregados30d} {t.entregados30d === 1 ? "entrega" : "entregas"} · últimos 30 días
+                      {t.entregadosPeriodo} {t.entregadosPeriodo === 1 ? "entrega" : "entregas"} · {etiquetaPeriodo}
                       {t.diasPromedio != null && ` · ${t.diasPromedio.toFixed(1)} días prom.`}
                     </p>
                   </div>
