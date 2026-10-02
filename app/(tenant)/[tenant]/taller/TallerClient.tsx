@@ -6,6 +6,7 @@ import { Wrench, Clock, AlertCircle, ChevronLeft, Send, Users } from "lucide-rea
 import type { ReparacionesData, EstadoReparacion, PrioridadReparacion } from "@/lib/reparaciones-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { enviarAlertaTallerAction } from "@/app/actions/reparaciones-actions";
+import { useTourDesdeUrl, TOUR_TALLER_ALERTA } from "@/lib/tours";
 
 /**
  * Vista del técnico reparador (módulo "taller") — RECORTADA a solo lectura
@@ -81,6 +82,9 @@ const formatFechaHora = (iso: string) =>
 
 export default function TallerClient({ data, labels, tenantSlug, miStaffId, verTodoTaller }: TallerClientProps) {
   const router = useRouter();
+
+  useTourDesdeUrl("taller-avisar-recepcion", TOUR_TALLER_ALERTA);
+
   const [seleccionadaId, setSeleccionadaId] = useState<string | null>(null);
   const [soloActivas, setSoloActivas] = useState(true);
   const [pending, startTransition] = useTransition();
@@ -181,6 +185,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
               <button
                 key={r.id}
                 onClick={() => setSeleccionadaId(r.id)}
+                data-tour="taller-abrir-folio"
                 className={`w-full text-left px-4 py-3 border-b border-border/60 hover:bg-muted/60 transition-colors ${
                   seleccionadaId === r.id ? "bg-primary/5" : ""
                 }`}
@@ -341,6 +346,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
                     onChange={(e) => setAlertaTexto(e.target.value)}
                     rows={2}
                     placeholder="Ej. Necesito autorización para cotizar una pieza extra…"
+                    data-tour="taller-alerta-mensaje"
                     className="w-full px-3 py-2 border border-border rounded-lg text-[12.5px] bg-card focus:outline-none focus:border-primary resize-none"
                   />
                   {/* 2026-09-24, a petición de Carlos: la página pública de
@@ -351,13 +357,14 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
                       enviarAlertaTallerAction, parámetro paraCliente). Sin
                       marcar, la alerta sigue siendo solo interna (Aduana/Tienda),
                       como siempre. */}
-                  <label className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-muted-foreground">
+                  <label className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-muted-foreground" data-tour="taller-alerta-para-cliente">
                     <input type="checkbox" checked={alertaParaCliente} onChange={(e) => setAlertaParaCliente(e.target.checked)} />
                     Mostrar este mensaje también al cliente en su página de seguimiento
                   </label>
                   <button
                     onClick={() => enviarAlerta(seleccionada.id)}
                     disabled={pending || !alertaTexto.trim()}
+                    data-tour="taller-alerta-enviar"
                     className="btn-primary mt-2 flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px]"
                   >
                     <Send className="w-3.5 h-3.5" /> Enviar alerta

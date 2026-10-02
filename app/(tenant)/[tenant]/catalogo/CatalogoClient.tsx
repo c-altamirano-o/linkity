@@ -22,6 +22,7 @@ import {
   type TipoProductoInput, type FilaImportacion,
 } from "@/app/actions/catalogo-actions";
 import { subirFotoProductoAction } from "@/app/actions/producto-imagen-actions";
+import { useTourDesdeUrl, TOUR_CATALOGO_ALTA, TOUR_CATALOGO_ARCHIVAR } from "@/lib/tours";
 
 interface BranchOption {
   id: string;
@@ -185,6 +186,10 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { categorias, productos, ventasDetalle } = data;
+
+  // "Muéstrame cómo" (ver lib/tours.ts).
+  useTourDesdeUrl("catalogo-dar-de-alta", TOUR_CATALOGO_ALTA);
+  useTourDesdeUrl("catalogo-archivar-eliminar", TOUR_CATALOGO_ARCHIVAR);
 
   // "Chip" de color por categoría (2026-09-26, a petición de Carlos: "quiero
   // esta configuración de la ficha en la que se muestra en el POS... icono
@@ -684,7 +689,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             className="btn-secondary flex-1 flex items-center justify-center gap-1 text-[11.5px] px-2 py-1.5 rounded-lg">
             <Upload className="w-3 h-3" /> Importar
           </button>
-          <button onClick={abrirNuevo} className="btn-primary flex-1 flex items-center justify-center gap-1 text-[11.5px] px-2 py-1.5 rounded-lg">
+          <button onClick={abrirNuevo} data-tour="catalogo-nuevo" className="btn-primary flex-1 flex items-center justify-center gap-1 text-[11.5px] px-2 py-1.5 rounded-lg">
             <Plus className="w-3 h-3" /> Nuevo
           </button>
         </div>
@@ -1075,7 +1080,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
               </button>
             </div>
             <div className="p-4 flex flex-col gap-3">
-              <div>
+              <div data-tour="catalogo-tipo">
                 <label className="text-[12.5px] font-medium text-muted-foreground">Tipo</label>
                 <select
                   value={form.type}
@@ -1087,7 +1092,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   ))}
                 </select>
               </div>
-              <div>
+              <div data-tour="catalogo-nombre">
                 <label className="text-[12.5px] font-medium text-muted-foreground">Nombre *</label>
                 <input
                   value={form.name}
@@ -1096,7 +1101,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   placeholder="Ej. Pantalla iPhone 13"
                 />
               </div>
-              <div>
+              <div data-tour="catalogo-opcionales">
                 <label className="text-[12.5px] font-medium text-muted-foreground">SKU</label>
                 <input
                   value={form.sku}
@@ -1223,7 +1228,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 )}
               </div>
               <div className={`grid gap-3 ${puedeVerMontos ? "grid-cols-3" : "grid-cols-2"}`}>
-                <div>
+                <div data-tour="catalogo-precio">
                   <label className="text-[12.5px] font-medium text-muted-foreground">Precio público *</label>
                   <input
                     type="number" min={0} step="0.01"
@@ -1315,7 +1320,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   olvidados para siempre en el catálogo — ver el comentario
                   largo en catalogo-actions.ts (archivarProductoAction). */}
               {editando && (
-                <div className="pt-3 mt-1 border-t border-border flex flex-col gap-2">
+                <div className="pt-3 mt-1 border-t border-border flex flex-col gap-2" data-tour="catalogo-archivar-eliminar">
                   {editando.archivedAt ? (
                     <>
                       <div className="flex items-start gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
@@ -1402,6 +1407,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
               <button
                 onClick={guardarProducto}
                 disabled={isPending || !form.name.trim() || !form.price}
+                data-tour="catalogo-guardar"
                 className="btn-primary px-4 py-2 rounded-lg text-[13.5px] transition-colors"
               >
                 {isPending ? "Guardando…" : editando ? "Guardar cambios" : "Crear producto"}

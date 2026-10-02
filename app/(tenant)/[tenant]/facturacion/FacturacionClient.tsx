@@ -11,6 +11,7 @@ import {
   timbrarFacturaAction,
   cancelarFacturaAction,
 } from "@/app/actions/facturacion-actions";
+import { useTourDesdeUrl, TOUR_FACTURACION_GENERAR } from "@/lib/tours";
 
 interface FacturacionClientProps {
   data: FacturacionData;
@@ -43,6 +44,8 @@ const nombreMesActual = () =>
 export default function FacturacionClient({ data, labels, tenantSlug }: FacturacionClientProps) {
   const router = useRouter();
   const { facturas, ventasSinFacturar, clientes } = data;
+
+  useTourDesdeUrl("facturacion-generar-factura", TOUR_FACTURACION_GENERAR);
 
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState<EstadoFactura | "TODAS">("TODAS");
@@ -176,6 +179,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
           <span className="text-[14.5px] font-medium text-foreground">{moduloNombre}</span>
           <button
             onClick={abrirModalNueva}
+            data-tour="facturacion-nueva"
             className="btn-primary flex items-center gap-1 text-[12.5px] px-2.5 py-1.5 rounded-lg"
           >
             <FileText className="w-3 h-3" /> Nueva
@@ -328,6 +332,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                       <button
                         onClick={() => handleTimbrar(seleccionada)}
                         disabled={pending}
+                        data-tour="facturacion-timbrar"
                         className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px]"
                       >
                         <FileText className="w-3 h-3" /> Timbrar ahora
@@ -454,7 +459,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                 </p>
               ) : (
                 <>
-                  <div>
+                  <div data-tour="facturacion-venta">
                     <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">VENTA A FACTURAR</label>
                     <select
                       value={nvSaleId}
@@ -469,7 +474,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                     </select>
                   </div>
 
-                  <div>
+                  <div data-tour="facturacion-receptor">
                     <div className="flex items-center justify-between">
                       <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">RECEPTOR DEL CFDI</label>
                       {ventaSeleccionadaNueva?.customerId && (
@@ -531,6 +536,7 @@ export default function FacturacionClient({ data, labels, tenantSlug }: Facturac
                 <button
                   onClick={handleCrearFactura}
                   disabled={guardando}
+                  data-tour="facturacion-generar"
                   className="btn-primary px-3 py-1.5 rounded-lg text-xs"
                 >
                   {guardando ? "Generando..." : "Generar factura"}

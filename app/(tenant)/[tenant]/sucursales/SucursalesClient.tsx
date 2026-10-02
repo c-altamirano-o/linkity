@@ -11,6 +11,7 @@ import {
   transferirInventarioAction,
   type DatosSucursal,
 } from "@/app/actions/sucursales-actions";
+import { useTourDesdeUrl, TOUR_SUCURSALES_ALTA } from "@/lib/tours";
 
 interface SucursalesClientProps {
   data: SucursalesData;
@@ -77,6 +78,9 @@ const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6];
 export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, montosVisibles = true }: SucursalesClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  // "Muéstrame cómo" (ver lib/tours.ts).
+  useTourDesdeUrl("sucursales-dar-de-alta", TOUR_SUCURSALES_ALTA);
 
   const [modalAbierto, setModalAbierto] = useState(false);
   // 2026-09-22, a petición de Carlos ("pide confirmación para cerrarlas
@@ -221,6 +225,7 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
         {!soloUnaSucursal && (
           <button
             onClick={abrirNueva}
+            data-tour="sucursales-nueva"
             className="btn-primary flex items-center gap-1.5 text-[12.5px] px-3 py-2 rounded-lg"
           >
             <Plus className="w-3.5 h-3.5" /> Nueva sucursal
@@ -550,7 +555,7 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
               </button>
             </div>
             <div className="p-4 flex flex-col gap-3">
-              <div>
+              <div data-tour="sucursales-nombre">
                 <label className="text-[12.5px] font-medium text-muted-foreground">Nombre *</label>
                 <input
                   value={form.name}
@@ -559,7 +564,7 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
                   placeholder="Ej. Sucursal Centro"
                 />
               </div>
-              <div>
+              <div data-tour="sucursales-opcionales">
                 <label className="text-[12.5px] font-medium text-muted-foreground">
                   Código de sucursal (opcional)
                 </label>
@@ -592,7 +597,7 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
                 />
               </div>
 
-              <div className="pt-1 border-t border-border">
+              <div className="pt-1 border-t border-border" data-tour="sucursales-horario">
                 <label className="text-[12.5px] font-medium text-muted-foreground">
                   Horario esperado de caja (opcional)
                 </label>
@@ -665,6 +670,7 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
               <button
                 onClick={guardarSucursal}
                 disabled={isPending || !form.name.trim()}
+                data-tour="sucursales-guardar"
                 className="btn-primary px-4 py-2 rounded-lg text-[13.5px]"
               >
                 {isPending ? "Guardando…" : editando ? "Guardar cambios" : "Crear sucursal"}

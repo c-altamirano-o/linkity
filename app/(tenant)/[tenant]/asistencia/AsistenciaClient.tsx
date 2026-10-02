@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CalendarCheck, Search, Building2, Calendar, LogIn, LogOut, X, Info } from "lucide-react";
 import type { RegistroAsistencia } from "@/lib/asistencia-data";
 import { cerrarAsistenciaManualAction } from "@/app/actions/asistencia-actions";
+import { useTourDesdeUrl, TOUR_ASISTENCIA_REVISAR } from "@/lib/tours";
 
 interface BranchOption {
   id: string;
@@ -89,6 +90,9 @@ function formatDuracion(checkInISO: string, checkOutISO: string | null): string 
 export default function AsistenciaClient({ registros, branches, tenantSlug, weekStartDay }: AsistenciaClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  useTourDesdeUrl("asistencia-revisar-registro", TOUR_ASISTENCIA_REVISAR);
+
   const [sucursal, setSucursal] = useState(TODAS_SUCURSALES_ID);
   const [periodo, setPeriodo] = useState<Periodo>("Semana");
   const [busqueda, setBusqueda] = useState("");
@@ -145,7 +149,7 @@ export default function AsistenciaClient({ registros, branches, tenantSlug, week
         </p>
       )}
 
-      <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3 p-3 bg-card border border-border rounded-xl">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3 p-3 bg-card border border-border rounded-xl" data-tour="asistencia-filtros">
         <div className="relative flex-1 min-w-[160px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
           <input
@@ -235,6 +239,7 @@ export default function AsistenciaClient({ registros, branches, tenantSlug, week
                       <button
                         disabled={isPending && cerrando === r.id}
                         onClick={() => cerrarAhora(r.id)}
+                        data-tour="asistencia-cerrar-ahora"
                         className="flex items-center gap-1 text-[11.5px] font-medium text-red-600 hover:text-red-700 disabled:opacity-50 ml-auto"
                       >
                         <X className="w-3 h-3" /> Cerrar ahora

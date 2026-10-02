@@ -92,6 +92,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Cambiar el periodo o la sucursal que ves",
+        tourId: "dashboard-cambiar-periodo",
         pasos: [
           "Elige un atajo: \"Hoy\", \"Semana\", \"Mes\" o \"Año\".",
           "Para un rango a tu medida, cambia las dos fechas (inicio y fin) y presiona \"Aplicar\".",
@@ -119,6 +120,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
       },
       {
         titulo: "Cobrar una reparación lista o una devolución",
+        tourId: "pos-cobrar-reparacion",
         pasos: [
           "Llega aquí desde Reparaciones con el botón \"Entregar\" — el carrito ya viene precargado con el costo cotizado.",
           "Confirma el método de pago y presiona \"Cobrar\", igual que en una venta normal.",
@@ -149,6 +151,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
       },
       {
         titulo: "Entregar un equipo ya listo",
+        tourId: "reparaciones-entregar-equipo",
         pasos: [
           "Abre el folio y presiona \"Entregar\".",
           "Si está \"Listo\", te manda a Punto de Venta a cobrar el costo cotizado.",
@@ -164,6 +167,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Avisar algo a Recepción/Tienda",
+        tourId: "taller-avisar-recepcion",
         pasos: [
           "Abre el folio de la lista.",
           "Escribe tu mensaje en el cuadro \"Enviar alerta a Recepción / Tienda\".",
@@ -191,6 +195,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
       },
       {
         titulo: "Cobrar y entregar un equipo listo",
+        tourId: "aduana-cobrar-entregar",
         pasos: [
           "Si el equipo ya está \"Listo\" y tu rol también tiene acceso a Punto de Venta, usa el atajo \"Cobrar y entregar\" que aparece en el folio.",
         ],
@@ -204,6 +209,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Agendar una cita",
+        tourId: "citas-agendar-cita",
         pasos: [
           "Presiona \"Nueva cita\".",
           "Elige el cliente del selector, o presiona \"+ Cliente nuevo\" y captura su Nombre (obligatorio) y, si quieres, Teléfono.",
@@ -217,6 +223,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
       },
       {
         titulo: "Dar seguimiento a una cita",
+        tourId: "citas-dar-seguimiento",
         pasos: [
           "Desde la lista, usa los íconos rápidos (los que aparecen dependen del estatus actual de la cita): \"Confirmar\", \"Iniciar atención\", \"Completar\", \"No se presentó\", \"Editar\" o \"Cancelar\".",
         ],
@@ -230,6 +237,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Marcar el odontograma",
+        tourId: "odontograma-marcar",
         pasos: [
           "Entra a la ficha del cliente y abre su expediente.",
           "Da clic en un diente.",
@@ -240,6 +248,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
       },
       {
         titulo: "Agregar una nota de evolución",
+        tourId: "expediente-nota-evolucion",
         pasos: [
           "Presiona \"Nueva nota\".",
           "Captura el Motivo de la consulta (obligatorio).",
@@ -249,6 +258,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
       },
       {
         titulo: "Armar un plan de tratamiento",
+        tourId: "expediente-plan-tratamiento",
         pasos: [
           "Presiona \"Nuevo plan\".",
           "Captura el Título del plan (obligatorio, ej. \"Rehabilitación oral\").",
@@ -267,6 +277,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Dar de alta un cliente",
+        tourId: "clientes-dar-de-alta",
         pasos: [
           "Presiona \"Agregar cliente\".",
           "Captura el Nombre completo (obligatorio) y, si quieres, Teléfono, Correo, RFC y Dirección.",
@@ -283,6 +294,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Dar de alta un producto o servicio",
+        tourId: "catalogo-dar-de-alta",
         pasos: [
           "Presiona \"Nuevo\".",
           "Elige el Tipo: Productos, Refacciones o Servicios — determina qué categorías puedes elegir, y si es Servicio no se captura Existencia inicial.",
@@ -293,6 +305,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
       },
       {
         titulo: "Archivar o eliminar un producto",
+        tourId: "catalogo-archivar-eliminar",
         pasos: [
           "Ábrelo para editar.",
           "Usa \"Archivar producto\" (se puede restaurar después) o, si nunca se ha usado en una venta/compra/reparación, \"Eliminar definitivamente\" — y confirma.",
@@ -307,6 +320,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Ajustar el stock de un producto",
+        tourId: "inventario-ajustar-stock",
         pasos: [
           "Presiona \"Ajustar\" (o \"Surtir\" si aparece en bajo/agotado) junto al producto.",
           "Si tienes más de una sucursal, elígela.",
@@ -324,6 +338,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Registrar una orden de compra",
+        tourId: "compras-registrar-orden",
         pasos: [
           "Presiona \"Nueva\".",
           "Elige la Sucursal que recibe la mercancía.",
@@ -335,6 +350,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
       },
       {
         titulo: "Confirmar que ya llegó la mercancía",
+        tourId: "compras-confirmar-recibida",
         pasos: [
           "Abre la orden mientras esté \"Pendiente\".",
           "Presiona \"Marcar recibida\" — esto es lo que de verdad suma el stock a tu Inventario.",
@@ -349,6 +365,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Abrir caja al iniciar tu turno",
+        tourId: "caja-abrir-turno",
         pasos: [
           "Captura el \"Fondo inicial\" (o \"Monto de apertura\", si eres supervisor).",
           "Presiona \"Guardar y continuar\" (o \"Abrir caja\").",
@@ -356,6 +373,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
       },
       {
         titulo: "Cerrar caja al terminar tu turno (el corte)",
+        tourId: "caja-cerrar-turno",
         pasos: [
           "Presiona \"Cerrar caja\".",
           "Cuenta tu efectivo real y captúralo en \"Efectivo contado\" (agrega una nota si algo no cuadra).",
@@ -371,6 +389,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Dar de alta un empleado",
+        tourId: "personal-dar-de-alta",
         pasos: [
           "Presiona \"Nuevo empleado\".",
           "Captura Nombre, Puesto, País y Teléfono.",
@@ -386,6 +405,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
       },
       {
         titulo: "Crear un rol personalizado",
+        tourId: "personal-crear-rol-personalizado",
         pasos: [
           "Presiona \"Roles y permisos\" y luego \"Crear rol personalizado\".",
           "Dale un nombre (ej. \"Barbero\") y marca las casillas de los módulos que podrá usar.",
@@ -407,6 +427,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
           "Opcional: define el horario esperado de apertura/cierre de caja y los Días que opera — si lo defines, te llega un aviso si la sucursal no reporta apertura o cierre a esa hora (con 15 minutos de margen).",
           "Presiona \"Crear sucursal\".",
         ],
+        tourId: "sucursales-dar-de-alta",
       },
     ],
   },
@@ -431,11 +452,13 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Generar una factura de una venta",
+        tourId: "facturacion-generar-factura",
         pasos: [
           "Presiona \"Nueva\".",
           "Elige la venta a facturar.",
           "Usa el cliente ya ligado a la venta, o presiona \"Facturar a otro receptor\" y captura Nombre o razón social (RFC y Teléfono son opcionales).",
-          "Presiona \"Generar factura\" y después \"Timbrar ahora\" en el detalle.",
+          "Presiona \"Generar factura\".",
+          "En el detalle de la factura recién creada, presiona \"Timbrar ahora\".",
         ],
       },
     ],
@@ -454,6 +477,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
           "Escribe tu Mensaje.",
           "Presiona \"Enviar ticket\".",
         ],
+        tourId: "soporte-abrir-ticket",
       },
     ],
   },
@@ -464,25 +488,31 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Cambiar el tipo de negocio/rubro",
+        tourId: "config-cambiar-rubro",
         pasos: [
-          "Ve a la sección \"Giro del negocio\", elige tu Rubro y presiona \"Guardar cambios\".",
+          "Ve a la sección \"Giro del negocio\" y elige tu Rubro.",
+          "Presiona \"Guardar cambios\".",
         ],
       },
       {
         titulo: "Subir tu logo",
+        tourId: "config-subir-logo",
         pasos: [
-          "Ve a \"Logo de tu negocio\", elige el archivo (PNG/JPG/WEBP/SVG, máximo 2MB) y presiona \"Subir logo\".",
+          "Ve a \"Logo de tu negocio\" y elige el archivo (PNG/JPG/WEBP/SVG, máximo 2MB).",
+          "Presiona \"Subir logo\".",
         ],
       },
       {
         titulo: "Capturar tus datos fiscales",
+        tourId: "config-datos-fiscales",
         pasos: [
-          "Ve a \"Personalizar ticket\" y captura tu RFC, Dirección y mensaje de pie.",
+          "Ve a \"Personalizar ticket\" y captura tu Dirección, RFC y mensaje de pie.",
           "Presiona \"Guardar cambios\".",
         ],
       },
       {
         titulo: "Activar o desactivar un módulo",
+        tourId: "config-activar-modulo",
         pasos: [
           "Ve a \"Módulos de tu negocio\" y usa el interruptor de cada módulo — se aplica de inmediato, sin botón de guardar aparte.",
           "O presiona \"Aplicar recomendado para tu rubro\" para que el sistema apague en bloque lo que no suele usarse en tu giro.",
@@ -497,6 +527,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Revisar el registro",
+        tourId: "asistencia-revisar-registro",
         pasos: [
           "Usa el buscador, el selector de sucursal y los atajos de periodo (Hoy/Semana/Mes/Todo) para filtrar.",
           "Si una sesión quedó sin salida registrada, presiona \"Cerrar ahora\" para cerrarla a mano.",

@@ -21,7 +21,7 @@ import { construirMensajeReparacion, primerNombre } from "@/lib/whatsapp-mensaje
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import { abrirReciboImprimible, estilosImpresionTicket, type DatosNegocioRecibo, type FormatoTicket, type ReciboData } from "@/lib/recibo-imprimible";
 import QRCode from "qrcode";
-import { useTourDesdeUrl, TOUR_REPARACIONES_RECIBIR } from "@/lib/tours";
+import { useTourDesdeUrl, TOUR_REPARACIONES_RECIBIR, TOUR_REPARACIONES_ENTREGAR } from "@/lib/tours";
 
 // Agrupa el catálogo de "agregar pieza" por tipo — piezas/productos primero,
 // servicios (mano de obra: "quitar cuenta Google", "limpieza general", etc.)
@@ -481,6 +481,7 @@ function VistaTienda({
             <div className="text-center py-8 text-muted-foreground text-xs">Sin equipos pendientes</div>
           ) : tiendaReps.map((rep) => (
             <div key={rep.id} onClick={() => { setSeleccionadaId(rep.id); setMostrarDetalle(true); }}
+              data-tour="reparaciones-abrir-folio"
               className={`p-3 rounded-xl border mb-2 cursor-pointer transition-all ${
                 seleccionada?.id === rep.id ? "bg-primary/5 border-primary" : "bg-card border-border hover:border-foreground/30"
               } ${rep.estado === "SHOP_READY" ? "border-l-2 border-l-emerald-500" : rep.estado === "SHOP_RETURN" ? "border-l-2 border-l-amber-400" : ""}`}>
@@ -602,18 +603,21 @@ function VistaTienda({
                   (handleEntregarSinCobro), nunca sin ningún comprobante. */}
               {seleccionada.estado === "SHOP_READY" && (
                 <button disabled={pending} onClick={() => onCobrarClick(seleccionada.id)}
+                  data-tour="reparaciones-entregar"
                   className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                   <CheckCircle className="w-3 h-3" /> Entregar
                 </button>
               )}
               {seleccionada.estado === "SHOP_RETURN" && cobrarEnDevolucion && (
                 <button disabled={pending} onClick={() => onCobrarClick(seleccionada.id)}
+                  data-tour="reparaciones-entregar"
                   className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                   <CheckCircle className="w-3 h-3" /> Entregar
                 </button>
               )}
               {seleccionada.estado === "SHOP_RETURN" && !cobrarEnDevolucion && (
                 <button disabled={pending} onClick={() => onEntregarSinCobro(seleccionada)}
+                  data-tour="reparaciones-entregar"
                   className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                   <CheckCircle className="w-3 h-3" /> Entregar
                 </button>
@@ -750,6 +754,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   // "Recibir un equipo nuevo" cuando se llega aquí desde el botón del mismo
   // nombre en /ayuda (?tour=reparaciones-recibir-equipo).
   useTourDesdeUrl("reparaciones-recibir-equipo", TOUR_REPARACIONES_RECIBIR);
+  useTourDesdeUrl("reparaciones-entregar-equipo", TOUR_REPARACIONES_ENTREGAR);
 
   const [modalNuevaAbierto, setModalNuevaAbierto] = useState(false);
   const [nuevaBranchId, setNuevaBranchId] = useState(branches[0]?.id ?? "");

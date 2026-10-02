@@ -286,6 +286,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
             <div className="border border-dashed border-border rounded-lg p-3 space-y-2">
               <input type="text" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)}
                 placeholder="Nombre del rol (ej. Barbero)"
+                data-tour="roles-nombre"
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
               {sugerenciasRoles.filter((s) => !roles.some((r) => r.name === s)).length > 0 && (
                 <div className="flex flex-wrap gap-1">
@@ -298,7 +299,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                   ))}
                 </div>
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5" data-tour="roles-modulos">
                 {MODULOS_ASIGNABLES.map((m) => (
                   <label key={m} className="flex items-center gap-1.5 text-xs text-foreground">
                     <input type="checkbox" checked={modulosNuevo.has(m)} onChange={() => toggleModulo(modulosNuevo, setModulosNuevo, m)} />
@@ -332,14 +333,14 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
               ))}
               <div className="flex justify-end gap-2">
                 <button onClick={() => setCreando(false)} className="btn-ghost px-3 py-1.5 text-xs rounded-lg">Cancelar</button>
-                <button disabled={pending} onClick={crearRol}
+                <button disabled={pending} onClick={crearRol} data-tour="roles-guardar"
                   className="btn-primary flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs">
                   <Check className="w-3 h-3" /> Crear rol
                 </button>
               </div>
             </div>
           ) : (
-            <button onClick={() => { setCreando(true); setError(null); }}
+            <button onClick={() => { setCreando(true); setError(null); }} data-tour="roles-crear-personalizado"
               className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-border hover:bg-muted rounded-lg text-xs font-medium text-muted-foreground">
               <Plus className="w-3.5 h-3.5" /> Crear rol personalizado
             </button>

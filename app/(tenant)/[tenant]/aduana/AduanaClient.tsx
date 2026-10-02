@@ -21,7 +21,7 @@ import {
   actualizarCostoEstimadoAction, avanzarEstadoAction, resolverAlertaTallerAction, type NuevoEstadoReparacion,
 } from "@/app/actions/reparaciones-actions";
 import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData } from "@/lib/recibo-imprimible";
-import { useTourDesdeUrl, TOUR_ADUANA_ASIGNAR } from "@/lib/tours";
+import { useTourDesdeUrl, TOUR_ADUANA_ASIGNAR, TOUR_ADUANA_COBRAR_ENTREGAR } from "@/lib/tours";
 
 /**
  * "Aduana" / Recepción del taller (2026-09-22, corrección explícita de
@@ -275,6 +275,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
   // "Asignar técnico y avanzar un folio" cuando se llega aquí desde el botón
   // del mismo nombre en /ayuda (?tour=aduana-asignar-tecnico).
   useTourDesdeUrl("aduana-asignar-tecnico", TOUR_ADUANA_ASIGNAR);
+  useTourDesdeUrl("aduana-cobrar-entregar", TOUR_ADUANA_COBRAR_ENTREGAR);
 
   // Selector de periodo del "Resumen de taller" (2026-10-02) — mismo patrón
   // que cambiarPeriodo en DashboardClient.tsx: navega a ?desde=&hasta=, el
@@ -622,6 +623,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
               <button
                 key={r.id}
                 onClick={() => setSeleccionadaId(r.id)}
+                data-tour="aduana-abrir-folio"
                 className={`w-full text-left px-4 py-3 border-b border-border/60 hover:bg-muted/60 transition-colors ${
                   seleccionadaId === r.id ? "bg-primary/5" : ""
                 }`}
@@ -898,6 +900,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                   <button
                     onClick={handleCobrar}
                     disabled={pending}
+                    data-tour="aduana-cobrar-entregar"
                     className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-[12.5px] font-medium transition-colors"
                   >
                     <Store className="w-3.5 h-3.5" /> Cobrar y entregar

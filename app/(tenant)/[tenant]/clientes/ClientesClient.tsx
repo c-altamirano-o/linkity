@@ -31,6 +31,10 @@ import { crearRecetaAction } from "@/app/actions/receta-actions";
 import FirmaCanvas from "@/components/tenant/FirmaCanvas";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, formatoTelefono, whatsappHref } from "@/lib/paises";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
+import {
+  useTourDesdeUrl, TOUR_CLIENTES_ALTA, TOUR_ODONTOGRAMA_MARCAR,
+  TOUR_NOTA_EVOLUCION, TOUR_PLAN_TRATAMIENTO,
+} from "@/lib/tours";
 
 interface ClientesClientProps {
   clientes: ClienteUI[];
@@ -394,6 +398,14 @@ export default function ClientesClient({
   const [seleccionadoId, setSeleccionadoId] = useState<string | null>(clientes[0]?.id ?? null);
   const [filtroHistorial, setFiltroHistorial] = useState<FiltroHistorial>("Todo");
   const [mostrarDetalle, setMostrarDetalle] = useState(false);
+
+  // "Muéstrame cómo" (ver lib/tours.ts) — esta pantalla también hospeda al
+  // expediente clínico (odontograma, notas, planes), así que son 4 tours
+  // posibles desde aquí, cada uno con su propio ?tour=<id>.
+  useTourDesdeUrl("clientes-dar-de-alta", TOUR_CLIENTES_ALTA);
+  useTourDesdeUrl("odontograma-marcar", TOUR_ODONTOGRAMA_MARCAR);
+  useTourDesdeUrl("expediente-nota-evolucion", TOUR_NOTA_EVOLUCION);
+  useTourDesdeUrl("expediente-plan-tratamiento", TOUR_PLAN_TRATAMIENTO);
 
   // Body del detalle: "historial" (compras/reparaciones, comportamiento de
   // siempre) o "expediente" (M16) — solo existe la segunda opción cuando el
@@ -879,7 +891,7 @@ export default function ClientesClient({
           </button>
         </div>
         <div className="p-5 space-y-3">
-          <div>
+          <div data-tour="clientes-nombre">
             <label className="text-xs font-medium text-muted-foreground">Nombre completo *</label>
             <input
               type="text"
@@ -889,7 +901,7 @@ export default function ClientesClient({
               placeholder="Nombre y apellido"
             />
           </div>
-          <div>
+          <div data-tour="clientes-opcionales">
             <label className="text-xs font-medium text-muted-foreground">Teléfono</label>
             <div className="mt-1 flex gap-2">
               <select
@@ -944,7 +956,7 @@ export default function ClientesClient({
               />
             </div>
           </div>
-          <div className="pt-2">
+          <div className="pt-2" data-tour="clientes-mayorista">
             <label className="flex items-center gap-2 text-[12.5px] text-foreground/80 cursor-pointer">
               <input
                 type="checkbox"
@@ -969,6 +981,7 @@ export default function ClientesClient({
           <button
             onClick={handleGuardar}
             disabled={guardando}
+            data-tour="clientes-guardar"
             className="btn-primary px-4 py-2 text-sm rounded-lg"
           >
             {guardando ? "Guardando…" : "Guardar"}
@@ -994,6 +1007,7 @@ export default function ClientesClient({
             </p>
             <button
               onClick={abrirModalNuevo}
+              data-tour="clientes-nuevo"
               className="btn-primary inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg"
             >
               <Plus className="w-4 h-4" /> Agregar cliente
@@ -1018,6 +1032,7 @@ export default function ClientesClient({
           <span className="text-sm font-medium text-foreground">Clientes</span>
           <button
             onClick={abrirModalNuevo}
+            data-tour="clientes-nuevo"
             className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
           >
             <Plus className="w-3 h-3" /> Nuevo
@@ -1397,7 +1412,7 @@ export default function ClientesClient({
                   {odontogramaActivo && (
                     <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
                       <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">ODONTOGRAMA</p>
-                      <div className="space-y-1.5 overflow-x-auto pb-1">
+                      <div className="space-y-1.5 overflow-x-auto pb-1" data-tour="odontograma-diente">
                         {[DIENTES_SUPERIOR, DIENTES_INFERIOR].map((fila, i) => (
                           <div key={i} className="flex gap-1 justify-center min-w-max">
                             {fila.map((numero) => {
@@ -1456,7 +1471,7 @@ export default function ClientesClient({
                               cada diente solo muestra un punto de color (ver leyenda)
                               cuando tiene una fase pendiente, para no forzar al doctor
                               a saltar entre dos flujos ya validados por separado. */}
-                          <div className="flex flex-wrap gap-3 mb-3">
+                          <div className="flex flex-wrap gap-3 mb-3" data-tour="odontograma-condicion">
                             {CATEGORIAS_CONDICION.map((grupo) => (
                               <div key={grupo.etiqueta}>
                                 <p className="text-[10.5px] font-semibold text-muted-foreground tracking-wide uppercase mb-1">{grupo.etiqueta}</p>
@@ -1488,6 +1503,7 @@ export default function ClientesClient({
                               <button
                                 onClick={handleGuardarDiente}
                                 disabled={dienteGuardando}
+                                data-tour="odontograma-guardar"
                                 className="btn-primary px-4 py-2 text-xs rounded-lg whitespace-nowrap"
                               >
                                 {dienteGuardando ? "Guardando…" : "Guardar"}
@@ -1515,6 +1531,7 @@ export default function ClientesClient({
                       <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PLAN DE TRATAMIENTO</p>
                       <button
                         onClick={abrirModalPlan}
+                        data-tour="plan-nuevo"
                         className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
                       >
                         <ClipboardList className="w-3 h-3" /> Nuevo plan
@@ -1686,6 +1703,7 @@ export default function ClientesClient({
                       <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NOTAS DE EVOLUCIÓN</p>
                       <button
                         onClick={abrirModalNota}
+                        data-tour="nota-nueva"
                         className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
                       >
                         <Plus className="w-3 h-3" /> Nueva nota
@@ -1729,7 +1747,7 @@ export default function ClientesClient({
               </button>
             </div>
             <div className="p-5 space-y-3">
-              <div>
+              <div data-tour="nota-motivo">
                 <label className="text-xs font-medium text-muted-foreground">Motivo de la consulta *</label>
                 <input
                   type="text"
@@ -1739,7 +1757,7 @@ export default function ClientesClient({
                   placeholder="ej. Limpieza dental, revisión"
                 />
               </div>
-              <div>
+              <div data-tour="nota-opcionales">
                 <label className="text-xs font-medium text-muted-foreground">Diagnóstico</label>
                 <input
                   type="text"
@@ -1781,6 +1799,7 @@ export default function ClientesClient({
               <button
                 onClick={handleGuardarNota}
                 disabled={notaGuardando}
+                data-tour="nota-guardar"
                 className="btn-primary px-4 py-2 text-sm rounded-lg"
               >
                 {notaGuardando ? "Guardando…" : "Guardar"}
@@ -1800,7 +1819,7 @@ export default function ClientesClient({
               </button>
             </div>
             <div className="p-5 space-y-3">
-              <div>
+              <div data-tour="plan-titulo">
                 <label className="text-xs font-medium text-muted-foreground">Título *</label>
                 <input
                   type="text"
@@ -1837,7 +1856,7 @@ export default function ClientesClient({
                 </div>
               </div>
 
-              <div>
+              <div data-tour="plan-fases">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Fases del plan *</label>
                   <button onClick={agregarFilaItem} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex items-center gap-0.5">
@@ -1905,6 +1924,7 @@ export default function ClientesClient({
               <button
                 onClick={handleGuardarPlan}
                 disabled={planGuardando}
+                data-tour="plan-guardar"
                 className="btn-primary px-4 py-2 text-sm rounded-lg"
               >
                 {planGuardando ? "Guardando…" : "Guardar plan"}

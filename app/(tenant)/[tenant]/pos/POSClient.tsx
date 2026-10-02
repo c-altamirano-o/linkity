@@ -16,7 +16,7 @@ import { ProductoIcono } from "@/lib/catalogo-iconos";
 import { CANTIDAD_CHIPS_CATEGORIA } from "@/lib/theme-presets";
 import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData, type QrDestinoTicket } from "@/lib/recibo-imprimible";
 import EscanearModal from "./EscanearModal";
-import { useTourDesdeUrl, TOUR_POS_VENTA } from "@/lib/tours";
+import { useTourDesdeUrl, TOUR_POS_VENTA, TOUR_POS_COBRAR_REPARACION } from "@/lib/tours";
 
 interface BranchOption {
   id: string;
@@ -109,6 +109,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   // "Registrar una venta" cuando se llega aquí desde el botón del mismo
   // nombre en /ayuda (?tour=pos-registrar-venta).
   useTourDesdeUrl("pos-registrar-venta", TOUR_POS_VENTA);
+  useTourDesdeUrl("pos-cobrar-reparacion", TOUR_POS_COBRAR_REPARACION);
 
   const [branchId, setBranchId] = useState<string | null>(branchInicial);
   const [busqueda, setBusqueda] = useState("");
@@ -779,7 +780,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         </div>
       )}
       {carrito.some((i) => i.repairId) && (
-        <div className="mx-5 mt-2 flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+        <div className="mx-5 mt-2 flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2" data-tour="pos-reparacion-aviso">
           <Wrench className="w-4 h-4 text-primary-text flex-shrink-0 mt-0.5" />
           <p className="text-xs text-foreground">
             Cobrando una reparación — la sucursal queda fija y el monto se puede ajustar en el renglón de abajo.
@@ -807,7 +808,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                     <p className="text-sm font-semibold text-foreground truncate">{item.nombre}</p>
                     <p className="text-xs text-muted-foreground">Cobro de reparación</p>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5" data-tour="pos-reparacion-monto">
                     <span className="text-xs text-muted-foreground">$</span>
                     <input
                       type="number"

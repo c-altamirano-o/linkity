@@ -13,6 +13,7 @@ import {
 } from "@/app/actions/citas-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, formatoTelefono } from "@/lib/paises";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
+import { useTourDesdeUrl, TOUR_CITAS_AGENDAR, TOUR_CITAS_SEGUIMIENTO } from "@/lib/tours";
 
 interface CitasClientProps {
   data: CitasData;
@@ -111,6 +112,11 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
   const [formError, setFormError] = useState<string | null>(null);
   const [guardando, startGuardar] = useTransition();
   const [accionEnCurso, startAccion] = useTransition();
+
+  // "Muéstrame cómo" (ver lib/tours.ts) — lanza el tour correspondiente
+  // cuando se llega aquí desde /ayuda con ?tour=<id>.
+  useTourDesdeUrl("citas-agendar-cita", TOUR_CITAS_AGENDAR);
+  useTourDesdeUrl("citas-dar-seguimiento", TOUR_CITAS_SEGUIMIENTO);
 
   const diaKey = fechaAKey(diaSeleccionado);
 
@@ -238,7 +244,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
         </div>
         <div className="p-5 space-y-3">
           {!citaEditando && (
-            <div>
+            <div data-tour="citas-cliente">
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-medium text-muted-foreground">Cliente *</label>
                 <button
@@ -292,7 +298,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
             </div>
           )}
 
-          <div>
+          <div data-tour="citas-sucursal">
             <label className="text-xs font-medium text-muted-foreground">Sucursal *</label>
             <select
               value={form.branchId}
@@ -305,7 +311,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
             </select>
           </div>
 
-          <div>
+          <div data-tour="citas-atiende">
             <label className="text-xs font-medium text-muted-foreground">Atiende *</label>
             <select
               value={form.doctorUserId}
@@ -324,7 +330,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
             )}
           </div>
 
-          <div>
+          <div data-tour="citas-motivo">
             <label className="text-xs font-medium text-muted-foreground">Motivo *</label>
             <input
               type="text"
@@ -336,7 +342,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div data-tour="citas-fecha">
               <label className="text-xs font-medium text-muted-foreground">Fecha y hora *</label>
               <input
                 type="datetime-local"
@@ -382,6 +388,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
           <button
             onClick={handleGuardar}
             disabled={guardando}
+            data-tour="citas-guardar"
             className="btn-primary px-4 py-2 text-sm rounded-lg"
           >
             {guardando ? "Guardando…" : "Guardar"}
@@ -406,6 +413,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
             </p>
             <button
               onClick={abrirModalNueva}
+              data-tour="citas-nueva"
               className="btn-primary inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg"
             >
               <Plus className="w-4 h-4" /> Nueva cita
@@ -426,6 +434,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
         </div>
         <button
           onClick={abrirModalNueva}
+          data-tour="citas-nueva"
           className="btn-primary flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg"
         >
           <Plus className="w-4 h-4" /> Nueva cita
@@ -502,7 +511,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
                 {label(labels, `appointment.status.${c.estado}`)}
               </span>
 
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1 flex-shrink-0" data-tour="citas-seguimiento">
                 {c.estado === "SCHEDULED" && (
                   <button disabled={accionEnCurso} onClick={() => cambiarEstado(c.id, "CONFIRMED")} title="Confirmar" className="p-1.5 rounded-md hover:bg-muted text-cyan-700">
                     <CheckCircle2 className="w-4 h-4" />

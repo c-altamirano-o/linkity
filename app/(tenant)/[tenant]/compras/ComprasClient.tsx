@@ -11,6 +11,7 @@ import {
   actualizarEstadoCompraAction,
   type ItemCompraParams,
 } from "@/app/actions/compras-actions";
+import { useTourDesdeUrl, TOUR_COMPRAS_REGISTRAR, TOUR_COMPRAS_RECIBIDA } from "@/lib/tours";
 
 interface BranchOption {
   id: string;
@@ -83,6 +84,10 @@ function renglonVacio(): RenglonForm {
 export default function ComprasClient({ data, labels, branches, tenantSlug }: ComprasClientProps) {
   const router = useRouter();
   const { compras, proveedores, productos } = data;
+
+  // "Muéstrame cómo" (ver lib/tours.ts).
+  useTourDesdeUrl("compras-registrar-orden", TOUR_COMPRAS_REGISTRAR);
+  useTourDesdeUrl("compras-confirmar-recibida", TOUR_COMPRAS_RECIBIDA);
 
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState<EstadoCompra | "TODAS">("TODAS");
@@ -235,6 +240,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
           <span className="text-[14.5px] font-medium text-foreground">{moduloNombre}</span>
           <button
             onClick={abrirModalNueva}
+            data-tour="compras-nueva"
             className="btn-primary flex items-center gap-1 text-[12.5px] px-2.5 py-1.5 rounded-lg"
           >
             <Plus className="w-3 h-3" /> Nueva
@@ -347,6 +353,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                       <button
                         onClick={() => handleActualizarEstado(seleccionada, "RECEIVED")}
                         disabled={pending}
+                        data-tour="compras-marcar-recibida"
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-lg text-[12.5px] font-medium transition-colors"
                       >
                         <Check className="w-3 h-3" /> Marcar recibida
@@ -464,7 +471,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
             </div>
 
             <div className="p-4 space-y-4">
-              <div>
+              <div data-tour="compras-sucursal">
                 <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
                 <select
                   value={nvBranchId}
@@ -478,7 +485,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                 </select>
               </div>
 
-              <div>
+              <div data-tour="compras-proveedor">
                 <div className="flex items-center justify-between">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PROVEEDOR</label>
                   <button
@@ -526,7 +533,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                 )}
               </div>
 
-              <div>
+              <div data-tour="compras-productos">
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PRODUCTOS</label>
                   <button type="button" onClick={handleAgregarRenglon} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-[11.5px]">
@@ -604,6 +611,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
               <button
                 onClick={handleCrearCompra}
                 disabled={guardando}
+                data-tour="compras-crear"
                 className="btn-primary px-3 py-1.5 rounded-lg text-xs"
               >
                 {guardando ? "Guardando..." : "Crear orden de compra"}

@@ -17,6 +17,7 @@ import type {
   DashboardData, RepairRow, CategoriaVenta, VentaPorHora, AtajosPeriodoDashboard,
 } from "@/lib/dashboard-data";
 import { guardarConfigCategoriasDashboardAction } from "@/app/actions/dashboard-actions";
+import { useTourDesdeUrl, TOUR_DASHBOARD_PERIODO } from "@/lib/tours";
 
 // ── Config de presentación (claves = valores reales del enum) ───────────────
 const estadoConfig: Record<RepairStatus, { label: string; classes: string }> = {
@@ -193,6 +194,8 @@ export default function DashboardClient({
   const router = useRouter();
   const t = (key: string) => label(labels, key);
   const enVistaGlobal = sucursalActualId === null;
+
+  useTourDesdeUrl("dashboard-cambiar-periodo", TOUR_DASHBOARD_PERIODO);
 
   const cambiarVista = (destino: "global" | string) => {
     if (destino === "global") {
@@ -671,7 +674,7 @@ export default function DashboardClient({
           lib/dashboard-data.ts) porque "Semana" depende de
           Tenant.weekStartDay. */}
       <div className="flex items-center gap-2 flex-wrap bg-card border border-border rounded-xl p-2.5">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5" data-tour="dashboard-atajos">
           {(
             [
               { key: "hoy", label: "Hoy", rango: atajosPeriodo.hoy },
@@ -691,7 +694,7 @@ export default function DashboardClient({
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5" data-tour="dashboard-rango">
           <input
             type="date"
             value={desdeSel}
@@ -727,7 +730,7 @@ export default function DashboardClient({
           sucursal — no es un filtro de solo apariencia en el cliente. */}
       {data.multiSucursal && (
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5" data-tour="dashboard-vista">
             <button
               onClick={() => cambiarVista("global")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors ${

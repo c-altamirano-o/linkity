@@ -8,6 +8,7 @@ import { ajustarStock, type AjusteTipo } from "@/lib/inventario-actions";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import { ProductoIcono } from "@/lib/catalogo-iconos";
+import { useTourDesdeUrl, TOUR_INVENTARIO_AJUSTAR } from "@/lib/tours";
 
 interface BranchOption {
   id: string;
@@ -54,6 +55,8 @@ interface VistaProducto extends ProductoInventario {
 export default function InventarioClient({ productos, labels, branches, tenantSlug, tenantName, puedeVerMontos = true }: InventarioClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  useTourDesdeUrl("inventario-ajustar-stock", TOUR_INVENTARIO_AJUSTAR);
 
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState<(typeof filtrosTabs)[number]>("Todos");
@@ -453,6 +456,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                     )}
                     <td className="px-3 sm:px-4 py-2.5">
                       <button onClick={() => abrirModal(p)}
+                        data-tour="inventario-ajustar"
                         className={`text-[11.5px] px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
                           status === "out"
                             ? "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
@@ -487,7 +491,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
             <p className="text-xs text-muted-foreground mb-4 truncate">{modalAjuste.name}</p>
 
             {branches.length > 1 && (
-              <div className="mb-4">
+              <div className="mb-4" data-tour="inventario-sucursal">
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Sucursal</label>
                 <select value={ajusteBranchId} onChange={(e) => setAjusteBranchId(e.target.value)}
                   className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
@@ -503,7 +507,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className="grid grid-cols-3 gap-2 mb-4" data-tour="inventario-tipo">
               {(["entrada", "salida", "ajuste"] as const).map((tipo) => (
                 <button key={tipo} onClick={() => setAjusteTipo(tipo)}
                   className={`py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
@@ -518,7 +522,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
               ))}
             </div>
 
-            <div className="mb-1">
+            <div className="mb-1" data-tour="inventario-cantidad">
               <label className="block text-xs font-medium text-muted-foreground mb-1">
                 {ajusteTipo === "ajuste" ? "Nuevo stock total" : "Cantidad"}
               </label>
@@ -535,6 +539,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                 Cancelar
               </button>
               <button onClick={guardarAjuste} disabled={isPending}
+                data-tour="inventario-guardar"
                 className="btn-primary flex-1 py-2 rounded-lg text-xs">
                 {isPending ? "Guardando…" : "Guardar"}
               </button>

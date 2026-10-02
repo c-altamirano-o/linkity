@@ -24,6 +24,13 @@ import {
   MessageCircle, Send, Unlink, Percent,
 } from "lucide-react";
 import type { EstadoTallerChecklist } from "@/lib/roles-server";
+import {
+  useTourDesdeUrl,
+  TOUR_CONFIG_RUBRO,
+  TOUR_CONFIG_LOGO,
+  TOUR_CONFIG_TICKET,
+  TOUR_CONFIG_MODULOS,
+} from "@/lib/tours";
 
 const TIPOS_LOGO_PERMITIDOS = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const TAMANO_MAXIMO_LOGO = 2 * 1024 * 1024; // 2 MB — mismo límite que valida logo-actions.ts en el servidor
@@ -190,6 +197,11 @@ export default function ConfiguracionClient({
   checklistTaller,
 }: ConfiguracionClientProps) {
   const router = useRouter();
+
+  useTourDesdeUrl("config-cambiar-rubro", TOUR_CONFIG_RUBRO);
+  useTourDesdeUrl("config-subir-logo", TOUR_CONFIG_LOGO);
+  useTourDesdeUrl("config-datos-fiscales", TOUR_CONFIG_TICKET);
+  useTourDesdeUrl("config-activar-modulo", TOUR_CONFIG_MODULOS);
 
   // ── Tema ──────────────────────────────────────────────────
   const [temaSeleccionado, setTemaSeleccionado] = useState(themePresetInicial);
@@ -974,7 +986,7 @@ export default function ConfiguracionClient({
             personalizarlo aparte.
           </p>
 
-          <div className="max-w-sm">
+          <div className="max-w-sm" data-tour="config-rubro-select">
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">Rubro</label>
             <select
               value={rubroSeleccionado}
@@ -992,6 +1004,7 @@ export default function ConfiguracionClient({
             <button
               onClick={guardarRubro}
               disabled={rubroPending}
+              data-tour="config-rubro-guardar"
               className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
             >
               {rubroPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -1175,7 +1188,7 @@ export default function ConfiguracionClient({
             RFC, un mensaje de despedida propio y un texto libre al fondo del ticket.
           </p>
 
-          <div className="max-w-sm space-y-4">
+          <div className="max-w-sm space-y-4" data-tour="config-ticket-datos">
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1.5">Dirección</label>
               <input
@@ -1328,6 +1341,7 @@ export default function ConfiguracionClient({
             <button
               onClick={guardarDatosTicket}
               disabled={datosTicketPending}
+              data-tour="config-ticket-guardar"
               className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
             >
               {datosTicketPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -1615,6 +1629,7 @@ export default function ConfiguracionClient({
                 <button
                   onClick={aplicarRecomendado}
                   disabled={aplicandoRecomendado}
+                  data-tour="config-modulos-recomendado"
                   className="btn-ghost mt-2 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex items-center gap-1.5"
                 >
                   {aplicandoRecomendado && <Loader2 className="w-3 h-3 animate-spin" />}
@@ -1624,7 +1639,7 @@ export default function ConfiguracionClient({
             </div>
           )}
 
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border" data-tour="config-modulos-lista">
             {modulosState.map((m) => (
               <div key={m.code} className="flex items-center justify-between py-2.5">
                 <span className="text-sm text-foreground">{m.name}</span>
@@ -1711,6 +1726,7 @@ export default function ConfiguracionClient({
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/svg+xml"
                 onChange={seleccionarLogo}
+                data-tour="config-logo-archivo"
                 className="block w-full text-xs text-muted-foreground file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-primary/10 file:text-primary-text hover:file:bg-primary/20 file:cursor-pointer cursor-pointer"
               />
 
@@ -1718,6 +1734,7 @@ export default function ConfiguracionClient({
                 <button
                   onClick={subirLogo}
                   disabled={!logoFile || logoPending}
+                  data-tour="config-logo-subir"
                   className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
                 >
                   {logoPending && <Loader2 className="w-4 h-4 animate-spin" />}

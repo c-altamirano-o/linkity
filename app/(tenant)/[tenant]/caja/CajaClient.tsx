@@ -6,6 +6,7 @@ import { Lock, Unlock, Plus, Filter, TrendingDown, TrendingUp, ShoppingCart, Cal
 import type { CajaData } from "@/lib/caja-data";
 import { abrirCajaAction, cerrarCajaAction, registrarMovimientoAction } from "@/app/actions/caja-actions";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
+import { useTourDesdeUrl, TOUR_CAJA_ABRIR_SIMPLE, TOUR_CAJA_ABRIR_SUPERVISOR, TOUR_CAJA_CERRAR } from "@/lib/tours";
 
 type Periodo = "hoy" | "semana" | "mes" | "año" | "periodo";
 
@@ -86,6 +87,12 @@ function finDelDia(d: Date): Date {
 export default function CajaClient({ data, branches, branchActual, tenantSlug, tenantName, puedeVerMontos }: CajaClientProps) {
   const router = useRouter();
   const { sesionActual, movimientos } = data;
+
+  useTourDesdeUrl(
+    "caja-abrir-turno",
+    !sesionActual && !puedeVerMontos ? TOUR_CAJA_ABRIR_SIMPLE : TOUR_CAJA_ABRIR_SUPERVISOR,
+  );
+  useTourDesdeUrl("caja-cerrar-turno", TOUR_CAJA_CERRAR);
 
   const hoy = new Date();
   const hoyStr = hoy.toISOString().slice(0, 10);
@@ -728,19 +735,22 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
           <h1 className="text-base font-semibold text-foreground text-center mb-1">Antes de comenzar, abre la caja</h1>
           <p className="text-[12.5px] text-muted-foreground text-center mb-5">Captura el fondo inicial con el que arrancas hoy tu turno.</p>
           <div className="bg-card border border-border rounded-2xl p-5">
-            <label className="block text-[12.5px] font-medium text-muted-foreground mb-1">Fondo inicial</label>
-            <input
-              type="number"
-              value={montoApertura}
-              onChange={(e) => setMontoApertura(e.target.value)}
-              placeholder="$0.00"
-              autoFocus
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            />
+            <div data-tour="caja-fondo-inicial">
+              <label className="block text-[12.5px] font-medium text-muted-foreground mb-1">Fondo inicial</label>
+              <input
+                type="number"
+                value={montoApertura}
+                onChange={(e) => setMontoApertura(e.target.value)}
+                placeholder="$0.00"
+                autoFocus
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
             {error && <p className="text-[12.5px] text-red-500 mt-2">{error}</p>}
             <button
               onClick={handleAbrirCaja}
               disabled={pending}
+              data-tour="caja-guardar-apertura"
               className="btn-primary w-full mt-4 py-2.5 rounded-lg text-sm"
             >
               {pending ? "Abriendo..." : "Guardar y continuar"}
@@ -939,6 +949,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                     cerrarModales();
                     setMostrarCerrarModal(true);
                   }}
+                  data-tour="caja-boton-cerrar"
                   className="w-full flex items-center justify-center gap-2 py-2.5 bg-foreground/90 hover:bg-foreground text-background text-xs font-medium rounded-lg transition-colors"
                 >
                   <Lock className="w-3.5 h-3.5" /> Cerrar caja
@@ -955,6 +966,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                   cerrarModales();
                   setMostrarAbrirModal(true);
                 }}
+                data-tour="caja-abrir-boton"
                 className="btn-primary w-full flex items-center justify-center gap-2 py-2.5 text-xs rounded-lg"
               >
                 <Unlock className="w-3.5 h-3.5" /> Abrir caja
@@ -1309,7 +1321,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
           <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-sm font-semibold text-foreground mb-4">Abrir caja</h2>
             <div className="space-y-3 mb-4">
-              <div>
+              <div data-tour="caja-monto-apertura">
                 <label className="block text-[12.5px] font-medium text-muted-foreground mb-1">Monto de apertura</label>
                 <input
                   type="number"
@@ -1333,6 +1345,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
               <button
                 onClick={handleAbrirCaja}
                 disabled={pending}
+                data-tour="caja-abrir-confirmar"
                 className="btn-primary flex-1 py-2 rounded-lg text-xs"
               >
                 {pending ? "Abriendo..." : "Abrir caja"}
@@ -1362,7 +1375,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
               </p>
             )}
             <div className="space-y-3 mb-4">
-              <div>
+              <div data-tour="caja-efectivo-contado">
                 <label className="block text-[12.5px] font-medium text-muted-foreground mb-1">Efectivo contado</label>
                 <input
                   type="number"
@@ -1409,6 +1422,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
               <button
                 onClick={handleCerrarCaja}
                 disabled={pending}
+                data-tour="caja-cerrar-confirmar"
                 className="flex-1 py-2 rounded-lg text-xs font-medium text-background bg-foreground/90 hover:bg-foreground disabled:opacity-50"
               >
                 {pending ? "Cerrando..." : "Cerrar caja"}

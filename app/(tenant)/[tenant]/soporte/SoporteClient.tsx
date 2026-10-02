@@ -6,6 +6,7 @@ import { LifeBuoy, Plus, X, Send } from "lucide-react";
 import type { TicketUI, TicketPriority, TicketStatus } from "@/lib/soporte-data";
 import { crearTicketAction, responderTicketAction } from "@/app/actions/soporte-actions";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
+import { useTourDesdeUrl, TOUR_SOPORTE_TICKET } from "@/lib/tours";
 
 const formatFecha = (iso: string) =>
   new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -45,6 +46,8 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
   const [priority, setPriority] = useState<TicketPriority>("NORMAL");
 
   const ticketActivo = tickets.find((t) => t.id === seleccionado) ?? null;
+
+  useTourDesdeUrl("soporte-abrir-ticket", TOUR_SOPORTE_TICKET);
 
   // 2026-09-22, a petición de Carlos ("pide confirmación para cerrarlas
   // cuando abandone la acción a mitad del proceso"): antes este modal se
@@ -105,6 +108,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
         </div>
         <button
           onClick={abrirModal}
+          data-tour="soporte-nuevo"
           className="btn-primary flex items-center gap-1.5 text-[13.5px] px-3 py-2 rounded-lg"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -119,6 +123,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
           <p className="text-[13.5px] text-muted-foreground mb-4">Si tienes una duda o algo no está funcionando, cuéntanos.</p>
           <button
             onClick={abrirModal}
+            data-tour="soporte-nuevo"
             className="btn-ghost px-2.5 py-1 rounded-md text-[13.5px]"
           >
             Abrir tu primer ticket
@@ -220,7 +225,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
               </button>
             </div>
             <div className="p-4 space-y-3">
-              <div>
+              <div data-tour="soporte-asunto">
                 <label className="text-[12.5px] text-muted-foreground block mb-1">Asunto</label>
                 <input
                   value={subject}
@@ -229,7 +234,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
                   className="w-full text-[13.5px] border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
                 />
               </div>
-              <div>
+              <div data-tour="soporte-prioridad">
                 <label className="text-[12.5px] text-muted-foreground block mb-1">Prioridad</label>
                 <select
                   value={priority}
@@ -242,7 +247,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
                   <option value="URGENT">Urgente</option>
                 </select>
               </div>
-              <div>
+              <div data-tour="soporte-mensaje">
                 <label className="text-[12.5px] text-muted-foreground block mb-1">Mensaje</label>
                 <textarea
                   value={body}
@@ -264,6 +269,7 @@ export default function SoporteClient({ tickets, tenantSlug }: { tickets: Ticket
               <button
                 onClick={crear}
                 disabled={isPending || !subject.trim() || !body.trim()}
+                data-tour="soporte-enviar"
                 className="btn-primary text-[13.5px] px-3 py-1.5 rounded-lg"
               >
                 {isPending ? "Enviando…" : "Enviar ticket"}

@@ -18,6 +18,7 @@ import {
 import RolesManager from "./RolesManager";
 import AsistentePersonal from "./AsistentePersonal";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
+import { useTourDesdeUrl, TOUR_PERSONAL_ALTA, TOUR_PERSONAL_ROL_PERSONALIZADO } from "@/lib/tours";
 
 interface BranchOption {
   id: string;
@@ -144,6 +145,10 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
   // usó el sistema. Colapsado por default (no estorba a quien ya sabe
   // usarlo) — solo memoria de componente, se vuelve a colapsar al recargar.
   const [guiaAbierta, setGuiaAbierta] = useState(false);
+
+  // "Muéstrame cómo" (ver lib/tours.ts).
+  useTourDesdeUrl("personal-dar-de-alta", TOUR_PERSONAL_ALTA);
+  useTourDesdeUrl("personal-crear-rol-personalizado", TOUR_PERSONAL_ROL_PERSONALIZADO);
 
   // Permite enlazar directo al asistente con /[tenant]/personal?asistente=1
   // (2026-09-24) — pensado para engancharlo después desde otros puntos de
@@ -563,7 +568,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
             )}
             <div className="flex gap-1.5">
-              <button onClick={abrirNuevoEmpleado}
+              <button onClick={abrirNuevoEmpleado} data-tour="personal-nuevo"
                 className="btn-primary flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs rounded-lg">
                 <Plus className="w-3.5 h-3.5" /> Nuevo empleado
               </button>
@@ -576,7 +581,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 además un acento de color para que resalte a simple vista
                 junto al de "Roles y permisos". */}
             <div className="flex gap-1.5">
-              <button onClick={() => setModalRoles(true)}
+              <button onClick={() => setModalRoles(true)} data-tour="personal-roles-permisos"
                 className="btn-secondary flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs rounded-lg">
                 <Shield className="w-3.5 h-3.5" /> Roles y permisos
               </button>
@@ -822,7 +827,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               <button onClick={cancelarModalEmpleado} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-4 space-y-3 overflow-y-auto flex-1">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2" data-tour="personal-nombre">
                 <div>
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NOMBRE</label>
                   <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -870,7 +875,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
 
               {branches.length > 1 && (
-                <div>
+                <div data-tour="personal-sucursal">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">SUCURSAL</label>
                   <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}
                     className={`w-full mt-1 px-3 py-2 border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary ${
@@ -885,7 +890,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 </div>
               )}
 
-              <div>
+              <div data-tour="personal-rol">
                 <div className="flex items-center justify-between">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ROL — DETERMINA SU ACCESO AL SISTEMA</label>
                   <button type="button" onClick={() => setModalRoles(true)} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-[11.5px]">Roles y permisos</button>
@@ -907,7 +912,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
 
               {modalEmpleado.modo === "crear" ? (
-                <div>
+                <div data-tour="personal-pin">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PIN DE INICIO (6 DÍGITOS)</label>
                   <input type="text" inputMode="numeric" maxLength={6} value={form.pin}
                     onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 6) })}
@@ -919,7 +924,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 <p className="text-[11.5px] text-muted-foreground">Para cambiar el PIN de este empleado, usa el botón &quot;Restablecer PIN&quot; en su ficha.</p>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2" data-tour="personal-esquema-pago">
                 <div>
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ESQUEMA DE PAGO</label>
                   <select value={form.paymentScheme} onChange={(e) => setForm({ ...form, paymentScheme: e.target.value as EsquemaPago })}
@@ -943,7 +948,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                     )}
                   </div>
                 </div>
-                <div>
+                <div data-tour="personal-metodo-pago">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MÉTODO DE PAGO</label>
                   <select value={form.staffPaymentMethod} onChange={(e) => setForm({ ...form, staffPaymentMethod: e.target.value as MetodoPago })}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
@@ -953,7 +958,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
 
               {form.staffPaymentMethod === "TRANSFERENCIA" && (
-                <div>
+                <div data-tour="personal-clabe">
                   <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">CLABE (18 DÍGITOS)</label>
                   <input type="text" inputMode="numeric" maxLength={18} value={form.clabe}
                     onChange={(e) => setForm({ ...form, clabe: e.target.value.replace(/\D/g, "").slice(0, 18) })}
@@ -980,7 +985,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
 
               {form.paymentScheme === "DESTAJO" && (
-                <div>
+                <div data-tour="personal-cascada-comision">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MONTO FIJO EN PESOS POR UNIDAD</label>
@@ -1006,7 +1011,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               )}
 
               {(form.paymentScheme === "COMISION" || form.paymentScheme === "MIXTO") && (
-                <div>
+                <div data-tour="personal-cascada-comision">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">% COMISIÓN</label>
@@ -1041,7 +1046,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 </div>
               )}
 
-              <div className="border-t border-border pt-3">
+              <div className="border-t border-border pt-3" data-tour="personal-lidera-equipo">
                 <label className="flex items-center gap-2 text-[11.5px] font-semibold text-muted-foreground tracking-widest">
                   <input type="checkbox" checked={form.teamCommissionBase !== ""}
                     onChange={(e) => setForm({ ...form, teamCommissionBase: e.target.checked ? "VENTAS" : "", teamCommissionRate: e.target.checked ? form.teamCommissionRate : "0" })} />
@@ -1079,7 +1084,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               )}
               <div className="flex justify-end gap-2 px-4 py-3">
                 <button onClick={cancelarModalEmpleado} className="btn-ghost px-3 py-2 text-xs rounded-lg">Cancelar</button>
-                <button disabled={guardando} onClick={handleGuardarEmpleado}
+                <button disabled={guardando} onClick={handleGuardarEmpleado} data-tour="personal-guardar"
                   className="btn-primary px-4 py-2 rounded-lg text-xs">
                   {guardando ? "Guardando..." : "Guardar"}
                 </button>
