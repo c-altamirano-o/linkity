@@ -1,11 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { AYUDA_MODULO, PLACEHOLDER_REPARACIONES, MODULO_ICON, MODULO_RUTA } from "@/lib/ayuda-contenido";
 import type { ModuloKey } from "@/lib/roles";
 import type { EstadoPasosBienvenida } from "@/lib/onboarding";
-import { LifeBuoy, CheckCircle2, Circle, ArrowRight, BookMarked } from "lucide-react";
+import { LifeBuoy, CheckCircle2, Circle, ArrowRight, BookMarked, ChevronDown, ChevronRight } from "lucide-react";
 
 interface AyudaClientProps {
   tenantSlug: string;
@@ -37,6 +38,22 @@ export default function AyudaClient({
   const resolverTexto = (texto: string) => texto.replaceAll(PLACEHOLDER_REPARACIONES, nombreReparaciones);
 
   const diasSemana = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+
+  // "Cómo lo harás" (2026-10-02, a petición de Carlos — revisó la primera
+  // versión y señaló que explicar "para qué es cada menú" sin explicar "el
+  // cómo" no reduce llamadas de soporte, que era justo el objetivo). Cada
+  // tarjeta se puede expandir sin salir de /ayuda para ver los pasos
+  // (AYUDA_MODULO[modulo].flujos) — "Ir al módulo" sigue siendo un link
+  // aparte, nunca toda la tarjeta, para no competir con el toggle de expandir.
+  const [expandidos, setExpandidos] = useState<Set<ModuloKey>>(new Set());
+  const toggleExpandido = (modulo: ModuloKey) => {
+    setExpandidos((prev) => {
+      const next = new Set(prev);
+      if (next.has(modulo)) next.delete(modulo);
+      else next.add(modulo);
+      return next;
+    });
+  };
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
@@ -135,18 +152,48 @@ export default function AyudaClient({
               const contenido = AYUDA_MODULO[modulo];
               const Icon = MODULO_ICON[modulo];
               const ruta = MODULO_RUTA[modulo] ?? modulo;
+              const abierto = expandidos.has(modulo);
+              const tienePasos = contenido.flujos.length > 0;
               return (
-                <Link
-                  key={modulo}
-                  href={`/${tenantSlug}/${ruta}`}
-                  className="rounded-xl border border-border bg-card p-4 hover:border-primary/40 transition-colors"
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Icon className="w-4 h-4 text-primary-text shrink-0" />
-                    <span className="text-sm font-medium text-foreground">{label(labels, contenido.labelKey)}</span>
+                <div key={modulo} className="rounded-xl border border-border bg-card p-4">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <Link href={`/${tenantSlug}/${ruta}`} className="flex items-center gap-2 min-w-0 hover:underline">
+                      <Icon className="w-4 h-4 text-primary-text shrink-0" />
+                      <span className="text-sm font-medium text-foreground truncate">{label(labels, contenido.labelKey)}</span>
+                    </Link>
+                    <Link href={`/${tenantSlug}/${ruta}`} className="text-xs text-muted-foreground hover:text-foreground shrink-0 inline-flex items-center gap-0.5">
+                      Ir <ArrowRight className="w-3 h-3" />
+                    </Link>
                   </div>
                   <p className="text-xs text-muted-foreground">{resolverTexto(contenido.esencial)}</p>
-                </Link>
+                  {tienePasos && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => toggleExpandido(modulo)}
+                        className="inline-flex items-center gap-1 text-xs text-primary-text mt-2 hover:underline"
+                        aria-expanded={abierto}
+                      >
+                        {abierto ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                        {abierto ? "Ocultar cómo hacerlo" : "Ver cómo hacerlo"}
+                      </button>
+                      {abierto && (
+                        <div className="mt-2 pt-2 border-t border-border space-y-3">
+                          {contenido.flujos.map((flujo) => (
+                            <div key={flujo.titulo}>
+                              <p className="text-xs font-medium text-foreground mb-1">{flujo.titulo}</p>
+                              <ol className="list-decimal list-inside space-y-0.5">
+                                {flujo.pasos.map((paso, i) => (
+                                  <li key={i} className="text-xs text-muted-foreground">{resolverTexto(paso)}</li>
+                                ))}
+                              </ol>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               );
             })}
           </div>

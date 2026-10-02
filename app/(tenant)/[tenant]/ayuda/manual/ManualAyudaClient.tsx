@@ -68,7 +68,7 @@ export default function ManualAyudaClient({ tenantSlug, labels, modulosInactivos
                         <Link href={`/${tenantSlug}/${ruta}`} className="text-sm font-medium text-foreground hover:underline">
                           {label(labels, contenido.labelKey)}
                         </Link>
-                        {contenido.avanzado && (
+                        {(contenido.avanzado || contenido.flujos.length > 0) && (
                           <button
                             type="button"
                             onClick={() => toggleExpandido(modulo)}
@@ -81,10 +81,22 @@ export default function ManualAyudaClient({ tenantSlug, labels, modulosInactivos
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">{resolverTexto(contenido.esencial)}</p>
-                      {abierto && contenido.avanzado && (
-                        <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border">
-                          {resolverTexto(contenido.avanzado)}
-                        </p>
+                      {abierto && (
+                        <div className="mt-2 pt-2 border-t border-border space-y-3">
+                          {contenido.avanzado && (
+                            <p className="text-xs text-muted-foreground">{resolverTexto(contenido.avanzado)}</p>
+                          )}
+                          {contenido.flujos.map((flujo) => (
+                            <div key={flujo.titulo}>
+                              <p className="text-xs font-medium text-foreground mb-1">{flujo.titulo}</p>
+                              <ol className="list-decimal list-inside space-y-0.5">
+                                {flujo.pasos.map((paso, i) => (
+                                  <li key={i} className="text-xs text-muted-foreground">{resolverTexto(paso)}</li>
+                                ))}
+                              </ol>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
