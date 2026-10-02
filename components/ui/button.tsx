@@ -9,7 +9,20 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
+        // 2026-10-02, a petición de Carlos ("botones sin realce, sin
+        // énfasis") — este componente ya existía con la jerarquía correcta
+        // (default/outline/secondary/ghost/destructive/link) pero el
+        // variant "default" (el botón PRIMARIO, la acción principal de una
+        // pantalla) pesaba visualmente IGUAL que cualquier otro: mismo
+        // font-medium y cero sombra heredados de la base de arriba — por
+        // eso un botón primario y una pastilla de filtro activa terminaban
+        // viéndose del mismo peso. Se le suma peso de fuente y una sombra
+        // sutil (más marcada en hover, plana al presionar — misma
+        // convención física de "levantado/presionado" que ya usa
+        // "active:not-aria-[haspopup]:translate-y-px" en la base) — el
+        // resto de variants no cambia, así siguen leyéndose un escalón por
+        // debajo del primario, que es justo la jerarquía que faltaba.
+        default: "bg-primary text-primary-foreground font-semibold shadow-sm hover:shadow-md active:shadow-none [a]:hover:bg-primary/80",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:

@@ -313,6 +313,58 @@ function hsl(h: number, s: number, l: number): string {
   return `hsl(${Math.round(h)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`;
 }
 
+/* ── Contraste de texto sobre "--primary" (2026-10-02, a petición de
+ * Carlos: "botones sin realce, sin énfasis" — un reporte distinto de la
+ * jerarquía de componentes, ver button.tsx, pero con la MISMA causa raíz
+ * en al menos 3 de los 10 temas Windows Phone) ──
+ *
+ * Cada WindowsThemeDef/MaterialThemeDef trae "defaultIconColor" fijado A
+ * MANO por quien armó el catálogo (casi siempre "#FFFFFF") sin calcular
+ * contraste real contra "backgroundColor". Tres temas quedaron con texto
+ * blanco sobre un fondo igual de claro/brillante:
+ *   - LAWN_LIME (#76EE00, verde lima) → contraste real ~1.3:1
+ *   - VIBRANT_LUMIA (#00C7C7, cian claro) → ~1.6:1
+ *   - MANGO_TANGERINE (#F09609, naranja claro) → ~2:1
+ * (el mínimo WCAG AA para texto de botón es 3:1). El botón "primario"
+ * técnicamente tiene relleno sólido, pero el texto se funde con él — de
+ * ahí el "sin énfasis" para cualquier negocio con uno de estos 3 temas.
+ *
+ * En vez de corregir esas 3 entradas a mano (lo que deja el mismo bug
+ * listo para repetirse en el próximo tema que alguien agregue al
+ * catálogo), se calcula el contraste real de "defaultIconColor" contra
+ * el color de fondo EFECTIVO (fondoVentana, ya con la intensidad del
+ * tenant aplicada) y, si no alcanza el mínimo, se elige automáticamente
+ * blanco o negro — lo que sí contraste — en su lugar. Un tema bien hecho
+ * (los otros 13) nunca activa el fallback: el cálculo simplemente
+ * confirma que su elección manual ya era la correcta.
+ *
+ * Deliberadamente NO se toca "--tile-fg" (las 5 fichas de categoría del
+ * POS) — cada ficha tiene su propio color de fondo y un solo "--tile-fg"
+ * no puede ser correcto para las 5 a la vez; ese es un problema distinto
+ * (ya existía antes de este cambio) que Carlos no reportó esta vez. */
+function luminanciaRelativa(hex: string): number {
+  const canal = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const [r, g, b] = hexToRgb(hex);
+  return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
+}
+
+function contraste(hexA: string, hexB: string): number {
+  const la = luminanciaRelativa(hexA);
+  const lb = luminanciaRelativa(hexB);
+  const [claro, oscuro] = la >= lb ? [la, lb] : [lb, la];
+  return (claro + 0.05) / (oscuro + 0.05);
+}
+
+const UMBRAL_CONTRASTE_BOTON = 3; // WCAG AA, texto grande/negrita (botones)
+function textoLegibleSobre(fondo: string, preferido: string): string {
+  if (contraste(fondo, preferido) >= UMBRAL_CONTRASTE_BOTON) return preferido;
+  const blanco = "#FFFFFF", negro = "#000000";
+  return contraste(fondo, blanco) >= contraste(fondo, negro) ? blanco : negro;
+}
+
 /**
  * Deriva el set COMPLETO de tokens del sistema a partir de uno de los 10
  * temas de WINDOWS_THEMES y DOS intensidades independientes (0–200,
@@ -536,15 +588,21 @@ function construirPresetDesdeDef(
   // (su "--primary" ya es un acento propio, no el fondo de una ventana).
   const primaryText = esOscuro ? hslNeutro(0.55, 0.7) : hslNeutro(0.6, 0.36);
 
+  // 2026-10-02: ver el comentario largo junto a textoLegibleSobre más
+  // arriba — "--primary-foreground"/"--sidebar-primary-foreground" ya NO
+  // confían ciegamente en tema.defaultIconColor, se valida su contraste
+  // real contra fondoVentana primero.
+  const primaryForeground = textoLegibleSobre(fondoVentana, tema.defaultIconColor);
+
   return {
     ...chipVars,
     "--tile-fg": tema.defaultIconColor,
     "--primary": fondoVentana,
-    "--primary-foreground": tema.defaultIconColor,
+    "--primary-foreground": primaryForeground,
     "--primary-text": primaryText,
     "--ring": fondoVentana,
     "--sidebar-primary": fondoVentana,
-    "--sidebar-primary-foreground": tema.defaultIconColor,
+    "--sidebar-primary-foreground": primaryForeground,
     ...neutrales,
     // 2026-09-28 (bug real reportado por Carlos, capturas del selector de
     // fechas del Dashboard: fondo gris oscuro con texto NEGRO ilegible,

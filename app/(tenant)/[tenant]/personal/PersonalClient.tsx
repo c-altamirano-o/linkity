@@ -469,7 +469,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
             </p>
           </div>
           <button onClick={() => setModalAsistente(true)}
-            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-lg flex-shrink-0 shadow-sm">
+            className="btn-primary flex items-center justify-center gap-1.5 px-4 py-2 text-xs rounded-lg flex-shrink-0">
             <Sparkles className="w-3.5 h-3.5" /> Abrir Asistente de puestos
           </button>
         </div>
@@ -564,7 +564,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
             )}
             <div className="flex gap-1.5">
               <button onClick={abrirNuevoEmpleado}
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium rounded-lg">
+                className="btn-primary flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs rounded-lg">
                 <Plus className="w-3.5 h-3.5" /> Nuevo empleado
               </button>
             </div>
@@ -577,7 +577,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 junto al de "Roles y permisos". */}
             <div className="flex gap-1.5">
               <button onClick={() => setModalRoles(true)}
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 border border-border hover:bg-muted text-xs font-medium rounded-lg text-foreground">
+                className="btn-secondary flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs rounded-lg">
                 <Shield className="w-3.5 h-3.5" /> Roles y permisos
               </button>
               <button onClick={() => setModalAsistente(true)}
@@ -678,19 +678,19 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                       </span>
                     ))}
                     <button onClick={() => abrirEditarEmpleado(seleccionado)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted rounded-lg text-xs font-medium text-foreground">
+                      className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                       <Pencil className="w-3 h-3" /> Editar
                     </button>
                     <button onClick={() => abrirRestablecerPin(seleccionado)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted rounded-lg text-xs font-medium text-foreground">
+                      className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                       <KeyRound className="w-3 h-3" /> {seleccionado.tienePin ? "Restablecer PIN" : "Asignar PIN"}
                     </button>
                     <button onClick={() => abrirModalPago(seleccionado)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-xs font-medium">
+                      className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                       <Banknote className="w-3 h-3" /> Generar pago
                     </button>
                     <button disabled={pending} onClick={() => handleToggleActivo(seleccionado)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:bg-muted disabled:opacity-50 rounded-lg text-xs font-medium text-muted-foreground">
+                      className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                       {seleccionado.isActive ? <><Ban className="w-3 h-3" /> Desactivar</> : <><Check className="w-3 h-3" /> Reactivar</>}
                     </button>
                   </div>
@@ -782,7 +782,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                                   Pagar
                                 </button>
                                 <button disabled={pending} onClick={() => handleActualizarPago(p.id, "CANCELLED")}
-                                  className="px-2 py-1 border border-border hover:bg-card disabled:opacity-50 text-muted-foreground rounded text-[11.5px] font-medium">
+                                  className="btn-secondary px-2 py-1 rounded text-[11.5px]">
                                   Cancelar
                                 </button>
                               </div>
@@ -1078,9 +1078,9 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 <div className="mx-4 mt-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{formError}</div>
               )}
               <div className="flex justify-end gap-2 px-4 py-3">
-                <button onClick={cancelarModalEmpleado} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+                <button onClick={cancelarModalEmpleado} className="btn-ghost px-3 py-2 text-xs rounded-lg">Cancelar</button>
                 <button disabled={guardando} onClick={handleGuardarEmpleado}
-                  className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
+                  className="btn-primary px-4 py-2 rounded-lg text-xs">
                   {guardando ? "Guardando..." : "Guardar"}
                 </button>
               </div>
@@ -1112,9 +1112,9 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
-              <button onClick={cancelarModalPin} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+              <button onClick={cancelarModalPin} className="btn-ghost px-3 py-2 text-xs rounded-lg">Cancelar</button>
               <button disabled={restableciendoPin} onClick={handleRestablecerPin}
-                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
+                className="btn-primary px-4 py-2 rounded-lg text-xs">
                 {restableciendoPin ? "Guardando..." : "Guardar PIN"}
               </button>
             </div>
@@ -1178,9 +1178,9 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
-              <button onClick={cancelarModalPago} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+              <button onClick={cancelarModalPago} className="btn-ghost px-3 py-2 text-xs rounded-lg">Cancelar</button>
               <button disabled={generandoPago} onClick={handleGenerarPago}
-                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
+                className="btn-primary px-4 py-2 rounded-lg text-xs">
                 {generandoPago ? "Generando..." : "Generar pago"}
               </button>
             </div>

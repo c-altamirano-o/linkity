@@ -154,3 +154,53 @@
     font-size: 112%;
   }
 }
+
+/* 2026-10-02, a petición de Carlos ("botones sin realce, sin énfasis") —
+ * diagnóstico completo: existe un componente <Button> bien hecho
+ * (components/ui/button.tsx, variants default/outline/secondary/ghost/
+ * destructive/link ya correctos) pero NINGÚN módulo de negocio lo importa
+ * — los ~600 botones reales de la app son <button> nativos con className
+ * de Tailwind escrito a mano, módulo por módulo, repitiendo casi la misma
+ * receta para el botón "primario" (bg-primary + texto + rounded-lg) pero
+ * variando el tamaño de texto y SIN sombra ni peso de fuente mayor en
+ * ningún lado — por eso un botón primario y una pastilla de filtro activa
+ * (mismo "bg-primary text-primary-foreground") terminan con el mismo peso
+ * visual. El "secundario" tampoco existe como tal: lo que hay es texto
+ * suelto sin fondo ni borde (ej. "Cancelar"), un salto de dos escalones
+ * sin el intermedio.
+ *
+ * Migrar los ~600 botones existentes al componente <Button> es un cambio
+ * grande que conviene hacer módulo por módulo, verificado uno por uno
+ * (mismo criterio que el resto de este proyecto) — mientras esa migración
+ * avanza, estas clases dan la MISMA receta de énfasis que el variant
+ * "default"/"outline"/"ghost" de button.tsx (mismo shadow, mismo peso de
+ * fuente) con un solo className adicional, sin tener que tocar la
+ * estructura JSX de cada botón ni su lógica de onClick/disabled.
+ * Deliberadamente NO fijan padding/rounded/tamaño de texto — eso sigue
+ * siendo decisión de cada pantalla (ya es consistente: casi todas usan
+ * rounded-lg) y, por cómo funcionan las capas de Tailwind (@layer
+ * components siempre pierde contra @layer utilities), cualquier clase de
+ * espaciado puesta directo en el botón (px-4, text-xs, rounded-2xl…)
+ * sigue ganando sin conflicto. */
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-primary-foreground font-semibold shadow-sm transition-all hover:bg-primary/90 hover:shadow-md active:shadow-none active:translate-y-px disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none;
+  }
+  .btn-secondary {
+    @apply border border-border bg-background text-foreground font-medium transition-colors hover:bg-muted disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-ghost {
+    @apply text-muted-foreground font-medium transition-colors hover:text-foreground hover:bg-muted disabled:opacity-50 disabled:pointer-events-none;
+  }
+  /* Mismo tratamiento "suave" (fondo tenue, no relleno sólido) que ya usa
+     el variant "destructive" de button.tsx — ver ese archivo. NO es un
+     reemplazo 1:1 del botón rojo sólido que ya existe en Catálogo
+     (bg-red-600 hover:bg-red-700 text-white): ese usa un rojo de Tailwind
+     literal en vez del token --destructive del tema porque --destructive
+     no trae un "--destructive-foreground" calculado para texto blanco
+     sólido todavía — queda pendiente como mejora aparte, no se inventa
+     aquí a ciegas. */
+  .btn-destructive {
+    @apply bg-destructive/10 text-destructive font-medium transition-colors hover:bg-destructive/20 disabled:opacity-50 disabled:pointer-events-none;
+  }
+}

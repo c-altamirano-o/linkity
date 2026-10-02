@@ -249,9 +249,9 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                     </div>
                   ))}
                   <div className="flex justify-end gap-2">
-                    <button onClick={() => setEditandoId(null)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+                    <button onClick={() => setEditandoId(null)} className="btn-ghost px-3 py-1.5 text-xs rounded-lg">Cancelar</button>
                     <button disabled={pending} onClick={guardarEdicion}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
+                      className="btn-primary flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs">
                       <Check className="w-3 h-3" /> Guardar
                     </button>
                   </div>
@@ -268,7 +268,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                     <p className="text-[11.5px] text-muted-foreground">{rol.cantidadEmpleados} empleado(s) con este rol</p>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={() => abrirEditar(rol)} className="p-1.5 border border-border hover:bg-muted rounded-lg text-foreground">
+                    <button onClick={() => abrirEditar(rol)} className="btn-secondary p-1.5 rounded-lg">
                       <Pencil className="w-3 h-3" />
                     </button>
                     {!rol.isSystem && (
@@ -331,9 +331,9 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                 </div>
               ))}
               <div className="flex justify-end gap-2">
-                <button onClick={() => setCreando(false)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+                <button onClick={() => setCreando(false)} className="btn-ghost px-3 py-1.5 text-xs rounded-lg">Cancelar</button>
                 <button disabled={pending} onClick={crearRol}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg text-xs font-medium">
+                  className="btn-primary flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs">
                   <Check className="w-3 h-3" /> Crear rol
                 </button>
               </div>
