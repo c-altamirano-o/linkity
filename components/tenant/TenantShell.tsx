@@ -17,6 +17,7 @@ import {
   GitBranch, BookOpen, LogOut, Bell, ChevronDown, Settings,
   Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck, CalendarDays,
   Unlock, Lock, AlertTriangle, Smartphone, Check, ListChecks, CheckCircle2, Circle,
+  HelpCircle,
 } from "lucide-react";
 
 // Tipo real de NotificacionUI (lib/notificaciones.ts) — se reusa aquí en
@@ -59,7 +60,16 @@ function esAlertaUrgente(tipo: TipoNotificacion): boolean {
 // resuelto por rubro/tenant en el layout del tenant y pasado como prop, así
 // "Reparaciones" puede convertirse en "Órdenes de Servicio" para un taller
 // automotriz sin tocar este archivo (ver labelKey de cada ítem, abajo).
-const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloKey; icon: typeof LayoutDashboard }[] }[] = [
+//
+// `href` acepta `ModuloKey | "ayuda"` (2026-10-02, manual de usuario a
+// petición de Carlos) — "ayuda" NO se agregó a MODULOS/ModuloKey
+// (lib/roles.ts) a propósito: ese tipo es el catálogo real de permisos que
+// un dueño reparte por rol (RolesManager.tsx lo lista como checkbox) y
+// "Ayuda" nunca debe aparecer ahí ni ser algo que se pueda desactivar por
+// rol o por negocio — tiene que verla CUALQUIERA, siempre (ver el
+// comentario largo junto al filtro de gruposVisibles más abajo, donde se
+// exenta explícitamente de los 2 filtros que sí aplican al resto).
+const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloKey | "ayuda"; icon: typeof LayoutDashboard }[] }[] = [
   {
     section: "PRINCIPAL",
     items: [
@@ -116,6 +126,10 @@ const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloK
   {
     section: "AYUDA",
     items: [
+      // "Ayuda" antes que "Soporte" a propósito — el manual (autoservicio)
+      // es el primer paso; el centro de tickets es para cuando eso no
+      // resolvió el problema.
+      { labelKey: "module.help.name", href: "ayuda", icon: HelpCircle },
       { labelKey: "module.support.name", href: "soporte", icon: LifeBuoy },
     ]
   }
@@ -453,12 +467,20 @@ export default function TenantShell({
   // ("taller", ver OCULTOS_PARA_ADMIN arriba) no aparece de más; "Aduana" en
   // cambio sí se muestra siempre a admin (2026-09-25) porque es la única
   // forma de asignar técnico/cambiar estatus/ajustar costo, incluso para él.
+  //
+  // "ayuda" (2026-10-02) se exenta explícitamente de los filtros (1) y (2)
+  // — nunca se apaga por negocio ni se recorta por rol, cualquier sesión la
+  // ve siempre (ver el comentario largo junto a NAV_STRUCTURE arriba). El
+  // `as ModuloKey` en el filtro (2) es seguro: ese `.includes` nunca llega a
+  // evaluarse para "ayuda" gracias al `||` que lo antecede — el cast es
+  // solo para que TypeScript acepte la expresión en la rama que sí aplica a
+  // un ModuloKey real.
   const gruposVisibles = NAV_STRUCTURE
     .map((grupo) => ({
       section: grupo.section,
       items: grupo.items
-        .filter((item) => !modulosInactivosSet.has(item.href))
-        .filter((item) => modo !== "staff" || (modulosPermitidos?.includes(item.href) ?? false))
+        .filter((item) => item.href === "ayuda" || !modulosInactivosSet.has(item.href))
+        .filter((item) => item.href === "ayuda" || modo !== "staff" || (modulosPermitidos?.includes(item.href as ModuloKey) ?? false))
         .filter((item) => modo !== "admin" || !OCULTOS_PARA_ADMIN.has(item.href))
         .map((item) => ({ ...item, label: label(labels, item.labelKey) })),
     }))

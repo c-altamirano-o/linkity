@@ -81,7 +81,21 @@ export const DEFAULT_LABELS: LabelDictionary = {
   "module.branches.name": "Sucursales",
   "module.reports.name": "Reportes",
   "module.support.name": "Soporte",
+  // "Ayuda" (2026-10-02, a petición de Carlos: manual de usuario dentro de
+  // la propia app, visible para CUALQUIER rol — ver el comentario largo
+  // junto al ítem "ayuda" en NAV_STRUCTURE, TenantShell.tsx). Nombre fijo,
+  // sin personalizar por rubro a propósito: a diferencia de "Reparaciones"/
+  // "Soporte", no hay ninguna razón para que varíe de un negocio a otro.
+  "module.help.name": "Ayuda",
   "module.attendance.name": "Asistencia",
+  // "Configuración" (2026-10-02): hasta ahora TenantShell.tsx la escribía
+  // literal (no es un ítem de NAV_STRUCTURE, vive aparte como acceso directo
+  // junto al logout — ver el comentario junto a href={`/${tenant}/configuracion`}),
+  // así que nunca había pasado por este sistema de labels. Se agrega aquí
+  // porque lib/ayuda-contenido.ts necesita un labelKey real para CADA
+  // ModuloKey (incluida "configuracion") al resolver el nombre del módulo en
+  // el manual — no varía por rubro, igual que "Ayuda"/"Soporte".
+  "module.configuration.name": "Configuración",
   // Agenda de citas (2026-09-18) — ver el comentario largo en
   // lib/modules-catalog.ts sobre por qué este módulo es distinto de
   // Reparaciones.

@@ -182,8 +182,11 @@ export default async function TenantLayout({
 
     const headerList = await headers();
     const pathname = headerList.get("x-pathname") ?? "";
-    const modulo = pathname.split("/").filter(Boolean)[1] as ModuloKey | undefined;
-    if (modulo && !modulosPermitidosParaNav.includes(modulo)) {
+    const modulo = pathname.split("/").filter(Boolean)[1] as ModuloKey | "ayuda" | undefined;
+    // "ayuda" (2026-10-02) se exenta de este guard — ver el comentario largo
+    // junto al ítem "ayuda" en NAV_STRUCTURE, TenantShell.tsx: el manual
+    // debe poder verlo CUALQUIER rol, nunca es parte de modulosPermitidosParaNav.
+    if (modulo && modulo !== "ayuda" && !modulosPermitidosParaNav.includes(modulo)) {
       redirect(`/${tenant}/${modulosPermitidosParaNav[0] ?? "dashboard"}`);
     }
 
@@ -201,6 +204,10 @@ export default async function TenantLayout({
     if (
       modulo !== "caja" &&
       modulo !== "asistencia" &&
+      // "ayuda" (2026-10-02) también se deja pasar libre aquí — alguien
+      // debe poder consultar "cómo abrir caja" ANTES de haberla abierto,
+      // que es justo el escenario que este bloque empuja a resolver.
+      modulo !== "ayuda" &&
       modulosPermitidosParaNav.includes("pos") &&
       modulosPermitidosParaNav.includes("caja")
     ) {
