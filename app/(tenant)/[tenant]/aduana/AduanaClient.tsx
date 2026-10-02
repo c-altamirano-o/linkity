@@ -4,10 +4,11 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Wrench, Package, Stethoscope, Check, CheckCircle, AlertCircle,
-  ChevronLeft, X, Plus, ClipboardList, ArrowRight, Store,
+  ChevronLeft, X, Plus, ClipboardList, ArrowRight, Store, Gauge,
 } from "lucide-react";
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import type {
-  ReparacionesData, ReparacionUI, EstadoReparacion, PrioridadReparacion, ProductoParaReparacion,
+  ReparacionesData, ReparacionUI, EstadoReparacion, PrioridadReparacion, ProductoParaReparacion, TecnicoOption,
 } from "@/lib/reparaciones-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import {
@@ -102,6 +103,40 @@ const HISTORIAL_ICONOS: Record<EstadoReparacion, { icon: React.ElementType; bg: 
   SHOP_READY: { icon: Store, bg: "bg-cyan-50", color: "text-cyan-600" },
   SHOP_RETURN: { icon: ArrowRight, bg: "bg-red-50", color: "text-red-600" },
 };
+
+// Colores de la dona "Distribución por estatus" (panel de resumen, ver más
+// abajo) — 2026-10-02, a petición de Carlos ("como administrador, qué
+// reportes o métricas podrás poner ahí para ver el desempeño de taller y
+// sus empleados"). A propósito los MISMOS colores que ya asocia la familia
+// de ESTADO_BADGE de arriba (ámbar=espera, morado=en reparación,
+// esmeralda=listo, naranja=devolución de taller, cian=listo en tienda,
+// rojo=devolución a tienda) — el usuario ya aprendió esa asociación viendo
+// las etiquetas de la lista, reusarla aquí es gratis en curva de
+// aprendizaje. Validado con el validador de paletas del skill de dataviz en
+// ESTE orden (de hecho, el orden en el que entran a la dona, ver
+// ESTADO_DONUT_ORDEN): pasa las 4 pruebas en "adjacent" (el caso real de una
+// dona/leyenda en secuencia); en "all-pairs" quedan 2 pares por debajo del
+// piso de daltonismo — por eso la dona SIEMPRE se acompaña de una leyenda
+// con texto (nunca solo color, ver el bloque de abajo), que es exactamente
+// la mitigación que exige ese resultado. DELIVERED/CANCELLED (equipos ya
+// fuera del flujo activo) no entran — nunca se grafican aquí.
+const ESTADO_DONUT_COLOR: Partial<Record<EstadoReparacion, string>> = {
+  RECEIVED: "var(--primary-text)",
+  DIAGNOSING: "#2563EB",
+  WAITING_PARTS: "#F59E0B",
+  IN_REPAIR: "#8B5CF6",
+  READY: "#10B981",
+  WORKSHOP_READY: "#10B981",
+  WORKSHOP_RETURN: "#F97316",
+  SHOP_READY: "#06B6D4",
+  SHOP_RETURN: "#EF4444",
+};
+// Orden de entrada a la dona — mismo criterio: el recorrido real de un
+// equipo por el taller, de recepción a salida a tienda.
+const ESTADO_DONUT_ORDEN: EstadoReparacion[] = [
+  "RECEIVED", "DIAGNOSING", "WAITING_PARTS", "IN_REPAIR",
+  "READY", "WORKSHOP_READY", "WORKSHOP_RETURN", "SHOP_READY", "SHOP_RETURN",
+];
 
 // Botones de avance de estatus ofrecidos aquí — mismo mapa de transiciones
 // válidas que TRANSICIONES_VALIDAS en reparaciones-actions.ts (el servidor
@@ -340,6 +375,63 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
 
   const entidadPlural = label(labels, "entity.repair.plural");
   const activo = label(labels, "entity.repair.asset");
+
+  // ── Panel "Resumen de taller" (2026-10-02, a petición de Carlos: "veo
+  // mucho espacio desperdiciado del lado derecho... qué reportes o métricas
+  // podrás colocar ahí para ver el desempeño de taller y sus empleados").
+  // Se calcula aquí mismo, en el cliente, a partir de los datos que esta
+  // pantalla YA recibe (reparaciones + técnicos) — no hace falta ni un
+  // query ni un campo nuevo. A propósito usa `reparaciones`/`activas`
+  // completas (de TODO el negocio), sin importar el toggle "Activas/Todas"
+  // de la lista de la izquierda ni la búsqueda — este panel responde "cómo
+  // va el taller en general", no "qué estoy viendo en la lista ahora".
+  const hoy = new Date();
+  const atrasados = activas.filter((r) => r.fechaEstimada && new Date(r.fechaEstimada) < hoy);
+  const sinTecnico = activas.filter((r) => !r.tecnicoAsignadoId);
+  const alertasPendientes = reparaciones.filter((r) => r.alertaTallerPendiente);
+
+  const estadoCounts = ESTADO_DONUT_ORDEN
+    .map((estado) => ({
+      estado,
+      label: label(labels, `repair.status.${estado}`),
+      color: ESTADO_DONUT_COLOR[estado] ?? "var(--muted-foreground)",
+      value: activas.filter((r) => r.estado === estado).length,
+    }))
+    .filter((e) => e.value > 0);
+
+  // Ranking de técnicos — carga actual (equipos activos YA asignados a
+  // él), entregados en los últimos 30 días (productividad reciente) y
+  // tiempo promedio recepción→entrega en TODO su historial de entregados
+  // (estabilidad: 30 días de muestra puede ser muy poco para un taller
+  // chico). No existe un timestamp de "cuándo se le asignó" en el schema
+  // (Repair.assignedToStaffId no trae fecha propia) — fechaRecibido es la
+  // mejor aproximación disponible sin tocar el schema; si un folio cambió
+  // de técnico a medio camino, ese tiempo se le "regala" al que lo entregó,
+  // mismo criterio que ya acepta tecnico (quien registró, no quien trabajó)
+  // en otras partes de este módulo.
+  const haceTreintaDias = new Date(hoy.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const rankingTecnicos = tecnicos
+    .map((t: TecnicoOption) => {
+      const propias = reparaciones.filter((r) => r.tecnicoAsignadoId === t.id);
+      const entregadas = propias.filter((r) => r.estado === "DELIVERED" && r.fechaEntregado);
+      const entregadas30d = entregadas.filter((r) => new Date(r.fechaEntregado as string) >= haceTreintaDias);
+      const diasPromedio =
+        entregadas.length > 0
+          ? entregadas.reduce((sum, r) => {
+              const dias = (new Date(r.fechaEntregado as string).getTime() - new Date(r.fechaRecibido).getTime()) / (24 * 60 * 60 * 1000);
+              return sum + Math.max(0, dias);
+            }, 0) / entregadas.length
+          : null;
+      return {
+        id: t.id,
+        nombre: t.name,
+        carga: propias.filter((r) => r.estado !== "DELIVERED" && r.estado !== "CANCELLED").length,
+        entregados30d: entregadas30d.length,
+        diasPromedio,
+      };
+    })
+    .sort((a, b) => b.carga - a.carga || b.entregados30d - a.entregados30d);
+
   const cerrada = seleccionada?.estado === "DELIVERED" || seleccionada?.estado === "CANCELLED";
   // Con "cobrar en devolución" activo, SHOP_RETURN -> DELIVERED directo NO
   // se ofrece aquí (ver el comentario largo en SIGUIENTES_ESTADOS arriba):
@@ -714,6 +806,111 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
               )}
             </div>
           )}
+        </div>
+
+        {/* Resumen de taller — panel de métricas (2026-10-02, a petición de
+            Carlos: "veo mucho espacio desperdiciado del lado derecho...
+            qué reportes o métricas podrás colocar ahí para ver el
+            desempeño de taller y sus empleados"). Oculto por debajo de
+            "xl" a propósito — el panel de Detalle ya se vuelve angosto en
+            pantallas medianas (sigue limitado por max-w-xl, ver más
+            arriba), y este panel necesita su propio ancho fijo aparte; en
+            vez de apretar todo en una pantalla chica, simplemente no se
+            muestra ahí (el admin que lo quiere ver trabaja en escritorio
+            grande, igual que el resto de este módulo). */}
+        <div className="hidden xl:flex w-[320px] flex-shrink-0 border-l border-border overflow-y-auto p-4 flex-col gap-4">
+          <div className="flex items-center gap-1.5">
+            <Gauge className="w-3.5 h-3.5 text-primary-text" />
+            <p className="text-[12.5px] font-semibold text-foreground">Resumen de taller</p>
+          </div>
+
+          {/* KPIs operativos — mismo patrón visual de "ficha" que ya usa
+              Dashboard (bg-muted/50, valor grande + etiqueta chica), para
+              que se sienta parte de la misma app. Rojo/ámbar solo cuando
+              el número es un problema real (>0) — en 0 se ve neutro, no
+              hay que entrenar al ojo a ignorar un color de alerta que casi
+              siempre está encendido. */}
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { valor: activas.length, texto: "Activos en taller", alerta: false },
+              { valor: atrasados.length, texto: "Atrasados", alerta: atrasados.length > 0 },
+              { valor: sinTecnico.length, texto: "Sin técnico", alerta: sinTecnico.length > 0 },
+              { valor: alertasPendientes.length, texto: "Alertas sin atender", alerta: alertasPendientes.length > 0 },
+            ].map((k) => (
+              <div key={k.texto} className={`rounded-xl p-2.5 text-center ${k.alerta ? "bg-red-50" : "bg-muted/50"}`}>
+                <p className={`text-base font-semibold ${k.alerta ? "text-red-600" : "text-foreground"}`}>{k.valor}</p>
+                <p className={`text-[10.5px] mt-0.5 ${k.alerta ? "text-red-600/80" : "text-muted-foreground"}`}>{k.texto}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Distribución por estatus — dona con leyenda de texto siempre
+              visible (nunca solo color, ver el comentario largo junto a
+              ESTADO_DONUT_COLOR arriba). */}
+          <div className="bg-card border border-border rounded-xl p-3">
+            <p className="text-[12px] font-medium text-foreground mb-2">Distribución por estatus</p>
+            {estadoCounts.length === 0 ? (
+              <p className="text-[11.5px] text-muted-foreground text-center py-4">Taller vacío por ahora.</p>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={120}>
+                  <PieChart>
+                    <Pie data={estadoCounts} cx="50%" cy="50%" innerRadius={28} outerRadius={46} dataKey="value" nameKey="label" paddingAngle={2}>
+                      {estadoCounts.map((e) => <Cell key={e.estado} fill={e.color} />)}
+                    </Pie>
+                    <RechartsTooltip
+                      contentStyle={{ backgroundColor: "var(--card)", borderColor: "var(--border)", borderRadius: 8, fontSize: 12 }}
+                      formatter={(v: any, nombre: any) => [`${v} ${Number(v) === 1 ? activo.toLowerCase() : entidadPlural.toLowerCase()}`, nombre]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-1 mt-1">
+                  {estadoCounts.map((e) => (
+                    <div key={e.estado} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: e.color }} />
+                        <span className="text-[11px] text-muted-foreground truncate">{e.label}</span>
+                      </div>
+                      <span className="text-[11px] font-medium text-foreground ml-1">{e.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Ranking de técnicos — "reportes por técnico" que teníamos
+              pendiente en el backlog, aquí a la vista todo el tiempo en
+              vez de una pantalla aparte. Carga = equipos activos que trae
+              asignados AHORA MISMO (para detectar sobrecarga/desbalance);
+              30 días = productividad reciente; promedio = recepción→
+              entrega de TODO su historial (ver el comentario largo junto a
+              rankingTecnicos). */}
+          <div className="bg-card border border-border rounded-xl p-3">
+            <p className="text-[12px] font-medium text-foreground mb-2">Técnicos</p>
+            {rankingTecnicos.length === 0 ? (
+              <p className="text-[11.5px] text-muted-foreground text-center py-4">Sin técnicos registrados.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {rankingTecnicos.map((t) => (
+                  <div key={t.id}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11.5px] font-medium text-foreground truncate">{t.nombre}</span>
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                        t.carga === 0 ? "bg-muted text-muted-foreground" : "bg-purple-50 text-purple-700"
+                      }`}>
+                        {t.carga} {t.carga === 1 ? "activo" : "activos"}
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] text-muted-foreground mt-0.5">
+                      {t.entregados30d} {t.entregados30d === 1 ? "entrega" : "entregas"} · últimos 30 días
+                      {t.diasPromedio != null && ` · ${t.diasPromedio.toFixed(1)} días prom.`}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
