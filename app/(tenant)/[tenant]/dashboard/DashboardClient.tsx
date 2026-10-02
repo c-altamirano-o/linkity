@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ShoppingCart, Wrench, AlertTriangle, Clock, ArrowUpRight, ArrowDownRight,
+  ShoppingCart, Wrench, AlertTriangle, Clock, ArrowUpRight, ArrowDownRight, Minus,
   CheckCircle, RotateCcw, Receipt, Building2, X, Phone, Settings,
   Calendar,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar,
+  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, LineChart, Line,
 } from "recharts";
 import type { RepairStatus, Priority } from "@prisma/client";
 import { label, type LabelDictionary } from "@/lib/labels";
@@ -571,21 +571,58 @@ export default function DashboardClient({
   // excepción deliberada: es una foto del momento (equipos que están
   // AHORA en proceso), no tiene sentido acotarla a un rango de fechas
   // pasado, así que se queda con "En proceso" sin importar el selector.
+  // 2026-10-02, a petición de Carlos ("en el dashboard de administrador...
+  // convertir las fichas a gauge o KPIs o gráficas"): las 2 fichas de
+  // dinero/conteo ahora traen una mini-tendencia (sparkline, los mismos
+  // buckets que "Ventas de la semana"/ticketsSemana) y un comparativo REAL
+  // contra el periodo anterior (deltaPct) — antes la flechita arriba/abajo
+  // era un `positive: true/false` fijo en el código, nunca una comparación
+  // de verdad (ver el comentario largo junto a *VsPeriodoAnterior,
+  // lib/dashboard-data.ts). `sub` se queda como descripción neutra (conteo),
+  // el color/flecha ahora vive aparte, en deltaPct.
   const metricas = [
     // 2026-09-24: la ficha "Ventas del período" es puro dinero (su único
     // valor es un monto) — se omite por completo cuando montosVisibles es
     // false, en vez de mostrarla con un candado (a petición de Carlos).
     // "Total de tickets" se queda siempre: su valor es un conteo, no dinero.
-    ...(montosVisibles ? [{ label: "Ventas del período", value: formatMXN(data.totalVentasHoy), sub: data.numVentasHoy > 0 ? `${data.numVentasHoy} ${data.numVentasHoy === 1 ? "venta" : "ventas"} · ${etiquetaPeriodo}` : `Sin ventas · ${etiquetaPeriodo}`, positive: true, icon: ShoppingCart, iconBg: "bg-primary/10", iconColor: "text-primary-text", modal: "ventas" as ModalType, btnColor: "text-primary-text bg-primary/10" }] : []),
-    { label: "Total de tickets", value: String(data.numVentasHoy), sub: `Transacciones · ${etiquetaPeriodo}`, positive: true, icon: Receipt, iconBg: "bg-cyan-50", iconColor: "text-cyan-600", modal: "tickets" as ModalType, btnColor: "text-cyan-600 bg-cyan-50" },
-    ...(data.reparacionesActiva
-      ? [
-          { label: `${t("entity.repair.plural")} activas`, value: String(data.reparacionesActivasCount), sub: "En proceso", positive: true, icon: Wrench, iconBg: "bg-amber-50", iconColor: "text-amber-600", modal: "reparaciones" as ModalType, btnColor: "text-amber-600 bg-amber-50" },
-          { label: `${t("entity.repair.asset")}s listos`, value: String(data.equiposListosCount), sub: `Quedaron listos · ${etiquetaPeriodo}`, positive: true, icon: CheckCircle, iconBg: "bg-emerald-50", iconColor: "text-emerald-600", modal: "listos" as ModalType, btnColor: "text-emerald-600 bg-emerald-50" },
-          { label: `${t("entity.repair.asset")}s devolución`, value: String(data.equiposDevolucionCount), sub: `Devueltos · ${etiquetaPeriodo}`, positive: false, icon: RotateCcw, iconBg: "bg-red-50", iconColor: "text-red-500", modal: "devoluciones" as ModalType, btnColor: "text-red-600 bg-red-50" },
-        ]
+    ...(montosVisibles
+      ? [{
+          label: "Ventas del período", value: formatMXN(data.totalVentasHoy),
+          sub: data.numVentasHoy > 0 ? `${data.numVentasHoy} ${data.numVentasHoy === 1 ? "venta" : "ventas"} · ${etiquetaPeriodo}` : `Sin ventas · ${etiquetaPeriodo}`,
+          deltaPct: data.ventasVsPeriodoAnterior, sparkline: data.ventasSemana.map((d) => d.ventas), sparklineColor: "var(--primary-text)",
+          icon: ShoppingCart, iconBg: "bg-primary/10", iconColor: "text-primary-text", modal: "ventas" as ModalType, btnColor: "text-primary-text bg-primary/10",
+        }]
       : []),
+    {
+      label: "Total de tickets", value: String(data.numVentasHoy), sub: `Transacciones · ${etiquetaPeriodo}`,
+      deltaPct: data.ticketsVsPeriodoAnterior, sparkline: data.ticketsSemana, sparklineColor: "#06B6D4",
+      icon: Receipt, iconBg: "bg-cyan-50", iconColor: "text-cyan-600", modal: "tickets" as ModalType, btnColor: "text-cyan-600 bg-cyan-50",
+    },
   ];
+
+  // Mini-dona "Reparaciones" (2026-10-02, mismo pedido de Carlos) —
+  // reemplaza las 3 fichas sueltas de Activas/Listas/Devolución por una
+  // sola, con la proporción entre las tres. Mezcla a propósito una "foto
+  // del momento" (Activas, estatus ACTUAL, igual que antes) con 2 conteos
+  // DEL PERIODO elegido (Listas/Devolución) — mismo criterio de cada ficha
+  // original, ver el comentario largo junto a reparacionesActivas en
+  // lib/dashboard-data.ts; para no esconder esa mezcla de "ahora" vs
+  // "periodo", la leyenda lo deja explícito en el propio texto. Colores:
+  // reusa los MISMOS que ya tenían las fichas originales (icon/iconColor de
+  // arriba) salvo Activas (amber→azul): validado con el validador de
+  // paletas del skill de dataviz en este set exacto — amber+rojo juntos
+  // fallan el piso de daltonismo (confusión roja/ámbar clásica), azul+
+  // esmeralda+rojo pasan limpio. Cada renglón de la leyenda abre su mismo
+  // modal de siempre (reparaciones/listos/devoluciones) — no se pierde
+  // ningún acceso al quitar las 3 fichas.
+  const reparacionesResumen = data.reparacionesActiva
+    ? [
+        { key: "activas", nombre: `${t("entity.repair.plural")} activas (ahora)`, valor: data.reparacionesActivasCount, color: "#2563EB", modal: "reparaciones" as ModalType },
+        { key: "listos", nombre: `${t("entity.repair.asset")}s listos · ${etiquetaPeriodo}`, valor: data.equiposListosCount, color: "#059669", modal: "listos" as ModalType },
+        { key: "devolucion", nombre: `${t("entity.repair.asset")}s devolución · ${etiquetaPeriodo}`, valor: data.equiposDevolucionCount, color: "#EF4444", modal: "devoluciones" as ModalType },
+      ].filter((r) => r.valor > 0)
+    : [];
+  const totalReparacionesResumen = reparacionesResumen.reduce((s, r) => s + r.valor, 0);
 
   // Comparativo "Ventas por sucursal" (vista global, 2026-09-22) — orden de
   // mayor a menor, mismo criterio visual que el reporte diario que Carlos
@@ -722,31 +759,83 @@ export default function DashboardClient({
         </div>
       )}
 
-      {/* ── Métricas 5 fichas ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3">
-        {metricas.map((m) => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-3 hover:border-primary/30 transition-colors">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[11.5px] sm:text-xs text-muted-foreground leading-tight">{m.label}</p>
-              <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg ${m.iconBg} flex items-center justify-center flex-shrink-0`}>
-                <m.icon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${m.iconColor}`} />
+      {/* ── Métricas: fichas con mini-tendencia + mini-dona de reparaciones ──
+          2026-10-02 — ver el comentario largo junto a `metricas`/
+          `reparacionesResumen` más arriba. */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${reparacionesResumen.length > 0 ? "xl:grid-cols-3" : ""} gap-2 sm:gap-3`}>
+        {metricas.map((m) => {
+          // null = sin ventas/tickets en el periodo anterior para comparar
+          // (ver *VsPeriodoAnterior, lib/dashboard-data.ts) — se muestra
+          // neutro ("Sin datos"), nunca como 0% (eso se leería como "sin
+          // cambio", que es una afirmación distinta a "no hay con qué
+          // comparar").
+          const Flecha = m.deltaPct == null ? Minus : m.deltaPct >= 0 ? ArrowUpRight : ArrowDownRight;
+          const colorDelta = m.deltaPct == null ? "text-muted-foreground" : m.deltaPct >= 0 ? "text-emerald-500" : "text-red-500";
+          return (
+            <div key={m.label} className="bg-card border border-border rounded-xl p-3 hover:border-primary/30 transition-colors">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11.5px] sm:text-xs text-muted-foreground leading-tight">{m.label}</p>
+                <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg ${m.iconBg} flex items-center justify-center flex-shrink-0`}>
+                  <m.icon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${m.iconColor}`} />
+                </div>
+              </div>
+              <p className="text-xl sm:text-[22px] font-semibold text-foreground leading-none mb-1">{m.value}</p>
+              <p className="text-[10.5px] sm:text-[11.5px] text-muted-foreground mb-1.5">{m.sub}</p>
+              <div className="flex items-center justify-between flex-wrap gap-1 mb-1.5">
+                <div className="flex items-center gap-1">
+                  <Flecha className={`w-3 h-3 ${colorDelta}`} />
+                  <p className={`text-[10.5px] sm:text-[11.5px] ${colorDelta}`}>
+                    {m.deltaPct == null ? "Sin datos" : `${Math.abs(m.deltaPct)}%`} vs anterior
+                  </p>
+                </div>
+                <button onClick={() => setModalAbierto(m.modal)}
+                  className={`text-[10.5px] font-medium px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity ${m.btnColor}`}>
+                  Ver →
+                </button>
+              </div>
+              {/* Mini-tendencia — mismos buckets que "Ventas de la semana"
+                  (ventasSemana/ticketsSemana), solo que en miniatura y sin
+                  ejes: el punto de un sparkline es la FORMA del movimiento,
+                  no leer valores exactos (para eso está "Ver →" y la
+                  gráfica grande de abajo). */}
+              {m.sparkline.some((v) => v > 0) && (
+                <ResponsiveContainer width="100%" height={28}>
+                  <LineChart data={m.sparkline.map((v) => ({ v }))} margin={{ top: 2, right: 2, bottom: 0, left: 2 }}>
+                    <Line type="monotone" dataKey="v" stroke={m.sparklineColor} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          );
+        })}
+
+        {reparacionesResumen.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-3">
+            <p className="text-[11.5px] sm:text-xs text-muted-foreground leading-tight mb-2">{t("entity.repair.plural")}</p>
+            <div className="flex items-center gap-3">
+              <ResponsiveContainer width={72} height={72}>
+                <PieChart>
+                  <Pie data={reparacionesResumen} cx="50%" cy="50%" innerRadius={20} outerRadius={34} dataKey="valor" paddingAngle={2}>
+                    {reparacionesResumen.map((r) => <Cell key={r.key} fill={r.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: any) => [v, ""]} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex-1 min-w-0 space-y-1">
+                {reparacionesResumen.map((r) => (
+                  <button key={r.key} onClick={() => setModalAbierto(r.modal)} className="w-full flex items-center justify-between gap-1 hover:opacity-70 transition-opacity">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: r.color }} />
+                      <span className="text-[10.5px] text-muted-foreground truncate text-left">{r.nombre}</span>
+                    </span>
+                    <span className="text-[11px] font-medium text-foreground flex-shrink-0">{r.valor}</span>
+                  </button>
+                ))}
               </div>
             </div>
-            <p className="text-xl sm:text-[22px] font-semibold text-foreground leading-none mb-1">{m.value}</p>
-            <div className="flex items-center justify-between flex-wrap gap-1">
-              <div className="flex items-center gap-1">
-                {m.positive
-                  ? <ArrowUpRight className="w-3 h-3 text-emerald-500" />
-                  : <ArrowDownRight className="w-3 h-3 text-red-500" />}
-                <p className={`text-[10.5px] sm:text-[11.5px] ${m.positive ? "text-emerald-500" : "text-red-500"}`}>{m.sub}</p>
-              </div>
-              <button onClick={() => setModalAbierto(m.modal)}
-                className={`text-[10.5px] font-medium px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity ${m.btnColor}`}>
-                Ver →
-              </button>
-            </div>
+            <p className="text-[10px] text-muted-foreground mt-2">{totalReparacionesResumen} en total · da clic para ver el detalle</p>
           </div>
-        ))}
+        )}
       </div>
 
       {/* ── Gráficas: área + pie ───────────────────────────────────────────

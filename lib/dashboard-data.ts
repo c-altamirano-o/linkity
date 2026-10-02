@@ -158,6 +158,14 @@ export interface DashboardData {
   tendenciaGranularidad: "dia" | "mes";
   totalSemana: number;
   promedioVentasSemana: number;
+  // Mini-tendencia + comparativo real para las fichas de arriba (2026-10-02,
+  // ver el comentario largo junto a su cálculo más abajo) — ticketsSemana
+  // son los MISMOS buckets que ventasSemana pero en conteo, no dinero.
+  // *VsPeriodoAnterior sigue el mismo criterio que SucursalResumen.vsPeriodoAnterior:
+  // null = sin datos del periodo anterior para comparar.
+  ticketsSemana: number[];
+  ventasVsPeriodoAnterior: number | null;
+  ticketsVsPeriodoAnterior: number | null;
   // Ventas por hora del día, SUMADAS a lo largo de TODO el periodo elegido
   // (2026-09-28, a petición de Carlos — reemplaza el selector de un solo
   // día que tenía antes esta sección, ver el comentario largo junto a
@@ -224,6 +232,11 @@ export function redactarMontosDashboard(data: DashboardData): DashboardData {
     ventasSemana: data.ventasSemana.map((d) => ({ ...d, ventas: 0, reparaciones: 0, total: 0 })),
     totalSemana: 0,
     promedioVentasSemana: 0,
+    // ticketsSemana/ticketsVsPeriodoAnterior NO se redactan — son conteos,
+    // no dinero (mismo criterio que numVentasHoy arriba). ventasVsPeriodoAnterior
+    // sí, porque es un % derivado de dinero real (igual que
+    // sucursales[].vsPeriodoAnterior, ver más abajo).
+    ventasVsPeriodoAnterior: null,
     // 2026-09-28: mismo criterio que ventasSemana/totalSemana de arriba —
     // numVentas (conteo) se conserva, totalVentas (dinero) se redacta.
     ventasPorHora: data.ventasPorHora.map((h) => ({ ...h, totalVentas: 0 })),
@@ -598,7 +611,11 @@ export async function getDashboardData(
     // Solo para el comparativo "vs periodo anterior" (2026-09-28) — un
     // groupBy con _sum es mucho más barato que traer cada venta del periodo
     // anterior fila por fila, sobre todo con el atajo "Año" (un año entero
-    // de más, solo para un porcentaje de cambio).
+    // de más, solo para un porcentaje de cambio). 2026-10-02: se agrega
+    // _count (mismo query, gratis) para poder calcular también el real de
+    // "Total de tickets" vs periodo anterior en las fichas del Dashboard
+    // (ver ticketsVsPeriodoAnterior más abajo) — antes esta ficha solo traía
+    // una flechita fija, sin comparar nada de verdad.
     db.sale.groupBy({
       by: ["branchId"],
       where: {
@@ -607,6 +624,7 @@ export async function getDashboardData(
         ...(branchIdFiltro ? { branchId: branchIdFiltro } : {}),
       },
       _sum: { total: true },
+      _count: { _all: true },
     }),
     // Las 3 queries de reparaciones de abajo llevan un filtro `id` extra
     // (2026-09-18, módulo Reparaciones por tenant) que cuando el módulo
@@ -854,6 +872,17 @@ export async function getDashboardData(
     ? Math.round(ventasSemana.reduce((s, d) => s + d.ventas, 0) / ventasSemana.length)
     : 0;
 
+  // Mismos buckets que ventasSemana (bucketsTendencia), pero CONTEO de
+  // tickets en vez de dinero (2026-10-02, a petición de Carlos: "convertir
+  // las fichas [del Dashboard] a gauge o KPIs o gráficas" — la ficha "Total
+  // de tickets" ahora trae su propia mini-tendencia, nunca la de dinero de
+  // "Ventas del período", que puede moverse distinto si cambia el ticket
+  // promedio). No es dinero (es un conteo), así que redactarMontosDashboard
+  // NO la toca — mismo criterio que numVentasHoy.
+  const ticketsSemana: number[] = bucketsTendencia.map(
+    ({ start, end }) => ventasHoyRaw.filter((s) => s.createdAt >= start && s.createdAt < end).length
+  );
+
   // ── Ventas por hora, sumadas a lo largo de TODO el periodo elegido ─
   // (2026-09-28, reemplaza el selector de un solo día que tenía antes esta
   // gráfica — ver el comentario largo junto a DashboardData.ventasPorHora
@@ -889,6 +918,25 @@ export async function getDashboardData(
   // de ventasAnteriorPorBranch (ver el comentario largo junto a su query
   // más arriba), una por sucursal.
   const ventasAnteriorMap = new Map(ventasAnteriorPorBranch.map((g) => [g.branchId, Number(g._sum.total ?? 0)]));
+
+  // "Ventas del período"/"Total de tickets" (fichas de arriba) vs periodo
+  // anterior — 2026-10-02, a petición de Carlos ("convertir las fichas a
+  // gauge o KPIs o gráficas"): antes estas 2 fichas traían una flechita
+  // verde FIJA (positive: true a secas en DashboardClient.tsx), que no
+  // comparaba nada de verdad. Ahora se reusa exactamente el mismo cálculo
+  // (suma/cuenta del periodo anterior) que ya trae ventasAnteriorPorBranch
+  // para el comparativo por sucursal — nada más se suma across TODAS las
+  // sucursales en vez de agrupar por una — mismo query, sin ninguna
+  // consulta nueva. Mismo criterio de null que SucursalResumen.vsPeriodoAnterior:
+  // sin ventas en el periodo anterior, no hay contra qué comparar.
+  const ventasAnteriorGlobal = ventasAnteriorPorBranch.reduce((s, g) => s + Number(g._sum.total ?? 0), 0);
+  const numVentasAnteriorGlobal = ventasAnteriorPorBranch.reduce((s, g) => s + g._count._all, 0);
+  const ventasVsPeriodoAnterior = ventasAnteriorGlobal > 0
+    ? Math.round(((totalVentasHoy - ventasAnteriorGlobal) / ventasAnteriorGlobal) * 100)
+    : null;
+  const ticketsVsPeriodoAnterior = numVentasAnteriorGlobal > 0
+    ? Math.round(((numVentasHoy - numVentasAnteriorGlobal) / numVentasAnteriorGlobal) * 100)
+    : null;
 
   const repairsByBranch = new Map<string, typeof openRepairsRaw>();
   for (const r of openRepairsRaw) {
@@ -959,6 +1007,9 @@ export async function getDashboardData(
     tendenciaGranularidad,
     totalSemana: Math.round(totalSemana),
     promedioVentasSemana,
+    ticketsSemana,
+    ventasVsPeriodoAnterior,
+    ticketsVsPeriodoAnterior,
     ventasPorHora,
     horaPico: horaPico ? { hora: horaPico.hora, horaLabel: horaPico.horaLabel, numVentas: horaPico.numVentas } : null,
     sucursales,
