@@ -129,9 +129,16 @@ const HISTORIAL_ICONOS: Record<EstadoReparacion, { icon: React.ElementType; bg: 
 //   - Centro: TOTAL de equipos recibidos en el periodo elegido (sin
 //     importar su estatus actual) — "me daría un valor del cual saber que
 //     tantos equipos entran a reparar". Sin cambios entre las 2 vueltas.
-//   - "Recibido": SOLO el estatus RECEIVED — "sí es importante que esté
-//     separado... me dice que hay equipos sin que se asignen o los
-//     reparen".
+//   - "Pendientes de asignación": SOLO el estatus RECEIVED — "sí es
+//     importante que esté separado... me dice que hay equipos sin que se
+//     asignen o los reparen". Etiqueta de ESTA dona nada más (2026-10-02,
+//     tercera vuelta): el estatus en sí se sigue llamando "Recibido" en
+//     todo el resto de la app (badges, historial, mensajes al cliente —
+//     repair.status.RECEIVED, lib/labels.ts) — cambiarlo ahí correría la
+//     inconsistencia a todas esas pantallas. Aquí, en cambio, "Recibido"
+//     chocaba con la palabra del centro de la dona ("Equipos ingresados",
+//     antes "recibidos") y Carlos pidió un término más descriptivo para
+//     esta franja en particular.
 //   - "En reparación" (morado): Diagnóstico/Esperando refacción/En
 //     reparación — "englobar cualquier parte del proceso" (ya sin
 //     Recibido).
@@ -493,7 +500,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
   // suman el 100% del centro.
   const totalRecibidosPeriodo = recibidosPeriodo.length;
   const GRUPO_DONUT_LABEL: Record<GrupoDonut, string> = {
-    recibido: "Recibido",
+    recibido: "Pendientes de asignación",
     reparacion: "En reparación",
     listo: "Listo",
     devolucion: "Devoluciones",
@@ -1047,7 +1054,13 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <p className="text-lg font-semibold text-foreground leading-none">{totalRecibidosPeriodo}</p>
-                    <p className="text-[9px] text-muted-foreground mt-0.5">recibidos</p>
+                    {/* "Equipos ingresados" en vez de "recibidos" (2026-10-02,
+                        a petición de Carlos: se confundía con el estatus
+                        "Recibido" de la leyenda, que es algo distinto —
+                        equipo que ya se registró pero nadie le ha puesto
+                        manos encima todavía). Partido en 2 líneas: una sola
+                        línea no cabe legible en el centro de la dona. */}
+                    <p className="text-[8px] text-muted-foreground mt-0.5 leading-tight text-center">Equipos<br />ingresados</p>
                   </div>
                 </div>
                 <div className="space-y-1 mt-1">
