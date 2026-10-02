@@ -29,7 +29,7 @@ import {
 import { crearConsentimientoAction } from "@/app/actions/consentimiento-actions";
 import { crearRecetaAction } from "@/app/actions/receta-actions";
 import FirmaCanvas from "@/components/tenant/FirmaCanvas";
-import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp, formatoTelefono } from "@/lib/paises";
+import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, formatoTelefono, whatsappHref } from "@/lib/paises";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 
 interface ClientesClientProps {
@@ -378,11 +378,6 @@ function tiempoRelativo(iso: string | null): string {
   if (dias < 7) return `Hace ${dias} días`;
   if (dias < 30) return `Hace ${Math.floor(dias / 7)} sem`;
   return formatFechaCorta(iso);
-}
-
-function whatsappHref(phone: string | null, countryCode: string | null): string | null {
-  const numero = telefonoWhatsapp(phone, countryCode);
-  return numero ? `https://wa.me/${numero}` : null;
 }
 
 type FiltroHistorial = "Todo" | "Compras" | "Reparaciones";

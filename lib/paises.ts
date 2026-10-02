@@ -81,6 +81,21 @@ export function telefonoWhatsapp(phone: string | null | undefined, countryCode: 
 }
 
 /**
+ * Link "wa.me/..." listo para un <a href>, o null si no hay teléfono.
+ * Antes vivía duplicado como función local en ClientesClient.tsx
+ * (whatsappHref) — centralizado aquí el 2026-10-02 al necesitarse también
+ * en ReparacionesClient.tsx (modo MANUAL de WhatsApp, ver
+ * lib/whatsapp-mensaje.ts) para que ambos lugares armen el link exactamente
+ * igual. `mensaje`, si se manda, va urlencodeado como "?text=..." — el
+ * mensaje prellenado que el cliente ve antes de enviar.
+ */
+export function whatsappHref(phone: string | null | undefined, countryCode: string | null | undefined, mensaje?: string): string | null {
+  const numero = telefonoWhatsapp(phone, countryCode);
+  if (!numero) return null;
+  return mensaje ? `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}` : `https://wa.me/${numero}`;
+}
+
+/**
  * Valida que un teléfono tenga exactamente los dígitos que exige su país
  * (PaisTelefono.digits) — null/vacío se considera válido aquí a propósito
  * (el teléfono sigue siendo opcional en Customer y Staff; quien exige que no

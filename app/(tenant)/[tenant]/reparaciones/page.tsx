@@ -80,6 +80,15 @@ export default async function ReparacionesPage({
       negocioRecibo={negocioRecibo}
       cobrarEnDevolucion={tenant.cobrarEnDevolucion}
       clienteInicialId={clienteId ?? null}
+      // whatsappApiConectado (2026-10-02) — decide el modo del botón
+      // "Avisar" (ver handleWhatsapp en ReparacionesClient.tsx): con API
+      // conectada se manda automático vía marcarWhatsappEnviadoAction; si no,
+      // cae a un link wa.me/... armado en el cliente con el teléfono del
+      // cliente. No hace falta un select especial arriba — este query ya usa
+      // include (no select) en el nivel superior, así que trae todos los
+      // campos escalares de Tenant, token incluido; pero aquí solo se manda
+      // el boolean derivado, nunca el token real.
+      whatsappApiConectado={Boolean(tenant.whatsappPhoneNumberId && tenant.whatsappAccessToken)}
     />
   );
 }

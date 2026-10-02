@@ -16,7 +16,8 @@ import {
   crearReparacionAction, avanzarEstadoAction, marcarWhatsappEnviadoAction,
   type NuevoEstadoReparacion,
 } from "@/app/actions/reparaciones-actions";
-import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp } from "@/lib/paises";
+import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp, whatsappHref } from "@/lib/paises";
+import { construirMensajeReparacion, primerNombre } from "@/lib/whatsapp-mensaje";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import { abrirReciboImprimible, estilosImpresionTicket, type DatosNegocioRecibo, type FormatoTicket, type ReciboData } from "@/lib/recibo-imprimible";
 import QRCode from "qrcode";
@@ -70,6 +71,16 @@ interface ReparacionesClientProps {
   // siempre); si el id no coincide con ningún cliente de este tenant no
   // preselecciona nada (ver el efecto de seed más abajo).
   clienteInicialId?: string | null;
+  // 2026-10-02, modo dual de WhatsApp a petición de Carlos ("apliquemos
+  // ambas opciones y que el negocio elija") — decide cómo se comporta el
+  // botón "Avisar" (ver handleWhatsapp más abajo): con la API de Meta
+  // conectada, el envío sigue siendo automático desde el servidor
+  // (marcarWhatsappEnviadoAction, sin cambios); sin ella, el botón arma un
+  // link wa.me/... en el cliente (mismo mecanismo que el botón "Contáctanos
+  // por WhatsApp" de la página pública, ver app/rep/[token]/page.tsx) y lo
+  // abre directo — nunca llama a una acción de servidor que de cualquier
+  // forma fallaría por no tener credenciales de Meta.
+  whatsappApiConectado: boolean;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -358,6 +369,9 @@ function VistaTienda({
   reparaciones: ReparacionUI[];
   labels: LabelDictionary;
   onAvanzar: (repairId: string, nuevoEstado: NuevoEstadoReparacion) => void;
+  // El modo (API vs. manual) lo decide handleWhatsapp en el componente padre
+  // (tiene whatsappApiConectado por closure) — VistaTienda solo dispara el
+  // callback con el id, sin necesidad de conocer el modo.
   onWhatsapp: (repairId: string) => void;
   onCobrarClick: (repairId: string) => void;
   onEntregarSinCobro: (repair: ReparacionUI) => void;
@@ -568,7 +582,10 @@ function VistaTienda({
                 className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
                 <Printer className="w-3 h-3" /> Ticket
               </button>
-              <button disabled={pending} onClick={() => onWhatsapp(seleccionada.id)}
+              <button
+                disabled={pending || !seleccionada.telefono}
+                onClick={() => onWhatsapp(seleccionada.id)}
+                title={!seleccionada.telefono ? "Este cliente no tiene teléfono capturado" : undefined}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#22c35e] disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors">
                 <Phone className="w-3 h-3" /> Avisar
               </button>
@@ -720,7 +737,7 @@ function VistaTienda({
    NINGÚN rol — se movió por completo a /aduana, ver AduanaClient.tsx. Esta
    pantalla ahora es SIEMPRE la vista de tienda: recibir con folio, ver el
    detalle de solo lectura, y cobrar/entregar/avisar.) ── */
-export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, negocioRecibo, cobrarEnDevolucion, clienteInicialId }: ReparacionesClientProps) {
+export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, negocioRecibo, cobrarEnDevolucion, clienteInicialId, whatsappApiConectado }: ReparacionesClientProps) {
   const { reparaciones, clientes, productos } = data;
   const router = useRouter();
   const negocio = nombreNegocio(tenantSlug);
@@ -896,7 +913,34 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     });
   };
 
+  // 2026-10-02, modo dual de WhatsApp (ver el comentario largo en
+  // ReparacionesClientProps.whatsappApiConectado): con la API conectada el
+  // envío sigue siendo 100% automático en el servidor, sin cambios. Sin
+  // ella, llamar a marcarWhatsappEnviadoAction de cualquier forma fallaría
+  // (no hay credenciales de Meta que usar) — en vez de mostrar ese error,
+  // se arma el link wa.me/... en el cliente con el teléfono DEL CLIENTE
+  // (whatsappHref, lib/paises.ts — al revés del botón "Contáctanos" de la
+  // página pública, que usa el teléfono del NEGOCIO) y se abre directo. No
+  // hay confirmación del servidor de que el mensaje de verdad se mandó (el
+  // negocio decide si lo manda o no desde su propio WhatsApp), así que no
+  // se marca whatsappSent ni se refresca router — mismo criterio que el
+  // botón "Contáctanos por WhatsApp" de app/rep/[token]/page.tsx, que
+  // tampoco registra nada en el servidor.
   const handleWhatsapp = (repairId: string) => {
+    if (!whatsappApiConectado) {
+      const repair = reparaciones.find((r) => r.id === repairId);
+      if (!repair) return;
+      const mensaje = construirMensajeReparacion({
+        negocio,
+        clientePrimerNombre: primerNombre(repair.cliente),
+        folio: repair.folio,
+        estadoTexto: repair.estadoTexto,
+        urlSeguimiento: `${window.location.origin}/rep/${repair.publicToken}`,
+      });
+      const href = whatsappHref(repair.telefono, repair.telefonoCountryCode, mensaje);
+      if (href) window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
     setAccionError(null);
     startAccion(async () => {
       const res = await marcarWhatsappEnviadoAction({ tenantSlug, repairId });

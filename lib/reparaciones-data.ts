@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
+import { whatsappModoActivo, primerNombre } from "@/lib/whatsapp-mensaje";
 
 /**
  * Capa de datos reales del módulo Reparaciones (M9). Sigue la misma
@@ -46,6 +47,11 @@ export interface ReparacionUI {
   clienteId: string;
   cliente: string;
   telefono: string | null;
+  // 2026-10-02, modo MANUAL de WhatsApp (ver ReparacionesClient.tsx,
+  // handleWhatsapp): hace falta junto con `telefono` para armar el link
+  // "wa.me/..." con el código de país correcto — mismo criterio que
+  // lib/paises.ts (telefonoWhatsapp), nunca se asume México a ciegas.
+  telefonoCountryCode: string | null;
   iniciales: string;
   branchId: string;
   marca: string;
@@ -81,6 +87,14 @@ export interface ReparacionUI {
   sucursalCodigo: string | null;
   whatsappSent: boolean;
   publicToken: string;
+  // 2026-10-02, modo MANUAL de WhatsApp (ver ReparacionesClient.tsx,
+  // handleWhatsapp) — MISMO texto que ya ve el cliente en su página pública
+  // (ESTADO_CLIENTE_TEXTO, más abajo en este archivo) para que el botón
+  // "Avisar" en modo manual arme el mensaje con construirMensajeReparacion
+  // sin tener que importar ESTADO_CLIENTE_TEXTO desde un Client Component
+  // (este archivo tiene "server-only" arriba, nunca es importable en tiempo
+  // de ejecución desde ahí).
+  estadoTexto: string;
   // 2026-10-01, ver el comentario largo en Repair.alertaTallerPendiente
   // (schema.prisma) — true mientras haya una alerta del técnico sin
   // atender en este folio. Reparaciones/Aduana/Taller la leen para mostrar
@@ -160,7 +174,7 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
     db.repair.findMany({
       where: branchIdFiltro ? { branchId: branchIdFiltro } : undefined,
       include: {
-        customer: { select: { id: true, name: true, phone: true } },
+        customer: { select: { id: true, name: true, phone: true, phoneCountryCode: true } },
         user: { select: { name: true } },
         assignedTo: { select: { id: true, name: true } },
         branch: { select: { name: true, code: true } },
@@ -193,6 +207,7 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
     clienteId: r.customerId,
     cliente: r.customer.name,
     telefono: r.customer.phone,
+    telefonoCountryCode: r.customer.phoneCountryCode,
     iniciales: iniciales(r.customer.name),
     branchId: r.branchId,
     marca: r.deviceBrand,
@@ -213,6 +228,7 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
     sucursalCodigo: r.branch.code,
     whatsappSent: r.whatsappSent,
     publicToken: r.publicToken,
+    estadoTexto: ESTADO_CLIENTE_TEXTO[r.status as EstadoReparacion] ?? "En proceso",
     alertaTallerPendiente: r.alertaTallerPendiente,
     historial: r.history.map((h) => ({
       estado: h.status as EstadoReparacion,
@@ -378,6 +394,13 @@ export interface ReparacionPublicaUI {
   fechaEntregado: string | null;
   checkpoints: CheckpointPublico[];
   mensajeTaller: MensajeTallerPublico | null;
+  // 2026-10-02 — número del negocio para el botón "Contáctanos por
+  // WhatsApp" de la página pública, SOLO cuando el negocio está en modo
+  // MANUAL (ver whatsappModoActivo, lib/whatsapp-mensaje.ts). En modo API
+  // viene null a propósito: el cliente ya recibió el mensaje automático, así
+  // que ya tiene el chat abierto con el negocio — un botón aquí sería
+  // redundante. En modo DESACTIVADO también null (no hay a dónde mandarlo).
+  whatsappNumeroManual: string | null;
 }
 
 const PREFIJO_ALERTA_CLIENTE = "Alerta del técnico: ";
@@ -395,7 +418,13 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
       estimatedAt: true,
       deliveredAt: true,
       customer: { select: { name: true } },
-      tenant: { select: { name: true } },
+      // whatsappAccessToken se selecciona aquí SOLO para calcular el boolean
+      // apiConectado más abajo (whatsappModoActivo) — esta función corre del
+      // lado servidor (lib/reparaciones-data.ts, sin "use client"), el valor
+      // real jamás se incluye en el objeto que regresa (ReparacionPublicaUI
+      // ni siquiera tiene un campo para él), mismo criterio que
+      // lib/whatsapp-tenant.ts.
+      tenant: { select: { name: true, whatsappPhoneNumberId: true, whatsappAccessToken: true, whatsappNumeroManual: true } },
       history: {
         where: { visibleCliente: true },
         orderBy: { createdAt: "asc" },
@@ -405,7 +434,7 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
   });
   if (!repair) return null;
 
-  const primerNombre = repair.customer.name.trim().split(/\s+/)[0] ?? repair.customer.name;
+  const nombreCliente = primerNombre(repair.customer.name);
 
   // El mensaje del taller (alerta marcada "para el cliente") se muestra
   // aparte, destacado — no como un checkpoint más de la línea de tiempo.
@@ -420,10 +449,15 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
       fecha: h.createdAt.toISOString(),
     }));
 
+  const modoWhatsapp = whatsappModoActivo({
+    apiConectado: Boolean(repair.tenant.whatsappPhoneNumberId && repair.tenant.whatsappAccessToken),
+    numeroManual: repair.tenant.whatsappNumeroManual,
+  });
+
   return {
     folio: repair.folio,
     negocio: repair.tenant.name,
-    clientePrimerNombre: primerNombre,
+    clientePrimerNombre: nombreCliente,
     marca: repair.deviceBrand,
     modelo: repair.deviceModel,
     estado: repair.status as EstadoReparacion,
@@ -437,6 +471,7 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
     mensajeTaller: ultimaAlerta
       ? { texto: (ultimaAlerta.notes ?? "").slice(PREFIJO_ALERTA_CLIENTE.length), fecha: ultimaAlerta.createdAt.toISOString() }
       : null,
+    whatsappNumeroManual: modoWhatsapp === "MANUAL" ? repair.tenant.whatsappNumeroManual : null,
   };
 }
 

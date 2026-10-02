@@ -117,6 +117,25 @@ model Tenant {
   whatsappPhoneNumberId String?
   whatsappAccessToken   String?
 
+  // WhatsApp MANUAL (2026-10-02, a petición de Carlos: no todos sus tenants
+  // quieren/pueden pasar por la verificación de negocio de Meta que exige el
+  // modo API de arriba — "ofrezcamos ambas opciones, que el negocio elija").
+  // Sin ninguna API de por medio: es solo el número al que apuntan los
+  // enlaces "wa.me/..." (click-to-chat) — abre WhatsApp con un mensaje
+  // prellenado para que un humano del negocio conteste a mano. No es
+  // secreto (es justo lo opuesto: se muestra/comparte con el cliente final a
+  // propósito, como un teléfono en un volante), así que SÍ puede llegar a un
+  // Client Component o a la página pública /rep/[token] sin problema.
+  //
+  // Prioridad cuando un negocio tiene AMBOS modos configurados: el modo API
+  // (arriba) siempre gana — ver whatsappModoActivo() en
+  // lib/whatsapp-mensaje.ts, el único lugar que decide esto, para que nunca
+  // haya dos criterios distintos de cuál modo está "activo" en dos pantallas
+  // diferentes. Formato libre (el mismo criterio que Tenant.phone/
+  // updateSupportPhone): se limpia a solo dígitos al armar el link, así que
+  // el negocio puede escribirlo con o sin "+52", espacios, etc.
+  whatsappNumeroManual String?
+
   // 2026-10-02, a petición de Carlos ("no hay un tema llamado Linkity que
   // venga por default. usando los colores del logo como base") — el
   // default pasó de MATERIAL_INDIGO a LINKITY (ver LINKITY_THEMES en

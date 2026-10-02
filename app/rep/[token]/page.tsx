@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { MessageCircle, Wrench } from "lucide-react";
 import { getReparacionPublica, PASOS_PROGRESO_TEXTO } from "@/lib/reparaciones-data";
+import { construirMensajeReparacion, hrefWhatsappManual } from "@/lib/whatsapp-mensaje";
+import { urlSeguimientoReparacion } from "@/lib/whatsapp-tenant";
 
 /**
  * Página pública de seguimiento (2026-09-24, a petición de Carlos: "la
@@ -17,10 +19,13 @@ import { getReparacionPublica, PASOS_PROGRESO_TEXTO } from "@/lib/reparaciones-d
  * [tenant] dinámico de app/(auth)/[tenant]/page.tsx, así que no hay
  * colisión (mismo criterio ya documentado ahí).
  *
- * Se manda un mensaje de WhatsApp automático por cada cambio de estatus:
- * pendiente (ver el hilo de esa conversación con Carlos, aún sin resolver
- * qué ruta de integración usar) — esta página es el destino al que
- * apuntará ese mensaje el día que se conecte.
+ * Esta página es el destino al que apunta el link que recibe el cliente por
+ * WhatsApp en cada cambio de estatus (modo API, ver lib/whatsapp-tenant.ts) —
+ * resuelto ya el hilo que quedó pendiente aquí: 2026-10-02, a petición de
+ * Carlos, además del modo API existe un modo MANUAL (sin API ni
+ * verificación de Meta) para los negocios que no lo conectaron; en ese caso
+ * esta página ofrece de vuelta un botón "Contáctanos por WhatsApp" hacia el
+ * número del negocio (ver rep.whatsappNumeroManual más abajo).
  */
 export default async function ReparacionPublicaPage({
   params,
@@ -36,6 +41,26 @@ export default async function ReparacionPublicaPage({
   const formatoMoneda = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
   const cancelado = rep.estado === "CANCELLED";
+
+  // Botón "Contáctanos por WhatsApp" (2026-10-02) — SOLO cuando el negocio
+  // está en modo MANUAL (rep.whatsappNumeroManual ya viene null si no
+  // aplica, ver el comentario largo en getReparacionPublica/
+  // ReparacionPublicaUI, lib/reparaciones-data.ts). Mismo texto que el resto
+  // de los avisos (construirMensajeReparacion), para que el negocio reciba
+  // de entrada el contexto completo (folio + estatus) y no tenga que
+  // preguntarlo.
+  const hrefWhatsapp = rep.whatsappNumeroManual
+    ? hrefWhatsappManual(
+        rep.whatsappNumeroManual,
+        construirMensajeReparacion({
+          negocio: rep.negocio,
+          clientePrimerNombre: rep.clientePrimerNombre,
+          folio: rep.folio,
+          estadoTexto: rep.estadoTexto,
+          urlSeguimiento: urlSeguimientoReparacion(token),
+        })
+      )
+    : null;
 
   return (
     <div className="min-h-full bg-muted flex justify-center px-4 py-8">
@@ -147,6 +172,17 @@ export default async function ReparacionPublicaPage({
             ))}
           </div>
         </div>
+
+        {hrefWhatsapp && (
+          <a
+            href={hrefWhatsapp}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#25D366] hover:bg-[#22c35e] text-white text-xs font-medium rounded-xl transition-colors"
+          >
+            <MessageCircle className="w-3.5 h-3.5" /> Contáctanos por WhatsApp
+          </a>
+        )}
 
         <p className="text-center text-[10.5px] text-muted-foreground pt-2">Powered by Linkity Soluciones</p>
       </div>

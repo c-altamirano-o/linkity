@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateDatosTicket, guardarWhatsappBusinessAction, desconectarWhatsappBusinessAction, probarWhatsappBusinessAction } from "@/app/actions/tenant";
+import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateDatosTicket, guardarWhatsappBusinessAction, desconectarWhatsappBusinessAction, probarWhatsappBusinessAction, actualizarWhatsappNumeroManualAction } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
@@ -154,6 +154,10 @@ interface ConfiguracionClientProps {
   // "conectado" sin exponer el valor.
   whatsappPhoneNumberIdInicial: string | null;
   whatsappTieneTokenInicial: boolean;
+  // WhatsApp MANUAL (2026-10-02) — alternativa sin API al modo de arriba,
+  // ver el comentario largo junto a Tenant.whatsappNumeroManual
+  // (schema.prisma). Nunca es secreto, a diferencia del token de arriba.
+  whatsappNumeroManualInicial: string | null;
   checklistTaller: EstadoTallerChecklist;
 }
 
@@ -182,6 +186,7 @@ export default function ConfiguracionClient({
   qrEtiquetaTicketInicial,
   whatsappPhoneNumberIdInicial,
   whatsappTieneTokenInicial,
+  whatsappNumeroManualInicial,
   checklistTaller,
 }: ConfiguracionClientProps) {
   const router = useRouter();
@@ -424,6 +429,29 @@ export default function ConfiguracionClient({
           ? { ok: true, texto: "Mensaje de prueba enviado — revisa el WhatsApp de ese número." }
           : { ok: false, texto: result.error ?? "No se pudo enviar" }
       );
+    });
+  };
+
+  // ── WhatsApp MANUAL (2026-10-02) ────────────────────────────
+  // Alternativa sin API al bloque de arriba — ver whatsappModoActivo()
+  // (lib/whatsapp-mensaje.ts) para cómo se decide cuál de los dos manda
+  // cuando un negocio llega a tener ambos configurados.
+  const [whatsappNumeroManual, setWhatsappNumeroManual] = useState(whatsappNumeroManualInicial ?? "");
+  const [whatsappManualPending, startWhatsappManualTransition] = useTransition();
+  const [whatsappManualMensaje, setWhatsappManualMensaje] = useState("");
+  const [whatsappManualError, setWhatsappManualError] = useState("");
+
+  const guardarWhatsappManual = () => {
+    setWhatsappManualError("");
+    startWhatsappManualTransition(async () => {
+      const result = await actualizarWhatsappNumeroManualAction(tenantSlug, whatsappNumeroManual);
+      if (!result.success) {
+        setWhatsappManualError(result.error ?? "Error al guardar");
+        return;
+      }
+      setWhatsappManualMensaje("Guardado correctamente.");
+      router.refresh();
+      setTimeout(() => setWhatsappManualMensaje(""), 3000);
     });
   };
 
@@ -1421,6 +1449,65 @@ export default function ConfiguracionClient({
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ── WhatsApp manual (sin API) ────────────────────────────
+          2026-10-02, a petición de Carlos: no todos los negocios quieren o
+          pueden pasar por la verificación de negocio de Meta que exige el
+          modo de arriba — esta es la alternativa de cero trámite: un
+          enlace "wa.me/..." que abre WhatsApp con el mensaje ya escrito,
+          para que alguien del negocio lo mande a mano. Si arriba ya está
+          conectado el modo API, ese manda siempre (ver whatsappModoActivo
+          en lib/whatsapp-mensaje.ts) — se lo advertimos aquí mismo para que
+          no piense que necesita las dos cosas. */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <MessageCircle className="w-5 h-5 text-primary-text" />
+          <h2 className="text-base font-semibold text-foreground">WhatsApp manual (sin API)</h2>
+          {whatsappNumeroManual.trim() && !whatsappTieneToken && (
+            <span className="ml-auto text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">Activo</span>
+          )}
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-muted-foreground mb-2">
+            Para cuando no quieres (o no puedes todavía) pasar por la verificación de negocio de Meta: captura
+            aquí el número de WhatsApp al que quieres que tus clientes escriban. No hay ningún envío automático
+            — el botón "Avisar" de Reparaciones y la página pública de seguimiento abrirán WhatsApp con el
+            mensaje ya escrito, y alguien de tu negocio lo manda a mano, como cualquier chat normal.
+          </p>
+          {whatsappTieneToken && (
+            <p className="text-xs text-amber-600 mb-4">
+              Ya tienes conectado el WhatsApp Business de arriba (modo automático) — mientras esté conectado, ese
+              es el que se usa siempre, y este número manual no se mostrará. Solo sirve como respaldo si algún
+              día desconectas el de arriba.
+            </p>
+          )}
+
+          <div className="max-w-sm">
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Número de WhatsApp</label>
+            <input
+              type="tel"
+              value={whatsappNumeroManual}
+              onChange={(e) => setWhatsappNumeroManual(e.target.value)}
+              placeholder="Ej. 55 1234 5678"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+          </div>
+
+          <div className="mt-5 flex items-center gap-3 flex-wrap border-t border-border pt-5">
+            <button
+              onClick={guardarWhatsappManual}
+              disabled={whatsappManualPending}
+              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
+            >
+              {whatsappManualPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              {whatsappManualPending ? "Aplicando..." : "Guardar cambios"}
+            </button>
+            {whatsappManualMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{whatsappManualMensaje}</span>}
+            {whatsappManualError && <span className="text-sm font-medium text-destructive animate-in fade-in">{whatsappManualError}</span>}
+          </div>
         </div>
       </div>
 

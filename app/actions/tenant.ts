@@ -5,7 +5,8 @@ import { ReciboFormato, ReciboQrDestino } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { resolverActor } from "@/lib/actor";
 import { parseColoresPersonalizados, TEMA_PERSONALIZADO_ID } from "@/lib/theme-presets";
-import { enviarWhatsappTenant, construirMensajeReparacion } from "@/lib/whatsapp-tenant";
+import { enviarWhatsappTenant } from "@/lib/whatsapp-tenant";
+import { construirMensajeReparacion } from "@/lib/whatsapp-mensaje";
 
 // intensity: 0–200 (100 = paleta original, ver INTENSIDAD_DEFAULT en
 // lib/theme-presets.ts). Se guarda junto con el preset porque ambos valores
@@ -396,6 +397,36 @@ export async function desconectarWhatsappBusinessAction(tenantSlug: string) {
   } catch (error) {
     console.error("Error al desconectar WhatsApp Business:", error);
     return { success: false, error: "No se pudo desconectar" };
+  }
+}
+
+// WhatsApp MANUAL (2026-10-02) — ver el comentario largo junto a
+// Tenant.whatsappNumeroManual (schema.prisma) y lib/whatsapp-mensaje.ts.
+// Sin credenciales que proteger (a diferencia de guardarWhatsappBusinessAction
+// arriba), así que una sola acción basta para guardar o borrar: mandar una
+// cadena vacía SÍ borra el número aquí — a diferencia del modo API, no hay
+// ningún "secreto" que se pueda perder sin querer por dejar el campo en
+// blanco, así que no hace falta el patrón de dos botones separados.
+export async function actualizarWhatsappNumeroManualAction(tenantSlug: string, numero: string) {
+  const limpio = numero.trim();
+  if (limpio && !/^[0-9+()\-\s]{7,20}$/.test(limpio)) {
+    return { success: false, error: "Ese teléfono no parece válido" };
+  }
+
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
+  try {
+    await prisma.tenant.update({
+      where: { id: resuelto.tenant.id },
+      data: { whatsappNumeroManual: limpio || null },
+    });
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al guardar WhatsApp manual:", error);
+    return { success: false, error: "No se pudo guardar" };
   }
 }
 

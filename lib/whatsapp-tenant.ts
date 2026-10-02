@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { telefonoWhatsapp } from "@/lib/paises";
+import { construirMensajeReparacion } from "@/lib/whatsapp-mensaje";
 
 /**
  * WhatsApp Business PROPIO de cada negocio (2026-09-29, a petición de
@@ -38,11 +39,23 @@ import { telefonoWhatsapp } from "@/lib/paises";
  * Un solo parámetro de texto libre (todo el mensaje ya armado) — mismo
  * criterio que "aviso_suscripcion_linkity": evita necesitar una plantilla
  * distinta por cada tipo de aviso (recibido/en reparación/listo/entregado),
- * Meta solo aprueba la forma UNA vez y el contenido real lo arma este
- * archivo en construirMensaje() de abajo. Mientras esa plantilla no exista
- * o no esté aprobada para un tenant, Meta responderá con error — se
- * regresa tal cual en ResultadoWhatsappTenant.motivo para que se vea en
- * Configuración (botón "Enviar prueba") en vez de fallar en silencio.
+ * Meta solo aprueba la forma UNA vez y el contenido real lo arma
+ * construirMensajeReparacion() (lib/whatsapp-mensaje.ts). Mientras esa
+ * plantilla no exista o no esté aprobada para un tenant, Meta responderá
+ * con error — se regresa tal cual en ResultadoWhatsappTenant.motivo para
+ * que se vea en Configuración (botón "Enviar prueba") en vez de fallar en
+ * silencio.
+ *
+ * 2026-10-02: este archivo sigue siendo SOLO el modo API. Desde esta fecha
+ * existe un segundo modo, MANUAL (Tenant.whatsappNumeroManual) — un simple
+ * enlace "wa.me/..." sin ninguna API ni verificación de Meta, para los
+ * negocios que no quieren/pueden pasar por ese trámite. Ver el comentario
+ * junto al campo en schema.prisma y lib/whatsapp-mensaje.ts
+ * (whatsappModoActivo, construirMensajeReparacion — compartido entre los
+ * dos modos a propósito) para la arquitectura completa. Este archivo
+ * (whatsapp-tenant.ts) sigue teniendo "server-only" porque SÍ toca el
+ * access token real; el modo MANUAL nunca necesita tocar este archivo desde
+ * el cliente, por eso vive en un archivo aparte sin esa restricción.
  */
 
 const NOMBRE_PLANTILLA = "actualizacion_reparacion_linkity";
@@ -61,25 +74,6 @@ export interface DatosWhatsappTenant {
 /** Solo para decidir si mostrar "conectado"/"sin conectar" en la UI — nunca expone el token. */
 export function whatsappTenantConfigurado(tenant: DatosWhatsappTenant): boolean {
   return Boolean(tenant.whatsappPhoneNumberId && tenant.whatsappAccessToken);
-}
-
-/**
- * Arma el mensaje que ve el cliente final — mismo texto tanto para los
- * avisos automáticos (creación/cambio de estatus) como para el envío
- * manual ("Avisar" en Reparaciones). `estadoTexto` es siempre
- * ESTADO_CLIENTE_TEXTO[...] (lib/reparaciones-data.ts) — MISMO texto que ya
- * ve el cliente en la página pública, para que el WhatsApp y la página
- * jamás se contradigan.
- */
-export function construirMensajeReparacion(params: {
-  negocio: string;
-  clientePrimerNombre: string;
-  folio: string;
-  estadoTexto: string;
-  urlSeguimiento: string;
-}): string {
-  const { negocio, clientePrimerNombre, folio, estadoTexto, urlSeguimiento } = params;
-  return `Hola ${clientePrimerNombre}, este es un mensaje de ${negocio}. Folio ${folio}: ${estadoTexto}. Sigue el estatus en tiempo real aquí: ${urlSeguimiento}`;
 }
 
 /**
