@@ -444,6 +444,37 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
         <p className="text-sm text-muted-foreground">Directorio, asistencia y nómina de tu equipo.</p>
       </div>
 
+      {/* 2026-10-02, a petición de Carlos: el empujón hacia el Asistente de
+          puestos (agregado el 2026-10-01) vivía como un botón chico de texto,
+          escondido en el panel de detalle y visible solo cuando ese panel
+          caía en su estado vacío — "alguien que ya sabe qué es lo sabrá usar,
+          pero no es llamativo para quien no tiene conocimiento previo".
+          Ahora es un banner grande, a todo lo ancho, pegado al encabezado del
+          módulo — lo primero que se ve al abrir "Personal", sin depender de
+          qué empleado quede seleccionado en el panel de abajo. Misma
+          condición de antes (totalActivos === 0: negocio nuevo O todos los
+          empleados desactivados), misma acción (abre el modal del
+          Asistente). */}
+      {totalActivos === 0 && (
+        <div className="mx-4 sm:mx-6 mb-3 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border-2 border-primary/40 bg-gradient-to-r from-primary/10 to-primary/5 px-4 py-3.5">
+          <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-5 h-5 text-primary-text" />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <p className="text-sm font-semibold text-foreground">
+              {empleados.length === 0 ? "Antes de dar de alta a tu equipo, configura sus puestos" : "No tienes ningún empleado activo ahora mismo"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              El Asistente de puestos arma los roles y permisos correctos para tu negocio en un par de minutos, para que no tengas que adivinar al dar de alta a cada persona.
+            </p>
+          </div>
+          <button onClick={() => setModalAsistente(true)}
+            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-lg flex-shrink-0 shadow-sm">
+            <Sparkles className="w-3.5 h-3.5" /> Abrir Asistente de puestos
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-4 sm:px-6 pb-3">
         {[
           { label: "Total empleados", value: String(totalActivos), sub: "Activos", icon: Users, color: "text-primary-text" },
@@ -605,19 +636,15 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               <button onClick={abrirNuevoEmpleado} className="text-xs text-primary-text mt-1">
                 {empleados.length === 0 ? "+ Registrar el primero" : "+ Registrar un nuevo empleado"}
               </button>
-              {/* 2026-10-01, a petición de Carlos: empujón hacia el
-                  Asistente de puestos antes de que use el alta manual, para
-                  que los Roles queden bien configurados desde el principio.
-                  2026-10-02: la condición cambió de empleados.length === 0 a
-                  totalActivos === 0 — un negocio con todos sus empleados
-                  desactivados está, en la práctica, tan "sin configurar"
-                  como uno recién creado. */}
-              {totalActivos === 0 && (
-                <button onClick={() => setModalAsistente(true)}
-                  className="flex items-center gap-1.5 mt-3 px-3 py-1.5 border border-primary/40 bg-primary/5 hover:bg-primary/10 text-xs font-medium rounded-lg text-primary-text">
-                  <Sparkles className="w-3.5 h-3.5" /> Antes de dar de alta a alguien, prueba el Asistente de puestos
-                </button>
-              )}
+              {/* 2026-10-02, a petición de Carlos ("lo agregó como texto
+                  solamente, alguien que sepa que es lo sabrá usar... necesito
+                  que sea llamativo") — el botón discreto que vivía aquí (un
+                  link de texto chico) se quitó: ahora el empujón al
+                  Asistente vive como un banner grande arriba, junto al
+                  encabezado del módulo (ver el comentario largo ahí), que es
+                  lo primero que se ve al abrir "Personal" sin importar qué
+                  empleado quede seleccionado — no solo cuando este panel de
+                  detalle cae en su estado vacío. */}
             </div>
           ) : (
             <>
