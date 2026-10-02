@@ -6,7 +6,7 @@ import { label, type LabelDictionary } from "@/lib/labels";
 import { AYUDA_MODULO, PLACEHOLDER_REPARACIONES, MODULO_ICON, MODULO_RUTA } from "@/lib/ayuda-contenido";
 import type { ModuloKey } from "@/lib/roles";
 import type { EstadoPasosBienvenida } from "@/lib/onboarding";
-import { LifeBuoy, CheckCircle2, Circle, ArrowRight, BookMarked, ChevronDown, ChevronRight } from "lucide-react";
+import { LifeBuoy, CheckCircle2, Circle, ArrowRight, BookMarked, ChevronDown, ChevronRight, PlayCircle } from "lucide-react";
 
 interface AyudaClientProps {
   tenantSlug: string;
@@ -181,7 +181,17 @@ export default function AyudaClient({
                         <div className="mt-2 pt-2 border-t border-border space-y-3">
                           {contenido.flujos.map((flujo) => (
                             <div key={flujo.titulo}>
-                              <p className="text-xs font-medium text-foreground mb-1">{flujo.titulo}</p>
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <p className="text-xs font-medium text-foreground">{flujo.titulo}</p>
+                                {flujo.tourId && (
+                                  <Link
+                                    href={`/${tenantSlug}/${ruta}?tour=${flujo.tourId}`}
+                                    className="inline-flex items-center gap-1 text-[11px] text-primary-text hover:underline shrink-0"
+                                  >
+                                    <PlayCircle className="w-3.5 h-3.5" /> Muéstrame cómo
+                                  </Link>
+                                )}
+                              </div>
                               <ol className="list-decimal list-inside space-y-0.5">
                                 {flujo.pasos.map((paso, i) => (
                                   <li key={i} className="text-xs text-muted-foreground">{resolverTexto(paso)}</li>

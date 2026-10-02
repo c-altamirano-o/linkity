@@ -16,6 +16,7 @@ import { ProductoIcono } from "@/lib/catalogo-iconos";
 import { CANTIDAD_CHIPS_CATEGORIA } from "@/lib/theme-presets";
 import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData, type QrDestinoTicket } from "@/lib/recibo-imprimible";
 import EscanearModal from "./EscanearModal";
+import { useTourDesdeUrl, TOUR_POS_VENTA } from "@/lib/tours";
 
 interface BranchOption {
   id: string;
@@ -102,6 +103,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const { categorias, productos, clientes, cajaAbiertaPorSucursal, recientementeUsados } = data;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  // "Muéstrame cómo" (2026-10-02, a petición de Carlos — tutorial
+  // interactivo real, no un video) — ver lib/tours.ts. Lanza el tour de
+  // "Registrar una venta" cuando se llega aquí desde el botón del mismo
+  // nombre en /ayuda (?tour=pos-registrar-venta).
+  useTourDesdeUrl("pos-registrar-venta", TOUR_POS_VENTA);
 
   const [branchId, setBranchId] = useState<string | null>(branchInicial);
   const [busqueda, setBusqueda] = useState("");
@@ -906,7 +913,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             con relleno sólido (no un tinte tenue) para que se vea igual de
             "marcado" que las píldoras de categoría del catálogo — mismo
             ajuste de "contenedores marcados" del 2026-09-23. */}
-        <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="grid grid-cols-2 gap-2 mb-3" data-tour="pos-metodo-pago">
           {([
             { key: "efectivo", label: "Efectivo" },
             { key: "tarjeta", label: "Tarjeta" },
@@ -1052,6 +1059,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             pantalla"). */}
         <button
           ref={cobrarBtnRef}
+          data-tour="pos-cobrar"
           onClick={handleCobrar}
           disabled={!puedeCobar}
           className="w-full h-16 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-bold rounded-2xl text-lg transition-colors flex items-center justify-center gap-2.5"
@@ -1233,7 +1241,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5 content-start items-start pb-24 lg:pb-4">
-            {productosFiltrados.map((producto) => {
+            {productosFiltrados.map((producto, idxProducto) => {
               const stock = stockDe(producto);
               const agotado = !producto.isService && stock <= 0;
               const precioActivo = (isWholesaler && producto.wholesalePrice != null && producto.wholesalePrice > 0) ? producto.wholesalePrice : producto.price;
@@ -1279,7 +1287,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               // (rounded-l-xl más abajo), sin necesitar clip del padre.
               const fichaBg = chip ? `var(--chip-${chip})` : "var(--primary)";
               return (
-                <button key={producto.id} onClick={() => { agregarAlCarrito(producto); setTimeout(() => cobrarBtnRef.current?.focus(), 0); }} disabled={agotado}
+                <button key={producto.id} data-tour={idxProducto === 0 ? "pos-producto" : undefined} onClick={() => { agregarAlCarrito(producto); setTimeout(() => cobrarBtnRef.current?.focus(), 0); }} disabled={agotado}
                   className={`relative flex items-stretch rounded-xl bg-card border transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)] ${
                     cantidadEnCarrito > 0 ? "border-primary ring-2 ring-primary/25" : "border-border hover:border-primary/40"
                   }`}>

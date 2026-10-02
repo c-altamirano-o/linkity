@@ -21,6 +21,7 @@ import { construirMensajeReparacion, primerNombre } from "@/lib/whatsapp-mensaje
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import { abrirReciboImprimible, estilosImpresionTicket, type DatosNegocioRecibo, type FormatoTicket, type ReciboData } from "@/lib/recibo-imprimible";
 import QRCode from "qrcode";
+import { useTourDesdeUrl, TOUR_REPARACIONES_RECIBIR } from "@/lib/tours";
 
 // Agrupa el catálogo de "agregar pieza" por tipo — piezas/productos primero,
 // servicios (mano de obra: "quitar cuenta Google", "limpieza general", etc.)
@@ -441,7 +442,7 @@ function VistaTienda({
       <div className={`${mostrarDetalle ? "hidden md:flex" : "flex"} w-full md:w-72 flex-col bg-card border-r border-border flex-shrink-0`}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="text-sm font-medium text-foreground">{label(labels, "module.repair.name")}</span>
-          <button onClick={onNuevaClick} className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg">
+          <button onClick={onNuevaClick} data-tour="reparaciones-nueva" className="btn-primary flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg">
             <Plus className="w-3 h-3" /> Nueva
           </button>
         </div>
@@ -743,6 +744,12 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   const negocio = nombreNegocio(tenantSlug);
   const [pendingAccion, startAccion] = useTransition();
   const [accionError, setAccionError] = useState<string | null>(null);
+
+  // "Muéstrame cómo" (2026-10-02, a petición de Carlos — tutorial
+  // interactivo real, no un video) — ver lib/tours.ts. Lanza el tour de
+  // "Recibir un equipo nuevo" cuando se llega aquí desde el botón del mismo
+  // nombre en /ayuda (?tour=reparaciones-recibir-equipo).
+  useTourDesdeUrl("reparaciones-recibir-equipo", TOUR_REPARACIONES_RECIBIR);
 
   const [modalNuevaAbierto, setModalNuevaAbierto] = useState(false);
   const [nuevaBranchId, setNuevaBranchId] = useState(branches[0]?.id ?? "");
@@ -1164,7 +1171,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                 </div>
               </div>
 
-              <div>
+              <div data-tour="reparaciones-falla">
                 <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">FALLA REPORTADA</label>
                 <textarea value={nuevaFalla} onChange={(e) => setNuevaFalla(e.target.value)} rows={2}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary resize-none" />
@@ -1181,7 +1188,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
               </div>
 
-              <div>
+              <div data-tour="reparaciones-piezas">
                 {/* 2026-09-24, a petición de Carlos: "una reparación no puede
                     ingresar sin costo estipulado" — ya no dice "(opcional)":
                     hace falta al menos una línea (pieza o servicio) para
@@ -1274,7 +1281,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
               <button onClick={cancelarModalNueva} className="btn-ghost px-3 py-2 text-xs rounded-lg">
                 Cancelar
               </button>
-              <button disabled={creando} onClick={handleCrearReparacion}
+              <button disabled={creando} onClick={handleCrearReparacion} data-tour="reparaciones-crear"
                 className="btn-primary px-4 py-2 rounded-lg text-xs">
                 {creando ? "Creando..." : "Crear"}
               </button>

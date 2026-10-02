@@ -21,6 +21,7 @@ import {
   actualizarCostoEstimadoAction, avanzarEstadoAction, resolverAlertaTallerAction, type NuevoEstadoReparacion,
 } from "@/app/actions/reparaciones-actions";
 import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData } from "@/lib/recibo-imprimible";
+import { useTourDesdeUrl, TOUR_ADUANA_ASIGNAR } from "@/lib/tours";
 
 /**
  * "Aduana" / Recepción del taller (2026-09-22, corrección explícita de
@@ -268,6 +269,12 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
   const [busqueda, setBusqueda] = useState("");
   const [soloActivas, setSoloActivas] = useState(true);
   const [seleccionadaId, setSeleccionadaId] = useState<string | null>(reparaciones[0]?.id ?? null);
+
+  // "Muéstrame cómo" (2026-10-02, a petición de Carlos — tutorial
+  // interactivo real, no un video) — ver lib/tours.ts. Lanza el tour de
+  // "Asignar técnico y avanzar un folio" cuando se llega aquí desde el botón
+  // del mismo nombre en /ayuda (?tour=aduana-asignar-tecnico).
+  useTourDesdeUrl("aduana-asignar-tecnico", TOUR_ADUANA_ASIGNAR);
 
   // Selector de periodo del "Resumen de taller" (2026-10-02) — mismo patrón
   // que cambiarPeriodo en DashboardClient.tsx: navega a ?desde=&hasta=, el
@@ -720,7 +727,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
 
               {/* Técnico asignado — exclusivo de Aduana (2026-09-22, corrección
                   de Carlos: ni tienda ni el técnico mismo pueden elegirlo). */}
-              <div className="mt-4">
+              <div className="mt-4" data-tour="aduana-tecnico">
                 <p className="text-[12.5px] font-semibold text-foreground mb-1.5">Técnico asignado</p>
                 <select
                   disabled={pending || cerrada}
@@ -738,7 +745,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
               {/* Costo estimado — exclusivo de Aduana ("la edición del costo
                   solo se puede hacer en recepción", Carlos). El cambio queda
                   registrado en el Historial de abajo con fecha y hora. */}
-              <div className="mt-4">
+              <div className="mt-4" data-tour="aduana-costo">
                 <p className="text-[12.5px] font-semibold text-foreground mb-1.5">Costo estimado / pieza cotizada</p>
                 <div className="flex items-center gap-2">
                   <input
@@ -844,7 +851,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
               {/* Avanzar estatus — exclusivo de Aduana ("solo la encargada de
                   recepción puede cambiar el estatus de un equipo", Carlos). */}
               {siguientes.length > 0 && (
-                <div className="mt-4">
+                <div className="mt-4" data-tour="aduana-estatus">
                   <p className="text-[12.5px] font-semibold text-foreground mb-1.5">Cambiar estatus</p>
                   <div className="flex flex-wrap gap-2">
                     {siguientes.map((s) => (

@@ -34,6 +34,14 @@ export interface FlujoPasos {
   titulo: string;
   // Pasos en orden — cada uno ya listo para mostrarse como item de lista.
   pasos: string[];
+  // Id del tour interactivo ("Muéstrame cómo", 2026-10-02 — ver lib/tours.ts)
+  // para este flujo, si ya existe uno. Ausente = este flujo todavía solo
+  // tiene los pasos en texto, sin tour (la primera versión solo cubre 3
+  // flujos de validación, a petición explícita de Carlos). Cuando está
+  // presente, AyudaClient.tsx/ManualAyudaClient.tsx muestran un botón extra
+  // que navega a `/${tenantSlug}/${ruta}?tour=${tourId}` — ese Client
+  // Component (ver lib/tours.ts) lo detecta y lanza el tour real.
+  tourId?: string;
 }
 
 export interface ContenidoModuloAyuda {
@@ -99,6 +107,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Registrar una venta",
+        tourId: "pos-registrar-venta",
         pasos: [
           "Agrega productos dando clic en su tarjeta del catálogo, o usa \"Escanear código de barras\".",
           "Opcional: presiona \"Agregar cliente\" y búscalo, si quieres ligar la venta a su ficha.",
@@ -123,6 +132,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Recibir un equipo nuevo",
+        tourId: "reparaciones-recibir-equipo",
         pasos: [
           "Presiona \"Nueva\" arriba de la lista.",
           "Elige el cliente (búscalo, o presiona el \"+\" para darlo de alta: Nombre y Teléfono).",
@@ -166,6 +176,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     flujos: [
       {
         titulo: "Asignar técnico y avanzar un folio",
+        tourId: "aduana-asignar-tecnico",
         pasos: [
           "Abre el folio de la lista.",
           "En \"Técnico asignado\", elige al técnico del selector — se guarda solo con elegirlo, sin botón aparte.",

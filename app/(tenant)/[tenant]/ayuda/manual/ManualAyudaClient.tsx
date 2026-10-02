@@ -5,7 +5,7 @@ import Link from "next/link";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { AYUDA_MODULO, AYUDA_SECCIONES, PLACEHOLDER_REPARACIONES, MODULO_ICON, MODULO_RUTA } from "@/lib/ayuda-contenido";
 import type { ModuloKey } from "@/lib/roles";
-import { ChevronDown, LifeBuoy } from "lucide-react";
+import { ChevronDown, LifeBuoy, PlayCircle } from "lucide-react";
 
 interface ManualAyudaClientProps {
   tenantSlug: string;
@@ -88,7 +88,17 @@ export default function ManualAyudaClient({ tenantSlug, labels, modulosInactivos
                           )}
                           {contenido.flujos.map((flujo) => (
                             <div key={flujo.titulo}>
-                              <p className="text-xs font-medium text-foreground mb-1">{flujo.titulo}</p>
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <p className="text-xs font-medium text-foreground">{flujo.titulo}</p>
+                                {flujo.tourId && (
+                                  <Link
+                                    href={`/${tenantSlug}/${ruta}?tour=${flujo.tourId}`}
+                                    className="inline-flex items-center gap-1 text-[11px] text-primary-text hover:underline shrink-0"
+                                  >
+                                    <PlayCircle className="w-3.5 h-3.5" /> Muéstrame cómo
+                                  </Link>
+                                )}
+                              </div>
                               <ol className="list-decimal list-inside space-y-0.5">
                                 {flujo.pasos.map((paso, i) => (
                                   <li key={i} className="text-xs text-muted-foreground">{resolverTexto(paso)}</li>
