@@ -9,11 +9,13 @@ import {
   Printer,
 } from "lucide-react";
 import type {
-  ReparacionesData, ReparacionUI, EstadoReparacion, PrioridadReparacion, ProductoParaReparacion,
+  ReparacionesData, ReparacionUI, EstadoReparacion, PrioridadReparacion, ProductoParaReparacion, TecnicoOption,
 } from "@/lib/reparaciones-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import {
   crearReparacionAction, avanzarEstadoAction, marcarWhatsappEnviadoAction,
+  asignarTecnicoAction, agregarPiezaReparacionAction, eliminarPiezaReparacionAction,
+  actualizarCostoEstimadoAction, resolverAlertaTallerAction,
   type NuevoEstadoReparacion,
 } from "@/app/actions/reparaciones-actions";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, telefonoWhatsapp, whatsappHref } from "@/lib/paises";
@@ -35,6 +37,30 @@ function agruparProductosParaSelector(productos: ProductoParaReparacion[]) {
   const servicios = productos.filter((p) => p.type === "SERVICE");
   return { piezas, servicios };
 }
+
+// Tabla de transiciones ofrecidas por el "Control de taller" (2026-10-03,
+// Modo Simple — "unificar en una sola ventana todas las operaciones que
+// tengan que ver con reparaciones", a petición de Carlos). Copiada tal cual
+// de AduanaClient.tsx (misma SIGUIENTES_ESTADOS, ver el comentario largo de
+// esa constante ahí) — esta tabla solo decide qué botones se OFRECEN;
+// TRANSICIONES_VALIDAS en reparaciones-actions.ts sigue siendo la única
+// validación real del lado del servidor.
+const SIGUIENTES_ESTADOS: Partial<Record<EstadoReparacion, { estado: NuevoEstadoReparacion; texto: string }[]>> = {
+  RECEIVED: [{ estado: "IN_REPAIR", texto: "Iniciar reparación" }],
+  IN_REPAIR: [
+    { estado: "WAITING_PARTS", texto: "Esperando refacción" },
+    { estado: "WORKSHOP_READY", texto: "Marcar listo" },
+    { estado: "WORKSHOP_RETURN", texto: "Marcar devolución" },
+  ],
+  WAITING_PARTS: [{ estado: "IN_REPAIR", texto: "Reanudar reparación" }],
+  WORKSHOP_READY: [{ estado: "SHOP_READY", texto: "Enviar a tienda (listo)" }],
+  WORKSHOP_RETURN: [{ estado: "SHOP_RETURN", texto: "Enviar a tienda (devolución)" }],
+  SHOP_READY: [{ estado: "IN_REPAIR", texto: "Regresar a taller (corregir)" }],
+  SHOP_RETURN: [
+    { estado: "DELIVERED", texto: "Entregar (sin cobro)" },
+    { estado: "IN_REPAIR", texto: "Regresar a taller (corregir)" },
+  ],
+};
 
 interface BranchOption {
   id: string;
@@ -82,6 +108,15 @@ interface ReparacionesClientProps {
   // abre directo — nunca llama a una acción de servidor que de cualquier
   // forma fallaría por no tener credenciales de Meta.
   whatsappApiConectado: boolean;
+  // puedeControlarTaller (2026-10-03, Modo Simple — a petición de Carlos:
+  // "unificar en una sola ventana todas las operaciones que tengan que ver
+  // con reparaciones") — true cuando quien ve esta pantalla también tiene
+  // acceso al módulo "aduana" (ver puedeAccederModulo, lib/actor.ts, y el
+  // cómputo en page.tsx). Decide si esta misma pantalla ADEMÁS muestra el
+  // control de técnico/costo/piezas/estatus que antes vivía exclusivamente
+  // en /aduana — nunca reemplaza la validación real, que sigue pasando por
+  // resolverActor(tenantSlug, "aduana") del lado del servidor en cada acción.
+  puedeControlarTaller: boolean;
 }
 
 const ESTADO_BADGE: Record<EstadoReparacion, string> = {
@@ -366,6 +401,8 @@ async function abrirTicketImprimible(t: TicketData, negocio: DatosNegocioRecibo,
 function VistaTienda({
   reparaciones, labels, onAvanzar, onWhatsapp, onCobrarClick, onEntregarSinCobro, pending, onNuevaClick,
   negocio, negocioRecibo, telefonoNegocio, formatoTicket, cobrarEnDevolucion,
+  puedeControlarTaller, tecnicos, productos,
+  onAsignarTecnico, onActualizarCosto, onAgregarPieza, onQuitarPieza, onResolverAlerta,
 }: {
   reparaciones: ReparacionUI[];
   labels: LabelDictionary;
@@ -386,6 +423,21 @@ function VistaTienda({
   telefonoNegocio: string | null;
   formatoTicket: FormatoTicket | null | undefined;
   cobrarEnDevolucion: boolean;
+  // Modo Simple (2026-10-03) — ver el comentario largo en
+  // ReparacionesClientProps.puedeControlarTaller. Cuando es true, esta vista
+  // también renderiza la tarjeta "Control de taller" (técnico/costo/piezas/
+  // estatus), ported de AduanaClient.tsx.
+  puedeControlarTaller: boolean;
+  tecnicos: TecnicoOption[];
+  productos: ProductoParaReparacion[];
+  onAsignarTecnico: (repairId: string, staffId: string) => void;
+  onActualizarCosto: (repairId: string, costoEstimado: number) => void;
+  onAgregarPieza: (
+    repairId: string,
+    item: { productId: string; quantity: number } | { nombre: string; precio: number; quantity: number }
+  ) => void;
+  onQuitarPieza: (repairId: string, itemId: string) => void;
+  onResolverAlerta: (repairId: string) => void;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("Pendientes");
@@ -393,7 +445,50 @@ function VistaTienda({
   const [seleccionadaId, setSeleccionadaId] = useState<string | null>(enTienda[0]?.id ?? reparaciones[0]?.id ?? null);
   const [mostrarDetalle, setMostrarDetalle] = useState(false);
 
+  // Estado LOCAL del "Control de taller" (2026-10-03, Modo Simple) — nombrado
+  // distinto a piezaNuevaId/otroNombre/etc. del modal de "Nueva reparación"
+  // más abajo a propósito: esos construyen la lista de piezas de un folio
+  // TODAVÍA NO creado (buffer puramente local); estos editan piezas/costo de
+  // un folio YA EXISTENTE y seleccionado (cada cambio llama de inmediato a
+  // una Server Action) — son dos flujos distintos que no deben compartir
+  // estado aunque luzcan parecidos.
+  const [costoEditValor, setCostoEditValor] = useState("");
+  const [piezaEditId, setPiezaEditId] = useState("");
+  const [piezaEditCantidad, setPiezaEditCantidad] = useState("1");
+  const [otroEditAbierto, setOtroEditAbierto] = useState(false);
+  const [otroEditNombre, setOtroEditNombre] = useState("");
+  const [otroEditPrecio, setOtroEditPrecio] = useState("");
+  const [otroEditCantidad, setOtroEditCantidad] = useState("1");
+  const [otroEditError, setOtroEditError] = useState<string | null>(null);
+
   const seleccionada = reparaciones.find((r) => r.id === seleccionadaId) ?? reparaciones[0] ?? null;
+  const cerrada = seleccionada?.estado === "DELIVERED" || seleccionada?.estado === "CANCELLED";
+
+  const handleGuardarCostoEdit = () => {
+    if (!seleccionada) return;
+    onActualizarCosto(seleccionada.id, parseFloat(costoEditValor));
+    setCostoEditValor("");
+  };
+
+  const agregarPiezaEdit = () => {
+    if (!seleccionada || !piezaEditId) return;
+    const cantidad = Math.max(1, parseInt(piezaEditCantidad, 10) || 1);
+    onAgregarPieza(seleccionada.id, { productId: piezaEditId, quantity: cantidad });
+    setPiezaEditId("");
+    setPiezaEditCantidad("1");
+  };
+
+  const agregarPiezaEditPersonalizada = () => {
+    if (!seleccionada) return;
+    const nombre = otroEditNombre.trim();
+    const precio = parseFloat(otroEditPrecio);
+    if (!nombre) { setOtroEditError("Escribe un nombre"); return; }
+    if (!Number.isFinite(precio) || precio <= 0) { setOtroEditError("Escribe un precio válido"); return; }
+    const cantidad = Math.max(1, parseInt(otroEditCantidad, 10) || 1);
+    onAgregarPieza(seleccionada.id, { nombre, precio, quantity: cantidad });
+    setOtroEditNombre(""); setOtroEditPrecio(""); setOtroEditCantidad("1"); setOtroEditError(null);
+    setOtroEditAbierto(false);
+  };
 
   const tiendaReps = reparaciones.filter((r) => {
     // Bug real reportado por Carlos (2026-09-25, con capturas): la pestaña
@@ -634,14 +729,28 @@ function VistaTienda({
               al cliente) pero no tiene botón para apagarlo — eso es
               a propósito, ver resolverAlertaTallerAction. */}
           {seleccionada.alertaTallerPendiente && (
-            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-amber-50 border-amber-300 mb-3">
-              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-              <div>
+            <div className="flex items-start gap-3 px-4 py-3 rounded-xl border bg-amber-50 border-amber-300 mb-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
                 <p className="text-xs font-semibold text-amber-700">Alerta del técnico sin atender</p>
                 <p className="text-[11.5px] mt-0.5 text-amber-600">
                   {seleccionada.historial.find((h) => h.nota?.startsWith("Alerta del técnico: "))?.nota?.slice("Alerta del técnico: ".length)
                     ?? "Hay un pendiente con este equipo — contacta a Taller."}
                 </p>
+                {/* Modo Simple (2026-10-03) — único botón que de verdad apaga
+                    el aviso: resolverAlertaTallerAction sigue siendo
+                    exclusiva de "aduana" del lado del servidor, así que solo
+                    se muestra aquí cuando puedeControlarTaller es true; sin
+                    él, esta tienda solo ve el aviso (igual que siempre). */}
+                {puedeControlarTaller && (
+                  <button
+                    onClick={() => onResolverAlerta(seleccionada.id)}
+                    disabled={pending}
+                    className="mt-2 text-[11.5px] font-medium px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white transition-colors"
+                  >
+                    Marcar como atendida
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -674,6 +783,160 @@ function VistaTienda({
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
+          {/* "Control de taller" (2026-10-03, Modo Simple — a petición de
+              Carlos: "unificar en una sola ventana todas las operaciones que
+              tengan que ver con reparaciones") — técnico/costo/piezas/
+              estatus, portado tal cual de AduanaClient.tsx. Solo visible
+              cuando puedeControlarTaller es true (el dueño con Modo Simple
+              activo, o cualquier rol con acceso a "aduana" visitando esta
+              pantalla) — para todos los demás esta tarjeta simplemente no
+              existe y la vista queda exactamente como antes: solo lectura. */}
+          {puedeControlarTaller && (
+            <div className="bg-card border border-border rounded-xl p-4 sm:col-span-2">
+              <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">CONTROL DE TALLER</p>
+
+              <div data-tour="aduana-tecnico">
+                <p className="text-[12.5px] font-semibold text-foreground mb-1.5">Técnico asignado</p>
+                <select
+                  disabled={pending || cerrada}
+                  value={seleccionada.tecnicoAsignadoId ?? ""}
+                  onChange={(e) => onAsignarTecnico(seleccionada.id, e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-[12.5px] bg-card focus:outline-none focus:border-primary disabled:opacity-50"
+                >
+                  <option value="">Sin asignar</option>
+                  {tecnicos.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mt-4" data-tour="aduana-costo">
+                <p className="text-[12.5px] font-semibold text-foreground mb-1.5">Costo estimado / pieza cotizada</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    disabled={pending || cerrada}
+                    value={costoEditValor}
+                    onChange={(e) => setCostoEditValor(e.target.value)}
+                    placeholder={seleccionada.costoEstimado != null ? formatMXN(seleccionada.costoEstimado) : "$0"}
+                    className="flex-1 min-w-0 px-3 py-2 border border-border rounded-lg text-[12.5px] bg-card focus:outline-none focus:border-primary disabled:opacity-50"
+                  />
+                  <button
+                    onClick={handleGuardarCostoEdit}
+                    disabled={pending || cerrada || !costoEditValor}
+                    className="btn-primary px-3 py-2 rounded-lg text-[12.5px]"
+                  >
+                    Guardar
+                  </button>
+                </div>
+                {seleccionada.costoEstimado != null && (
+                  <p className="text-[11.5px] text-muted-foreground mt-1">Actual: {formatMXN(seleccionada.costoEstimado)}</p>
+                )}
+              </div>
+
+              <div className="mt-4" data-tour="aduana-piezas">
+                <p className="text-[12.5px] font-semibold text-foreground mb-1.5">Piezas y servicios cotizados</p>
+                {seleccionada.piezas.length > 0 && (
+                  <div className="flex flex-col gap-1.5 mb-2">
+                    {seleccionada.piezas.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between bg-muted rounded-lg px-2.5 py-1.5 text-[12px]">
+                        <span className="text-foreground/90">{p.productName} × {p.quantity}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">{formatMXN(p.price * p.quantity)}</span>
+                          {!cerrada && (
+                            <button
+                              onClick={() => onQuitarPieza(seleccionada.id, p.id)}
+                              disabled={pending}
+                              className="text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!cerrada && (
+                  <div className="flex gap-2">
+                    <select
+                      value={piezaEditId}
+                      onChange={(e) => {
+                        // "__otro__" no es un producto real — abre el
+                        // diálogo de personalizado (ver agregarPiezaEditPersonalizada).
+                        if (e.target.value === "__otro__") { setOtroEditAbierto(true); return; }
+                        setPiezaEditId(e.target.value);
+                      }}
+                      className="flex-1 min-w-0 px-2 py-2 border border-border rounded-lg text-[12px] bg-card text-foreground focus:outline-none focus:border-primary"
+                    >
+                      <option value="">Selecciona una pieza o servicio…</option>
+                      {(() => {
+                        const { piezas: piezasCat, servicios } = agruparProductosParaSelector(productos);
+                        return (
+                          <>
+                            {piezasCat.length > 0 && (
+                              <optgroup label="Piezas / productos">
+                                {piezasCat.map((p) => (
+                                  <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {servicios.length > 0 && (
+                              <optgroup label="Servicios">
+                                {servicios.map((p) => (
+                                  <option key={p.id} value={p.id}>{p.name} — {formatMXN(p.price)}</option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </>
+                        );
+                      })()}
+                      <option value="__otro__">+ Otro (nombre y precio libres)</option>
+                    </select>
+                    <input
+                      type="number"
+                      min={1}
+                      value={piezaEditCantidad}
+                      onChange={(e) => setPiezaEditCantidad(e.target.value)}
+                      className="w-14 px-2 py-2 border border-border rounded-lg text-[12px] bg-card focus:outline-none focus:border-primary"
+                    />
+                    <button
+                      onClick={agregarPiezaEdit}
+                      disabled={pending || !piezaEditId}
+                      className="btn-secondary px-2.5 py-2 rounded-lg"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {(() => {
+                const siguientes = (SIGUIENTES_ESTADOS[seleccionada.estado] ?? []).filter(
+                  (s) => !(s.estado === "DELIVERED" && cobrarEnDevolucion)
+                );
+                if (siguientes.length === 0) return null;
+                return (
+                  <div className="mt-4" data-tour="aduana-estatus">
+                    <p className="text-[12.5px] font-semibold text-foreground mb-1.5">Cambiar estatus</p>
+                    <div className="flex flex-wrap gap-2">
+                      {siguientes.map((s) => (
+                        <button
+                          key={s.estado}
+                          onClick={() => (s.estado === "DELIVERED" ? onEntregarSinCobro(seleccionada) : onAvanzar(seleccionada.id, s.estado))}
+                          disabled={pending}
+                          className="btn-primary flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px]"
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" /> {s.texto}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           <div className="bg-card border border-border rounded-xl p-4">
             <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">DATOS DE {activoLabel.toUpperCase()}</p>
             <div className="grid grid-cols-2 gap-2">
@@ -733,6 +996,57 @@ function VistaTienda({
         </>
         )}
       </div>
+
+      {/* Diálogo de "Otro" — pieza o servicio personalizado del "Control de
+          taller" (2026-10-03, Modo Simple). Copiado tal cual del mismo
+          diálogo en AduanaClient.tsx, usando el estado otroEdit* (ver el
+          comentario largo junto a su declaración más arriba). */}
+      {otroEditAbierto && seleccionada && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setOtroEditAbierto(false)}>
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-sm font-medium text-foreground">Pieza o servicio personalizado</span>
+              <button onClick={() => setOtroEditAbierto(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              {otroEditError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{otroEditError}</div>}
+              <div>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">NOMBRE</label>
+                <input type="text" autoFocus value={otroEditNombre} onChange={(e) => setOtroEditNombre(e.target.value)}
+                  placeholder='Ej. "Micrófono genérico" o "Limpieza interna"'
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-card text-foreground focus:outline-none focus:border-primary" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">PRECIO</label>
+                  <input type="number" min={0} step="0.01" value={otroEditPrecio} onChange={(e) => setOtroEditPrecio(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-card text-foreground focus:outline-none focus:border-primary" />
+                </div>
+                <div>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">CANTIDAD</label>
+                  <input type="number" min={1} value={otroEditCantidad} onChange={(e) => setOtroEditCantidad(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-card text-foreground focus:outline-none focus:border-primary" />
+                </div>
+              </div>
+              <p className="text-[11.5px] text-muted-foreground">
+                Úsalo cuando la pieza o el servicio no esté guardado en tu catálogo — no se agrega a Catálogo ni afecta tu inventario, solo se cotiza en esta reparación.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setOtroEditAbierto(false)}
+                  className="btn-secondary flex-1 px-3 py-2 rounded-lg text-xs">
+                  Cancelar
+                </button>
+                <button type="button" onClick={agregarPiezaEditPersonalizada} disabled={pending}
+                  className="btn-primary flex-1 px-3 py-2 rounded-lg text-xs">
+                  {pending ? "Agregando..." : "Agregar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -742,8 +1056,8 @@ function VistaTienda({
    NINGÚN rol — se movió por completo a /aduana, ver AduanaClient.tsx. Esta
    pantalla ahora es SIEMPRE la vista de tienda: recibir con folio, ver el
    detalle de solo lectura, y cobrar/entregar/avisar.) ── */
-export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, negocioRecibo, cobrarEnDevolucion, clienteInicialId, whatsappApiConectado }: ReparacionesClientProps) {
-  const { reparaciones, clientes, productos } = data;
+export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, negocioRecibo, cobrarEnDevolucion, clienteInicialId, whatsappApiConectado, puedeControlarTaller }: ReparacionesClientProps) {
+  const { reparaciones, clientes, productos, tecnicos } = data;
   const router = useRouter();
   const negocio = nombreNegocio(tenantSlug);
   const [pendingAccion, startAccion] = useTransition();
@@ -882,6 +1196,64 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     setAccionError(null);
     startAccion(async () => {
       const res = await avanzarEstadoAction({ tenantSlug, repairId, nuevoEstado });
+      if (res.ok) router.refresh();
+      else setAccionError(res.error);
+    });
+  };
+
+  // ── "Control de taller" (2026-10-03, Modo Simple — a petición de Carlos:
+  // "unificar en una sola ventana todas las operaciones que tengan que ver
+  // con reparaciones") — mismas Server Actions que ya usaba exclusivamente
+  // AduanaClient.tsx (asignarTecnicoAction/actualizarCostoEstimadoAction/
+  // agregarPiezaReparacionAction/eliminarPiezaReparacionAction/
+  // resolverAlertaTallerAction, todas resolverActor(tenantSlug, "aduana") del
+  // lado del servidor) — sin ningún cambio en la capa de datos/acciones, solo
+  // se agregan los handlers equivalentes aquí para que esta pantalla también
+  // pueda llamarlas cuando puedeControlarTaller es true. ──
+  const handleAsignarTecnico = (repairId: string, staffId: string) => {
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await asignarTecnicoAction({ tenantSlug, repairId, staffId: staffId || null });
+      if (res.ok) router.refresh();
+      else setAccionError(res.error);
+    });
+  };
+
+  const handleActualizarCosto = (repairId: string, costoEstimado: number) => {
+    if (!Number.isFinite(costoEstimado) || costoEstimado < 0) { setAccionError("Ingresa un costo válido"); return; }
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await actualizarCostoEstimadoAction({ tenantSlug, repairId, costoEstimado });
+      if (res.ok) router.refresh();
+      else setAccionError(res.error);
+    });
+  };
+
+  const handleAgregarPiezaTaller = (
+    repairId: string,
+    item: { productId: string; quantity: number } | { nombre: string; precio: number; quantity: number }
+  ) => {
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await agregarPiezaReparacionAction({ tenantSlug, repairId, ...item });
+      if (res.ok) router.refresh();
+      else setAccionError(res.error);
+    });
+  };
+
+  const handleQuitarPiezaTaller = (repairId: string, itemId: string) => {
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await eliminarPiezaReparacionAction({ tenantSlug, repairId, itemId });
+      if (res.ok) router.refresh();
+      else setAccionError(res.error);
+    });
+  };
+
+  const handleResolverAlertaTaller = (repairId: string) => {
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await resolverAlertaTallerAction({ tenantSlug, repairId });
       if (res.ok) router.refresh();
       else setAccionError(res.error);
     });
@@ -1086,7 +1458,10 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
       <div className="flex-1 overflow-hidden">
         <VistaTienda reparaciones={reparaciones} labels={labels} onAvanzar={handleAvanzar} onWhatsapp={handleWhatsapp} onCobrarClick={handleCobrarClick} onEntregarSinCobro={handleEntregarSinCobro} pending={pendingAccion}
-          onNuevaClick={() => setModalNuevaAbierto(true)} negocio={negocio} negocioRecibo={negocioRecibo} telefonoNegocio={telefonoNegocio} formatoTicket={negocioRecibo.formato} cobrarEnDevolucion={cobrarEnDevolucion} />
+          onNuevaClick={() => setModalNuevaAbierto(true)} negocio={negocio} negocioRecibo={negocioRecibo} telefonoNegocio={telefonoNegocio} formatoTicket={negocioRecibo.formato} cobrarEnDevolucion={cobrarEnDevolucion}
+          puedeControlarTaller={puedeControlarTaller} tecnicos={tecnicos} productos={productos}
+          onAsignarTecnico={handleAsignarTecnico} onActualizarCosto={handleActualizarCosto} onAgregarPieza={handleAgregarPiezaTaller}
+          onQuitarPieza={handleQuitarPiezaTaller} onResolverAlerta={handleResolverAlertaTaller} />
       </div>
 
       {modalNuevaAbierto && (

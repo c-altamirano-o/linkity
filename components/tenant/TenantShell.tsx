@@ -149,6 +149,7 @@ export default function TenantShell({
   modulosPermitidos = null,
   labels = DEFAULT_LABELS,
   modulosInactivos = [],
+  modoSimpleActivo = false,
   logoUrl = null,
   notificacionesIniciales = [],
   notificacionesNoLeidasIniciales = 0,
@@ -190,6 +191,16 @@ export default function TenantShell({
   // como para uno que un negocio nunca desactivó, así que ningún tenant ya
   // en producción antes de este cambio pierde un link de golpe.
   modulosInactivos?: string[];
+  // Modo Simple (2026-10-03, ver el comentario largo junto a
+  // activarModoSimpleAction, app/actions/modulos-tenant-actions.ts) — ya
+  // calculado en el servidor (layout.tsx). Solo tiene efecto en modo
+  // "admin": oculta "Aduana" (labelKey "module.reception.name", la entrada
+  // de menú que el dueño ve como "Taller") del menú, ahora que Reparaciones
+  // ya trae fusionados esos mismos controles — ver OCULTOS_PARA_ADMIN más
+  // abajo y ReparacionesClient.tsx. Nunca afecta el menú de personal de PIN
+  // (Gerente sigue viendo "Aduana" con su panel de métricas completo,
+  // tenga o no el dueño Modo Simple activado).
+  modoSimpleActivo?: boolean;
   // Logo propio del negocio (2026-09-17) — el de Linkity en el sidebar de
   // arriba NUNCA se reemplaza (esa es la marca de la plataforma, igual para
   // todos los tenants); este es un logo aparte, distinto por negocio, que
@@ -471,7 +482,12 @@ export default function TenantShell({
   // explícitamente ("un administrador no puede cambiar el estatus de los
   // equipos... también debería poder hacerlo por default") — corregido
   // quitando "aduana" de este set.
-  const OCULTOS_PARA_ADMIN = new Set(["taller"]);
+  // "aduana" se suma a este set SOLO con Modo Simple activo (2026-10-03) —
+  // ver el comentario largo junto a la prop modoSimpleActivo arriba. Sin
+  // Modo Simple, el razonamiento de 2026-09-25 sigue intacto: "Aduana" es
+  // la única forma de asignar técnico/cambiar estatus/ajustar costo, así
+  // que se le sigue mostrando siempre a admin.
+  const OCULTOS_PARA_ADMIN = new Set(modoSimpleActivo ? ["taller", "aduana"] : ["taller"]);
 
   // Primero se resuelve el nombre visible de cada ítem contra el
   // diccionario de labels (rubro + overrides del tenant), luego se filtra

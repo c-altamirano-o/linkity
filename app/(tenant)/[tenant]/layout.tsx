@@ -15,6 +15,7 @@ import { calcularEstadoCiclo } from "@/lib/ciclo-suscripcion";
 import CuentaBloqueada from "@/components/tenant/CuentaBloqueada";
 import { getNotificaciones, contarNotificacionesNoLeidas } from "@/lib/notificaciones";
 import { obtenerEstadoPasosBienvenida } from "@/lib/onboarding";
+import { MODULOS_OCULTOS_MODO_SIMPLE } from "@/lib/modules-catalog";
 
 export const metadata: Metadata = {
   title: "Linkity",
@@ -126,6 +127,9 @@ export default async function TenantLayout({
   // este cambio pierde un módulo de golpe (nunca tuvo una fila así).
   let labels: LabelDictionary = {};
   let modulosInactivos: string[] = [];
+  // Modo Simple (2026-10-03) — ver el comentario largo donde se calcula,
+  // unas líneas más abajo.
+  let modoSimpleActivo = false;
   // Panel de notificaciones en tiempo real (2026-09-22, a petición de
   // Carlos — ver el comentario largo en lib/notificaciones.ts): la
   // campanita de TenantShell.tsx necesita un estado inicial (lo que ya
@@ -147,6 +151,19 @@ export default async function TenantLayout({
     ]);
     labels = labelsResueltos;
     modulosInactivos = inactivos.map((tm) => tm.module.code);
+    // Modo Simple (2026-10-03, ver el comentario largo junto a
+    // activarModoSimpleAction, app/actions/modulos-tenant-actions.ts) —
+    // mismo cálculo que configuracion/page.tsx: "activo" = los 4 módulos que
+    // apaga ya están, los 4, inactivos. Se usa más abajo para (a) ocultar
+    // "Taller" (aduana) del menú del dueño — ver TenantShell, prop
+    // modoSimpleActivo — y (b) redirigirlo de vuelta a Reparaciones si
+    // entra a /aduana escribiendo la URL a mano, ahora que Reparaciones ya
+    // trae los mismos controles (asignar técnico/costo/estatus) fusionados
+    // — ver ReparacionesClient.tsx. Nunca afecta a personal de PIN (Gerente
+    // sigue viendo "Aduana" en su propio menú, con su panel de métricas
+    // completo) — Modo Simple es una simplificación pensada para el dueño.
+    const modulosInactivosSet = new Set(modulosInactivos);
+    modoSimpleActivo = MODULOS_OCULTOS_MODO_SIMPLE.every((code) => modulosInactivosSet.has(code));
     notificacionesIniciales = notifs;
     notificacionesNoLeidas = noLeidas;
   }
@@ -262,6 +279,24 @@ export default async function TenantLayout({
     }
   }
 
+  // Modo Simple (2026-10-03) — "Aduana" (lo que el menú le muestra al dueño
+  // como "Taller") deja de ser necesario en cuanto Reparaciones ya trae
+  // fusionados sus mismos controles (asignar técnico/costo/estatus, ver
+  // ReparacionesClient.tsx) — si el dueño llega ahí escribiendo /aduana a
+  // mano (o por un link/favorito viejo), se le manda de regreso a
+  // Reparaciones en vez de dejarlo en una pantalla que el propio menú ya no
+  // ofrece. Solo aplica en modo "admin": Gerente (personal de PIN) sigue
+  // entrando a /aduana con normalidad, con o sin Modo Simple — ver el
+  // comentario largo junto a modoSimpleActivo más arriba.
+  if (dbTenant && modo === "admin" && modoSimpleActivo) {
+    const headerList = await headers();
+    const pathname = headerList.get("x-pathname") ?? "";
+    const modulo = pathname.split("/").filter(Boolean)[1];
+    if (modulo === "aduana") {
+      redirect(`/${tenant}/reparaciones`);
+    }
+  }
+
   // "Primeros pasos" — indicador en el encabezado, visible desde CUALQUIER
   // módulo, del avance del checklist de bienvenida (2026-09-29, a petición
   // de Carlos: "si das de alta artículos, ya no tienes como regresar a la
@@ -311,6 +346,7 @@ export default async function TenantLayout({
         modulosPermitidos={modulosPermitidosParaNav}
         labels={labels}
         modulosInactivos={modulosInactivos}
+        modoSimpleActivo={modoSimpleActivo}
         logoUrl={dbTenant?.logo ?? null}
         notificacionesIniciales={notificacionesIniciales}
         notificacionesNoLeidasIniciales={notificacionesNoLeidas}

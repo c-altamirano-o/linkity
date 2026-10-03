@@ -4,6 +4,7 @@ import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import { getReparacionesData } from "@/lib/reparaciones-data";
 import { getTenantLabels } from "@/lib/labels-server";
 import { nombreNegocioDeSlug, type DatosNegocioRecibo } from "@/lib/recibo-imprimible";
+import { puedeAccederModulo } from "@/lib/actor";
 import ReparacionesClient from "./ReparacionesClient";
 
 export default async function ReparacionesPage({
@@ -52,9 +53,20 @@ export default async function ReparacionesPage({
   // corrección de Carlos, /reparaciones es SIEMPRE la vista de tienda (ver
   // el comentario en ReparacionesClient.tsx); el control de piezas, costo,
   // estatus y técnico vive en /aduana.
-  const [data, labels] = await Promise.all([
+  // Modo Simple (2026-10-03, a petición de Carlos: "unificar en una sola
+  // ventana todas las operaciones que tengan que ver con reparaciones") —
+  // puedeControlarTaller decide si esta pantalla también muestra el control
+  // de técnico/costo/piezas/estatus que antes vivía exclusivamente en
+  // /aduana. puedeAccederModulo (lib/actor.ts) ya resuelve esto igual que en
+  // el guard de layout.tsx: el dueño de la cuenta real SIEMPRE pasa (sin
+  // cambio de comportamiento), y un empleado con PIN solo pasa si su rol
+  // tiene "aduana" en su matriz de permisos (lib/roles.ts) — por ejemplo un
+  // Gerente visitando /reparaciones (no su pantalla normal) seguiría viendo
+  // el control completo, consistente con lo que ya puede hacer en /aduana.
+  const [data, labels, puedeControlarTaller] = await Promise.all([
     getReparacionesData(tenant.id, sucursalDeEmpleado ?? undefined),
     getTenantLabels(tenant.id, tenant.businessType),
+    puedeAccederModulo(tenant.id, "aduana"),
   ]);
 
   // Datos reales del negocio para el ticket de "Entregar sin cobro"
@@ -79,6 +91,7 @@ export default async function ReparacionesPage({
       telefonoNegocio={tenant.phone}
       negocioRecibo={negocioRecibo}
       cobrarEnDevolucion={tenant.cobrarEnDevolucion}
+      puedeControlarTaller={puedeControlarTaller}
       clienteInicialId={clienteId ?? null}
       // whatsappApiConectado (2026-10-02) — decide el modo del botón
       // "Avisar" (ver handleWhatsapp en ReparacionesClient.tsx): con API
