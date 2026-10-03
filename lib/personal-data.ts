@@ -80,6 +80,13 @@ export interface EmpleadoUI {
   asistenciaHoy: AsistenciaHoy | null;
   horasSemana: number;
   pagos: PagoUI[];
+  // Horario esperado individual (2026-10-03, ver el comentario largo en
+  // Staff.horaEntradaEsperada, schema.prisma, y lib/incidencias-asistencia.ts)
+  // — null/vacío = sin configurar todavía, el cálculo de incidencias no
+  // aplica para este empleado.
+  horaEntradaEsperada: string | null;
+  horaSalidaEsperada: string | null;
+  diasLaborales: number[];
 }
 
 export interface PersonalData {
@@ -152,6 +159,9 @@ export async function getPersonalData(tenantId: string): Promise<PersonalData> {
         ? { checkIn: asistHoy.checkIn ? asistHoy.checkIn.toISOString() : null, checkOut: asistHoy.checkOut ? asistHoy.checkOut.toISOString() : null }
         : null,
       horasSemana: Math.round(horasSemana * 10) / 10,
+      horaEntradaEsperada: s.horaEntradaEsperada,
+      horaSalidaEsperada: s.horaSalidaEsperada,
+      diasLaborales: s.diasLaborales,
       pagos: s.payments.map((p) => ({
         id: p.id,
         periodoInicio: p.periodStart.toISOString(),

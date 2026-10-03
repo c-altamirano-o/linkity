@@ -7,13 +7,14 @@ import {
   Banknote, X, Check, Ban, KeyRound, Shield, Sparkles, HelpCircle, ChevronDown, ChevronUp,
 } from "lucide-react";
 import type { PersonalData, EmpleadoUI, EsquemaPago, BaseComision, Frecuencia, EstadoPago, MetodoPago } from "@/lib/personal-data";
+import type { IncidenciasAsistencia } from "@/lib/incidencias-asistencia";
 import { label, type LabelDictionary } from "@/lib/labels";
 import type { RolTenantUI } from "@/lib/roles";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, paisPorCodigo, validarTelefono } from "@/lib/paises";
 import {
   crearEmpleadoAction, editarEmpleadoAction, cambiarEstadoEmpleadoAction,
   registrarAsistenciaAction, generarPagoAction, actualizarEstadoPagoAction,
-  obtenerSugerenciaComisionAction, restablecerPinAction, type DatosEmpleado,
+  obtenerSugerenciaComisionAction, obtenerIncidenciasAsistenciaAction, restablecerPinAction, type DatosEmpleado,
 } from "@/app/actions/personal-actions";
 import RolesManager from "./RolesManager";
 import AsistentePersonal from "./AsistentePersonal";
@@ -64,6 +65,22 @@ const ESTADO_PAGO_BADGE: Record<EstadoPago, string> = {
   CANCELLED: "bg-muted text-muted-foreground",
 };
 
+// Días de la semana para el selector de "días laborales" del horario
+// individual (2026-10-03, ver Staff.diasLaborales en schema.prisma) — mismo
+// patrón exacto que DIAS_SEMANA_SELECTOR en SucursalesClient.tsx: se
+// muestran lunes→domingo (más natural para leer) pero cada uno guarda su
+// índice real 0=domingo…6=sábado.
+const DIAS_SEMANA_SELECTOR = [
+  { valor: 1, etiqueta: "L" },
+  { valor: 2, etiqueta: "M" },
+  { valor: 3, etiqueta: "M" },
+  { valor: 4, etiqueta: "J" },
+  { valor: 5, etiqueta: "V" },
+  { valor: 6, etiqueta: "S" },
+  { valor: 0, etiqueta: "D" },
+];
+const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6];
+
 const formatMXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 const formatFecha = (iso: string) => new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
 const formatHora = (iso: string) => new Date(iso).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" });
@@ -99,6 +116,11 @@ interface FormEmpleado {
   teamCommissionBase: BaseComision | "";
   staffPaymentMethod: MetodoPago;
   clabe: string;
+  // Horario esperado individual (2026-10-03, ver Staff.horaEntradaEsperada
+  // en schema.prisma y lib/incidencias-asistencia.ts) — "" = sin configurar.
+  horaEntradaEsperada: string;
+  horaSalidaEsperada: string;
+  diasLaborales: number[];
 }
 
 // 2026-09-23, a petición de Carlos ("Todo personal al crearlo, debe pedir
@@ -118,6 +140,7 @@ function formVacio(branchId: string): FormEmpleado {
     paymentScheme: "FIJO", baseSalary: "", commissionRate: "0", commissionBase: "VENTAS",
     paymentFrequency: "QUINCENAL", commissionFrequency: "QUINCENAL", pieceRate: "0",
     teamCommissionRate: "0", teamCommissionBase: "", staffPaymentMethod: "EFECTIVO", clabe: "",
+    horaEntradaEsperada: "", horaSalidaEsperada: "", diasLaborales: TODOS_LOS_DIAS,
   };
 }
 
@@ -129,6 +152,8 @@ function formDeEmpleado(e: EmpleadoUI): FormEmpleado {
     commissionBase: e.comisionBase, paymentFrequency: e.frecuencia, commissionFrequency: e.frecuenciaComision,
     pieceRate: String(e.montoDestajo), teamCommissionRate: String(e.comisionEquipoRate),
     teamCommissionBase: e.comisionEquipoBase ?? "", staffPaymentMethod: e.metodoPago, clabe: e.clabe ?? "",
+    horaEntradaEsperada: e.horaEntradaEsperada ?? "", horaSalidaEsperada: e.horaSalidaEsperada ?? "",
+    diasLaborales: e.diasLaborales.length > 0 ? e.diasLaborales : TODOS_LOS_DIAS,
   };
 }
 
@@ -199,6 +224,12 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
   const [pagoError, setPagoError] = useState<string | null>(null);
   const [cargandoSugerencia, setCargandoSugerencia] = useState(false);
   const [generandoPago, startGenerarPago] = useTransition();
+  // Incidencias de asistencia (2026-10-03, ver lib/incidencias-asistencia.ts)
+  // — tardanzas y horas sin confirmar del período, calculadas con el login
+  // real por PIN. Se piden junto con la sugerencia de comisión, pero son
+  // independientes de ella (aplican aunque el esquema sea FIJO).
+  const [incidencias, setIncidencias] = useState<IncidenciasAsistencia | null>(null);
+  const [cargandoIncidencias, setCargandoIncidencias] = useState(false);
 
   const empleadosFiltrados = useMemo(() => {
     return empleados.filter((e) => {
@@ -261,6 +292,14 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
     setModalEmpleado({ modo: "editar", id: emp.id });
   };
 
+  function alternarDiaLaboral(dia: number) {
+    setForm((f) => {
+      const actuales = f.diasLaborales ?? TODOS_LOS_DIAS;
+      const siguiente = actuales.includes(dia) ? actuales.filter((d) => d !== dia) : [...actuales, dia];
+      return { ...f, diasLaborales: siguiente };
+    });
+  }
+
   const handleGuardarEmpleado = () => {
     if (!form.name.trim()) { setFormError("El nombre es obligatorio"); return; }
     if (!form.branchId) { setFormError("Selecciona una sucursal"); return; }
@@ -303,6 +342,9 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
       teamCommissionBase: (form.teamCommissionBase || null) as any,
       staffPaymentMethod: form.staffPaymentMethod as any,
       clabe: form.clabe || null,
+      horaEntradaEsperada: form.horaEntradaEsperada || null,
+      horaSalidaEsperada: form.horaSalidaEsperada || null,
+      diasLaborales: form.diasLaborales,
     };
 
     startGuardar(async () => {
@@ -363,9 +405,11 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
     setPagoComision("0");
     setPagoAdvertencia(null);
     setPagoError(null);
+    setIncidencias(null);
     if (emp.esquemaPago !== "FIJO") {
       cargarSugerencia(emp.id, periodo.inicio, periodo.fin);
     }
+    cargarIncidencias(emp, periodo.inicio, periodo.fin);
   };
 
   const cargarSugerencia = (staffId: string, inicio: string, fin: string) => {
@@ -384,6 +428,28 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
       .finally(() => setCargandoSugerencia(false));
   };
 
+  // 2026-10-03, ver lib/incidencias-asistencia.ts — se pide junto con la
+  // sugerencia de comisión (arriba) pero es independiente de ella: aplica
+  // aunque el esquema sea FIJO, porque lo que descuenta es tardanza/horas
+  // sin confirmar, no comisión. Solo ajusta el "Monto base" sola si de
+  // verdad hay algo que descontar — nunca lo toca si descuentoSugerido es 0,
+  // para no pisar un valor que el administrador ya haya editado a mano.
+  const cargarIncidencias = (emp: EmpleadoUI, inicio: string, fin: string) => {
+    setCargandoIncidencias(true);
+    obtenerIncidenciasAsistenciaAction({ tenantSlug, staffId: emp.id, periodoInicio: inicio, periodoFin: fin })
+      .then((res) => {
+        if (res.ok) {
+          setIncidencias(res.incidencias);
+          if (res.incidencias.descuentoSugerido > 0 && emp.esquemaPago !== "COMISION") {
+            setPagoBase(String(Math.max(0, emp.sueldoBase - res.incidencias.descuentoSugerido)));
+          }
+        } else {
+          setIncidencias(null);
+        }
+      })
+      .finally(() => setCargandoIncidencias(false));
+  };
+
   const handleCambiarPeriodoPago = (campo: "inicio" | "fin", valor: string) => {
     const nuevoInicio = campo === "inicio" ? valor : pagoInicio;
     const nuevoFin = campo === "fin" ? valor : pagoFin;
@@ -391,6 +457,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
     if (modalPagoStaffId && seleccionadoParaPago?.esquemaPago !== "FIJO") {
       cargarSugerencia(modalPagoStaffId, nuevoInicio, nuevoFin);
     }
+    if (seleccionadoParaPago) cargarIncidencias(seleccionadoParaPago, nuevoInicio, nuevoFin);
   };
 
   const seleccionadoParaPago = empleados.find((e) => e.id === modalPagoStaffId) ?? null;
@@ -1073,6 +1140,64 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   </div>
                 )}
               </div>
+
+              <div className="border-t border-border pt-3">
+                <label className="text-[12.5px] font-medium text-muted-foreground">
+                  Horario esperado de este empleado (opcional)
+                </label>
+                <p className="text-[11.5px] text-muted-foreground mt-0.5 mb-2">
+                  Si lo defines, el sistema calculará tardanzas y horas sin confirmar (sesiones de PIN que no se
+                  cerraron) para sugerir un descuento automático — pero editable — en el &quot;Monto base&quot; al
+                  generar su pago. Si no lo defines, nada cambia para este empleado.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11.5px] text-muted-foreground">Entrada</label>
+                    <input
+                      type="time"
+                      value={form.horaEntradaEsperada}
+                      onChange={(e) => setForm({ ...form, horaEntradaEsperada: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11.5px] text-muted-foreground">Salida</label>
+                    <input
+                      type="time"
+                      value={form.horaSalidaEsperada}
+                      onChange={(e) => setForm({ ...form, horaSalidaEsperada: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+                {!form.horaSalidaEsperada && form.horaEntradaEsperada && (
+                  <p className="text-[11.5px] text-amber-600 mt-1">
+                    Sin la hora de salida, solo se mostrarán los minutos/horas de incidencia — no un descuento en pesos.
+                  </p>
+                )}
+                {(form.horaEntradaEsperada || form.horaSalidaEsperada) && (
+                  <div className="mt-2">
+                    <label className="text-[11.5px] text-muted-foreground">Días que trabaja</label>
+                    <div className="flex gap-1 mt-1">
+                      {DIAS_SEMANA_SELECTOR.map((d) => {
+                        const activo = (form.diasLaborales ?? TODOS_LOS_DIAS).includes(d.valor);
+                        return (
+                          <button
+                            key={d.valor}
+                            type="button"
+                            onClick={() => alternarDiaLaboral(d.valor)}
+                            className={`w-8 h-8 rounded-lg text-[12.5px] font-medium transition-colors ${
+                              activo ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {d.etiqueta}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             {/* Aviso de error en el PIE (fuera del área con scroll) — a
                 propósito, para que sea imposible perderlo de vista sin
@@ -1153,10 +1278,46 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
               </div>
 
               <div>
-                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MONTO BASE</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">
+                  MONTO BASE {cargandoIncidencias && "(revisando asistencia...)"}
+                </label>
                 <input type="number" value={pagoBase} onChange={(e) => setPagoBase(e.target.value)}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
               </div>
+
+              {/* Incidencias de asistencia (2026-10-03, ver
+                  lib/incidencias-asistencia.ts) — a propósito solo se
+                  muestra cuando SÍ hubo al menos un día con incidencia real:
+                  a un empleado sin horario configurado (o configurado pero
+                  sin ninguna tardanza/sesión sin cerrar en el período) nunca
+                  le aparece nada aquí — ese aviso vive en su ficha, en
+                  Personal, no en cada pago que se le genera. */}
+              {incidencias && incidencias.diasConIncidencia.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11.5px] text-amber-800 space-y-1">
+                  <p className="font-semibold">
+                    {incidencias.diasConIncidencia.length} día(s) con incidencia en este período
+                  </p>
+                  {incidencias.totalMinutosTarde > 0 && (
+                    <p>Tardanza acumulada: {incidencias.totalMinutosTarde} minutos (login real por PIN, con 15 min de margen).</p>
+                  )}
+                  {incidencias.totalHorasNoContabilizadas > 0 && (
+                    <p>
+                      {incidencias.totalHorasNoContabilizadas} hora(s) sin confirmar (sesiones que se cerraron solas sin que
+                      el empleado las cerrara).
+                    </p>
+                  )}
+                  {incidencias.diasConIncidencia.some((d) => d.discrepanciaManual) && (
+                    <p>Algún día su registro manual de Asistencia no coincide con su login real por PIN.</p>
+                  )}
+                  {incidencias.diasConIncidencia.some((d) => d.sinActividadTrasEntrada) && (
+                    <p>Algún día no se encontró ninguna venta/reparación/corte de caja tras su entrada — revisa si fue un día legítimo.</p>
+                  )}
+                  {incidencias.descuentoSugerido > 0 && (
+                    <p className="font-semibold">Descuento sugerido ya aplicado al Monto base: {formatMXN(incidencias.descuentoSugerido)}.</p>
+                  )}
+                  {incidencias.advertencia && <p>{incidencias.advertencia}</p>}
+                </div>
+              )}
 
               {seleccionadoParaPago.esquemaPago !== "FIJO" && (
                 <div>

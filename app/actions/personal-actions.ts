@@ -4,8 +4,10 @@ import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { PaymentScheme, CommissionBase, PaymentFrequency, StaffPaymentMethod, StaffPaymentStatus } from "@prisma/client";
 import { calcularComisionSugerida, calcularComisionEquipoSugerida } from "@/lib/personal-data";
+import { calcularIncidenciasAsistencia, type IncidenciasAsistencia } from "@/lib/incidencias-asistencia";
 import { resolverActor, type ActorResult } from "@/lib/actor";
 import { validarTelefono, PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
+import { horaValida } from "@/lib/horarios-sucursal";
 import { hashPin, pinValido } from "@/lib/staff-auth";
 import { randomUUID } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -95,6 +97,14 @@ export interface DatosEmpleado {
   teamCommissionBase: CommissionBase | null;
   staffPaymentMethod: StaffPaymentMethod;
   clabe?: string | null;
+  // Horario esperado individual (2026-10-03, ver el comentario largo en
+  // Staff.horaEntradaEsperada, schema.prisma) — "HH:MM" en 24h u
+  // null/undefined para no calcular incidencias de asistencia a este
+  // empleado. 0=domingo…6=sábado en diasLaborales, mismo índice que
+  // Branch.diasOperacion.
+  horaEntradaEsperada?: string | null;
+  horaSalidaEsperada?: string | null;
+  diasLaborales?: number[];
 }
 
 function validarDatosEmpleado(d: DatosEmpleado): string | null {
@@ -114,6 +124,15 @@ function validarDatosEmpleado(d: DatosEmpleado): string | null {
   if (d.staffPaymentMethod === StaffPaymentMethod.TRANSFERENCIA) {
     const clabeDigitos = (d.clabe ?? "").replace(/\D/g, "");
     if (clabeDigitos.length !== 18) return "La CLABE debe tener exactamente 18 dígitos";
+  }
+  if (d.horaEntradaEsperada && !horaValida(d.horaEntradaEsperada)) {
+    return "La hora de entrada esperada no es válida";
+  }
+  if (d.horaSalidaEsperada && !horaValida(d.horaSalidaEsperada)) {
+    return "La hora de salida esperada no es válida";
+  }
+  if (d.diasLaborales && d.diasLaborales.some((dia) => !Number.isInteger(dia) || dia < 0 || dia > 6)) {
+    return "Los días laborales no son válidos";
   }
   return null;
 }
@@ -204,6 +223,9 @@ export async function crearEmpleadoAction(
           teamCommissionBase: datos.teamCommissionBase,
           staffPaymentMethod: datos.staffPaymentMethod,
           clabe: datos.staffPaymentMethod === StaffPaymentMethod.TRANSFERENCIA ? (datos.clabe ?? "").replace(/\D/g, "") : datos.clabe?.trim() || null,
+          horaEntradaEsperada: datos.horaEntradaEsperada?.trim() || null,
+          horaSalidaEsperada: datos.horaSalidaEsperada?.trim() || null,
+          ...(datos.diasLaborales ? { diasLaborales: datos.diasLaborales } : {}),
         },
       });
     });
@@ -260,6 +282,9 @@ export async function editarEmpleadoAction(
       teamCommissionBase: datos.teamCommissionBase,
       staffPaymentMethod: datos.staffPaymentMethod,
       clabe: datos.staffPaymentMethod === StaffPaymentMethod.TRANSFERENCIA ? (datos.clabe ?? "").replace(/\D/g, "") : datos.clabe?.trim() || null,
+      horaEntradaEsperada: datos.horaEntradaEsperada?.trim() || null,
+      horaSalidaEsperada: datos.horaSalidaEsperada?.trim() || null,
+      ...(datos.diasLaborales ? { diasLaborales: datos.diasLaborales } : {}),
     };
 
     if (existente.userId) {
@@ -583,6 +608,72 @@ export async function obtenerSugerenciaComisionAction(params: {
   } catch (err: any) {
     console.error("Error al calcular sugerencia de comisión:", err);
     return { ok: false, error: "No se pudo calcular la comisión sugerida" };
+  }
+}
+
+export type IncidenciasAsistenciaResult =
+  | { ok: true; incidencias: IncidenciasAsistencia }
+  | { ok: false; error: string };
+
+/**
+ * Envoltura de calcularIncidenciasAsistencia (lib/incidencias-asistencia.ts,
+ * server-only) como Server Action — mismo criterio que
+ * obtenerSugerenciaComisionAction (arriba): el modal de "Generar pago" en el
+ * cliente la llama al abrir y al cambiar de período, y usa el resultado solo
+ * para PRE-LLENAR el "Monto base" (nunca para forzarlo).
+ */
+export async function obtenerIncidenciasAsistenciaAction(params: {
+  tenantSlug: string;
+  staffId: string;
+  periodoInicio: string;
+  periodoFin: string;
+}): Promise<IncidenciasAsistenciaResult> {
+  const { tenantSlug, staffId, periodoInicio, periodoFin } = params;
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const staff = await db.staff.findUnique({
+      where: { id: staffId },
+      select: {
+        id: true,
+        userId: true,
+        horaEntradaEsperada: true,
+        horaSalidaEsperada: true,
+        diasLaborales: true,
+        baseSalary: true,
+      },
+    });
+    if (!staff) return { ok: false, error: "Empleado no encontrado" };
+
+    const inicio = new Date(periodoInicio);
+    const fin = new Date(periodoFin);
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
+      return { ok: false, error: "El período no es válido" };
+    }
+
+    const incidencias = await calcularIncidenciasAsistencia(
+      tenant.id,
+      {
+        id: staff.id,
+        userId: staff.userId,
+        horaEntradaEsperada: staff.horaEntradaEsperada,
+        horaSalidaEsperada: staff.horaSalidaEsperada,
+        diasLaborales: staff.diasLaborales,
+        baseSalary: Number(staff.baseSalary),
+      },
+      inicio,
+      fin
+    );
+
+    return { ok: true, incidencias };
+  } catch (err: any) {
+    console.error("Error al calcular incidencias de asistencia:", err);
+    return { ok: false, error: "No se pudieron calcular las incidencias de asistencia" };
   }
 }
 

@@ -32,13 +32,31 @@ import { leerSesionPersonal, cerrarSesionPersonal, type SesionPersonal } from "@
  * cada request: el layout del tenant y resolverActor (lib/actor.ts). Como
  * su forma de retorno es idéntica (`SesionPersonal | null`), cambiar la
  * llamada en esos dos archivos no obliga a tocar nada más ahí.
+ *
+ * 2026-10-03, a petición de Carlos (tras notar que Asistencia podía seguir
+ * mostrando "Sigue dentro" de días anteriores): el cierre de arriba es
+ * PEREZOSO — solo ocurre la próxima vez que ESA MISMA sesión (ese
+ * dispositivo/cookie) intenta usarse de nuevo. Si el empleado nunca vuelve
+ * a usar ese dispositivo (cambió de equipo, dejó de trabajar ahí, etc.), la
+ * fila se queda abierta en la BD indefinidamente — no afecta nada fuera del
+ * panel de Asistencia (ver el comentario de StaffLoginSession, arriba),
+ * pero sí se ve mal ahí. `inicioDeHoyMX` (abajo) es lo que usa el cron
+ * /api/cron/cerrar-sesiones-vencidas para encontrar y cerrar esas filas
+ * PROACTIVAMENTE, una vez al día, sin esperar a que el dispositivo vuelva —
+ * mismo cálculo de cierre (`finDeDiaMX` sobre el checkIn original) que el
+ * camino perezoso de arriba, solo que disparado por un cron en vez de por
+ * un request real.
  */
 
 // Mismo offset fijo (UTC-6, sin ajuste de horario de verano) que ya usan
 // mxParts()/matchesPeriodo() en CatalogoClient.tsx y DashboardClient.tsx —
 // se replica aquí en vez de importarlo porque esos son Client Components y
 // este archivo es server-only.
-const MX_OFFSET_MS = 6 * 60 * 60 * 1000;
+// Exportado (2026-10-03, ver lib/incidencias-asistencia.ts) — antes era de
+// uso interno únicamente; el cálculo de incidencias de asistencia para
+// nómina necesita el mismo offset para ubicar un StaffLoginSession.checkIn
+// en su minuto-del-día en México, sin duplicar la constante.
+export const MX_OFFSET_MS = 6 * 60 * 60 * 1000;
 
 /** "YYYY-MM-DD" del día calendario en México al que pertenece ese instante. */
 export function diaMX(epochMs: number): string {
@@ -51,6 +69,18 @@ export function finDeDiaMX(epochMs: number): Date {
   const mx = new Date(epochMs - MX_OFFSET_MS);
   const medianocheSiguienteMX = Date.UTC(mx.getUTCFullYear(), mx.getUTCMonth(), mx.getUTCDate() + 1, 0, 0, 0, 0);
   return new Date(medianocheSiguienteMX + MX_OFFSET_MS - 1);
+}
+
+/**
+ * Instante (UTC) de la medianoche de HOY en México — usado por el cron de
+ * /api/cron/cerrar-sesiones-vencidas (2026-10-03, a petición de Carlos) para
+ * acotar la consulta a solo las StaffLoginSession que de plano empezaron
+ * antes de hoy, sin tener que traer TODAS las filas abiertas de todos los
+ * negocios en cada corrida.
+ */
+export function inicioDeHoyMX(ahoraMs: number = Date.now()): Date {
+  const mx = new Date(ahoraMs - MX_OFFSET_MS);
+  return new Date(Date.UTC(mx.getUTCFullYear(), mx.getUTCMonth(), mx.getUTCDate(), 0, 0, 0, 0) + MX_OFFSET_MS);
 }
 
 /**

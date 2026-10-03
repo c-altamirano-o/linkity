@@ -79,7 +79,11 @@ export function inicioDeHoyEnZonaNegocio(fechaStr: string): Date {
   return new Date(`${fechaStr}T00:00:00${OFFSET_ZONA_NEGOCIO}`);
 }
 
-function parseHoraAMinutos(hhmm: string): number | null {
+// Exportada (2026-10-03, ver lib/incidencias-asistencia.ts) — antes era de
+// uso interno únicamente; el cálculo de tardanzas de nómina individual
+// necesita el mismo parseo "HH:MM" → minutos que ya usa debeRevisar() para
+// el horario de sucursal, sin duplicar la función.
+export function parseHoraAMinutos(hhmm: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
   if (!m) return null;
   const h = parseInt(m[1], 10);

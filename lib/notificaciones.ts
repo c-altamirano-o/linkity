@@ -30,6 +30,18 @@ export interface NotificacionUI {
   // Solo en tipo DISPOSITIVO_PENDIENTE — ver el comentario largo junto a
   // Notificacion.solicitudDispositivoId, schema.prisma.
   solicitudDispositivoId: string | null;
+  // 2026-10-03, corrigiendo un bug reportado por Carlos: "le doy aprobar y
+  // me dice que ya fue aprobada, pero sigue apareciendo como alerta". La
+  // campanita se llena aquí desde los últimos 30 Notificacion de la BD, sin
+  // importar si la SolicitudDispositivo detrás de un DISPOSITIVO_PENDIENTE
+  // ya se resolvió hace rato (desde otra pestaña, otro día, u otro
+  // administrador) — por eso un aviso viejo YA aprobado/rechazado podía
+  // seguir mostrando los botones "Aprobar"/"Rechazar" en cada recarga de
+  // página. Este campo trae el estado real de la solicitud para que
+  // TenantShell.tsx pueda ocultar los botones desde el primer render, no
+  // solo después de que alguien intente usarlos y falle. false cuando el
+  // tipo de notificación no es DISPOSITIVO_PENDIENTE (no aplica).
+  solicitudResuelta: boolean;
   // A dónde navegar al dar clic (ver el comentario largo junto a
   // Notificacion.url, schema.prisma) — null = no es clicable.
   url: string | null;
@@ -42,7 +54,13 @@ export async function getNotificaciones(tenantId: string): Promise<NotificacionU
   const rows = await db.notificacion.findMany({
     orderBy: { createdAt: "desc" },
     take: LIMITE_NOTIFICACIONES,
-    include: { branch: { select: { name: true } } },
+    include: {
+      branch: { select: { name: true } },
+      // Trae el estado actual de la solicitud (ver el comentario de
+      // `solicitudResuelta` en NotificacionUI, arriba) — select mínimo,
+      // nunca se necesita el resto de la fila aquí.
+      solicitudDispositivo: { select: { status: true } },
+    },
   });
   return rows.map((r: any) => ({
     id: r.id,
@@ -52,6 +70,7 @@ export async function getNotificaciones(tenantId: string): Promise<NotificacionU
     leida: r.leida,
     fecha: r.createdAt.toISOString(),
     solicitudDispositivoId: r.solicitudDispositivoId ?? null,
+    solicitudResuelta: r.solicitudDispositivo ? r.solicitudDispositivo.status !== "PENDIENTE" : false,
     url: r.url ?? null,
   }));
 }

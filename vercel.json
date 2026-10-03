@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/revisar-suscripciones",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/cerrar-sesiones-vencidas",
+      "schedule": "30 10 * * *"
     }
   ]
 }

@@ -1499,6 +1499,25 @@ model Staff {
   hiredAt  DateTime @default(now())
   isActive Boolean  @default(true)
 
+  // Horario esperado INDIVIDUAL (2026-10-03, a petición de Carlos: calcular
+  // descuentos reales de nómina por tardanza/horas sin confirmar — ver
+  // lib/incidencias-asistencia.ts). Mismo patrón que
+  // Branch.horaAperturaEsperada/horaCierreEsperada/diasOperacion
+  // (horarios-sucursal.ts), pero por EMPLEADO en vez de por sucursal —
+  // Carlos lo pidió así porque dentro de una misma sucursal puede haber
+  // turnos distintos. horaEntradaEsperada/horaSalidaEsperada en null/vacío
+  // (el estado de TODO Staff creado antes de este cambio) significa "este
+  // empleado no tiene horario configurado todavía": el cálculo de
+  // incidencias simplemente no aplica para él — no se le descuenta nada,
+  // mismo comportamiento que antes de este cambio, hasta que se le capture
+  // un horario desde Personal.
+  horaEntradaEsperada String?
+  horaSalidaEsperada  String?
+  // 0=domingo…6=sábado, mismo índice que Branch.diasOperacion. Default los 7
+  // días por la misma razón que ahí: no obligar a definir días solo por
+  // definir un horario — el administrador desmarca lo que no aplique.
+  diasLaborales Int[] @default([0, 1, 2, 3, 4, 5, 6])
+
   tenant     Tenant         @relation(fields: [tenantId], references: [id])
   branch     Branch         @relation(fields: [branchId], references: [id])
   user       User?          @relation(fields: [userId], references: [id])

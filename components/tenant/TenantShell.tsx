@@ -285,7 +285,10 @@ export default function TenantShell({
     }) => {
       const { id, mensaje, branchName, fecha, solicitudDispositivoId, url } = msg.payload;
       setNotificaciones((prev) =>
-        [{ id, tipo, mensaje, branchName, leida: false, fecha, solicitudDispositivoId: solicitudDispositivoId ?? null, url: url ?? null }, ...prev].slice(0, 30)
+        // solicitudResuelta: false — esta notificación recién se creó en el
+        // servidor como PENDIENTE (ver crearNotificacionDispositivo), así
+        // que nunca llega aquí ya resuelta.
+        [{ id, tipo, mensaje, branchName, leida: false, fecha, solicitudDispositivoId: solicitudDispositivoId ?? null, solicitudResuelta: false, url: url ?? null }, ...prev].slice(0, 30)
       );
       setNotifNoLeidas((n) => n + 1);
 
@@ -333,8 +336,8 @@ export default function TenantShell({
   // Aprobar/Rechazar un dispositivo pendiente — usable tanto desde el
   // pop-up como desde la lista de la campanita (2026-09-23). El "ok:false,
   // error: ya fue resuelta" no se muestra al usuario: significa que otro
-  // administrador (u otra pestaña) ya la resolvió, así que basta con
-  // ocultar los botones aquí también, sin alarmar con un error.
+  // administrador (u otra pestaña, u otro día) ya la resolvió, así que
+  // basta con ocultar los botones aquí también, sin alarmar con un error.
   const resolverDispositivo = async (solicitudId: string, aprobar: boolean) => {
     // 2026-09-23, corrección: antes esto marcaba la solicitud como
     // "resuelta" en pantalla (ocultando los botones Aprobar/Rechazar) SIN
@@ -345,10 +348,24 @@ export default function TenantShell({
     // síntoma que reportó Carlos). Ahora solo se marca como resuelta cuando
     // el servidor de verdad confirma ok:true; si falla, se avisa el motivo
     // y los botones se quedan para poder reintentar.
+    //
+    // 2026-10-03, corrección de un bug real (reportado por Carlos: "le doy
+    // aprobar y me dice que ya fue aprobada, pero sigue apareciendo como
+    // alerta"): el comentario de arriba YA decía que "ya fue resuelta" no
+    // debía mostrarse como error, pero el código de este `else` lo hacía de
+    // todos modos con cualquier mensaje, SolicitudResuelta incluido — nunca
+    // ocultaba los botones en ese caso. Ahora ese mensaje puntual se trata
+    // igual que un ok:true (oculta los botones, sin alarmar); el resto de
+    // errores reales (de conexión, de permisos) sigue avisando con el
+    // alert de siempre. El campo `solicitudResuelta` nuevo en
+    // NotificacionUI (lib/notificaciones.ts) ataca la otra mitad del mismo
+    // bug: que un aviso viejo ya resuelto reapareciera con los botones
+    // visibles desde una recarga de página, antes de siquiera dar clic.
+    const YA_RESUELTA = "Esta solicitud ya fue resuelta";
     const res = await resolverSolicitudDispositivoAction({ tenantSlug: tenant, solicitudId, aprobar }).catch(
       (): { ok: false; error: string } => ({ ok: false, error: "No se pudo conectar con el servidor — inténtalo de nuevo." })
     );
-    if (res.ok) {
+    if (res.ok || (!res.ok && res.error === YA_RESUELTA)) {
       setSolicitudesResueltas((prev) => new Set(prev).add(solicitudId));
     } else {
       window.alert(res.error);
@@ -858,7 +875,10 @@ export default function TenantShell({
                         // aunque su pop-up ya se haya desaparecido solo (p.
                         // ej. si el administrador no lo vio a tiempo).
                         const necesitaAccion =
-                          n.tipo === "DISPOSITIVO_PENDIENTE" && n.solicitudDispositivoId && !solicitudesResueltas.has(n.solicitudDispositivoId);
+                          n.tipo === "DISPOSITIVO_PENDIENTE" &&
+                          n.solicitudDispositivoId &&
+                          !n.solicitudResuelta &&
+                          !solicitudesResueltas.has(n.solicitudDispositivoId);
                         // Clicable solo si trae `url` (ver el comentario largo
                         // en Notificacion.url, schema.prisma) — hoy
                         // únicamente ALERTA_TALLER. Cierra la campanita al
