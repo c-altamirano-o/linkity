@@ -73,3 +73,12 @@ export const MODULE_CATALOG: Record<string, ModuloInfo> = {
 };
 
 export const ALL_MODULE_CODES = Object.keys(MODULE_CATALOG);
+
+// Módulos que Modo Simple apaga (2026-10-03, ver el comentario largo junto a
+// activarModoSimpleAction, app/actions/modulos-tenant-actions.ts) — vive
+// aquí (y no en ese archivo) porque un archivo "use server" solo puede
+// exportar funciones async; esta lista también la necesita, sin tocar la
+// base de datos, configuracion/page.tsx para calcular si Modo Simple ya está
+// activo (los 4 apagados a la vez) y mostrar el botón en el estado correcto
+// desde el primer render, sin depender de un efecto en el cliente.
+export const MODULOS_OCULTOS_MODO_SIMPLE = ["compras", "personal", "asistencia", "sucursales"];

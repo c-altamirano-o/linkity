@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { resolverActor } from "@/lib/actor";
-import { MODULE_CATALOG } from "@/lib/modules-catalog";
+import { MODULE_CATALOG, MODULOS_OCULTOS_MODO_SIMPLE } from "@/lib/modules-catalog";
 import { modulosRecomendadosOff } from "@/lib/modulos-rubro";
 
 /**
@@ -114,4 +114,55 @@ export async function aplicarRecomendadoRubroAction(params: {
     console.error("Error al aplicar el recomendado de rubro:", err);
     return { ok: false, error: "No se pudo aplicar la recomendación" };
   }
+}
+
+// Modo Simple (2026-10-03, a petición de Carlos: una interfaz para el
+// microempresario que trabaja solo o con 1-2 personas, sin la carga de
+// módulos pensados para un negocio con varias sucursales o plantilla
+// grande). Deliberadamente conservador en esta primera fase: Reparaciones/
+// Taller/Aduana, Catálogo, Inventario, Caja, Reportes y Facturación se
+// QUEDAN activos — todavía no existe una pantalla consolidada de
+// "Reparaciones" (fase 2; la fase 1, "Ventas", ya quedó integrada directo en
+// POSClient.tsx en vez de ser un módulo aparte), y apagar Reparaciones hoy
+// dejaría sin forma de operar a cualquier taller que ya viva de eso. Lo que
+// SÍ se apaga (MODULOS_OCULTOS_MODO_SIMPLE, lib/modules-catalog.ts) son los
+// módulos que, sin importar el rubro, casi nunca le sirven a 1-2 personas:
+// Compras (control de pedidos formal a proveedor), Personal (nómina/
+// comisión/incidencias de asistencia — una sola persona se paga a mano),
+// Asistencia (panel de quién entró/salió por PIN — no aplica si eres tú
+// mismo) y Sucursales (una sola ubicación). "dashboard" nunca entra ahí — es
+// isCore, no se puede apagar ni con este botón ni con el de arriba.
+async function alternarModoSimple(tenantSlug: string, activar: boolean): Promise<AccionModulosResult> {
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+
+  try {
+    for (const code of MODULOS_OCULTOS_MODO_SIMPLE) {
+      const info = MODULE_CATALOG[code];
+      const mod = await prisma.module.upsert({
+        where: { code },
+        update: {},
+        create: { code, name: info.name, isCore: info.isCore },
+      });
+      await prisma.tenantModule.upsert({
+        where: { tenantId_moduleId: { tenantId: resuelto.tenant.id, moduleId: mod.id } },
+        update: { isActive: !activar },
+        create: { tenantId: resuelto.tenant.id, moduleId: mod.id, isActive: !activar },
+      });
+    }
+
+    revalidatePath(`/${tenantSlug}`, "layout");
+    return { ok: true };
+  } catch (err) {
+    console.error(`Error al ${activar ? "activar" : "desactivar"} modo simple:`, err);
+    return { ok: false, error: `No se pudo ${activar ? "activar" : "desactivar"} el modo simple` };
+  }
+}
+
+export async function activarModoSimpleAction(params: { tenantSlug: string }): Promise<AccionModulosResult> {
+  return alternarModoSimple(params.tenantSlug, true);
+}
+
+export async function desactivarModoSimpleAction(params: { tenantSlug: string }): Promise<AccionModulosResult> {
+  return alternarModoSimple(params.tenantSlug, false);
 }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateDatosTicket, guardarWhatsappBusinessAction, desconectarWhatsappBusinessAction, probarWhatsappBusinessAction, actualizarWhatsappNumeroManualAction } from "@/app/actions/tenant";
-import { alternarModuloPropioAction, aplicarRecomendadoRubroAction } from "@/app/actions/modulos-tenant-actions";
+import { alternarModuloPropioAction, aplicarRecomendadoRubroAction, activarModoSimpleAction, desactivarModoSimpleAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
@@ -21,7 +21,7 @@ import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
   LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock, Phone, Undo2,
   Bell, RefreshCw, Smartphone, X, Wrench, Circle, ArrowRight, Receipt,
-  MessageCircle, Send, Unlink, Percent,
+  MessageCircle, Send, Unlink, Percent, Zap,
 } from "lucide-react";
 import type { EstadoTallerChecklist } from "@/lib/roles-server";
 import {
@@ -555,6 +555,36 @@ export default function ConfiguracionClient({
       }
       setModulosState((prev) => prev.map((m) => ({ ...m, activo: !recomendadosOff.includes(m.code) })));
       setModulosMensaje({ tipo: "ok", texto: "Se aplicó la recomendación para tu rubro." });
+      router.refresh();
+      setTimeout(() => setModulosMensaje(null), 4000);
+    });
+  };
+
+  // Modo Simple (2026-10-03, ver el comentario largo junto a
+  // activarModoSimpleAction, app/actions/modulos-tenant-actions.ts) — se
+  // deriva del mismo modulosState de arriba (no un booleano aparte) para que
+  // nunca se desincronice si el dueño apaga/prende alguno de esos 4 módulos
+  // a mano desde la lista de abajo.
+  const MODULOS_MODO_SIMPLE = ["compras", "personal", "asistencia", "sucursales"];
+  const modoSimpleActivo = MODULOS_MODO_SIMPLE.every((code) => modulosState.find((m) => m.code === code)?.activo === false);
+  const [aplicandoModoSimple, startModoSimpleTransition] = useTransition();
+
+  const alternarModoSimple = () => {
+    setModulosMensaje(null);
+    const activar = !modoSimpleActivo;
+    startModoSimpleTransition(async () => {
+      const result = activar
+        ? await activarModoSimpleAction({ tenantSlug })
+        : await desactivarModoSimpleAction({ tenantSlug });
+      if (!result.ok) {
+        setModulosMensaje({ tipo: "error", texto: result.error });
+        return;
+      }
+      setModulosState((prev) => prev.map((m) => (MODULOS_MODO_SIMPLE.includes(m.code) ? { ...m, activo: !activar } : m)));
+      setModulosMensaje({
+        tipo: "ok",
+        texto: activar ? "Modo Simple activado — tu menú ahora solo muestra lo esencial." : "Volviste al menú completo.",
+      });
       router.refresh();
       setTimeout(() => setModulosMensaje(null), 4000);
     });
@@ -1617,6 +1647,57 @@ export default function ConfiguracionClient({
             Elige qué módulos aparecen en tu menú. Apagar uno no borra ninguna información que ya
             hayas capturado — solo deja de mostrarse hasta que lo vuelvas a activar.
           </p>
+
+          {/* Modo Simple (2026-10-03, a petición de Carlos: "a un
+              autoempleado lo estamos saturando de opciones que
+              probablemente no usará... debemos crear una interface que
+              también piense en él. En el único que trabaja en su empresa,
+              o el dueño que solo tiene un empleado en la tienda y un
+              técnico" — y, confirmado explícitamente, "el modo simple lo
+              puede activar o desactivar el dueño"). Un solo switch que
+              apaga de un golpe los módulos que casi nunca le sirven a 1-2
+              personas (Compras, Personal, Asistencia, Sucursales — ver
+              MODULOS_OCULTOS_MODO_SIMPLE, lib/modules-catalog.ts);
+              Reparaciones/Caja/Catálogo/Inventario/Reportes/Facturación se
+              quedan, porque siguen siendo el pan de cada día de un taller
+              chico. No borra nada — es un atajo sobre el mismo switch por
+              módulo de abajo, así que el dueño puede re-prender cualquiera
+              de los 4 a mano sin desactivar Modo Simple por completo. */}
+          <div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3.5">
+            <Zap className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-xs font-medium text-foreground">Modo Simple</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Pensado para quien trabaja solo o con 1-2 personas: oculta Compras, Personal,
+                Asistencia y Sucursales de tu menú, para que solo veas lo esencial. Puedes
+                desactivarlo cuando quieras sin perder ninguna información.
+              </p>
+              <button
+                onClick={alternarModoSimple}
+                disabled={aplicandoModoSimple}
+                className={`mt-2 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex items-center gap-1.5 ${
+                  modoSimpleActivo ? "text-foreground font-medium" : "btn-ghost"
+                }`}
+              >
+                {aplicandoModoSimple && <Loader2 className="w-3 h-3 animate-spin" />}
+                {!aplicandoModoSimple && (
+                  <span
+                    className={`relative w-8 h-4.5 rounded-full transition-colors flex-shrink-0 inline-block ${
+                      modoSimpleActivo ? "bg-amber-500" : "bg-muted-foreground/30"
+                    }`}
+                    style={{ width: "2rem", height: "1.125rem" }}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${
+                        modoSimpleActivo ? "translate-x-3.5" : "translate-x-0"
+                      }`}
+                    />
+                  </span>
+                )}
+                {modoSimpleActivo ? "Modo Simple activado" : "Activar Modo Simple"}
+              </button>
+            </div>
+          </div>
 
           {recomendadosOff.length > 0 && (
             <div className="mb-5 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3.5">

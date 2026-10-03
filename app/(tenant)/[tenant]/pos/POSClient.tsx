@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, ShoppingCart, Barcode, Plus, Minus, X, Check,
-  User, ChevronDown, Building2, AlertTriangle, Printer, Wrench,
+  User, UserPlus, ChevronDown, Building2, AlertTriangle, Printer, Wrench, Loader2,
 } from "lucide-react";
-import type { PosData, ProductoPOS } from "@/lib/pos-data";
+import type { PosData, ProductoPOS, ClientePOS } from "@/lib/pos-data";
 import type { RepairParaCobro } from "@/lib/reparaciones-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { crearVentaAction, type MetodoPago } from "@/app/actions/pos-actions";
+import { abrirCajaAction } from "@/app/actions/caja-actions";
+import { crearClienteAction } from "@/app/actions/clientes-actions";
 import { ProductoIcono } from "@/lib/catalogo-iconos";
 import { CANTIDAD_CHIPS_CATEGORIA } from "@/lib/theme-presets";
 import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData, type QrDestinoTicket } from "@/lib/recibo-imprimible";
@@ -135,6 +137,100 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const [clientePickerAbierto, setClientePickerAbierto] = useState(false);
   const [clienteQuery, setClienteQuery] = useState("");
 
+  // "+ Nuevo cliente" inline (2026-10-03, Modo Simple — ver el comentario
+  // largo junto a activarModoSimpleAction, app/actions/modulos-tenant-
+  // actions.ts: para el negocio de 1-2 personas, POS ES la pantalla de
+  // "Ventas", así que el único paso que antes obligaba a salir de aquí
+  // —registrar un cliente nuevo en /clientes— se trae directo al picker de
+  // cliente de abajo. clientesExtra guarda los clientes creados DESDE AQUÍ
+  // en esta sesión de POS (la prop `clientes` solo se refresca cuando el
+  // Server Component vuelve a correr) para que aparezcan de inmediato en la
+  // lista/búsqueda sin esperar un recargo completo de la página.
+  const [clientesExtra, setClientesExtra] = useState<ClientePOS[]>([]);
+  const [nuevoClienteAbierto, setNuevoClienteAbierto] = useState(false);
+  const [nuevoClienteNombre, setNuevoClienteNombre] = useState("");
+  const [nuevoClienteTelefono, setNuevoClienteTelefono] = useState("");
+  const [creandoCliente, startCrearClienteTransition] = useTransition();
+  const [errorNuevoCliente, setErrorNuevoCliente] = useState<string | null>(null);
+
+  const abrirFormularioNuevoCliente = () => {
+    setErrorNuevoCliente(null);
+    // Precarga el nombre con lo que ya se había escrito en el buscador del
+    // picker (2026-10-03) — si el cajero tecleó "Juan Pérez" buscando a un
+    // cliente que no existe, no tiene sentido pedirle que lo vuelva a
+    // escribir en el formulario de alta.
+    setNuevoClienteNombre(clienteQuery.trim());
+    setNuevoClienteTelefono("");
+    setNuevoClienteAbierto(true);
+  };
+
+  const handleCrearCliente = () => {
+    const nombre = nuevoClienteNombre.trim();
+    if (!nombre) {
+      setErrorNuevoCliente("El nombre del cliente es obligatorio");
+      return;
+    }
+    setErrorNuevoCliente(null);
+    startCrearClienteTransition(async () => {
+      const res = await crearClienteAction({
+        tenantSlug,
+        name: nombre,
+        phone: nuevoClienteTelefono.trim() || null,
+      });
+      if (!res.ok) {
+        setErrorNuevoCliente(res.error);
+        return;
+      }
+      setClientesExtra((prev) => [...prev, { id: res.id, name: nombre, phone: nuevoClienteTelefono.trim() || null, isWholesaler: false }]);
+      setClienteId(res.id);
+      setClientePickerAbierto(false);
+      setNuevoClienteAbierto(false);
+      setNuevoClienteNombre("");
+      setNuevoClienteTelefono("");
+      setClienteQuery("");
+      router.refresh();
+    });
+  };
+
+  // Caja abierta "optimista" (2026-10-03, Modo Simple) — ver handleAbrirCaja
+  // más abajo. Se superpone sobre cajaAbiertaPorSucursal (que viene de la
+  // prop `data`, solo se refresca con el Server Component) para que, apenas
+  // el cajero abre la caja sin salir de POS, el botón "Cobrar" se habilite
+  // al instante sin esperar un recargo completo de la página.
+  const [cajaAbiertaOverride, setCajaAbiertaOverride] = useState<Record<string, boolean>>({});
+  const [abrirCajaAbierto, setAbrirCajaAbierto] = useState(false);
+  const [montoAperturaInput, setMontoAperturaInput] = useState("");
+  const [notasAperturaInput, setNotasAperturaInput] = useState("");
+  const [abriendoCaja, startAbrirCajaTransition] = useTransition();
+  const [errorAbrirCaja, setErrorAbrirCaja] = useState<string | null>(null);
+
+  const handleAbrirCaja = () => {
+    if (!branchId) return;
+    const monto = montoAperturaInput.trim() === "" ? 0 : Number(montoAperturaInput);
+    if (!Number.isFinite(monto) || monto < 0) {
+      setErrorAbrirCaja("El monto de apertura no es válido");
+      return;
+    }
+    setErrorAbrirCaja(null);
+    startAbrirCajaTransition(async () => {
+      const res = await abrirCajaAction({
+        tenantSlug,
+        branchId,
+        montoApertura: monto,
+        notas: notasAperturaInput.trim() || null,
+      });
+      if (!res.ok) {
+        setErrorAbrirCaja(res.error);
+        return;
+      }
+      setCajaAbiertaOverride((prev) => ({ ...prev, [branchId]: true }));
+      setAbrirCajaAbierto(false);
+      setMontoAperturaInput("");
+      setNotasAperturaInput("");
+      router.refresh();
+    });
+  };
+
   const [montoRecibido, setMontoRecibido] = useState("");
   const [mixtoEfectivo, setMixtoEfectivo] = useState("");
   const [mixtoTarjeta, setMixtoTarjeta] = useState("");
@@ -218,11 +314,16 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   // crearVentaAction, pos-actions.ts — esa es la validación que de verdad
   // importa; esto solo evita que el cajero llene todo el carrito para
   // enterarse hasta el final).
-  const cajaAbierta = branchId ? cajaAbiertaPorSucursal[branchId] ?? false : false;
+  const cajaAbierta = branchId ? cajaAbiertaOverride[branchId] ?? cajaAbiertaPorSucursal[branchId] ?? false : false;
 
-  const clienteSeleccionado = clientes.find((c) => c.id === clienteId) ?? null;
+  // clientesTotal = los del servidor + los dados de alta desde este mismo
+  // POS en lo que va de la sesión (ver clientesExtra arriba) — un solo
+  // arreglo para que clienteSeleccionado/clientesFiltrados encuentren al
+  // recién creado sin esperar un recargo de la página.
+  const clientesTotal = clientesExtra.length > 0 ? [...clientes, ...clientesExtra] : clientes;
+  const clienteSeleccionado = clientesTotal.find((c) => c.id === clienteId) ?? null;
   const isWholesaler = clienteSeleccionado?.isWholesaler ?? false;
-  const clientesFiltrados = clientes
+  const clientesFiltrados = clientesTotal
     .filter((c) => c.name.toLowerCase().includes(clienteQuery.toLowerCase()))
     .slice(0, 8);
 
@@ -722,7 +823,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           </div>
         ) : (
           <button
-            onClick={() => setClientePickerAbierto((v) => !v)}
+            onClick={() => { setClientePickerAbierto((v) => !v); setNuevoClienteAbierto(false); setErrorNuevoCliente(null); }}
             className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary-text transition-colors"
           >
             <User className="w-4 h-4" />
@@ -732,35 +833,87 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
 
         {clientePickerAbierto && !clienteSeleccionado && (
           <div className="absolute left-4 right-4 top-full mt-1 z-10 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
-            <input
-              autoFocus
-              type="text"
-              value={clienteQuery}
-              onChange={(e) => setClienteQuery(e.target.value)}
-              placeholder="Buscar cliente..."
-              className="w-full px-3 py-2 text-xs bg-muted border-b border-border focus:outline-none text-foreground placeholder:text-muted-foreground"
-            />
-            <div className="max-h-40 overflow-y-auto">
-              <button
-                onClick={() => { setClienteId(null); setClientePickerAbierto(false); setClienteQuery(""); }}
-                className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:bg-muted"
-              >
-                Cliente general (sin registrar)
-              </button>
-              {clientesFiltrados.map((c) => (
+            {/* "+ Nuevo cliente" inline (2026-10-03, Modo Simple) — ver el
+                comentario largo junto a clientesExtra más arriba. Reemplaza
+                la búsqueda/lista por un formulario corto mientras está
+                abierto; al crear, selecciona al cliente recién creado y
+                cierra el picker entero, igual que elegir uno ya existente. */}
+            {nuevoClienteAbierto ? (
+              <div className="p-3 space-y-2">
+                <p className="text-xs font-medium text-foreground">Nuevo cliente</p>
+                <input
+                  autoFocus
+                  type="text"
+                  value={nuevoClienteNombre}
+                  onChange={(e) => setNuevoClienteNombre(e.target.value)}
+                  placeholder="Nombre *"
+                  className="w-full px-2.5 py-1.5 text-xs bg-muted border border-border rounded-md focus:outline-none text-foreground placeholder:text-muted-foreground"
+                />
+                <input
+                  type="tel"
+                  value={nuevoClienteTelefono}
+                  onChange={(e) => setNuevoClienteTelefono(e.target.value)}
+                  placeholder="Teléfono (opcional)"
+                  className="w-full px-2.5 py-1.5 text-xs bg-muted border border-border rounded-md focus:outline-none text-foreground placeholder:text-muted-foreground"
+                />
+                {errorNuevoCliente && <p className="text-[11px] text-red-600">{errorNuevoCliente}</p>}
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={handleCrearCliente}
+                    disabled={creandoCliente}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-60"
+                  >
+                    {creandoCliente && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Crear y seleccionar
+                  </button>
+                  <button
+                    onClick={() => { setNuevoClienteAbierto(false); setErrorNuevoCliente(null); }}
+                    className="px-2.5 py-1.5 text-xs font-medium rounded-md text-muted-foreground hover:bg-muted"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <input
+                  autoFocus
+                  type="text"
+                  value={clienteQuery}
+                  onChange={(e) => setClienteQuery(e.target.value)}
+                  placeholder="Buscar cliente..."
+                  className="w-full px-3 py-2 text-xs bg-muted border-b border-border focus:outline-none text-foreground placeholder:text-muted-foreground"
+                />
+                <div className="max-h-40 overflow-y-auto">
+                  <button
+                    onClick={() => { setClienteId(null); setClientePickerAbierto(false); setClienteQuery(""); }}
+                    className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:bg-muted"
+                  >
+                    Cliente general (sin registrar)
+                  </button>
+                  {clientesFiltrados.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => { setClienteId(c.id); setClientePickerAbierto(false); setClienteQuery(""); }}
+                      className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted truncate flex justify-between items-center"
+                    >
+                      <span className="truncate">{c.name}</span>
+                      {c.isWholesaler && <span className="text-[10px] text-amber-700 font-medium">Mayorista</span>}
+                    </button>
+                  ))}
+                  {clientesFiltrados.length === 0 && (
+                    <p className="px-3 py-2 text-[12.5px] text-muted-foreground/70">Sin resultados</p>
+                  )}
+                </div>
                 <button
-                  key={c.id}
-                  onClick={() => { setClienteId(c.id); setClientePickerAbierto(false); setClienteQuery(""); }}
-                  className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted truncate flex justify-between items-center"
+                  onClick={abrirFormularioNuevoCliente}
+                  className="w-full flex items-center gap-1.5 text-left px-3 py-2 text-xs font-medium text-primary-text hover:bg-muted border-t border-border"
                 >
-                  <span className="truncate">{c.name}</span>
-                  {c.isWholesaler && <span className="text-[10px] text-amber-700 font-medium">Mayorista</span>}
+                  <UserPlus className="w-3.5 h-3.5" />
+                  Nuevo cliente{clienteQuery.trim() ? ` "${clienteQuery.trim()}"` : ""}
                 </button>
-              ))}
-              {clientesFiltrados.length === 0 && (
-                <p className="px-3 py-2 text-[12.5px] text-muted-foreground/70">Sin resultados</p>
-              )}
-            </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1075,17 +1228,66 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           )}
         </button>
         {razonNoPuedeCobrar && !isPending && (
-          <p className="text-xs text-amber-600 text-center mt-2">
-            {razonNoPuedeCobrar}
-            {branchId && !cajaAbierta && (
-              <>
-                {" — "}
-                <Link href={`/${tenantSlug}/caja`} className="underline font-medium">
-                  ábrela en Caja
-                </Link>
-              </>
+          <div className="mt-2">
+            <p className="text-xs text-amber-600 text-center">{razonNoPuedeCobrar}</p>
+
+            {/* Abrir caja sin salir de POS (2026-10-03, Modo Simple — ver
+                el comentario largo junto a activarModoSimpleAction,
+                app/actions/modulos-tenant-actions.ts). Antes esto era solo
+                un <Link href="/caja">, que sacaba al cajero de la pantalla
+                de venta — para el negocio de 1-2 personas, POS debe ser la
+                única ventana que necesita abrir en todo el día. Misma
+                acción (abrirCajaAction) que usa Caja/CajaClient.tsx, solo
+                que en un formulario corto aquí mismo. */}
+            {branchId && !cajaAbierta && !abrirCajaAbierto && (
+              <button
+                onClick={() => setAbrirCajaAbierto(true)}
+                className="mt-1.5 w-full text-center text-xs font-medium text-amber-700 underline"
+              >
+                Abrir caja aquí
+              </button>
             )}
-          </p>
+
+            {branchId && !cajaAbierta && abrirCajaAbierto && (
+              <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+                <p className="text-xs font-medium text-foreground">Abrir caja</p>
+                <input
+                  autoFocus
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={montoAperturaInput}
+                  onChange={(e) => setMontoAperturaInput(e.target.value)}
+                  placeholder="Monto de apertura (efectivo inicial)"
+                  className="w-full px-2.5 py-1.5 text-xs bg-card border border-border rounded-md focus:outline-none text-foreground placeholder:text-muted-foreground"
+                />
+                <input
+                  type="text"
+                  value={notasAperturaInput}
+                  onChange={(e) => setNotasAperturaInput(e.target.value)}
+                  placeholder="Notas (opcional)"
+                  className="w-full px-2.5 py-1.5 text-xs bg-card border border-border rounded-md focus:outline-none text-foreground placeholder:text-muted-foreground"
+                />
+                {errorAbrirCaja && <p className="text-[11px] text-red-600">{errorAbrirCaja}</p>}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleAbrirCaja}
+                    disabled={abriendoCaja}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-60"
+                  >
+                    {abriendoCaja && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Abrir caja
+                  </button>
+                  <button
+                    onClick={() => { setAbrirCajaAbierto(false); setErrorAbrirCaja(null); }}
+                    className="px-2.5 py-1.5 text-xs font-medium rounded-md text-muted-foreground hover:bg-muted"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </>
