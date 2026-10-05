@@ -252,3 +252,53 @@ export async function crearNotificacionAlertaTaller(params: {
     url,
   }).catch((err) => console.error("No se pudo enviar el push de alerta de taller:", err));
 }
+
+/**
+ * Falla REAL de entrega de un WhatsApp (2026-10-05) — ver el comentario
+ * largo en lib/whatsapp-tenant.ts (enviarWhatsappTenant/procesarEstadoWhatsapp)
+ * para la arquitectura completa. Se crea desde el webhook de Meta
+ * (app/api/webhooks/whatsapp/route.ts), después de que el sistema ya
+ * intentó, solo, el reenvío automático con el otro formato de número si
+ * aplicaba — así que si esta notificación aparece, ya no hay nada más que
+ * el sistema pueda hacer solo: alguien del negocio necesita ver el motivo
+ * real que dio Meta. Tenant-wide (branchId null) a propósito, mismo
+ * criterio que CAJA_* / ALERTA_TALLER — este sistema no filtra por rol
+ * todavía. Sin `url` (a diferencia de ALERTA_TALLER): el contexto no
+ * siempre corresponde a un folio navegable (ej. una prueba manual), el
+ * texto del aviso ya incluye ese contexto tal cual.
+ */
+export async function crearNotificacionWhatsappFallido(params: {
+  tenantId: string;
+  contexto: string;
+  telefono: string;
+  motivo: string;
+}): Promise<void> {
+  const { tenantId, contexto, telefono, motivo } = params;
+  const db = getTenantPrisma(tenantId);
+  const mensaje = `No se pudo entregar un WhatsApp (${contexto}, al ${telefono}): ${motivo}`;
+
+  const notificacion = await db.notificacion.create({
+    data: { tenantId, branchId: null, tipo: NotificacionTipo.WHATSAPP_FALLIDO, mensaje },
+  });
+
+  try {
+    const supabase = createAdminClient();
+    await supabase.channel(`notificaciones:${tenantId}`).send({
+      type: "broadcast",
+      event: "whatsapp_fallido",
+      payload: {
+        id: notificacion.id,
+        mensaje,
+        branchName: null,
+        fecha: notificacion.createdAt.toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error("No se pudo enviar el broadcast de WhatsApp fallido (el aviso ya quedó guardado):", err);
+  }
+
+  await enviarPushTenant(tenantId, {
+    title: "WhatsApp no entregado",
+    body: mensaje,
+  }).catch((err) => console.error("No se pudo enviar el push de WhatsApp fallido:", err));
+}

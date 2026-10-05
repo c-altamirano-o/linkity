@@ -444,7 +444,7 @@ export async function probarWhatsappBusinessAction(tenantSlug: string, telefonoP
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: resuelto.tenant.id },
-    select: { name: true, whatsappPhoneNumberId: true, whatsappAccessToken: true },
+    select: { id: true, name: true, whatsappPhoneNumberId: true, whatsappAccessToken: true },
   });
   if (!tenant) return { success: false, error: "Negocio no encontrado" };
 
@@ -463,7 +463,7 @@ export async function probarWhatsappBusinessAction(tenantSlug: string, telefonoP
     urlSeguimiento: "https://linkitysoluciones.mx",
   });
 
-  const res = await enviarWhatsappTenant(tenant, numero, mensaje);
+  const res = await enviarWhatsappTenant(tenant, numero, mensaje, "Prueba manual desde Configuración");
   if (!res.enviado) return { success: false, error: res.motivo ?? "No se pudo enviar" };
   return { success: true };
 }

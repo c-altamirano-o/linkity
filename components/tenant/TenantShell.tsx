@@ -17,7 +17,7 @@ import {
   GitBranch, BookOpen, LogOut, Bell, ChevronDown, Settings,
   Menu, X, ChevronLeft, ChevronRight, LifeBuoy, CalendarCheck, CalendarDays,
   Unlock, Lock, AlertTriangle, Smartphone, Check, ListChecks, CheckCircle2, Circle,
-  HelpCircle,
+  HelpCircle, MessageSquareWarning,
 } from "lucide-react";
 
 // Tipo real de NotificacionUI (lib/notificaciones.ts) — se reusa aquí en
@@ -49,10 +49,17 @@ const ESTILO_NOTIFICACION: Record<TipoNotificacion, { icon: typeof Unlock; bg: s
   // DISPOSITIVO_PENDIENTE (azul) pero con su propio color para distinguirse
   // a simple vista.
   ALERTA_TALLER: { icon: Wrench, bg: "bg-amber-50", color: "text-amber-600" },
+  // 2026-10-05, a petición de Carlos ("necesito ver... por qué da el falso
+  // positivo de enviado") — ver el comentario largo en
+  // NotificacionTipo.WHATSAPP_FALLIDO, schema.prisma. Rosa/rojizo para
+  // distinguirse a simple vista tanto de CAJA_NO_* (rojo, incumplimiento de
+  // horario) como de ALERTA_TALLER (ámbar, informativo operativo) — esto es
+  // una falla real de entrega hacia un cliente final.
+  WHATSAPP_FALLIDO: { icon: MessageSquareWarning, bg: "bg-rose-50", color: "text-rose-600" },
 };
 
 function esAlertaUrgente(tipo: TipoNotificacion): boolean {
-  return tipo === "CAJA_NO_ABIERTA" || tipo === "CAJA_NO_CERRADA";
+  return tipo === "CAJA_NO_ABIERTA" || tipo === "CAJA_NO_CERRADA" || tipo === "WHATSAPP_FALLIDO";
 }
 
 // Estructura fija (secciones, orden, ícono) — el NOMBRE de cada ítem ya no
@@ -323,6 +330,9 @@ export default function TenantShell({
       .on("broadcast", { event: "dispositivo_pendiente" }, recibir("DISPOSITIVO_PENDIENTE"))
       // "Capa 1" de alertas de taller (2026-10-01) — ver lib/notificaciones.ts.
       .on("broadcast", { event: "alerta_taller" }, recibir("ALERTA_TALLER"))
+      // Falla real de entrega de WhatsApp (2026-10-05) — ver
+      // crearNotificacionWhatsappFallido, lib/notificaciones.ts.
+      .on("broadcast", { event: "whatsapp_fallido" }, recibir("WHATSAPP_FALLIDO"))
       .subscribe();
 
     return () => {

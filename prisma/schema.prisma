@@ -116,6 +116,16 @@ model Tenant {
   // URL de la API) — sí es seguro mostrarlo de vuelta en Configuración.
   whatsappPhoneNumberId String?
   whatsappAccessToken   String?
+  // whatsappAppSecret (2026-10-05, reservado): el "App Secret" de Meta que
+  // hace falta para verificar la firma HMAC (X-Hub-Signature-256) del
+  // webhook de estado de entrega (ver app/api/webhooks/whatsapp/route.ts).
+  // Se agrega el campo AHORA (aunque todavía no se usa) para no necesitar
+  // otra migración después — Carlos pidió explícitamente activar esa
+  // verificación antes de ofrecer el envío de WhatsApp como servicio a
+  // clientes externos de Linkity, una vez que el webhook esté probado y
+  // funcionando. Tan sensible como whatsappAccessToken: mismo criterio,
+  // nunca debe seleccionarse hacia un Client Component.
+  whatsappAppSecret     String?
 
   // WhatsApp MANUAL (2026-10-02, a petición de Carlos: no todos sus tenants
   // quieren/pueden pasar por la verificación de negocio de Meta que exige el
@@ -288,6 +298,10 @@ model Tenant {
   notificaciones    Notificacion[]
   pushSubscriptions     PushSubscription[]
   solicitudesDispositivo SolicitudDispositivo[]
+  // Correlación de estado real de entrega de WhatsApp (2026-10-05) — ver el
+  // comentario largo junto al modelo WhatsappMensajeEnviado, más abajo.
+  whatsappMensajesEnviados   WhatsappMensajeEnviado[]
+  whatsappNumerosConfirmados WhatsappNumeroConfirmado[]
 }
 
 // Textos de UI personalizables por tenant (nombre del módulo, de la entidad,
@@ -1336,6 +1350,106 @@ enum NotificacionTipo {
   // CAJA_*/DISPOSITIVO_PENDIENTE, con `url` (ver Notificacion.url) apuntando
   // a `/[tenant]/aduana?folio=...` para que un clic lleve directo al folio.
   ALERTA_TALLER
+  // 2026-10-05, a petición de Carlos: "necesito ver a dónde se mandó ese
+  // mensaje o por qué da el falso positivo de enviado" — hasta ahora el
+  // SaaS solo sabía que Meta ACEPTÓ el mensaje (200 OK), nunca si de verdad
+  // se entregó. Este tipo se crea desde el webhook
+  // (app/api/webhooks/whatsapp/route.ts → procesarEstadoWhatsapp,
+  // lib/whatsapp-tenant.ts) cuando Meta reporta `status: failed` para un
+  // mensaje — después de que el sistema ya intentó, solo, el reenvío
+  // automático con el otro formato de número (52 vs 521, ver
+  // WhatsappNumeroConfirmado abajo) si aplicaba. Tenant-wide (branchId
+  // null) a propósito, mismo criterio que CAJA_*/ALERTA_TALLER: este
+  // sistema de notificaciones no filtra por rol todavía.
+  WHATSAPP_FALLIDO
+}
+
+// 2026-10-05, a petición de Carlos — ver el comentario largo en
+// lib/whatsapp-tenant.ts (enviarWhatsappTenant) para la arquitectura
+// completa. Un 200 de la API de WhatsApp solo significa "Meta aceptó el
+// mensaje en su cola", nunca "se entregó" — el estado real (entregado,
+// leído, o falló con el motivo) llega después, de forma asíncrona, por el
+// webhook. Esta tabla correlaciona cada mensaje mandado (su wamid, el ID
+// que regresa Meta al aceptarlo) con el contexto humano y los datos
+// necesarios para: (a) saber a quién avisar si falla, y (b) poder
+// reintentar con el otro formato de número sin tener que volver a armar el
+// mensaje desde cero.
+model WhatsappMensajeEnviado {
+  id       String @id @default(cuid())
+  tenantId String
+
+  // ID que regresa Meta al aceptar el mensaje (`messages[0].id` en la
+  // respuesta) — es lo único que trae el webhook para identificar de qué
+  // mensaje habla, por eso es la clave de correlación.
+  wamid String @unique
+
+  // Últimos 10 dígitos del teléfono del destinatario — el número LOCAL de
+  // México nunca cambia entre el formato con o sin el "1" extra, solo
+  // cambia el prefijo de país que se le antepone (ver telefonoNormalizadoMx,
+  // lib/whatsapp-tenant.ts). Clave (junto con tenantId) para "recordar" en
+  // WhatsappNumeroConfirmado qué formato sí funcionó con este cliente.
+  telefonoNormalizado String
+
+  // Número EXACTO (con el prefijo que se haya usado en este intento
+  // puntual, ej. "52..." o "521...") que de verdad se mandó a la API de
+  // Meta — puede no coincidir con telefonoNormalizado + "52" si este
+  // intento ya es un reintento con el formato alterno.
+  telefonoEnviado String
+
+  // Texto libre para que un administrador entienda, desde la notificación
+  // de falla, DE QUÉ se trataba este mensaje sin tener que adivinar (ej.
+  // "Reparación folio ABC123", "Prueba manual desde Configuración").
+  contexto String
+
+  // Cuerpo exacto mandado como parámetro {{1}} de la plantilla — se guarda
+  // para poder reintentar con el otro formato de número sin tener que
+  // volver a armar el mensaje (ese contenido ya no existe en memoria para
+  // cuando llega la respuesta async del webhook).
+  mensajeTexto String
+
+  // Si este envío es el reintento automático (con el formato alterno) de
+  // OTRO mensaje que Meta reportó como fallido, aquí vive el id de aquel
+  // mensaje original — evita encadenar un tercer intento (ver
+  // reintentarWhatsappFormatoAlternoMx, lib/whatsapp-tenant.ts: ya reintentó
+  // una vez, si ese reintento también falla se avisa de verdad, no se
+  // insiste más).
+  reintentoDeId String?
+  reintentoDe   WhatsappMensajeEnviado?  @relation("ReintentoWhatsapp", fields: [reintentoDeId], references: [id])
+  reintentos    WhatsappMensajeEnviado[] @relation("ReintentoWhatsapp")
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, telefonoNormalizado])
+}
+
+// 2026-10-05 — la "memoria" que evita que el sistema (o Carlos, o el dueño
+// de cada negocio) tenga que seguir adivinando si un cliente necesita el
+// "1" extra después de México (52 1 XXXXXXXXXX) o el formato vigente desde
+// 2019 (52 XXXXXXXXXX): Meta no ofrece ninguna forma confiable de
+// consultarlo por adelantado (confirmado por investigación — es un problema
+// conocido, sin solución del lado de la API, ver la conversación con
+// Carlos del 2026-10-05). En cuanto el webhook confirma que un mensaje de
+// verdad se entregó/leyó (nunca solo "aceptado"), se guarda aquí qué
+// formato exacto funcionó para ese tenant+cliente — el siguiente envío a
+// ese mismo cliente ya no prueba a ciegas, usa el formato confirmado
+// directo.
+model WhatsappNumeroConfirmado {
+  id       String @id @default(cuid())
+  tenantId String
+
+  telefonoNormalizado String
+  // Número EXACTO (con el prefijo que corresponda) confirmado como
+  // entregable para este cliente — lo que enviarWhatsappTenant usa de
+  // primera opción en el siguiente envío, antes de caer al formato
+  // predeterminado.
+  telefonoConfirmado String
+  confirmadoEn       DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, telefonoNormalizado])
 }
 
 // 2026-09-23, a petición de Carlos ("que ningún empleado pueda entrar desde
