@@ -406,13 +406,72 @@ export default function TenantShell({
   // lib/staff-auth.ts) y un PIN de 6 dígitos nunca queda "recordado" por el
   // navegador de la misma forma que una contraseña real — el riesgo que esto
   // resuelve es específico de la cuenta con autofill, no del PIN.
+  //
+  // 2026-10-05, corregido a petición explícita de Carlos ("sello de
+  // seguridad, no debe tener huecos ni bugs" — encontró una sesión de
+  // administrador seguir abierta el lunes, habiéndola dejado el sábado): la
+  // primera versión dependía de que un setTimeout de React sonara EXACTO
+  // tras 20 minutos sin interrupción. Eso falla en la práctica: el
+  // navegador/sistema operativo puede suspender o "descargar" una pestaña en
+  // segundo plano (o la laptop dormirse) sin que eso cuente como cerrarla;
+  // cuando pasa, el useEffect se desmonta y el temporizador se cancela —
+  // al volver a activarse la pestaña, el efecto se vuelve a montar y el
+  // conteo arranca otra vez desde cero, sin memoria de cuánto tiempo real
+  // pasó. Mientras tanto la sesión de Supabase (el cookie) no expira sola
+  // por inactividad — se renueva sola indefinidamente — así que nada del
+  // lado del servidor forzaba el cierre.
+  //
+  // La corrección: en vez de confiar en que un temporizador suene exacto, se
+  // guarda la hora real (reloj de pared, Date.now()) de la última actividad
+  // en localStorage — sobrevive recargas y se comparte entre pestañas del
+  // mismo navegador (así una pestaña inactiva no cierra la sesión mientras
+  // el dueño sigue trabajando activamente en otra). Esa marca se compara
+  // contra el reloj actual al montar, cada vez que la pestaña recupera
+  // visibilidad/foco, y además cada 30s mientras sigue visible — si ya
+  // pasaron 20 minutos o más DE VERDAD, se cierra la sesión de inmediato,
+  // sin importar si algún temporizador "sobrevivió" o no. Esto es justo lo
+  // que detecta el caso de Carlos: una pestaña que estuvo dormida/descargada
+  // todo el fin de semana, al volver a activarse, lee que la última
+  // actividad real fue hace días y cierra la sesión en el acto, en vez de
+  // regalarle otros 20 minutos de gracia solo por haberse vuelto a montar.
+  // Si localStorage no está disponible (algunos navegadores lo bloquean en
+  // modo privado), se degrada a un respaldo en memoria — nunca peor que el
+  // comportamiento original, nunca deja de haber ALGÚN cierre por
+  // inactividad.
   useEffect(() => {
     if (modo !== "admin") return;
 
-    let timeoutId: ReturnType<typeof setTimeout>;
-    let ultimoReinicio = 0;
+    const CLAVE_ULTIMA_ACTIVIDAD = "linkity_admin_actividad_ts";
+    let ultimaActividadMemoria = Date.now();
+    let sesionCerrada = false;
+
+    const leerUltimaActividad = (): number => {
+      try {
+        const guardado = window.localStorage.getItem(CLAVE_ULTIMA_ACTIVIDAD);
+        if (guardado) {
+          const valor = parseInt(guardado, 10);
+          if (Number.isFinite(valor)) return valor;
+        }
+      } catch {
+        // localStorage no disponible (p.ej. modo privado) — se usa el
+        // respaldo en memoria de abajo.
+      }
+      return ultimaActividadMemoria;
+    };
+
+    const escribirUltimaActividad = (ahora: number) => {
+      ultimaActividadMemoria = ahora;
+      try {
+        window.localStorage.setItem(CLAVE_ULTIMA_ACTIVIDAD, String(ahora));
+      } catch {
+        // Sin localStorage, el respaldo en memoria de arriba ya quedó al
+        // día — degradado, pero sigue funcionando mientras la pestaña viva.
+      }
+    };
 
     const cerrarPorInactividad = async () => {
+      if (sesionCerrada) return;
+      sesionCerrada = true;
       const supabase = createClient();
       await supabase.auth.signOut();
       // alert() bloquea hasta que alguien lo cierre — si nadie está ahí (el
@@ -424,24 +483,68 @@ export default function TenantShell({
       window.location.href = `/${tenant}`;
     };
 
-    const reiniciar = () => {
-      const ahora = Date.now();
-      // Throttle a 5s: mousemove/scroll pueden dispararse decenas de veces
-      // por segundo — reiniciar el timer en cada uno sería puro desperdicio
-      // frente a una ventana de 20 minutos, donde 5s de margen no se nota.
-      if (ahora - ultimoReinicio < 5000) return;
-      ultimoReinicio = ahora;
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(cerrarPorInactividad, DURACION_INACTIVIDAD_ADMIN_MS);
+    // Compara la ÚLTIMA ACTIVIDAD REAL contra el reloj actual — nunca asume
+    // que pasó el tiempo correcto solo porque un temporizador sonó o porque
+    // el componente se acaba de montar.
+    const verificarInactividad = () => {
+      if (sesionCerrada) return;
+      const transcurrido = Date.now() - leerUltimaActividad();
+      if (transcurrido >= DURACION_INACTIVIDAD_ADMIN_MS) {
+        cerrarPorInactividad();
+      }
     };
 
+    let ultimoRegistro = 0;
+    const registrarActividad = () => {
+      if (sesionCerrada) return;
+      const ahora = Date.now();
+      // Throttle a 5s: mousemove/scroll pueden dispararse decenas de veces
+      // por segundo — escribir en localStorage en cada uno sería puro
+      // desperdicio frente a una ventana de 20 minutos, donde 5s de margen
+      // no se nota.
+      if (ahora - ultimoRegistro < 5000) return;
+      ultimoRegistro = ahora;
+      escribirUltimaActividad(ahora);
+    };
+
+    // Si no hay ninguna marca guardada todavía (primera vez que se monta
+    // esta pestaña/sesión), se establece "ahora" como punto de partida — a
+    // propósito NUNCA se pisa una marca YA EXISTENTE solo por montarse de
+    // nuevo (eso sería regalar 20 minutos gratis cada vez que la pestaña se
+    // recarga, sin que haya actividad real de por medio).
+    try {
+      if (window.localStorage.getItem(CLAVE_ULTIMA_ACTIVIDAD) == null) {
+        escribirUltimaActividad(Date.now());
+      }
+    } catch {
+      // Sin localStorage, ultimaActividadMemoria ya arrancó en "ahora".
+    }
+
+    // Verificación inmediata al montar — si la pestaña se estaba
+    // recuperando de una suspensión larga (o se reabrió después de días),
+    // esto detecta la inactividad real de inmediato.
+    verificarInactividad();
+
     const eventos: (keyof DocumentEventMap)[] = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "wheel"];
-    eventos.forEach((ev) => document.addEventListener(ev, reiniciar, { passive: true }));
-    timeoutId = setTimeout(cerrarPorInactividad, DURACION_INACTIVIDAD_ADMIN_MS);
+    eventos.forEach((ev) => document.addEventListener(ev, registrarActividad, { passive: true }));
+
+    const alVisible = () => {
+      if (document.visibilityState === "visible") verificarInactividad();
+    };
+    document.addEventListener("visibilitychange", alVisible);
+    window.addEventListener("focus", verificarInactividad);
+
+    // Ping periódico mientras la pestaña sigue montada — no depende de que
+    // el usuario cambie de pestaña o le dé foco para detectar la
+    // inactividad: una pestaña que se queda sola, visible pero sin tocar
+    // nada, también se cierra sola.
+    const intervalo = setInterval(verificarInactividad, 30 * 1000);
 
     return () => {
-      clearTimeout(timeoutId);
-      eventos.forEach((ev) => document.removeEventListener(ev, reiniciar));
+      eventos.forEach((ev) => document.removeEventListener(ev, registrarActividad));
+      document.removeEventListener("visibilitychange", alVisible);
+      window.removeEventListener("focus", verificarInactividad);
+      clearInterval(intervalo);
     };
   }, [modo, tenant]);
 
