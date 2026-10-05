@@ -297,17 +297,27 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
 // EXCLUSIVAMENTE para los dos estatus donde el cliente de verdad puede
 // pasar por su equipo (SHOP_READY/SHOP_RETURN); el resto describe el
 // avance sin usar esa palabra. Aprobado por Carlos, tabla completa.
+// 2026-10-05, ajuste de redacción a petición de Carlos ("hay que
+// personalizar el mensaje para cada estatus"), aplicando el MISMO criterio
+// del comentario de arriba un paso más allá: WORKSHOP_READY y
+// WORKSHOP_RETURN ahora comparten el mismo texto ("estamos terminando"),
+// porque en ese momento el equipo sigue físicamente en el taller — decirle
+// al cliente "listo" o "no se pudo reparar" ahí mismo se adelantaría al
+// verdadero momento en que puede pasar por él (SHOP_READY/SHOP_RETURN, ya
+// trasladado a tienda), que es justo lo que este criterio ya evitaba para
+// esos dos. IN_REPAIR ahora también dispara al asignar técnico, no solo al
+// avanzar estatus a mano — ver asignarTecnicoAction, reparaciones-actions.ts.
 export const ESTADO_CLIENTE_TEXTO: Record<EstadoReparacion, string> = {
-  RECEIVED: "Recibimos tu equipo",
+  RECEIVED: "Recibimos tu equipo y ya quedó registrado en nuestro sistema",
   DIAGNOSING: "Estamos revisando tu equipo",
-  IN_REPAIR: "Tu equipo está en reparación",
-  WAITING_PARTS: "Esperamos una refacción para tu equipo",
+  IN_REPAIR: "Un técnico ya está trabajando en tu equipo",
+  WAITING_PARTS: "Tu equipo está en espera de una refacción; nos pondremos en contacto contigo para coordinar los siguientes pasos",
   READY: "Tu equipo está listo",
-  WORKSHOP_READY: "Terminamos la reparación de tu equipo",
-  WORKSHOP_RETURN: "No fue posible reparar tu equipo",
-  SHOP_READY: "Tu equipo está listo para que lo recojas",
-  SHOP_RETURN: "Tu equipo está listo para que lo recojas (sin reparar)",
-  DELIVERED: "Equipo entregado",
+  WORKSHOP_READY: "Estamos terminando con tu equipo, pronto tendrás noticias nuestras",
+  WORKSHOP_RETURN: "Estamos terminando con tu equipo, pronto tendrás noticias nuestras",
+  SHOP_READY: "Tu equipo está listo, ya puedes pasar a recogerlo",
+  SHOP_RETURN: "Tu equipo está disponible para que lo recojas (no fue posible repararlo)",
+  DELIVERED: "Equipo entregado, gracias por tu confianza",
   CANCELLED: "Reparación cancelada",
 };
 

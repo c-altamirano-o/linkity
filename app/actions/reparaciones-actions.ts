@@ -374,7 +374,10 @@ export async function asignarTecnicoAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, publicToken: true } });
+    const repair = await db.repair.findUnique({
+      where: { id: repairId },
+      select: { id: true, status: true, publicToken: true, folio: true, customerId: true },
+    });
     if (!repair) return { ok: false, error: "Reparación no encontrada" };
     if (repair.status === RepairStatus.DELIVERED || repair.status === RepairStatus.CANCELLED) {
       return { ok: false, error: "No se puede reasignar técnico de una reparación ya cerrada" };
@@ -400,24 +403,73 @@ export async function asignarTecnicoAction(params: {
       nombrePuesto = tecnico.role?.name ?? "Técnico";
     }
 
+    // 2026-10-05, a petición de Carlos: "al asignar técnico debería disparar
+    // [el estatus] en reparación... significa que ya lo tomó un técnico y el
+    // equipo está en reparación" — antes asignar técnico y avanzar de
+    // estatus (botón "Iniciar reparación", avanzarEstadoAction) eran dos
+    // acciones completamente independientes. Deliberadamente acotado: solo
+    // cuando SÍ se asignó un técnico real (nunca al quitarlo, staffId=null)
+    // Y el folio sigue en RECEIVED — un folio que ya avanzó por cualquier
+    // otro camino (ej. está en espera de refacción) no se mueve solo por
+    // reasignar técnico, eso lo sigue decidiendo Aduana a mano con los
+    // botones de "Cambiar estatus". Nunca revierte el estatus en sentido
+    // contrario (quitar/cambiar técnico después no regresa nada).
+    const avanzaAEnReparacion = Boolean(staffIdValidado) && repair.status === RepairStatus.RECEIVED;
+
     await db.$transaction(async (tx: any) => {
-      await tx.repair.update({ where: { id: repairId }, data: { assignedToStaffId: staffIdValidado } });
+      await tx.repair.update({
+        where: { id: repairId },
+        data: {
+          assignedToStaffId: staffIdValidado,
+          ...(avanzaAEnReparacion ? { status: RepairStatus.IN_REPAIR } : {}),
+        },
+      });
 
       // Checkpoint visible al cliente (2026-09-24, a petición de Carlos):
       // "que diga 'Asignado a técnico reparador'" — SOLO el puesto (el
       // nombre real del rol asignado), nunca el nombre de la persona. Solo
-      // se registra al asignar (no al quitar la asignación) — status queda
-      // igual al actual, esta fila no representa un cambio de estatus real.
+      // se registra al asignar (no al quitar la asignación).
       if (staffIdValidado) {
         await tx.repairHistory.create({
-          data: { repairId, status: repair.status, notes: `Asignado a ${nombrePuesto}`, visibleCliente: true },
+          data: {
+            repairId,
+            status: avanzaAEnReparacion ? RepairStatus.IN_REPAIR : repair.status,
+            notes: `Asignado a ${nombrePuesto}`,
+            visibleCliente: true,
+          },
+        });
+      }
+
+      // Checkpoint del cambio de estatus real, por separado del de arriba
+      // (mismo texto que usa avanzarEstadoAction para este mismo salto,
+      // NOTA_POR_ESTADO.IN_REPAIR) — así el historial conserva ambos hechos
+      // distinguibles, igual que cuando el técnico ya estaba asignado desde
+      // antes y el estatus se avanzó aparte con "Iniciar reparación".
+      if (avanzaAEnReparacion) {
+        await tx.repairHistory.create({
+          data: { repairId, status: RepairStatus.IN_REPAIR, notes: NOTA_POR_ESTADO.IN_REPAIR, visibleCliente: true },
         });
       }
     });
 
+    // WhatsApp automático (mismo criterio/mejor-esfuerzo que
+    // avanzarEstadoAction) — solo cuando este clic de verdad representó un
+    // cambio de estatus real.
+    if (avanzaAEnReparacion) {
+      await avisarWhatsappReparacion({
+        db,
+        tenantId: tenant.id,
+        customerId: repair.customerId,
+        folio: repair.folio,
+        publicToken: repair.publicToken,
+        estadoTexto: ESTADO_CLIENTE_TEXTO.IN_REPAIR,
+      });
+    }
+
     revalidatePath(`/${tenantSlug}/aduana`);
     revalidatePath(`/${tenantSlug}/taller`);
     revalidatePath(`/${tenantSlug}/reparaciones`);
+    revalidatePath(`/${tenantSlug}/dashboard`);
     if (staffIdValidado) revalidatePath(`/rep/${repair.publicToken}`);
     return { ok: true };
   } catch (err: any) {
