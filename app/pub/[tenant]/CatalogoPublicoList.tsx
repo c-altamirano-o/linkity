@@ -24,8 +24,8 @@ export default function CatalogoPublicoList({ productos }: { productos: Producto
     <div className="grid grid-cols-2 gap-2.5">
       {productos.map((p) => (
         <div key={p.id} className="bg-card border border-border rounded-xl p-3 flex flex-col gap-1">
-          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-primary-text">
-            <ProductoIcono value={p.emoji} className="w-4.5 h-4.5" />
+          <div className="relative w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-primary-text overflow-hidden">
+            <ProductoIcono value={p.emoji} imageUrl={p.image} className="w-4.5 h-4.5" />
           </div>
           <p className="text-xs font-medium text-foreground leading-tight">{p.name}</p>
           <p className="text-xs text-muted-foreground">{p.categoryName}</p>

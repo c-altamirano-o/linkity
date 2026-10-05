@@ -786,6 +786,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                             <button
                               onClick={() => handleQuitarPieza(p.id)}
                               disabled={pending}
+                              title="Quitar pieza"
                               className="text-muted-foreground hover:text-red-600 disabled:opacity-50"
                             >
                               <X className="w-3 h-3" />
@@ -842,6 +843,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                     <button
                       onClick={handleAgregarPieza}
                       disabled={pending || !piezaNuevaId}
+                      title="Agregar pieza"
                       className="btn-secondary px-2.5 py-2 rounded-lg"
                     >
                       <Plus className="w-3.5 h-3.5" />

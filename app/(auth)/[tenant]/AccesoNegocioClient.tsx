@@ -108,41 +108,51 @@ export default function AccesoNegocioClient({
     setErrorAdmin("");
     setPendingAdmin(true);
 
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    // Todo lo que sigue a signInWithPassword hace llamadas de red propias
+    // (Server Action getTenantAccesoBySupabaseId, signOut) — si cualquiera
+    // de ellas falla por conexión, antes se quedaba "Verificando..." para
+    // siempre sin mensaje ni forma de reintentar. Con el try/catch, un
+    // fallo de red muestra un error claro y vuelve a habilitar el botón.
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error || !data.user) {
-      setErrorAdmin("Correo o contraseña incorrectos");
+      if (error || !data.user) {
+        setErrorAdmin("Correo o contraseña incorrectos");
+        setPendingAdmin(false);
+        return;
+      }
+
+      const { tenantSlug: tenantDeLaCuenta, cuentaDesactivada } = await getTenantAccesoBySupabaseId(data.user.id);
+
+      if (cuentaDesactivada) {
+        setErrorAdmin("Tu cuenta fue desactivada. Contacta al administrador de tu negocio.");
+        await supabase.auth.signOut();
+        setPendingAdmin(false);
+        return;
+      }
+
+      // Esta pantalla es la puerta de UN negocio específico (el de la URL) —
+      // a diferencia de /login (genérico), aquí no tiene sentido dejar pasar
+      // ni a un superadmin de Panel Maestro ni a un administrador de OTRO
+      // negocio, aunque su correo/contraseña sean válidos en Supabase Auth.
+      if (!tenantDeLaCuenta || tenantDeLaCuenta !== tenantSlug) {
+        setErrorAdmin("Esta cuenta no pertenece a este negocio.");
+        await supabase.auth.signOut();
+        setPendingAdmin(false);
+        return;
+      }
+
+      if (data.user.user_metadata?.must_change_password) {
+        window.location.href = "/primer-acceso";
+        return;
+      }
+
+      window.location.href = `/${tenantSlug}/dashboard`;
+    } catch {
+      setErrorAdmin("No se pudo conectar. Revisa tu conexión e intenta de nuevo.");
       setPendingAdmin(false);
-      return;
     }
-
-    const { tenantSlug: tenantDeLaCuenta, cuentaDesactivada } = await getTenantAccesoBySupabaseId(data.user.id);
-
-    if (cuentaDesactivada) {
-      setErrorAdmin("Tu cuenta fue desactivada. Contacta al administrador de tu negocio.");
-      await supabase.auth.signOut();
-      setPendingAdmin(false);
-      return;
-    }
-
-    // Esta pantalla es la puerta de UN negocio específico (el de la URL) —
-    // a diferencia de /login (genérico), aquí no tiene sentido dejar pasar
-    // ni a un superadmin de Panel Maestro ni a un administrador de OTRO
-    // negocio, aunque su correo/contraseña sean válidos en Supabase Auth.
-    if (!tenantDeLaCuenta || tenantDeLaCuenta !== tenantSlug) {
-      setErrorAdmin("Esta cuenta no pertenece a este negocio.");
-      await supabase.auth.signOut();
-      setPendingAdmin(false);
-      return;
-    }
-
-    if (data.user.user_metadata?.must_change_password) {
-      window.location.href = "/primer-acceso";
-      return;
-    }
-
-    window.location.href = `/${tenantSlug}/dashboard`;
   };
 
   // ── Ficha Empleado ────────────────────────────────────────────────────
@@ -235,19 +245,28 @@ export default function AccesoNegocioClient({
     setErrorEmpleado(null);
     if (siguiente.length === PIN_LARGO) {
       startEmpleado(async () => {
-        const res = await iniciarSesionPersonalAction({
-          tenantSlug,
-          staffId: empleadoSel.id,
-          pin: siguiente,
-          branchId: sucursalId,
-        });
-        if (res.ok) {
-          window.location.href = `/${tenantSlug}/dashboard`;
-        } else if ("necesitaAutorizacion" in res && res.necesitaAutorizacion) {
-          setEspera({ token: res.token, staffId: empleadoSel.id, pin: siguiente, branchId: sucursalId });
-          setEstadoEspera("pendiente");
-        } else {
-          setErrorEmpleado(res.error);
+        // Sin este try/catch, un fallo de red aquí dejaba el teclado
+        // bloqueado en "Verificando..." sin ningún mensaje — el único
+        // escape era "No soy {nombre}", sin que el empleado supiera que
+        // fue un problema de conexión y no un PIN incorrecto.
+        try {
+          const res = await iniciarSesionPersonalAction({
+            tenantSlug,
+            staffId: empleadoSel.id,
+            pin: siguiente,
+            branchId: sucursalId,
+          });
+          if (res.ok) {
+            window.location.href = `/${tenantSlug}/dashboard`;
+          } else if ("necesitaAutorizacion" in res && res.necesitaAutorizacion) {
+            setEspera({ token: res.token, staffId: empleadoSel.id, pin: siguiente, branchId: sucursalId });
+            setEstadoEspera("pendiente");
+          } else {
+            setErrorEmpleado(res.error);
+            setPin("");
+          }
+        } catch {
+          setErrorEmpleado("No se pudo conectar. Intenta de nuevo.");
           setPin("");
         }
       });

@@ -68,6 +68,15 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   const [ajusteTipo, setAjusteTipo] = useState<AjusteTipo>("entrada");
   const [ajusteBranchId, setAjusteBranchId] = useState("");
   const [ajusteError, setAjusteError] = useState<string | null>(null);
+  // 2026-10-05, a petición de Carlos (auditoría de Inventario): aviso cuando
+  // una "salida" pidió descontar más de lo que había disponible y el
+  // servidor recortó la cantidad real aplicada (ver ajustarStock,
+  // lib/inventario-actions.ts) — antes el modal se cerraba igual que un
+  // ajuste exitoso normal, sin que el empleado se enterara de que no se
+  // descontó todo lo que tecleó. No es un error (el ajuste sí se guardó),
+  // por eso vive aparte de ajusteError y el modal se queda abierto hasta que
+  // el empleado lo confirma.
+  const [ajusteAviso, setAjusteAviso] = useState<string | null>(null);
 
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [mostrarExportMenu, setMostrarExportMenu] = useState(false);
@@ -218,6 +227,12 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   const stockBajo = vista.filter((p) => getStockStatus(p.stock, p.minStock) === "low").length;
   const agotados = vista.filter((p) => p.stock === 0).length;
 
+  // 2026-10-05: encabezados reales de la tabla — se reutiliza su longitud
+  // para el colSpan de la fila "sin resultados" (ver la tabla más abajo),
+  // en vez de un 7 fijo que no coincidía cuando este rol no tiene
+  // Role.verMontosCaja (6 columnas de verdad, sin "Costo").
+  const columnasTabla = ["Producto", "Categoría", "Stock actual", "Stock mínimo", "Precio venta", ...(puedeVerMontos ? ["Costo"] : []), "Acción"];
+
   const sucursalNombre = sucursal === TODAS_SUCURSALES_ID
     ? "Todas las sucursales"
     : branches.find((b) => b.id === sucursal)?.name ?? "Sucursal";
@@ -227,7 +242,13 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   // cerraba sin más (click fuera no hacía nada; "Cancelar" cerraba sin
   // preguntar) — perdiendo lo capturado sin aviso.
   const cancelarModal = () => {
-    if (confirmarSalirSinGuardar()) setModalAjuste(null);
+    // Si ya se guardó el ajuste y solo queda el aviso de recorte de la
+    // "salida" (ver guardarAjuste), ya no hay nada pendiente que se pueda
+    // perder — se cierra directo, sin preguntar.
+    if (ajusteAviso || confirmarSalirSinGuardar()) {
+      setModalAjuste(null);
+      setAjusteAviso(null);
+    }
   };
 
   // Aviso al cerrar/recargar la PESTAÑA del navegador mientras el modal de
@@ -241,6 +262,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
     setAjusteCantidad("");
     setAjusteTipo("entrada");
     setAjusteError(null);
+    setAjusteAviso(null);
     setAjusteBranchId(sucursal !== TODAS_SUCURSALES_ID ? sucursal : branches[0]?.id ?? "");
   };
 
@@ -256,6 +278,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
       return;
     }
     setAjusteError(null);
+    setAjusteAviso(null);
     startTransition(async () => {
       const res = await ajustarStock({
         tenantSlug,
@@ -268,8 +291,17 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
         setAjusteError(res.error);
         return;
       }
-      setModalAjuste(null);
       router.refresh();
+      // El stock disponible no alcanzaba para descontar la cantidad completa
+      // pedida — se avisa cuánto se descontó de verdad en vez de cerrar el
+      // modal como si hubiera salido tal cual se pidió.
+      if (ajusteTipo === "salida" && res.cantidadAplicada < cantidad) {
+        setAjusteAviso(
+          `Solo había ${res.cantidadAplicada} unidad${res.cantidadAplicada === 1 ? "" : "es"} disponible${res.cantidadAplicada === 1 ? "" : "s"} — se descontó eso, no las ${cantidad} que pediste. El stock quedó en 0.`
+        );
+        return;
+      }
+      setModalAjuste(null);
     });
   };
 
@@ -404,8 +436,11 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
               <tr>
                 {/* 2026-09-24: "Costo" es la misma columna de margen que se
                     omite en los exportables — no se muestra a quien no
-                    tiene Role.verMontosCaja. */}
-                {["Producto", "Categoría", "Stock actual", "Stock mínimo", "Precio venta", ...(puedeVerMontos ? ["Costo"] : []), "Acción"].map((h) => (
+                    tiene Role.verMontosCaja. columnasTabla se reutiliza para
+                    el colSpan de la fila "sin resultados" de abajo (2026-10-05
+                    — antes era un 7 fijo que se desalineaba cuando este rol
+                    no tiene Role.verMontosCaja, 6 columnas de verdad). */}
+                {columnasTabla.map((h) => (
                   <th key={h} className="text-left text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5 whitespace-nowrap">
                     {h}
                   </th>
@@ -472,7 +507,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
               })}
               {productosFiltrados.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center text-xs text-muted-foreground py-6">Sin resultados para este filtro.</td>
+                  <td colSpan={columnasTabla.length} className="text-center text-xs text-muted-foreground py-6">Sin resultados para este filtro.</td>
                 </tr>
               )}
             </tbody>
@@ -493,8 +528,8 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
             {branches.length > 1 && (
               <div className="mb-4" data-tour="inventario-sucursal">
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Sucursal</label>
-                <select value={ajusteBranchId} onChange={(e) => setAjusteBranchId(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
+                <select value={ajusteBranchId} onChange={(e) => setAjusteBranchId(e.target.value)} disabled={!!ajusteAviso}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary disabled:opacity-60">
                   {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
@@ -509,8 +544,8 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
 
             <div className="grid grid-cols-3 gap-2 mb-4" data-tour="inventario-tipo">
               {(["entrada", "salida", "ajuste"] as const).map((tipo) => (
-                <button key={tipo} onClick={() => setAjusteTipo(tipo)}
-                  className={`py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
+                <button key={tipo} onClick={() => setAjusteTipo(tipo)} disabled={!!ajusteAviso}
+                  className={`py-2 rounded-lg text-xs font-medium capitalize transition-colors disabled:opacity-60 ${
                     ajusteTipo === tipo
                       ? tipo === "entrada" ? "bg-emerald-500 text-white"
                         : tipo === "salida" ? "bg-red-500 text-white"
@@ -527,22 +562,40 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                 {ajusteTipo === "ajuste" ? "Nuevo stock total" : "Cantidad"}
               </label>
               <input type="number" min={0} value={ajusteCantidad} onChange={(e) => setAjusteCantidad(e.target.value)}
-                placeholder="0"
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                placeholder="0" disabled={!!ajusteAviso}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-60" />
             </div>
             {ajusteError && <p className="text-[12.5px] text-red-600 mb-3">{ajusteError}</p>}
-            {!ajusteError && <div className="mb-3" />}
+            {/* 2026-10-05: aviso de que una "salida" no pudo descontar la
+                cantidad completa pedida por falta de stock disponible (ver
+                guardarAjuste) — el ajuste YA se guardó con lo que sí había,
+                esto solo informa que fue menos de lo tecleado. */}
+            {ajusteAviso && (
+              <p className="text-[12.5px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                {ajusteAviso}
+              </p>
+            )}
+            {!ajusteError && !ajusteAviso && <div className="mb-3" />}
 
             <div className="flex gap-2">
-              <button onClick={cancelarModal} disabled={isPending}
-                className="btn-secondary flex-1 py-2 rounded-lg text-xs">
-                Cancelar
-              </button>
-              <button onClick={guardarAjuste} disabled={isPending}
-                data-tour="inventario-guardar"
-                className="btn-primary flex-1 py-2 rounded-lg text-xs">
-                {isPending ? "Guardando…" : "Guardar"}
-              </button>
+              {ajusteAviso ? (
+                <button onClick={cancelarModal}
+                  className="btn-primary flex-1 py-2 rounded-lg text-xs">
+                  Entendido
+                </button>
+              ) : (
+                <>
+                  <button onClick={cancelarModal} disabled={isPending}
+                    className="btn-secondary flex-1 py-2 rounded-lg text-xs">
+                    Cancelar
+                  </button>
+                  <button onClick={guardarAjuste} disabled={isPending}
+                    data-tour="inventario-guardar"
+                    className="btn-primary flex-1 py-2 rounded-lg text-xs">
+                    {isPending ? "Guardando…" : "Guardar"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

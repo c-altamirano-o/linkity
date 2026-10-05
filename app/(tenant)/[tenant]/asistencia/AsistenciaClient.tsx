@@ -2,9 +2,9 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, Search, Building2, Calendar, LogIn, LogOut, X, Info } from "lucide-react";
+import { CalendarCheck, Search, Building2, Calendar, LogIn, LogOut, X, Info, Pencil } from "lucide-react";
 import type { RegistroAsistencia } from "@/lib/asistencia-data";
-import { cerrarAsistenciaManualAction } from "@/app/actions/asistencia-actions";
+import { cerrarAsistenciaManualAction, editarAsistenciaLoginAction } from "@/app/actions/asistencia-actions";
 import { useTourDesdeUrl, TOUR_ASISTENCIA_REVISAR } from "@/lib/tours";
 
 interface BranchOption {
@@ -78,6 +78,15 @@ function formatFechaHora(iso: string): string {
   return new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+// "YYYY-MM-DDTHH:MM" (hora local del navegador) para precargar un <input
+// type="datetime-local"> al corregir un registro — distinto de
+// formatFechaHora (que es solo para mostrar texto).
+function isoAInputLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function formatDuracion(checkInISO: string, checkOutISO: string | null): string {
   const inicio = new Date(checkInISO).getTime();
   const fin = checkOutISO ? new Date(checkOutISO).getTime() : Date.now();
@@ -98,6 +107,16 @@ export default function AsistenciaClient({ registros, branches, tenantSlug, week
   const [busqueda, setBusqueda] = useState("");
   const [cerrando, setCerrando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Corregir un registro con hora equivocada (2026-10-05, a petición de
+  // Carlos tras la auditoría): "Cerrar ahora" ya existía para una sesión
+  // que se quedó abierta, pero no había forma de arreglar una hora de
+  // entrada (o de salida) mal capturada — ver editarAsistenciaLoginAction
+  // en asistencia-actions.ts.
+  const [registroEditando, setRegistroEditando] = useState<RegistroAsistencia | null>(null);
+  const [editCheckIn, setEditCheckIn] = useState("");
+  const [editCheckOut, setEditCheckOut] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -121,6 +140,38 @@ export default function AsistenciaClient({ registros, branches, tenantSlug, week
         setError(res.error);
         return;
       }
+      router.refresh();
+    });
+  }
+
+  function abrirEditarRegistro(registro: RegistroAsistencia) {
+    setRegistroEditando(registro);
+    setEditCheckIn(isoAInputLocal(registro.checkIn));
+    setEditCheckOut(registro.checkOut ? isoAInputLocal(registro.checkOut) : "");
+    setEditError(null);
+  }
+
+  function guardarEdicionRegistro() {
+    if (!registroEditando) return;
+    if (!editCheckIn) { setEditError("La hora de entrada es obligatoria"); return; }
+    // Es la fuente de verdad de Asistencia (y de las incidencias que
+    // Personal usa para sugerir descuentos de nómina) — se confirma antes
+    // de sobrescribirla, mismo criterio que la corrección del registro
+    // manual en Personal.
+    if (!window.confirm("¿Guardar esta corrección? Este es el registro real que usa el sistema para calcular asistencia e incidencias de nómina.")) return;
+    setEditError(null);
+    startTransition(async () => {
+      const res = await editarAsistenciaLoginAction({
+        tenantSlug,
+        registroId: registroEditando.id,
+        checkIn: new Date(editCheckIn).toISOString(),
+        checkOut: editCheckOut ? new Date(editCheckOut).toISOString() : null,
+      });
+      if (!res.ok) {
+        setEditError(res.error);
+        return;
+      }
+      setRegistroEditando(null);
       router.refresh();
     });
   }
@@ -235,16 +286,29 @@ export default function AsistenciaClient({ registros, branches, tenantSlug, week
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDuracion(r.checkIn, r.checkOut)}</td>
                   <td className="px-3 py-2.5 text-right">
-                    {r.abierta && (
+                    <div className="flex items-center justify-end gap-3">
+                      {/* 2026-10-05, a petición de Carlos tras la auditoría:
+                          "Cerrar ahora" no sirve si el error fue una hora de
+                          ENTRADA mal capturada (o una de salida ya cerrada
+                          mal) — este botón abre la corrección manual de
+                          ambas horas. */}
                       <button
-                        disabled={isPending && cerrando === r.id}
-                        onClick={() => cerrarAhora(r.id)}
-                        data-tour="asistencia-cerrar-ahora"
-                        className="flex items-center gap-1 text-[11.5px] font-medium text-red-600 hover:text-red-700 disabled:opacity-50 ml-auto"
+                        onClick={() => abrirEditarRegistro(r)}
+                        className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground hover:text-foreground"
                       >
-                        <X className="w-3 h-3" /> Cerrar ahora
+                        <Pencil className="w-3 h-3" /> Editar
                       </button>
-                    )}
+                      {r.abierta && (
+                        <button
+                          disabled={isPending && cerrando === r.id}
+                          onClick={() => cerrarAhora(r.id)}
+                          data-tour="asistencia-cerrar-ahora"
+                          className="flex items-center gap-1 text-[11.5px] font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                        >
+                          <X className="w-3 h-3" /> Cerrar ahora
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -252,6 +316,66 @@ export default function AsistenciaClient({ registros, branches, tenantSlug, week
           </tbody>
         </table>
       </div>
+
+      {/* Modal corregir registro (2026-10-05, ver el comentario junto a
+          registroEditando más arriba) */}
+      {registroEditando && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={() => setRegistroEditando(null)}
+        >
+          <div
+            className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-sm font-medium text-foreground">
+                Corregir registro — {registroEditando.staffName}
+              </span>
+              <button onClick={() => setRegistroEditando(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              {editError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{editError}</div>}
+              <p className="text-[11.5px] text-muted-foreground">
+                Usa esto cuando el inicio de sesión por PIN quedó con una hora equivocada — no solo cuando se quedó
+                abierto. Deja la salida en blanco para marcarlo como "sigue dentro".
+              </p>
+              <div>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ENTRADA</label>
+                <input
+                  type="datetime-local"
+                  value={editCheckIn}
+                  onChange={(e) => setEditCheckIn(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">SALIDA (OPCIONAL)</label>
+                <input
+                  type="datetime-local"
+                  value={editCheckOut}
+                  onChange={(e) => setEditCheckOut(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
+              <button onClick={() => setRegistroEditando(null)} className="btn-ghost px-3 py-2 text-xs rounded-lg">
+                Cancelar
+              </button>
+              <button
+                disabled={isPending}
+                onClick={guardarEdicionRegistro}
+                className="btn-primary px-4 py-2 rounded-lg text-xs"
+              >
+                {isPending ? "Guardando..." : "Guardar corrección"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

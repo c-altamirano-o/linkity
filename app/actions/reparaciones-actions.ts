@@ -931,7 +931,24 @@ export async function marcarWhatsappEnviadoAction(params: {
       estadoTexto: ESTADO_CLIENTE_TEXTO[repair.status as EstadoReparacion] ?? "Actualización de tu equipo",
     });
     if (!res.enviado) {
-      return { ok: false, error: res.motivo ?? "No se pudo enviar el WhatsApp" };
+      // 2026-10-05, hallazgo de auditoría: cuando Meta rechaza el envío
+      // (token vencido, plantilla no aprobada, etc.), enviarWhatsappTenant
+      // (lib/whatsapp-tenant.ts) regresa el texto CRUDO de la respuesta de
+      // Meta en res.motivo — útil para el botón "Enviar prueba" de
+      // Configuración (pensado para que Carlos/el admin diagnostique), pero
+      // ilegible para un encargado de mostrador que solo quiere avisarle al
+      // cliente. Aquí, en el botón "Avisar", se traduce ese caso puntual a
+      // un mensaje claro y accionable — el resto de motivos ya eran
+      // entendibles (ej. "El cliente no tiene teléfono registrado", "Este
+      // negocio no ha conectado WhatsApp Business todavía...") y se dejan
+      // tal cual.
+      const motivoCrudoDeMeta = res.motivo?.startsWith("Meta respondió") || res.motivo?.startsWith("Error de red");
+      return {
+        ok: false,
+        error: motivoCrudoDeMeta
+          ? "No se pudo enviar el WhatsApp — revisa la conexión en Configuración → WhatsApp Business"
+          : (res.motivo ?? "No se pudo enviar el WhatsApp"),
+      };
     }
 
     await db.repair.update({ where: { id: repairId }, data: { whatsappSent: true } });

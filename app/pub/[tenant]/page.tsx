@@ -41,7 +41,13 @@ export default async function CatalogoPublicoPage({
           <p className="text-xs font-semibold text-foreground flex items-center gap-1.5 mb-3">
             <Store className="w-3.5 h-3.5" /> Catálogo
           </p>
-          <CatalogoPublicoList productos={datos.productos} />
+          {datos.catalogoActivo ? (
+            <CatalogoPublicoList productos={datos.productos} />
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              Este negocio no tiene catálogo público disponible por ahora.
+            </p>
+          )}
         </div>
 
         {datos.sucursales.length > 0 && (

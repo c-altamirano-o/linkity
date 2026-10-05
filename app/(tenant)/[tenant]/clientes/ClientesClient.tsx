@@ -29,7 +29,7 @@ import {
 import { crearConsentimientoAction } from "@/app/actions/consentimiento-actions";
 import { crearRecetaAction } from "@/app/actions/receta-actions";
 import FirmaCanvas from "@/components/tenant/FirmaCanvas";
-import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, formatoTelefono, whatsappHref } from "@/lib/paises";
+import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, formatoTelefono, whatsappHref, validarTelefono } from "@/lib/paises";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import {
   useTourDesdeUrl, TOUR_CLIENTES_ALTA, TOUR_ODONTOGRAMA_MARCAR,
@@ -873,6 +873,15 @@ export default function ClientesClient({
     // esto solo evita el viaje redondo cuando ya se sabe que va a fallar.
     if (telefonoClienteObligatorio && !form.phone?.trim()) {
       setFormError("El teléfono del cliente es obligatorio");
+      return;
+    }
+    // 2026-10-05, a petición de Carlos: mismo validarTelefono que ya usa el
+    // alta/edición de Personal (PersonalClient.tsx) — evita el viaje redondo
+    // cuando ya se sabe que el servidor (crearClienteAction/editarClienteAction)
+    // va a rechazar un teléfono con la cantidad incorrecta de dígitos.
+    const errorTelefono = validarTelefono(form.phone, form.phoneCountryCode || PAIS_TELEFONO_DEFAULT);
+    if (errorTelefono) {
+      setFormError(errorTelefono);
       return;
     }
     setFormError(null);

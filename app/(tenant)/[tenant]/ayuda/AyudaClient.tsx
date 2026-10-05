@@ -126,7 +126,7 @@ export default function AyudaClient({
               <span className="text-foreground font-medium">Datos fiscales (Configuración/Facturación):</span>{" "}
               {tieneRfc
                 ? "ya tienes un RFC capturado."
-                : "todavía no capturas un RFC — sin esto, cualquier intento de facturar será rechazado."}
+                : "todavía no capturas un RFC — captúralo cuanto antes. Hoy el sistema no te lo exige para generar o timbrar una factura (el timbrado de este módulo es simulado, sin PAC/SAT real conectado), pero sí lo necesitarás en cuanto ese CFDI tenga que ser real."}
             </li>
             <li>
               <span className="text-foreground font-medium">Da de alta a tu equipo con su rol correcto (Personal):</span>{" "}

@@ -274,6 +274,11 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     );
     if (r.customerId) setClienteId(r.customerId);
     setCarritoAbierto(true);
+    // Un renglón de reparación recién precargado siempre arranca sin la
+    // confirmación de "$0" ya marcada (2026-10-05, ver confirmaReparacionSinCobro
+    // más abajo) — si el monto sugerido ya viniera en $0 (ej. Tenant.montoDevolucion
+    // sin configurar), el cajero de todas formas tiene que confirmarlo a propósito.
+    setConfirmaReparacionSinCobro(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repairParaCobro]);
 
@@ -292,6 +297,37 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   // "viendo" el código en cuadro por varios frames mientras el usuario
   // reacciona, y decodeFromVideoDevice llama a su callback en cada uno.
   const ultimoEscaneoRef = useRef<{ codigo: string; ts: number } | null>(null);
+
+  // Aviso de "ya no se agregó nada" (2026-10-05, hallazgo de auditoría: tocar
+  // una ficha o el "+" del carrito cuando ya se agregó TODO el stock
+  // disponible de ese producto no hacía nada visible — el cajero no tenía
+  // forma de saber si el toque "no sirvió" o si de verdad ya estaba al
+  // tope). agregarAlCarrito/cambiarCantidad lo llenan cuando detectan ese
+  // tope; se muestra como un aviso flotante (ver el JSX al final del
+  // archivo) y se borra solo a los pocos segundos.
+  const [avisoStock, setAvisoStock] = useState<string | null>(null);
+  const avisoStockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!avisoStock) return;
+    if (avisoStockTimeoutRef.current) clearTimeout(avisoStockTimeoutRef.current);
+    avisoStockTimeoutRef.current = setTimeout(() => setAvisoStock(null), 3200);
+    return () => {
+      if (avisoStockTimeoutRef.current) clearTimeout(avisoStockTimeoutRef.current);
+    };
+  }, [avisoStock]);
+
+  // Confirmación explícita para cobrar una reparación en $0 (2026-10-05,
+  // hallazgo de auditoría: el monto de una reparación es editable a mano sin
+  // mínimo real — si el cajero lo deja/borra sin querer, el Total caía a $0 y
+  // nada impedía completar el cobro). $0 SÍ puede ser legítimo (ej. una
+  // devolución sin cargo — Tenant.montoDevolucion arranca en $0 por default,
+  // ver schema.prisma, o una reparación de garantía sin costo), así que en
+  // vez de bloquearlo siempre se exige esta casilla marcada a propósito
+  // cuando el renglón de la reparación está en $0 — ver hayReparacionEnCero/
+  // puedeCobar más abajo. Se resetea (ver editarMontoReparacion,
+  // quitarDelCarrito y el efecto de precarga arriba) en cuanto el monto deja
+  // de ser $0, para que un cajero no pueda "heredar" una confirmación vieja.
+  const [confirmaReparacionSinCobro, setConfirmaReparacionSinCobro] = useState(false);
 
   // 2026-09-30, a petición de Carlos ("el flujo del Enter debe saltarse la
   // cantidad del producto... el focus deberia cambiar al botón Cobrar"):
@@ -512,23 +548,59 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const cambioMixto = totalMixto > total ? totalMixto - total : 0;
   const mixtoOk = totalMixto >= total;
 
+  // 2026-10-05, hallazgo de auditoría: el monto de un renglón de reparación
+  // es editable a mano sin mínimo real — si el cajero lo borra/deja en $0
+  // sin querer, nada impedía completar el cobro (y con Tarjeta/Transferencia
+  // ni siquiera depende de "Monto recibido"). $0 SÍ puede ser legítimo (una
+  // devolución sin cargo, una reparación de garantía), así que no se bloquea
+  // de plano: se exige la casilla "confirmaReparacionSinCobro" marcada a
+  // propósito (ver el checkbox junto al botón Cobrar) para que nunca pase
+  // por accidente/campo vacío.
+  const hayReparacionEnCero = carrito.some((i) => !!i.repairId && i.precio <= 0);
+
   const puedeCobar =
     !!branchId &&
     cajaAbierta &&
     carrito.length > 0 &&
     !isPending &&
+    (!hayReparacionEnCero || confirmaReparacionSinCobro) &&
     (metodoPago === "tarjeta" ||
       metodoPago === "transferencia" ||
       (metodoPago === "efectivo" && montoNum >= total) ||
       (metodoPago === "mixto" && mixtoOk));
 
   /* ── Acciones ── */
-  const agregarAlCarrito = (p: ProductoPOS) => {
+  // Devuelve true si de verdad se agregó/incrementó algo — false si no se
+  // tocó el carrito (sin stock, o ya se agregó todo el disponible). El valor
+  // de retorno lo usan los llamadores (ficha, buscador+Enter, escáner) para
+  // saber si deben seguir con su propio flujo (limpiar buscador, cerrar el
+  // modal del escáner, etc.) o no.
+  const agregarAlCarrito = (p: ProductoPOS): boolean => {
     const disponible = stockDe(p);
-    if (!p.isService && disponible <= 0) return;
+    if (!p.isService && disponible <= 0) {
+      // 2026-10-05, hallazgo de auditoría: antes esto regresaba en silencio
+      // — un producto sin existencias no daba ninguna pista de por qué no
+      // pasaba nada al tocarlo (fuera de la ficha ya marcada "Agotado", que
+      // no siempre es lo primero que el cajero mira).
+      setAvisoStock(`"${p.name}" no tiene existencias disponibles en esta sucursal.`);
+      return false;
+    }
+    // 2026-10-05, mismo hallazgo: si ya se agregó al carrito TODO el stock
+    // disponible de este producto, seguir tocando la ficha (o el "+" del
+    // carrito, ver cambiarCantidad) no debía agregar nada — pero tampoco
+    // avisaba nada, así que un cajero nuevo podía pensar que la pantalla no
+    // respondía. Se calcula aparte del updater de setCarrito de abajo
+    // (que sigue siendo la fuente de verdad de la mutación) solo para poder
+    // decidir si hay que avisar.
+    const existeActual = carrito.find((i) => i.productId === p.id);
+    if (existeActual && !p.isService && existeActual.cantidad + 1 > disponible) {
+      setAvisoStock(`Ya agregaste todo el stock disponible de "${p.name}" (${disponible}).`);
+      return false;
+    }
+    setAvisoStock(null);
     setUltimaVenta(null);
     setErrorVenta(null);
-    
+
     const precioActivo = (isWholesaler && p.wholesalePrice != null && p.wholesalePrice > 0) ? p.wholesalePrice : p.price;
 
     setCarrito((prev) => {
@@ -539,6 +611,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       }
       return [...prev, { productId: p.id, nombre: p.name, precio: precioActivo, taxRate: p.taxRate, cantidad: 1, isService: p.isService }];
     });
+    return true;
   };
 
   // Se llama con lo que el lector físico de código de barras (USB/Bluetooth,
@@ -566,8 +639,21 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       setErrorEscaner(`No se encontró ningún producto con el código "${codigo}".`);
       return;
     }
-    if (!producto.isService && stockDe(producto) <= 0) {
+    const disponibleEscaneado = stockDe(producto);
+    if (!producto.isService && disponibleEscaneado <= 0) {
       setErrorEscaner(`"${producto.name}" no tiene stock disponible en esta sucursal.`);
+      return;
+    }
+    // 2026-10-05, hallazgo de auditoría: si ya se agregó al carrito TODO el
+    // stock disponible de este producto, agregarAlCarrito no iba a agregar
+    // nada — pero el modal se cerraba de todas formas (como si el escaneo
+    // hubiera funcionado), dejando al cajero creyendo que sí se agregó. Se
+    // detecta ANTES de llamar a agregarAlCarrito para poder mostrar el error
+    // AQUÍ MISMO, sin cerrar el modal — igual que el caso de "sin stock" de
+    // arriba.
+    const existenteEscaneado = carrito.find((i) => i.productId === producto.id);
+    if (existenteEscaneado && !producto.isService && existenteEscaneado.cantidad >= disponibleEscaneado) {
+      setErrorEscaner(`Ya agregaste todo el stock disponible de "${producto.name}" (${disponibleEscaneado}).`);
       return;
     }
     agregarAlCarrito(producto);
@@ -576,6 +662,22 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   };
 
   const cambiarCantidad = (productId: string, delta: number) => {
+    // 2026-10-05, hallazgo de auditoría: tocar "+" cuando ya se agregó todo
+    // el stock disponible no hacía nada visible — mismo aviso que
+    // agregarAlCarrito, calculado aparte del updater de abajo (que se deja
+    // igual, como respaldo defensivo).
+    if (delta > 0) {
+      const item = carrito.find((i) => i.productId === productId);
+      if (item && !item.isService) {
+        const producto = productos.find((p) => p.id === productId);
+        const disponible = producto ? stockDe(producto) : 0;
+        if (item.cantidad + delta > disponible) {
+          setAvisoStock(`Ya agregaste todo el stock disponible de "${item.nombre}" (${disponible}).`);
+          return;
+        }
+      }
+    }
+    setAvisoStock(null);
     setCarrito((prev) =>
       prev
         .map((i) => {
@@ -595,13 +697,20 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     setCarrito([]);
     setMontoRecibido("");
     setMixtoEfectivo(""); setMixtoTarjeta(""); setMixtoTransferencia("");
+    setConfirmaReparacionSinCobro(false);
   };
 
   // Solo para el renglón de una reparación (2026-09-25) — no tiene +/- de
   // cantidad (siempre es 1), así que se quita completo con este botón. Quitar
   // el renglón no le hace nada a la reparación en sí (nada se guardó todavía):
   // solo significa que el cajero decidió no cobrarla ahora mismo.
-  const quitarDelCarrito = (productId: string) => setCarrito((prev) => prev.filter((i) => i.productId !== productId));
+  const quitarDelCarrito = (productId: string) => {
+    setCarrito((prev) => prev.filter((i) => i.productId !== productId));
+    // Si se quita justo el renglón de reparación que estaba en $0, la
+    // casilla de confirmación ya no aplica a nada — se resetea para que no
+    // se quede "marcada" de cara a una futura reparación que se agregue.
+    setConfirmaReparacionSinCobro(false);
+  };
 
   // El monto de una reparación es negociado, no un precio de catálogo —
   // editable directo aquí, mismo criterio de confianza que ya tenía el
@@ -611,6 +720,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   const editarMontoReparacion = (productId: string, valor: string) => {
     const monto = Math.max(0, parseFloat(valor) || 0);
     setCarrito((prev) => prev.map((i) => (i.productId === productId ? { ...i, precio: monto } : i)));
+    // 2026-10-05, hallazgo de auditoría: cualquier edición que deje el monto
+    // en algo distinto de $0 invalida una confirmación de "sin cobro" que ya
+    // se hubiera marcado antes — si el cajero vuelve a dejarlo en $0 más
+    // tarde (otro descuido, u otra reparación), tiene que confirmarlo de
+    // nuevo a propósito, nunca heredar la marca vieja.
+    if (monto !== 0) setConfirmaReparacionSinCobro(false);
   };
 
   const handleMetodo = (m: MetodoPago) => {
@@ -763,6 +878,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     ? "La caja de esta sucursal está cerrada"
     : carrito.length === 0
     ? "Agrega al menos un producto o servicio al carrito"
+    // 2026-10-05, hallazgo de auditoría: ver confirmaReparacionSinCobro/
+    // hayReparacionEnCero más arriba — un renglón de reparación en $0 nunca
+    // bloquea el cobro por accidente, pero sí exige marcar la casilla de
+    // abajo a propósito.
+    : hayReparacionEnCero && !confirmaReparacionSinCobro
+    ? "El monto de la reparación es $0 — confirma la casilla de abajo si de verdad se entrega sin cobrar"
     // 2026-09-30: con "Monto recibido" ya opcional (ver montoIngresado más
     // arriba), esto solo puede dispararse cuando el cajero SÍ escribió un
     // monto y ese monto no alcanza — dejarlo en blanco ya nunca bloquea.
@@ -817,7 +938,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 </span>
               )}
             </div>
-            <button onClick={() => setClienteId(null)} className="text-muted-foreground hover:text-foreground flex-shrink-0">
+            <button onClick={() => setClienteId(null)} title="Quitar cliente de esta venta" aria-label="Quitar cliente de esta venta" className="text-muted-foreground hover:text-foreground flex-shrink-0">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -1207,6 +1328,25 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           </div>
         )}
 
+        {/* Confirmación de "reparación en $0" (2026-10-05, hallazgo de
+            auditoría — ver hayReparacionEnCero/confirmaReparacionSinCobro
+            más arriba). Solo aparece cuando de verdad hace falta: un
+            renglón de reparación en el carrito con su monto en $0. */}
+        {hayReparacionEnCero && (
+          <label className="mb-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={confirmaReparacionSinCobro}
+              onChange={(e) => setConfirmaReparacionSinCobro(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-amber-600 flex-shrink-0"
+            />
+            <span className="text-xs text-amber-700">
+              Confirmo que esta reparación se entrega <strong>sin cobrar nada</strong> (monto en $0). Si no era la
+              intención, edita el monto en el renglón de arriba.
+            </span>
+          </label>
+        )}
+
         {/* Botón cobrar — el elemento más grande y llamativo del panel a
             propósito (2026-09-23, lenguaje visual nuevo del POS: "el botón
             de Cobrar es el elemento más grande y llamativo de la
@@ -1362,7 +1502,12 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 e.preventDefault();
                 const primero = productosFiltrados[0];
                 if (!primero) return;
-                agregarAlCarrito(primero);
+                // 2026-10-05: si no se agregó nada (sin stock, o ya se
+                // agregó todo el disponible — ver agregarAlCarrito), el
+                // aviso correspondiente ya quedó visible; no tiene caso
+                // borrar lo que el cajero escribió ni saltar el foco a
+                // Cobrar como si la venta hubiera avanzado.
+                if (!agregarAlCarrito(primero)) return;
                 setBusqueda("");
                 // setTimeout(0), no llamada directa: el botón "Cobrar" puede
                 // estar deshabilitado (carrito todavía vacío) en el momento
@@ -1380,6 +1525,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           </div>
           <button
             onClick={() => { setErrorEscaner(null); setMostrarEscaner(true); }}
+            title="Escanear código de barras"
             aria-label="Escanear código de barras"
             className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-card border border-border hover:bg-muted rounded-full text-foreground transition-colors"
           >
@@ -1574,6 +1720,23 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           onCodigoDetectado={handleCodigoEscaneado}
           error={errorEscaner}
         />
+      )}
+
+      {/* Aviso flotante de "no se agregó nada por tope de stock" (2026-10-05,
+          hallazgo de auditoría — ver avisoStock arriba). Vive al nivel raíz
+          (no dentro del panel de catálogo ni del carrito) para que se vea
+          igual sin importar si el cajero está tocando una ficha o el "+" del
+          carrito, en escritorio o en la hoja móvil. Se autodestruye solo a
+          los pocos segundos. */}
+      {avisoStock && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] max-w-[92vw] flex items-center gap-2 bg-amber-50 border border-amber-300 text-amber-800 rounded-xl shadow-lg px-4 py-2.5"
+        >
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <span className="text-xs font-medium">{avisoStock}</span>
+        </div>
       )}
     </div>
   );

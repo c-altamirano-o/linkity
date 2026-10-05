@@ -258,8 +258,30 @@ export default function TenantShell({
   const menuNotifRef = useRef<HTMLDivElement>(null);
   const menuOnboardingRef = useRef<HTMLDivElement>(null);
 
-  const [notificaciones, setNotificaciones] = useState<NotificacionUI[]>(notificacionesIniciales);
-  const [notifNoLeidas, setNotifNoLeidas] = useState(notificacionesNoLeidasIniciales);
+  // DISPOSITIVO_PENDIENTE solo debe verse y resolverse desde la cuenta de
+  // administrador (resolverSolicitudDispositivoAction exige el módulo
+  // "configuracion", que ningún rol de PIN tiene nunca — ver
+  // MODULOS_BASE_EXCLUIDOS, lib/roles.ts). Antes este tipo llegaba igual a
+  // cualquier sesión (admin o staff) con botones Aprobar/Rechazar que para
+  // personal de PIN siempre fallaban con "Tu rol no tiene acceso a este
+  // módulo" — un callejón sin salida. Se filtra aquí, en la fuente, para
+  // que el personal ni siquiera vea el aviso (no solo los botones).
+  const notificacionVisibleParaSesion = (tipo: TipoNotificacion) =>
+    modo === "admin" || tipo !== "DISPOSITIVO_PENDIENTE";
+
+  const [notificaciones, setNotificaciones] = useState<NotificacionUI[]>(() =>
+    notificacionesIniciales.filter((n) => notificacionVisibleParaSesion(n.tipo))
+  );
+  // Para "staff" el contador de no leídas se recalcula sobre la lista ya
+  // filtrada (en vez de usar notificacionesNoLeidasIniciales a secas, que
+  // cuenta TODAS las no leídas del tenant sin distinguir tipo) — así el
+  // número de la campana nunca incluye avisos que el personal ni siquiera
+  // puede ver.
+  const [notifNoLeidas, setNotifNoLeidas] = useState(() =>
+    modo === "admin"
+      ? notificacionesNoLeidasIniciales
+      : notificacionesIniciales.filter((n) => notificacionVisibleParaSesion(n.tipo) && !n.leida).length
+  );
   // Pop-ups efímeros (2026-09-22, a petición explícita de Carlos: "que
   // aparezca una alerta o pop up en la pantalla") — independientes de la
   // campanita: se ven aunque no la tengas abierta, y se autodesaparecen
@@ -301,6 +323,11 @@ export default function TenantShell({
     const recibir = (tipo: TipoNotificacion) => (msg: {
       payload: { id: string; mensaje: string; branchName: string | null; fecha: string; solicitudDispositivoId?: string; url?: string };
     }) => {
+      // Ver el comentario junto a notificacionVisibleParaSesion, arriba —
+      // el personal de PIN nunca debe recibir este tipo, ni como toast ni
+      // en la campana, así que se descarta antes de tocar ningún estado.
+      if (!notificacionVisibleParaSesion(tipo)) return;
+
       const { id, mensaje, branchName, fecha, solicitudDispositivoId, url } = msg.payload;
       setNotificaciones((prev) =>
         // solicitudResuelta: false — esta notificación recién se creó en el
@@ -346,9 +373,21 @@ export default function TenantShell({
     setMenuNotifAbierto((abierto) => {
       const siguiente = !abierto;
       if (siguiente && notifNoLeidas > 0) {
+        // Estado optimista: se guarda lo que había ANTES de marcar como
+        // leídas, para poder revertirlo si el servidor no lo logró — antes
+        // el .catch(() => {}) se quedaba vacío, así que si esta acción
+        // fallaba el badge se quedaba en 0 (leídas) aunque en la base de
+        // datos siguieran sin leer, sin que nadie se enterara del
+        // desfase. Mismo criterio que resolverDispositivo: nunca asumir
+        // éxito del servidor sin confirmación real.
+        const notificacionesPrevias = notificaciones;
+        const notifNoLeidasPrevias = notifNoLeidas;
         setNotifNoLeidas(0);
         setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
-        marcarNotificacionesLeidasAction(tenant).catch(() => {});
+        marcarNotificacionesLeidasAction(tenant).catch(() => {
+          setNotificaciones(notificacionesPrevias);
+          setNotifNoLeidas(notifNoLeidasPrevias);
+        });
       }
       return siguiente;
     });
@@ -360,6 +399,13 @@ export default function TenantShell({
   // administrador (u otra pestaña, u otro día) ya la resolvió, así que
   // basta con ocultar los botones aquí también, sin alarmar con un error.
   const resolverDispositivo = async (solicitudId: string, aprobar: boolean) => {
+    // Defensa en profundidad: con el filtro de notificacionVisibleParaSesion
+    // de arriba, personal de PIN ya nunca debería poder llegar a llamar
+    // esto (el botón ni se renderiza), pero se deja este guard explícito
+    // para que esta función nunca dependa únicamente de que el filtro de
+    // arriba se aplicó correctamente en todos los casos.
+    if (modo !== "admin") return;
+
     // 2026-09-23, corrección: antes esto marcaba la solicitud como
     // "resuelta" en pantalla (ocultando los botones Aprobar/Rechazar) SIN
     // esperar a saber si resolverSolicitudDispositivoAction de verdad
@@ -570,7 +616,16 @@ export default function TenantShell({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const isActive = (href: string) => pathname.includes(href);
+  // Comparación exacta del segmento de ruta (antes era pathname.includes(href),
+  // que disparaba por coincidencia de subcadena — ej. un tenant cuyo slug
+  // contuviera "pos" o "caja" como parte del nombre marcaría ese ítem como
+  // activo en cualquier pantalla). Se compara contra la MISMA ruta que arma
+  // cada <Link href={`/${tenant}/${item.href}`}> de abajo, exacta o como
+  // prefijo de carpeta (`/tenant/pos/algo-mas` sigue siendo "pos" activo).
+  const isActive = (href: string) => {
+    const ruta = `/${tenant}/${href}`;
+    return pathname === ruta || pathname.startsWith(`${ruta}/`);
+  };
 
   const modulosInactivosSet = new Set(modulosInactivos);
 
@@ -677,7 +732,13 @@ export default function TenantShell({
           {toasts.map((t) => {
             const estilo = ESTILO_NOTIFICACION[t.tipo];
             const Icono = estilo.icon;
+            // modo === "admin": defensa en profundidad — este tipo ya se
+            // filtra en la fuente (notificacionVisibleParaSesion) y nunca
+            // debería llegar aquí en modo "staff", pero la condición se
+            // deja explícita para que el botón nunca pueda mostrarse sin
+            // depender únicamente de ese filtro previo.
             const necesitaAccion =
+              modo === "admin" &&
               t.tipo === "DISPOSITIVO_PENDIENTE" && t.solicitudDispositivoId && !solicitudesResueltas.has(t.solicitudDispositivoId);
             return (
               <div
@@ -704,6 +765,8 @@ export default function TenantShell({
                   <button
                     onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
                     className="ml-auto text-muted-foreground hover:text-foreground flex-shrink-0"
+                    title="Cerrar aviso"
+                    aria-label="Cerrar aviso"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -768,6 +831,8 @@ export default function TenantShell({
                 <button
                   className="lg:hidden p-1 rounded-md hover:bg-sidebar-accent"
                   onClick={() => setMobileOpen(false)}
+                  title="Cerrar menú"
+                  aria-label="Cerrar menú"
                 >
                   <X className="w-4 h-4 text-sidebar-foreground/60" />
                 </button>
@@ -839,6 +904,8 @@ export default function TenantShell({
         <button
           className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 bg-sidebar border border-sidebar-border rounded-full items-center justify-center shadow-sm hover:bg-sidebar-accent transition-colors z-10"
           onClick={() => setCollapsed(!collapsed)}
+          title={collapsed ? "Expandir menú" : "Colapsar menú"}
+          aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
         >
           {collapsed
             ? <ChevronRight className="w-3 h-3 text-sidebar-foreground/60" />
@@ -854,6 +921,8 @@ export default function TenantShell({
             <button
               className="lg:hidden p-1.5 rounded-lg hover:bg-muted transition-colors"
               onClick={() => setMobileOpen(true)}
+              title="Abrir menú"
+              aria-label="Abrir menú"
             >
               <Menu className="w-5 h-5 text-muted-foreground" />
             </button>
@@ -981,7 +1050,12 @@ export default function TenantShell({
             )}
 
             <div className="relative" ref={menuNotifRef}>
-              <button onClick={handleToggleNotif} className="relative p-2 rounded-lg hover:bg-muted transition-colors">
+              <button
+                onClick={handleToggleNotif}
+                className="relative p-2 rounded-lg hover:bg-muted transition-colors"
+                title="Notificaciones"
+                aria-label="Notificaciones"
+              >
                 <Bell className="w-4 h-4 text-muted-foreground" />
                 {notifNoLeidas > 0 && (
                   <span className="absolute top-1 right-1 min-w-[15px] h-[15px] px-[3px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
@@ -1003,7 +1077,10 @@ export default function TenantShell({
                         // de dispositivo pendiente se queda accionable aquí
                         // aunque su pop-up ya se haya desaparecido solo (p.
                         // ej. si el administrador no lo vio a tiempo).
+                        // modo === "admin": misma defensa en profundidad que
+                        // el toast de arriba.
                         const necesitaAccion =
+                          modo === "admin" &&
                           n.tipo === "DISPOSITIVO_PENDIENTE" &&
                           n.solicitudDispositivoId &&
                           !n.solicitudResuelta &&

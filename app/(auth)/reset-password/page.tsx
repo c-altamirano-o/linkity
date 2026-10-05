@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { Lock, Eye, EyeOff, ArrowRight, ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getTenantAccesoBySupabaseId, isSuperAdminBySupabaseId } from "../login/actions";
 
@@ -66,13 +66,24 @@ export default function ResetPasswordPage() {
     setListo(true);
     setLoading(false);
 
-    const { tenantSlug } = await getTenantAccesoBySupabaseId(userData.user.id);
-    if (tenantSlug) {
-      window.location.href = `/${tenantSlug}/dashboard`;
-      return;
+    // La contraseña ya quedó guardada en este punto — si lo que sigue
+    // (buscar a qué negocio redirigir) falla por conexión, antes el botón
+    // se quedaba deshabilitado para siempre en "Listo, entrando…" sin
+    // ninguna salida en esta pantalla. Con el catch, se vuelve a habilitar
+    // el formulario (listo=false) y se explica que la contraseña sí se
+    // guardó, para que no se reintente a ciegas pensando que falló todo.
+    try {
+      const { tenantSlug } = await getTenantAccesoBySupabaseId(userData.user.id);
+      if (tenantSlug) {
+        window.location.href = `/${tenantSlug}/dashboard`;
+        return;
+      }
+      const esSuperAdmin = await isSuperAdminBySupabaseId(userData.user.id);
+      window.location.href = esSuperAdmin ? "/maestro/dashboard" : "/login";
+    } catch {
+      setListo(false);
+      setError("Tu contraseña ya se actualizó, pero no pudimos continuar. Intenta de nuevo o usa el link de abajo para iniciar sesión.");
     }
-    const esSuperAdmin = await isSuperAdminBySupabaseId(userData.user.id);
-    window.location.href = esSuperAdmin ? "/maestro/dashboard" : "/login";
   };
 
   if (checking) {
@@ -179,6 +190,13 @@ export default function ResetPasswordPage() {
                 )}
               </button>
             </form>
+
+            <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
+              <Link href="/login" className="text-primary font-medium hover:underline inline-flex items-center gap-1">
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Volver al inicio de sesión
+              </Link>
+            </p>
           </>
         )}
       </div>

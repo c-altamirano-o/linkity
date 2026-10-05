@@ -14,7 +14,8 @@ import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, paisPorCodigo, validarTelefono 
 import {
   crearEmpleadoAction, editarEmpleadoAction, cambiarEstadoEmpleadoAction,
   registrarAsistenciaAction, generarPagoAction, actualizarEstadoPagoAction,
-  obtenerSugerenciaComisionAction, obtenerIncidenciasAsistenciaAction, restablecerPinAction, type DatosEmpleado,
+  obtenerSugerenciaComisionAction, obtenerIncidenciasAsistenciaAction, restablecerPinAction,
+  editarAsistenciaManualAction, borrarAsistenciaManualAction, type DatosEmpleado,
 } from "@/app/actions/personal-actions";
 import RolesManager from "./RolesManager";
 import AsistentePersonal from "./AsistentePersonal";
@@ -84,6 +85,13 @@ const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6];
 const formatMXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 const formatFecha = (iso: string) => new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
 const formatHora = (iso: string) => new Date(iso).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" });
+// "HH:MM" en 24h (hora local del navegador) para precargar un <input
+// type="time"> al corregir asistencia — distinto de formatHora (que es
+// solo para mostrar texto, 12h con am/pm).
+const isoAHoraInput = (iso: string) => {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
 
 function iniciales(nombre: string): string {
   const partes = nombre.trim().split(/\s+/).filter(Boolean);
@@ -214,6 +222,20 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
   const [pinError, setPinError] = useState<string | null>(null);
   const [restableciendoPin, startRestablecerPin] = useTransition();
 
+  // ── Corregir asistencia manual de hoy (2026-10-05, a petición de Carlos
+  // tras la auditoría) ─────────────────────────────────────────────────
+  // Antes, una vez capturada la entrada/salida de HOY de un empleado, no
+  // había forma de corregir un error de captura (hora equivocada, o el
+  // botón de otro empleado por accidente) — ver editarAsistenciaManualAction
+  // en personal-actions.ts. Mismo alcance que esa acción: solo el registro
+  // de hoy, no un historial completo.
+  const [modalAsistenciaStaffId, setModalAsistenciaStaffId] = useState<string | null>(null);
+  const [asistenciaCheckIn, setAsistenciaCheckIn] = useState("");
+  const [asistenciaCheckOut, setAsistenciaCheckOut] = useState("");
+  const [asistenciaError, setAsistenciaError] = useState<string | null>(null);
+  const [corrigiendoAsistencia, startCorregirAsistencia] = useTransition();
+  const [borrandoAsistencia, startBorrarAsistencia] = useTransition();
+
   const [modalPagoStaffId, setModalPagoStaffId] = useState<string | null>(null);
   const [pagoInicio, setPagoInicio] = useState("");
   const [pagoFin, setPagoFin] = useState("");
@@ -256,6 +278,57 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
       const res = await registrarAsistenciaAction({ tenantSlug, staffId, accion });
       if (res.ok) refrescar();
       else setAccionError(res.error);
+    });
+  };
+
+  // ── Corregir/borrar asistencia manual de hoy ─────────────────────────
+  const abrirCorregirAsistencia = (emp: EmpleadoUI) => {
+    setModalAsistenciaStaffId(emp.id);
+    setAsistenciaCheckIn(emp.asistenciaHoy?.checkIn ? isoAHoraInput(emp.asistenciaHoy.checkIn) : "");
+    setAsistenciaCheckOut(emp.asistenciaHoy?.checkOut ? isoAHoraInput(emp.asistenciaHoy.checkOut) : "");
+    setAsistenciaError(null);
+  };
+
+  const cancelarModalAsistencia = () => {
+    if (confirmarSalirSinGuardar()) setModalAsistenciaStaffId(null);
+  };
+
+  const handleGuardarAsistencia = () => {
+    if (!modalAsistenciaStaffId) return;
+    // Es un dato de nómina (horasSemana/pagos se calculan a partir de
+    // Attendance) — se pide confirmación explícita antes de sobrescribirlo,
+    // mismo criterio que ya usa eliminarRol en RolesManager.tsx para una
+    // acción que no se puede deshacer con un simple "Cancelar".
+    if (!window.confirm("¿Guardar esta corrección? Se usará para calcular horas y nómina de este empleado.")) return;
+    setAsistenciaError(null);
+    startCorregirAsistencia(async () => {
+      const res = await editarAsistenciaManualAction({
+        tenantSlug,
+        staffId: modalAsistenciaStaffId,
+        checkIn: asistenciaCheckIn || null,
+        checkOut: asistenciaCheckOut || null,
+      });
+      if (res.ok) {
+        setModalAsistenciaStaffId(null);
+        refrescar();
+      } else {
+        setAsistenciaError(res.error);
+      }
+    });
+  };
+
+  const handleBorrarAsistencia = () => {
+    if (!modalAsistenciaStaffId) return;
+    if (!window.confirm("¿Borrar por completo el registro de asistencia de hoy de este empleado? Esta acción no se puede deshacer.")) return;
+    setAsistenciaError(null);
+    startBorrarAsistencia(async () => {
+      const res = await borrarAsistenciaManualAction({ tenantSlug, staffId: modalAsistenciaStaffId });
+      if (res.ok) {
+        setModalAsistenciaStaffId(null);
+        refrescar();
+      } else {
+        setAsistenciaError(res.error);
+      }
     });
   };
 
@@ -503,11 +576,14 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
 
   const moduloNombre = label(labels, "module.staff.name");
   const empleadoParaPin = empleados.find((e) => e.id === modalPinStaffId) ?? null;
+  const empleadoParaAsistencia = empleados.find((e) => e.id === modalAsistenciaStaffId) ?? null;
 
   // Advierte al cerrar/recargar la PESTAÑA (no solo el modal) mientras
-  // cualquiera de los tres modales de captura de este módulo esté abierto
+  // cualquiera de los modales de captura de este módulo esté abierto
   // (2026-09-22, a petición de Carlos — ver lib/confirmar-cierre.ts).
-  useAdvertirCierrePestaña(modalEmpleado !== null || empleadoParaPin !== null || seleccionadoParaPago !== null);
+  useAdvertirCierrePestaña(
+    modalEmpleado !== null || empleadoParaPin !== null || seleccionadoParaPago !== null || empleadoParaAsistencia !== null
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -768,9 +844,22 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   </div>
                 </div>
                 {seleccionado.asistenciaHoy?.checkIn && (
-                  <p className="text-[12.5px] text-muted-foreground">
-                    Hoy: entrada {formatHora(seleccionado.asistenciaHoy.checkIn)}
-                    {seleccionado.asistenciaHoy.checkOut ? ` · salida ${formatHora(seleccionado.asistenciaHoy.checkOut)}` : " · sin salida registrada"}
+                  <p className="text-[12.5px] text-muted-foreground flex items-center gap-2 flex-wrap">
+                    <span>
+                      Hoy: entrada {formatHora(seleccionado.asistenciaHoy.checkIn)}
+                      {seleccionado.asistenciaHoy.checkOut ? ` · salida ${formatHora(seleccionado.asistenciaHoy.checkOut)}` : " · sin salida registrada"}
+                    </span>
+                    {/* 2026-10-05, a petición de Carlos tras la auditoría:
+                        antes no había ninguna forma de corregir este
+                        registro si se capturó mal (persona u hora
+                        equivocada) — ver editarAsistenciaManualAction en
+                        personal-actions.ts. */}
+                    <button
+                      onClick={() => abrirCorregirAsistencia(seleccionado)}
+                      className="flex items-center gap-1 text-primary-text hover:underline"
+                    >
+                      <Pencil className="w-3 h-3" /> Corregir
+                    </button>
                   </p>
                 )}
               </div>
@@ -1247,6 +1336,57 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 className="btn-primary px-4 py-2 rounded-lg text-xs">
                 {restableciendoPin ? "Guardando..." : "Guardar PIN"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal corregir asistencia manual de hoy (2026-10-05, a petición de
+          Carlos tras la auditoría) */}
+      {empleadoParaAsistencia && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={cancelarModalAsistencia}>
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-sm font-medium text-foreground">
+                Corregir asistencia de hoy — {empleadoParaAsistencia.name}
+              </span>
+              <button onClick={cancelarModalAsistencia} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              {asistenciaError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">{asistenciaError}</div>}
+              <p className="text-[11.5px] text-muted-foreground">
+                Corrige la hora capturada por error, o borra el registro completo si se marcó a la persona equivocada.
+                Esto se usa para calcular horas y nómina — se te pedirá confirmación antes de guardar.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ENTRADA</label>
+                  <input type="time" value={asistenciaCheckIn}
+                    onChange={(e) => setAsistenciaCheckIn(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+                <div>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">SALIDA</label>
+                  <input type="time" value={asistenciaCheckOut}
+                    onChange={(e) => setAsistenciaCheckOut(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                </div>
+              </div>
+              <p className="text-[11.5px] text-muted-foreground">Deja un campo vacío para marcarlo como "sin registrar".</p>
+            </div>
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-border">
+              <button disabled={borrandoAsistencia || corrigiendoAsistencia} onClick={handleBorrarAsistencia}
+                className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50">
+                <X className="w-3 h-3" /> {borrandoAsistencia ? "Borrando..." : "Borrar registro de hoy"}
+              </button>
+              <div className="flex gap-2">
+                <button onClick={cancelarModalAsistencia} className="btn-ghost px-3 py-2 text-xs rounded-lg">Cancelar</button>
+                <button disabled={corrigiendoAsistencia || borrandoAsistencia} onClick={handleGuardarAsistencia}
+                  className="btn-primary px-4 py-2 rounded-lg text-xs">
+                  {corrigiendoAsistencia ? "Guardando..." : "Guardar corrección"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

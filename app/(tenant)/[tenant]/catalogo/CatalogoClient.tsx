@@ -1,7 +1,7 @@
 // ruta: C:\linkity\app\(tenant)\[tenant]\catalogo\CatalogoClient.tsx
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, SlidersHorizontal, Smartphone, Cpu,
@@ -138,6 +138,21 @@ const stockBadge = (isService: boolean, stock: number) => {
   if (stock === 0) return <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-red-50 text-red-600">Agotado</span>;
   if (stock > 0 && stock <= 2) return <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600">Stock: {stock}</span>;
   return <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-600">Stock: {stock}</span>;
+};
+
+// 2026-10-05, a petición de Carlos (auditoría de Clientes/Catálogo/
+// Inventario/Compras — el botón "Filtros" de esta pantalla no hacía nada):
+// mismos 3 estados y mismo umbral que ya pinta stockBadge de arriba (no el
+// de Inventario, que compara contra minStock) — así el filtro "Stock bajo"/
+// "Agotados" coincide exactamente con las fichas ámbar/rojas que el
+// empleado ya ve en la cuadrícula, en vez de usar otro criterio distinto
+// por debajo. Un servicio nunca entra en "bajo"/"agotado" (no lleva stock).
+type EstadoStockCatalogo = "bajo" | "agotado" | "ok";
+const estadoStockDe = (p: Pick<ProductoCatalogo, "isService" | "stock">): EstadoStockCatalogo | "na" => {
+  if (p.isService) return "na";
+  if (p.stock === 0) return "agotado";
+  if (p.stock <= 2) return "bajo";
+  return "ok";
 };
 
 const rankBadgeClass = (i: number) => {
@@ -446,6 +461,33 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   const [confirmarAccionProducto, setConfirmarAccionProducto] = useState<"archivar" | "restaurar" | "eliminar" | null>(null);
   const [errorAccionProducto, setErrorAccionProducto] = useState<string | null>(null);
 
+  // ── Filtros (2026-10-05, a petición de Carlos — auditoría de Clientes/
+  // Catálogo/Inventario/Compras): el botón "Filtros" de la barra de arriba
+  // no tenía onClick, no hacía nada. Mismo patrón de panel desplegable que
+  // ya usa el botón gemelo de Inventario (InventarioClient.tsx): un popover
+  // que se cierra solo al hacer clic fuera. Tipo (Producto/Refacción/
+  // Servicio) y "Ver archivados" ya tienen su propio control dedicado y
+  // visible (tabs de arriba/sidebar y el botón "Archivados" de junto,
+  // respectivamente) — duplicarlos aquí adentro solo sería confuso, así que
+  // este panel aporta dos filtros que hoy no existen en ningún otro lado:
+  // "Categoría" con la opción "Todas las categorías" (el sidebar siempre
+  // deja una categoría puntual seleccionada, nunca "todas a la vez" dentro
+  // de un tipo) y "Estado de stock" (Stock bajo/Agotados), útil para ver de
+  // un vistazo qué surtir sin tener que ir hasta Inventario.
+  const [mostrarFiltrosCatalogo, setMostrarFiltrosCatalogo] = useState(false);
+  const [estadoStockFiltro, setEstadoStockFiltro] = useState<"todos" | EstadoStockCatalogo>("todos");
+  const filtrosCatalogoRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filtrosCatalogoRef.current && !filtrosCatalogoRef.current.contains(e.target as Node)) {
+        setMostrarFiltrosCatalogo(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   // Selector de ícono del modal: "icono" muestra la galería de ICONOS
   // (misma paleta vectorial que ya usa el catálogo de arranque), "emoji"
   // muestra el campo de texto libre de siempre para quien prefiera escribir
@@ -613,7 +655,11 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
     // productos archivados (descontinuados) — "Ver archivados" los vuelve a
     // traer, atenuados, cuando sí se necesitan consultar.
     const matchArchivado = mostrarArchivados ? true : !p.archivedAt;
-    return matchTipo && matchCat && matchSearch && matchArchivado;
+    // 2026-10-05: filtro "Estado de stock" del panel "Filtros" — un
+    // servicio (estadoStockDe === "na") nunca califica como "bajo"/
+    // "agotado", así que con ese filtro activo simplemente no aparece.
+    const matchEstadoStock = estadoStockFiltro === "todos" ? true : estadoStockDe(p) === estadoStockFiltro;
+    return matchTipo && matchCat && matchSearch && matchArchivado && matchEstadoStock;
   });
 
   const totalArchivados = productos.filter((p) => p.archivedAt).length;
@@ -842,10 +888,68 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   </span>
                 )}
               </button>
-              <button className="btn-secondary flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-xs flex-shrink-0">
-                <SlidersHorizontal className="w-3 h-3" />
-                <span className="hidden sm:inline">Filtros</span>
-              </button>
+              <div className="relative flex-shrink-0" ref={filtrosCatalogoRef}>
+                <button
+                  type="button"
+                  onClick={() => setMostrarFiltrosCatalogo((v) => !v)}
+                  className="btn-secondary flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-xs"
+                >
+                  <SlidersHorizontal className="w-3 h-3" />
+                  <span className="hidden sm:inline">Filtros</span>
+                  {estadoStockFiltro !== "todos" && (
+                    <span className="w-4 h-4 flex items-center justify-center bg-primary text-primary-foreground rounded-full text-[10.5px] font-semibold">
+                      1
+                    </span>
+                  )}
+                </button>
+                {mostrarFiltrosCatalogo && (
+                  <div className="absolute right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-lg z-30 p-3 w-56">
+                    <label className="block text-[11.5px] font-medium text-muted-foreground mb-1">Categoría</label>
+                    <select
+                      value={categoriaActiva ?? ""}
+                      onChange={(e) => setCategoriaActiva(e.target.value || null)}
+                      className="w-full px-2.5 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary"
+                    >
+                      <option value="">Todas las categorías</option>
+                      {categoriasPorTipo[tipoActivo].map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+
+                    <label className="block text-[11.5px] font-medium text-muted-foreground mt-3 mb-1">Estado de stock</label>
+                    <div className="flex flex-col gap-1">
+                      {([
+                        ["todos", "Todos"],
+                        ["bajo", "Stock bajo"],
+                        ["agotado", "Agotados"],
+                      ] as const).map(([valor, etiqueta]) => (
+                        <button
+                          key={valor}
+                          type="button"
+                          onClick={() => setEstadoStockFiltro(valor)}
+                          className={`text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                            estadoStockFiltro === valor
+                              ? "bg-primary text-primary-foreground font-medium"
+                              : "text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {etiqueta}
+                        </button>
+                      ))}
+                    </div>
+
+                    {estadoStockFiltro !== "todos" && (
+                      <button
+                        type="button"
+                        onClick={() => setEstadoStockFiltro("todos")}
+                        className="btn-ghost mt-2 -mx-1.5 px-1.5 py-0.5 rounded-md text-[11.5px]"
+                      >
+                        Limpiar filtro
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {productos.length === 0 ? (

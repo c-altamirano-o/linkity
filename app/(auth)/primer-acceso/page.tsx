@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { Lock, Eye, EyeOff, ArrowRight, ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getTenantSlugBySupabaseId } from "../login/actions";
 
@@ -67,15 +68,26 @@ export default function PrimerAccesoPage() {
       return;
     }
 
-    const tenantSlug = await getTenantSlugBySupabaseId(userData.user.id);
-    setLoading(false);
+    // La contraseña ya quedó guardada en este punto — si getTenantSlugBySupabaseId
+    // falla por conexión, antes el botón se quedaba en "..." para siempre
+    // sin mensaje y sin ningún link en toda la pantalla para salir. Con el
+    // catch se vuelve a habilitar el botón (loading=false) para reintentar;
+    // el link "Volver a iniciar sesión" de abajo queda como salida aparte
+    // por si el reintento tampoco conecta.
+    try {
+      const tenantSlug = await getTenantSlugBySupabaseId(userData.user.id);
+      setLoading(false);
 
-    if (!tenantSlug) {
-      setError("Tu cuenta no está asociada a ningún negocio.");
-      return;
+      if (!tenantSlug) {
+        setError("Tu cuenta no está asociada a ningún negocio.");
+        return;
+      }
+
+      window.location.href = `/${tenantSlug}/bienvenida`;
+    } catch {
+      setLoading(false);
+      setError("Tu contraseña ya se guardó, pero no pudimos continuar. Intenta de nuevo o usa el link de abajo para iniciar sesión.");
     }
-
-    window.location.href = `/${tenantSlug}/bienvenida`;
   };
 
   if (checking) {
@@ -173,6 +185,13 @@ export default function PrimerAccesoPage() {
             )}
           </button>
         </form>
+
+        <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
+          <Link href="/login" className="text-primary font-medium hover:underline inline-flex items-center gap-1">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Volver a iniciar sesión
+          </Link>
+        </p>
       </div>
     </div>
   );

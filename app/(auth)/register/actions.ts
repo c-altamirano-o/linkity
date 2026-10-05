@@ -82,6 +82,26 @@ function generateTempPassword(): string {
   return "Temp" + Math.random().toString(36).slice(-8) + "!1";
 }
 
+// Traduce los mensajes de Supabase Auth (siempre en inglés) a algo que un
+// visitante real pueda leer — antes se mostraba el texto crudo de
+// authError.message directo en el formulario (ej. "User already
+// registered"), rompiendo el idioma y el tono del resto del flujo y sin
+// decirle a la persona qué hacer. Los casos no reconocidos caen a un
+// mensaje genérico en español en vez de filtrar el texto de Supabase.
+function mensajeErrorRegistro(authError: { message?: string } | null | undefined): string {
+  const msg = authError?.message?.toLowerCase() ?? "";
+  if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("already been registered")) {
+    return "Ya existe una cuenta con ese correo — intenta iniciar sesión.";
+  }
+  if (msg.includes("password")) {
+    return "La contraseña generada no cumple los requisitos de seguridad. Intenta de nuevo.";
+  }
+  if (msg.includes("email") && (msg.includes("invalid") || msg.includes("valid"))) {
+    return "El correo electrónico no es válido.";
+  }
+  return "No se pudo crear tu cuenta. Intenta de nuevo en unos minutos.";
+}
+
 export async function registrarNegocioAction(
   input: RegistrarNegocioInput
 ): Promise<RegistrarNegocioResult> {
@@ -121,7 +141,7 @@ export async function registrarNegocioAction(
     if (authError || !authData.user) {
       return {
         success: false,
-        error: `No se pudo crear tu cuenta: ${authError?.message ?? "error desconocido"}`,
+        error: mensajeErrorRegistro(authError),
       };
     }
 
@@ -202,10 +222,14 @@ export async function registrarNegocioAction(
 
     return { success: true, tenantSlug: result.slug, ownerEmail: input.ownerEmail.trim(), tempPassword };
   } catch (err) {
+    // Mismo criterio que mensajeErrorRegistro arriba: nunca se le muestra al
+    // visitante el texto crudo de un error interno (antes podía filtrar
+    // mensajes de Prisma/DB sin traducir) — se registra en el log del
+    // servidor y se responde con un mensaje genérico en español.
     console.error("Error en auto-registro de negocio:", err);
     return {
       success: false,
-      error: err instanceof Error ? err.message : "Error desconocido",
+      error: "No se pudo crear tu cuenta. Intenta de nuevo en unos minutos.",
     };
   }
 }

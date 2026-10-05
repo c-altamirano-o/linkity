@@ -218,6 +218,21 @@ export default async function TenantLayout({
     // de Caja (si no, nunca podría llegar a abrirla) y Asistencia (para que
     // pueda registrar su salida si por lo que sea ya se fue sin cerrar —
     // caso raro, pero no tiene sentido atraparlo sin ver ni eso).
+    //
+    // Nota (auditoría 2026-10-05): "asistencia" NUNCA puede estar en
+    // modulosPermitidosParaNav para ningún rol de PIN — ese módulo está
+    // excluido a propósito de todo el sistema de permisos (ver
+    // MODULOS_BASE_EXCLUIDOS, lib/roles.ts, y el comentario de
+    // "module.attendance.name" en TenantShell.tsx: "staff nunca ve este
+    // link"). Eso significa que el guard de arriba (línea 206) ya redirige
+    // fuera de /asistencia a CUALQUIER personal antes de que este segundo
+    // bloque se evalúe siquiera — la excepción `modulo !== "asistencia"` de
+    // abajo es hoy inalcanzable en la práctica. Se deja tal cual (en vez de
+    // quitarla) a propósito: es inofensiva, documenta la intención original
+    // ("que pueda registrar su salida"), y queda lista para activarse sola
+    // el día que algún rol sí pueda tener "asistencia" sin tocar esta línea
+    // — no se trata de código con efecto engañoso, solo de una excepción
+    // hoy sin caso que la dispare.
     if (
       modulo !== "caja" &&
       modulo !== "asistencia" &&

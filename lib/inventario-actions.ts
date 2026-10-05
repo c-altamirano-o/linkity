@@ -33,7 +33,21 @@ export async function ajustarStock(params: {
   branchId: string;
   tipo: AjusteTipo;
   cantidad: number;
-}): Promise<{ ok: true; nuevoStock: number } | { ok: false; error: string }> {
+}): Promise<
+  | {
+      ok: true;
+      nuevoStock: number;
+      // 2026-10-05, a petición de Carlos (auditoría de Inventario): cuánto se
+      // descontó DE VERDAD en una "salida" — antes, pedir descontar más de lo
+      // que había disponible se recortaba en silencio a 0 sin que el
+      // empleado se enterara de que no se quitó la cantidad completa que
+      // tecleó. Igual a `cantidad` en "entrada"/"ajuste" (ahí nunca hay
+      // recorte); en "salida" puede ser menor que `cantidad` si el stock
+      // disponible no alcanzaba.
+      cantidadAplicada: number;
+    }
+  | { ok: false; error: string }
+> {
   const { tenantSlug, productId, branchId, tipo, cantidad } = params;
 
   if (!Number.isFinite(cantidad) || cantidad < 0) {
@@ -77,10 +91,21 @@ export async function ajustarStock(params: {
     where: { productId_branchId: { productId, branchId } },
   });
 
+  const stockPrevio = existing?.stock ?? 0;
   let nuevoStock: number;
-  if (tipo === "entrada") nuevoStock = (existing?.stock ?? 0) + cantidad;
-  else if (tipo === "salida") nuevoStock = Math.max(0, (existing?.stock ?? 0) - cantidad);
-  else nuevoStock = cantidad; // "ajuste" fija el valor absoluto
+  // cantidadAplicada: igual a `cantidad` salvo en "salida" cuando el stock
+  // disponible no alcanza — ahí es lo que de verdad se pudo descontar
+  // (stockPrevio, nunca negativo), para que el llamador pueda avisar que no
+  // se quitó la cantidad completa pedida.
+  let cantidadAplicada = cantidad;
+  if (tipo === "entrada") {
+    nuevoStock = stockPrevio + cantidad;
+  } else if (tipo === "salida") {
+    nuevoStock = Math.max(0, stockPrevio - cantidad);
+    cantidadAplicada = stockPrevio - nuevoStock;
+  } else {
+    nuevoStock = cantidad; // "ajuste" fija el valor absoluto
+  }
 
   await prisma.inventory.upsert({
     where: { productId_branchId: { productId, branchId } },
@@ -91,5 +116,5 @@ export async function ajustarStock(params: {
   revalidatePath(`/${tenantSlug}/inventario`);
   revalidatePath(`/${tenantSlug}/dashboard`);
 
-  return { ok: true, nuevoStock };
+  return { ok: true, nuevoStock, cantidadAplicada };
 }

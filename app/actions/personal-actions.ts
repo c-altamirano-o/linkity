@@ -7,7 +7,7 @@ import { calcularComisionSugerida, calcularComisionEquipoSugerida } from "@/lib/
 import { calcularIncidenciasAsistencia, type IncidenciasAsistencia } from "@/lib/incidencias-asistencia";
 import { resolverActor, type ActorResult } from "@/lib/actor";
 import { validarTelefono, PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
-import { horaValida } from "@/lib/horarios-sucursal";
+import { horaValida, parseHoraAMinutos } from "@/lib/horarios-sucursal";
 import { hashPin, pinValido } from "@/lib/staff-auth";
 import { randomUUID } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -438,6 +438,123 @@ export async function registrarAsistenciaAction(params: {
     }
     console.error("Error al registrar asistencia:", err);
     return { ok: false, error: "No se pudo registrar la asistencia" };
+  }
+}
+
+/**
+ * Corrige a mano el registro MANUAL de asistencia de HOY (modelo Attendance
+ * — el que alimenta horasSemana/nómina, distinto de StaffLoginSession que
+ * se corrige desde asistencia-actions.ts). 2026-10-05, a petición de Carlos
+ * tras la auditoría: antes, una vez capturada la entrada/salida de hoy, no
+ * había forma de corregir un error de captura (persona o botón equivocado)
+ * — registrarAsistenciaAction rechaza un segundo check-in/check-out del
+ * mismo día a propósito (ver su comentario), así que la única salida era
+ * esta edición aparte. Solo opera sobre el registro de HOY (mismo criterio
+ * de "un solo día a la vez" que ya regía en registrarAsistenciaAction) — no
+ * existe un selector de fecha en el cliente para no abrir la puerta a
+ * reescribir el historial de días pasados desde aquí.
+ */
+export async function editarAsistenciaManualAction(params: {
+  tenantSlug: string;
+  staffId: string;
+  // "HH:MM" (24h) o null para dejar ese campo sin capturar.
+  checkIn: string | null;
+  checkOut: string | null;
+}): Promise<AccionPersonalResult> {
+  const { tenantSlug, staffId, checkIn, checkOut } = params;
+
+  if (checkIn && !horaValida(checkIn)) return { ok: false, error: "La hora de entrada no es válida" };
+  if (checkOut && !horaValida(checkOut)) return { ok: false, error: "La hora de salida no es válida" };
+  if (checkOut && !checkIn) return { ok: false, error: "No puede haber una hora de salida sin una hora de entrada" };
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const staff = await db.staff.findUnique({ where: { id: staffId }, select: { id: true } });
+    if (!staff) return { ok: false, error: "Empleado no encontrado" };
+
+    const hoy = new Date();
+    const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+
+    // Attendance no tiene tenantId propio (ver el comentario en
+    // registrarAsistenciaAction) — su pertenencia al tenant ya quedó
+    // garantizada arriba, con staffId validado contra un Staff de este
+    // tenant.
+    const existente = await prisma.attendance.findUnique({ where: { staffId_date: { staffId, date: inicioHoy } } });
+    if (!existente) return { ok: false, error: "No hay ningún registro de asistencia de hoy para corregir" };
+
+    function horaDeHoyADate(hhmm: string): Date {
+      const minutos = parseHoraAMinutos(hhmm)!;
+      const d = new Date(inicioHoy);
+      d.setHours(Math.floor(minutos / 60), minutos % 60, 0, 0);
+      return d;
+    }
+
+    const nuevoCheckIn = checkIn ? horaDeHoyADate(checkIn) : null;
+    const nuevoCheckOut = checkOut ? horaDeHoyADate(checkOut) : null;
+
+    if (nuevoCheckIn && nuevoCheckOut && nuevoCheckOut < nuevoCheckIn) {
+      return { ok: false, error: "La hora de salida no puede ser antes que la de entrada" };
+    }
+
+    await prisma.attendance.update({
+      where: { staffId_date: { staffId, date: inicioHoy } },
+      data: { checkIn: nuevoCheckIn, checkOut: nuevoCheckOut },
+    });
+
+    revalidatePath(`/${tenantSlug}/personal`);
+    return { ok: true };
+  } catch (err: any) {
+    if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
+      return { ok: false, error: "No tienes acceso a este recurso" };
+    }
+    console.error("Error al corregir la asistencia manual:", err);
+    return { ok: false, error: "No se pudo corregir el registro de asistencia" };
+  }
+}
+
+/**
+ * Borra por completo el registro MANUAL de asistencia de HOY (ver el
+ * comentario largo en editarAsistenciaManualAction, arriba) — para cuando
+ * el error de captura fue registrar a la persona equivocada y no basta con
+ * corregir la hora. Mismo alcance de "solo hoy", mismo motivo.
+ */
+export async function borrarAsistenciaManualAction(params: {
+  tenantSlug: string;
+  staffId: string;
+}): Promise<AccionPersonalResult> {
+  const { tenantSlug, staffId } = params;
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const staff = await db.staff.findUnique({ where: { id: staffId }, select: { id: true } });
+    if (!staff) return { ok: false, error: "Empleado no encontrado" };
+
+    const hoy = new Date();
+    const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+
+    const existente = await prisma.attendance.findUnique({ where: { staffId_date: { staffId, date: inicioHoy } } });
+    if (!existente) return { ok: false, error: "No hay ningún registro de asistencia de hoy para borrar" };
+
+    await prisma.attendance.delete({ where: { staffId_date: { staffId, date: inicioHoy } } });
+
+    revalidatePath(`/${tenantSlug}/personal`);
+    return { ok: true };
+  } catch (err: any) {
+    if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
+      return { ok: false, error: "No tienes acceso a este recurso" };
+    }
+    console.error("Error al borrar la asistencia manual:", err);
+    return { ok: false, error: "No se pudo borrar el registro de asistencia" };
   }
 }
 

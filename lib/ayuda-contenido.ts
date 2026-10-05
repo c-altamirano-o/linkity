@@ -308,7 +308,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
         tourId: "catalogo-archivar-eliminar",
         pasos: [
           "Ábrelo para editar.",
-          "Usa \"Archivar producto\" (se puede restaurar después) o, si nunca se ha usado en una venta/compra/reparación, \"Eliminar definitivamente\" — y confirma.",
+          "Usa \"Archivar producto (descontinuado)\" (se puede restaurar después) o, si nunca se ha usado en una venta/compra/reparación, \"Eliminar definitivamente\" — y confirma.",
         ],
       },
     ],

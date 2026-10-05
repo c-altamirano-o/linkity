@@ -1,7 +1,6 @@
 import "server-only";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
-import { nombreNegocioDeSlug } from "@/lib/recibo-imprimible";
 
 /**
  * Datos de la página pública de catálogo + sucursales (2026-09-26, a
@@ -13,23 +12,39 @@ import { nombreNegocioDeSlug } from "@/lib/recibo-imprimible";
  * comentario largo en ese page.tsx): "pub" es un segmento literal, no
  * colisiona con el [tenant] dinámico de app/(auth)/[tenant]/page.tsx.
  *
- * El nombre del negocio se arma con nombreNegocioDeSlug(tenantSlug) — NO
- * Tenant.name (que en la práctica queda igual al slug, sin usarse en
- * ninguna otra pantalla, ver el comentario largo en
- * lib/recibo-imprimible.ts) — para que esta página muestre el MISMO nombre
- * que ya ve el negocio en su propio sidebar y en el ticket impreso.
+ * 2026-10-05, corregido tras auditoría: el nombre del negocio ahora sale de
+ * Tenant.name (el real, capturado como "Nombre del negocio" al dar de alta
+ * el tenant) — YA NO de un nombre reconstruido a partir del slug. Ese
+ * nombre reconstruido podía divergir del real (acentos/mayúsculas que
+ * slugify() normaliza al crear el slug), y Tenant.name SÍ se usa en otras
+ * pantallas públicas del mismo flujo (la puerta de acceso /[tenant] y el
+ * mensaje de WhatsApp, ver lib/whatsapp-tenant.ts) — con el nombre
+ * reconstruido, un mismo cliente podía ver dos nombres distintos para el
+ * mismo negocio entre esta página y /rep/[token]/el WhatsApp que ya recibió.
  *
  * Solo se listan productos ACTIVOS y NO archivados (mismo criterio de
  * exclusión que el catálogo interno, ver ProductoCatalogo.archivedAt en
  * lib/catalogo-data.ts) — un producto pausado o descontinuado no tiene
  * sentido mostrarlo a un cliente que ve esta página desde el QR del
- * ticket.
+ * ticket. Y SOLO si el negocio tiene el módulo "catalogo" activo
+ * (TenantModule, ver lib/roles.ts/MODULOS) — un negocio que lo desactivó en
+ * Configuración (ej. un taller que solo repara y no quiere exhibir precios
+ * al público) no debe seguir exponiendo su catálogo aquí solo porque
+ * alguien tiene o adivina el link; `catalogoActivo:false` en el resultado
+ * le indica a app/pub/[tenant]/page.tsx que muestre un aviso en vez de la
+ * lista (las sucursales se siguen mostrando — ese dato no depende del
+ * módulo "catalogo").
  */
 
 export interface ProductoPublico {
   id: string;
   name: string;
   emoji: string | null;
+  // Foto propia del producto (Product.image) — mismo criterio que
+  // <ProductoIcono> en el resto de la app: cuando existe, tiene prioridad
+  // visual sobre `emoji`. Null si el negocio nunca subió una foto para ese
+  // producto.
+  image: string | null;
   categoryName: string;
   price: number;
   isService: boolean;
@@ -49,6 +64,10 @@ export interface SucursalPublica {
 export interface CatalogoPublicoData {
   nombre: string;
   logoUrl: string | null;
+  // false = el negocio desactivó el módulo "Catálogo" (Configuración →
+  // Módulos) — `productos` viene vacío a propósito en ese caso, y
+  // app/pub/[tenant]/page.tsx debe mostrar un aviso en vez de la lista.
+  catalogoActivo: boolean;
   productos: ProductoPublico[];
   sucursales: SucursalPublica[];
 }
@@ -58,6 +77,7 @@ export async function getCatalogoPublico(tenantSlug: string): Promise<CatalogoPu
     where: { slug: tenantSlug },
     select: {
       id: true,
+      name: true,
       logo: true,
       branches: {
         where: { isActive: true },
@@ -68,25 +88,39 @@ export async function getCatalogoPublico(tenantSlug: string): Promise<CatalogoPu
   });
   if (!tenant) return null;
 
-  const db = getTenantPrisma(tenant.id);
-  const productosRaw = await db.product.findMany({
-    where: { isActive: true, archivedAt: null },
-    include: { category: true },
-    orderBy: [{ name: "asc" }],
+  // Mismo criterio que app/(tenant)/[tenant]/layout.tsx: "sin fila en
+  // TenantModule, o fila con isActive:true" = módulo activo; solo una fila
+  // explícita isActive:false lo apaga.
+  const moduloCatalogoInactivo = await prisma.tenantModule.findFirst({
+    where: { tenantId: tenant.id, isActive: false, module: { code: "catalogo" } },
+    select: { tenantId: true },
   });
+  const catalogoActivo = !moduloCatalogoInactivo;
 
-  const productos: ProductoPublico[] = productosRaw.map((p) => ({
-    id: p.id,
-    name: p.name,
-    // El valor crudo de Product.emoji puede ser un emoji escrito a mano o
-    // una clave "icon:Xxx" de la galería (ver ProductoIcono, lib/
-    // catalogo-iconos.tsx) — se manda tal cual, CatalogoPublicoList.tsx
-    // (Client Component) es quien sabe interpretarlo.
-    emoji: p.emoji,
-    categoryName: p.category?.name ?? "Sin categoría",
-    price: Number(p.price),
-    isService: p.type === "SERVICE",
-  }));
+  const productos: ProductoPublico[] = catalogoActivo
+    ? await (async () => {
+        const db = getTenantPrisma(tenant.id);
+        const productosRaw = await db.product.findMany({
+          where: { isActive: true, archivedAt: null },
+          include: { category: true },
+          orderBy: [{ name: "asc" }],
+        });
+
+        return productosRaw.map((p) => ({
+          id: p.id,
+          name: p.name,
+          // El valor crudo de Product.emoji puede ser un emoji escrito a mano
+          // o una clave "icon:Xxx" de la galería (ver ProductoIcono, lib/
+          // catalogo-iconos.tsx) — se manda tal cual, CatalogoPublicoList.tsx
+          // (Client Component) es quien sabe interpretarlo.
+          emoji: p.emoji,
+          image: p.image,
+          categoryName: p.category?.name ?? "Sin categoría",
+          price: Number(p.price),
+          isService: p.type === "SERVICE",
+        }));
+      })()
+    : [];
 
   const sucursales: SucursalPublica[] = tenant.branches.map((b) => ({
     id: b.id,
@@ -97,8 +131,9 @@ export async function getCatalogoPublico(tenantSlug: string): Promise<CatalogoPu
   }));
 
   return {
-    nombre: nombreNegocioDeSlug(tenantSlug),
+    nombre: tenant.name,
     logoUrl: tenant.logo,
+    catalogoActivo,
     productos,
     sucursales,
   };

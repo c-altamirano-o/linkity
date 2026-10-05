@@ -2,13 +2,15 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Printer, Check, Building2, Package, X, Ban } from "lucide-react";
+import { Search, Plus, Printer, Check, Building2, Package, X, Ban, Undo2, RotateCcw, AlertTriangle } from "lucide-react";
 import type { ComprasData, CompraUI, EstadoCompra } from "@/lib/compras-data";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import {
   crearCompraAction,
   actualizarEstadoCompraAction,
+  revertirRecepcionCompraAction,
+  reabrirCompraCanceladaAction,
   type ItemCompraParams,
 } from "@/app/actions/compras-actions";
 import { useTourDesdeUrl, TOUR_COMPRAS_REGISTRAR, TOUR_COMPRAS_RECIBIDA } from "@/lib/tours";
@@ -137,6 +139,38 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
     setAccionError(null);
     startAccion(async () => {
       const res = await actualizarEstadoCompraAction({ tenantSlug, purchaseId: compra.id, nuevoEstado });
+      if (res.ok) refrescar();
+      else setAccionError(res.error);
+    });
+  };
+
+  // ── Revertir "Recibida" / Reabrir "Cancelada" ────────────
+  // 2026-10-05, a petición de Carlos (auditoría de Clientes/Catálogo/
+  // Inventario/Compras): antes de este cambio, una compra marcada
+  // "Recibida" o "Cancelada" por error se quedaba así para siempre — la
+  // única salida para una "Recibida" de más era ir a mano a Inventario a
+  // restar el stock, sin quedar ligado a la compra. confirmarAccionCompra
+  // guarda el paso de "¿seguro?" (mismo criterio de no usar window.confirm()
+  // nativo que ya usa Catálogo con archivar/eliminar un producto) — el
+  // mensaje de cada paso deja explícito qué se va a deshacer antes de
+  // ejecutar, por tratarse de una operación delicada.
+  const [confirmarAccionCompra, setConfirmarAccionCompra] = useState<"revertir" | "reabrir" | null>(null);
+
+  const handleRevertirRecepcion = (compra: CompraUI) => {
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await revertirRecepcionCompraAction({ tenantSlug, purchaseId: compra.id });
+      setConfirmarAccionCompra(null);
+      if (res.ok) refrescar();
+      else setAccionError(res.error);
+    });
+  };
+
+  const handleReabrirCompra = (compra: CompraUI) => {
+    setAccionError(null);
+    startAccion(async () => {
+      const res = await reabrirCompraCanceladaAction({ tenantSlug, purchaseId: compra.id });
+      setConfirmarAccionCompra(null);
       if (res.ok) refrescar();
       else setAccionError(res.error);
     });
@@ -281,7 +315,7 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
           {comprasFiltradas.map((c) => (
             <div
               key={c.id}
-              onClick={() => setSeleccionadoId(c.id)}
+              onClick={() => { setSeleccionadoId(c.id); setConfirmarAccionCompra(null); setAccionError(null); }}
               className={`px-3 py-3 border-b border-border/60 cursor-pointer border-l-2 transition-all ${
                 seleccionada?.id === c.id
                   ? "bg-primary/5 border-l-primary"
@@ -360,8 +394,91 @@ export default function ComprasClient({ data, labels, branches, tenantSlug }: Co
                       </button>
                     </>
                   )}
+                  {/* 2026-10-05, a petición de Carlos: corregir una
+                      "Recibida"/"Cancelada" marcada por error — ver el
+                      comentario largo junto a confirmarAccionCompra. */}
+                  {seleccionada.status === "RECEIVED" && (
+                    <button
+                      onClick={() => setConfirmarAccionCompra("revertir")}
+                      disabled={pending}
+                      className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px]"
+                    >
+                      <Undo2 className="w-3 h-3" /> Revertir recepción
+                    </button>
+                  )}
+                  {seleccionada.status === "CANCELLED" && (
+                    <button
+                      onClick={() => setConfirmarAccionCompra("reabrir")}
+                      disabled={pending}
+                      className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px]"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Reabrir orden
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* Confirmación explícita antes de revertir/reabrir — operación
+                  delicada (la de "revertir" mueve inventario), por eso no se
+                  ejecuta de un solo clic como Cancelar/Marcar recibida. */}
+              {confirmarAccionCompra === "revertir" && seleccionada.status === "RECEIVED" && (
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12.5px] text-amber-800">
+                      Esto regresa la orden a <strong>Pendiente</strong> y resta de{" "}
+                      <strong>{seleccionada.branchName ?? "la sucursal de la compra"}</strong> las{" "}
+                      <strong>{seleccionada.items.reduce((s, i) => s + i.quantity, 0)} unidades</strong> de{" "}
+                      {seleccionada.items.length} producto{seleccionada.items.length === 1 ? "" : "s"} que se sumaron al
+                      marcarla recibida. Si alguna ya se vendió o se movió después, su existencia se deja en 0 en vez
+                      de quedar negativa.
+                    </p>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => setConfirmarAccionCompra(null)}
+                        disabled={pending}
+                        className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-[12px]"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => handleRevertirRecepcion(seleccionada)}
+                        disabled={pending}
+                        className="px-2.5 py-1 text-[12px] font-medium bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg"
+                      >
+                        {pending ? "Revirtiendo…" : "Sí, revertir recepción"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {confirmarAccionCompra === "reabrir" && seleccionada.status === "CANCELLED" && (
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12.5px] text-amber-800">
+                      Esto regresa la orden a <strong>Pendiente</strong> para poder recibirla o cancelarla de nuevo.
+                      Cancelar nunca tocó el inventario, así que reabrirla tampoco — ningún stock cambia.
+                    </p>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => setConfirmarAccionCompra(null)}
+                        disabled={pending}
+                        className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-[12px]"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => handleReabrirCompra(seleccionada)}
+                        disabled={pending}
+                        className="btn-primary px-2.5 py-1 text-[12px] rounded-lg"
+                      >
+                        {pending ? "Reabriendo…" : "Sí, reabrir orden"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Stats */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

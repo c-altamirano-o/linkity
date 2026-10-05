@@ -4,7 +4,7 @@
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { resolverActor, type ActorResult } from "@/lib/actor";
-import { PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
+import { PAIS_TELEFONO_DEFAULT, validarTelefono } from "@/lib/paises";
 
 /**
  * Server Actions del módulo Clientes (M7). Mismo criterio de siempre: el
@@ -42,6 +42,16 @@ export interface DatosCliente {
 
 function validarDatosCliente(datos: DatosCliente): string | null {
   if (!datos.name?.trim()) return "El nombre del cliente es obligatorio";
+  // 2026-10-05, a petición de Carlos (auditoría de Clientes/Catálogo/
+  // Inventario/Compras): antes solo se validaba "no vacío" — un teléfono con
+  // menos o más dígitos de los que exige su país (ver lib/paises.ts) se
+  // guardaba igual, y las notificaciones automáticas de WhatsApp que el
+  // propio formulario le promete al cliente nunca le llegarían, sin que
+  // nadie se enterara. Mismo validarTelefono que ya usa el alta/edición de
+  // Personal (personal-actions.ts) — null/vacío sigue siendo válido aquí, lo
+  // de "obligatorio o no" lo decide aparte validarTelefonoObligatorio.
+  const errorTelefono = validarTelefono(datos.phone, datos.phoneCountryCode || PAIS_TELEFONO_DEFAULT);
+  if (errorTelefono) return errorTelefono;
   return null;
 }
 

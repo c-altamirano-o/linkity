@@ -251,3 +251,127 @@ export async function actualizarEstadoCompraAction(params: {
     return { ok: false, error: "No se pudo actualizar la compra" };
   }
 }
+
+/**
+ * Revierte una compra ya marcada "Recibida" por error (2026-10-05, a
+ * petición de Carlos — auditoría de Clientes/Catálogo/Inventario/Compras:
+ * antes de este cambio no había ninguna forma de corregir un "Marcar
+ * recibida" accidental más que ir a mano a Inventario a restarle el stock,
+ * sin que quedara ligado a esta compra). Hace lo inverso exacto de la rama
+ * RECEIVED de actualizarEstadoCompraAction: regresa el status a PENDING
+ * (receivedAt a null) y resta de Inventory la misma cantidad que se sumó
+ * por cada producto, en la misma sucursal.
+ *
+ * El stock se resta con piso en 0 (Math.max(0, ...)), mismo criterio que
+ * una "salida" en ajustarStock (lib/inventario-actions.ts): si ese producto
+ * ya se vendió o se movió después de recibir la compra, no hay a dónde
+ * restarle de más — se deja en 0 en vez de ir a negativo. El modal de
+ * confirmación de ComprasClient.tsx ya avisa esto antes de ejecutar.
+ */
+export async function revertirRecepcionCompraAction(params: {
+  tenantSlug: string;
+  purchaseId: string;
+}): Promise<AccionCompraResult> {
+  const { tenantSlug, purchaseId } = params;
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const compra = await db.purchase.findUnique({
+      where: { id: purchaseId },
+      include: { items: { select: { productId: true, quantity: true } } },
+    });
+    if (!compra) return { ok: false, error: "Compra no encontrada" };
+    if (compra.status !== PurchaseStatus.RECEIVED) {
+      return { ok: false, error: "Esta compra no está marcada como recibida" };
+    }
+    if (resuelto.branchId !== null && (!compra.branchId || compra.branchId !== resuelto.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
+    }
+    // No debería poder pasar (toda compra RECEIVED ya tuvo branchId para
+    // llegar a ese estado, ver actualizarEstadoCompraAction), pero se
+    // valida igual antes de intentar tocar Inventory sin saber dónde.
+    if (!compra.branchId) {
+      return { ok: false, error: "Esta compra no tiene sucursal asignada y no se puede revertir automáticamente" };
+    }
+
+    await db.$transaction(async (tx: any) => {
+      await tx.purchase.update({
+        where: { id: purchaseId },
+        data: { status: PurchaseStatus.PENDING, receivedAt: null },
+      });
+
+      for (const item of compra.items) {
+        const inv = await tx.inventory.findUnique({
+          where: { productId_branchId: { productId: item.productId, branchId: compra.branchId! } },
+        });
+        if (!inv) continue; // nada que restarle si ya no hay fila de inventario
+        const nuevoStock = Math.max(0, inv.stock - item.quantity);
+        await tx.inventory.update({
+          where: { productId_branchId: { productId: item.productId, branchId: compra.branchId! } },
+          data: { stock: nuevoStock },
+        });
+      }
+    });
+
+    revalidatePath(`/${tenantSlug}/compras`);
+    revalidatePath(`/${tenantSlug}/inventario`);
+    revalidatePath(`/${tenantSlug}/dashboard`);
+    return { ok: true };
+  } catch (err: any) {
+    if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
+      return { ok: false, error: "No tienes acceso a este recurso" };
+    }
+    console.error("Error al revertir recepción de compra:", err);
+    return { ok: false, error: "No se pudo revertir la compra" };
+  }
+}
+
+/**
+ * Reabre una compra "Cancelada" por error, regresándola a "Pendiente"
+ * (2026-10-05, mismo pedido de Carlos que revertirRecepcionCompraAction).
+ * Cancelar nunca tocó Inventory (ver la rama CANCELLED de
+ * actualizarEstadoCompraAction), así que reabrir tampoco — es un cambio de
+ * status puro.
+ */
+export async function reabrirCompraCanceladaAction(params: {
+  tenantSlug: string;
+  purchaseId: string;
+}): Promise<AccionCompraResult> {
+  const { tenantSlug, purchaseId } = params;
+
+  const resuelto = await resolverTenantYUsuario(tenantSlug);
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+  const { tenant } = resuelto;
+
+  const db = getTenantPrisma(tenant.id);
+
+  try {
+    const compra = await db.purchase.findUnique({ where: { id: purchaseId }, select: { status: true, branchId: true } });
+    if (!compra) return { ok: false, error: "Compra no encontrada" };
+    if (compra.status !== PurchaseStatus.CANCELLED) {
+      return { ok: false, error: "Esta compra no está cancelada" };
+    }
+    if (resuelto.branchId !== null && (!compra.branchId || compra.branchId !== resuelto.branchId)) {
+      return { ok: false, error: "No tienes acceso a esa sucursal" };
+    }
+
+    await db.purchase.update({
+      where: { id: purchaseId },
+      data: { status: PurchaseStatus.PENDING },
+    });
+
+    revalidatePath(`/${tenantSlug}/compras`);
+    return { ok: true };
+  } catch (err: any) {
+    if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
+      return { ok: false, error: "No tienes acceso a este recurso" };
+    }
+    console.error("Error al reabrir compra cancelada:", err);
+    return { ok: false, error: "No se pudo reabrir la compra" };
+  }
+}

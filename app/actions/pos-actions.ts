@@ -121,6 +121,18 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       if (it.cantidad !== 1) {
         return { ok: false, error: "El cobro de una reparación no admite cantidad distinta de 1" };
       }
+      // 2026-10-05, hallazgo de auditoría ("el monto de una reparación es
+      // editable sin mínimo real y nada impedía cobrarla en $0 por
+      // accidente"): A PROPÓSITO se sigue aceptando monto === 0 aquí — $0 es
+      // un caso legítimo real (una devolución sin cargo; Tenant.montoDevolucion
+      // arranca en $0 por default, ver schema.prisma, y una reparación de
+      // garantía tampoco tiene costo), así que el servidor no puede
+      // rechazarlo sin romper ese flujo. El candado contra el descuido
+      // (campo editado/borrado sin querer) vive del lado del cliente:
+      // POSClient.tsx exige una casilla de confirmación explícita
+      // ("confirmaReparacionSinCobro") antes de habilitar "Cobrar" cuando
+      // el monto de la reparación es $0 — este endpoint sigue validando
+      // solo que el monto sea un número real y no negativo.
       if (typeof it.monto !== "number" || !Number.isFinite(it.monto) || it.monto < 0) {
         return { ok: false, error: "Monto inválido para el cobro de la reparación" };
       }

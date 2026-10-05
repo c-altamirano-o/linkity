@@ -60,6 +60,25 @@ export default async function DashboardPage({
   });
   const reparacionesActiva = !reparacionesInactiva;
 
+  // 2026-10-05, a petición de Carlos (auditoría de Configuración/Dashboard):
+  // los "Accesos rápidos" del Dashboard (Nueva venta/Abrir caja/Nuevo
+  // cliente) llevaban a /pos, /caja y /clientes sin importar si el negocio
+  // tiene esos módulos apagados — y los tres SÍ son apagables desde
+  // "Módulos de tu negocio" (isCore:false, lib/modules-catalog.ts). Si
+  // alguno está apagado, el guard de módulo de layout.tsx (mismo criterio
+  // "default abierto" de arriba) redirige esa ruta de vuelta a /dashboard en
+  // silencio — el botón quedaba como un callejón sin salida. Mismo patrón
+  // que reparacionesInactiva/reparacionesActiva arriba, solo que en una
+  // sola consulta para los 3 módulos a la vez.
+  const modulosAccesosRapidosInactivos = await prisma.tenantModule.findMany({
+    where: { tenantId: tenant.id, isActive: false, module: { code: { in: ["pos", "caja", "clientes"] } } },
+    select: { module: { select: { code: true } } },
+  });
+  const codigosAccesosRapidosInactivos = new Set(modulosAccesosRapidosInactivos.map((tm) => tm.module.code));
+  const posActiva = !codigosAccesosRapidosInactivos.has("pos");
+  const cajaActiva = !codigosAccesosRapidosInactivos.has("caja");
+  const clientesActiva = !codigosAccesosRapidosInactivos.has("clientes");
+
   // 2026-09-24, corrigiendo un hueco real que Carlos encontró probando el
   // sistema como empleado (Andrea Zamora, rol "Asesor de Ventas" en el demo
   // de reparación de celulares): esta pantalla nunca aplicaba el mismo
@@ -138,6 +157,9 @@ export default async function DashboardPage({
       puedeConfigurarCategorias={!sesionValida || veTodoElNegocio}
       montosVisibles={puedeVerMontos}
       atajosPeriodo={atajosPeriodo}
+      posActiva={posActiva}
+      cajaActiva={cajaActiva}
+      clientesActiva={clientesActiva}
     />
   );
 }

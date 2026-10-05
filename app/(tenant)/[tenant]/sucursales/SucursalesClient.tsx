@@ -390,7 +390,15 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
                 className="px-3 py-2 border border-border rounded-lg text-[12.5px] bg-muted focus:outline-none focus:border-primary"
               >
                 <option value="">Selecciona…</option>
-                {sucursales.map((s) => (
+                {/* 2026-10-05, a petición de Carlos tras la auditoría: antes
+                    solo el selector de DESTINO excluía a la otra sucursal ya
+                    elegida — este (ORIGEN) mostraba las sucursales completas,
+                    así que si el admin elegía primero DESTINO y luego la
+                    misma sucursal aquí, el botón "Transferir" simplemente se
+                    apagaba sin explicar por qué (ver el aviso de abajo, que
+                    cubre el caso de que de todos modos coincidan). Ahora
+                    ambos selectores se excluyen mutuamente entre sí. */}
+                {sucursales.filter((s) => s.id !== destinoId).map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
@@ -442,6 +450,16 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
               {okTransfer ? "✓ Transferido" : isPending ? "Transfiriendo…" : "Transferir"}
             </button>
           </div>
+          {/* 2026-10-05, a petición de Carlos tras la auditoría: aviso visible
+              para el caso (hoy ya bloqueado por el filtro mutuo de los dos
+              selectores de arriba, pero se deja como red de seguridad) de
+              que origen y destino coincidan — antes el botón "Transferir"
+              solo se apagaba en silencio, sin explicar el motivo. */}
+          {origenId && destinoId && origenId === destinoId && (
+            <p className="text-[12.5px] text-amber-600 mt-2">
+              La sucursal de origen y destino no pueden ser la misma — elige dos sucursales distintas.
+            </p>
+          )}
           {errorTransfer && <p className="text-[12.5px] text-red-600 mt-2">{errorTransfer}</p>}
           {productos.length === 0 && (
             <p className="text-[12.5px] text-muted-foreground mt-2">

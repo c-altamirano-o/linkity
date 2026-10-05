@@ -221,7 +221,13 @@ export default function ConfiguracionClient({
     () => parseColoresPersonalizados(themeCustomColorsInicial) ?? COLORES_PERSONALIZADOS_DEFAULT
   );
   const [temaPending, startTemaTransition] = useTransition();
-  const [temaMensaje, setTemaMensaje] = useState("");
+  // 2026-10-05, corregido tras la auditoría: antes era un string plano y el
+  // <span> de abajo SIEMPRE lo pintaba en verde (texto-emerald-600), así que
+  // un error de guardado se veía idéntico a un éxito — y encima se quedaba
+  // pegado en pantalla para siempre, porque el setTimeout que lo limpia solo
+  // corría en la rama de éxito. Mismo patrón {tipo,texto} que ya usan
+  // logoMensaje/modulosMensaje/contrasenaMensaje en este mismo archivo.
+  const [temaMensaje, setTemaMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   // Guarda cuál es el tema/intensidades/colores REALMENTE guardados en BD
   // (no lo que se está previsualizando) — si el negocio sale de esta
@@ -272,14 +278,18 @@ export default function ConfiguracionClient({
         tenantSlug, temaSeleccionado, intensidadSeleccionada, intensidadFondoSeleccionada,
         temaSeleccionado === TEMA_PERSONALIZADO_ID ? coloresPersonalizados : undefined,
       );
-      setTemaMensaje(result.success ? "Tema actualizado correctamente." : (result.error ?? "Error al actualizar el tema."));
       if (result.success) {
+        setTemaMensaje({ tipo: "ok", texto: "Tema actualizado correctamente." });
         temaConfirmadoRef.current = temaSeleccionado;
         intensidadConfirmadaRef.current = intensidadSeleccionada;
         intensidadFondoConfirmadaRef.current = intensidadFondoSeleccionada;
         coloresConfirmadosRef.current = coloresPersonalizados;
         router.refresh();
-        setTimeout(() => setTemaMensaje(""), 3000);
+        setTimeout(() => setTemaMensaje(null), 3000);
+      } else {
+        // Un error se queda visible (nunca se autolimpia) hasta que el
+        // negocio reintente — así no desaparece antes de que alcance a leerlo.
+        setTemaMensaje({ tipo: "error", texto: result.error ?? "Error al actualizar el tema." });
       }
     });
   };
@@ -287,13 +297,19 @@ export default function ConfiguracionClient({
   // ── Rubro del negocio ─────────────────────────────────────
   const [rubroSeleccionado, setRubroSeleccionado] = useState(businessTypeInicial ?? SIN_RUBRO);
   const [rubroPending, startRubroTransition] = useTransition();
-  const [rubroMensaje, setRubroMensaje] = useState("");
+  // 2026-10-05, mismo fix que temaMensaje arriba: {tipo,texto} en vez de
+  // string plano, para no pintar un error en verde ni dejarlo autolimpiarse.
+  const [rubroMensaje, setRubroMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   const guardarRubro = () => {
     startRubroTransition(async () => {
       const result = await updateBusinessType(tenantSlug, rubroSeleccionado === SIN_RUBRO ? null : rubroSeleccionado);
-      setRubroMensaje(result.success ? "Rubro actualizado correctamente." : "Error al actualizar el rubro.");
-      if (result.success) setTimeout(() => setRubroMensaje(""), 3000);
+      if (result.success) {
+        setRubroMensaje({ tipo: "ok", texto: "Rubro actualizado correctamente." });
+        setTimeout(() => setRubroMensaje(null), 3000);
+      } else {
+        setRubroMensaje({ tipo: "error", texto: result.error ?? "Error al actualizar el rubro." });
+      }
     });
   };
 
@@ -305,15 +321,18 @@ export default function ConfiguracionClient({
   // (schema.prisma) y lib/periodo-laboral.ts.
   const [weekStartDaySeleccionado, setWeekStartDaySeleccionado] = useState(weekStartDayInicial);
   const [weekStartDayPending, startWeekStartDayTransition] = useTransition();
-  const [weekStartDayMensaje, setWeekStartDayMensaje] = useState("");
+  // 2026-10-05, mismo fix que temaMensaje/rubroMensaje arriba.
+  const [weekStartDayMensaje, setWeekStartDayMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   const guardarWeekStartDay = () => {
     startWeekStartDayTransition(async () => {
       const result = await updateWeekStartDay(tenantSlug, weekStartDaySeleccionado);
-      setWeekStartDayMensaje(result.success ? "Semana laboral actualizada correctamente." : (result.error ?? "Error al actualizar."));
       if (result.success) {
+        setWeekStartDayMensaje({ tipo: "ok", texto: "Semana laboral actualizada correctamente." });
         router.refresh();
-        setTimeout(() => setWeekStartDayMensaje(""), 3000);
+        setTimeout(() => setWeekStartDayMensaje(null), 3000);
+      } else {
+        setWeekStartDayMensaje({ tipo: "error", texto: result.error ?? "Error al actualizar." });
       }
     });
   };
@@ -325,15 +344,18 @@ export default function ConfiguracionClient({
   // pantalla propia — antes solo el panel maestro/superadmin podía tocarlo.
   const [supportPhone, setSupportPhone] = useState(supportPhoneInicial ?? "");
   const [supportPhonePending, startSupportPhoneTransition] = useTransition();
-  const [supportPhoneMensaje, setSupportPhoneMensaje] = useState("");
+  // 2026-10-05, mismo fix que temaMensaje arriba.
+  const [supportPhoneMensaje, setSupportPhoneMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   const guardarSupportPhone = () => {
     startSupportPhoneTransition(async () => {
       const result = await updateSupportPhone(tenantSlug, supportPhone);
-      setSupportPhoneMensaje(result.success ? "Teléfono actualizado correctamente." : (result.error ?? "Error al actualizar."));
       if (result.success) {
+        setSupportPhoneMensaje({ tipo: "ok", texto: "Teléfono actualizado correctamente." });
         router.refresh();
-        setTimeout(() => setSupportPhoneMensaje(""), 3000);
+        setTimeout(() => setSupportPhoneMensaje(null), 3000);
+      } else {
+        setSupportPhoneMensaje({ tipo: "error", texto: result.error ?? "Error al actualizar." });
       }
     });
   };
@@ -363,7 +385,8 @@ export default function ConfiguracionClient({
   const [qrUrlTicket, setQrUrlTicket] = useState(qrUrlTicketInicial ?? "");
   const [qrEtiquetaTicket, setQrEtiquetaTicket] = useState(qrEtiquetaTicketInicial ?? "");
   const [datosTicketPending, startDatosTicketTransition] = useTransition();
-  const [datosTicketMensaje, setDatosTicketMensaje] = useState("");
+  // 2026-10-05, mismo fix que temaMensaje arriba.
+  const [datosTicketMensaje, setDatosTicketMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   const guardarDatosTicket = () => {
     startDatosTicketTransition(async () => {
@@ -371,10 +394,12 @@ export default function ConfiguracionClient({
         direccion: direccionTicket, rfc: rfcTicket, mensajePie: mensajePieTicket, extra: extraTicket, formato: formatoTicket,
         mostrarQR: mostrarQRTicket, qrDestino: qrDestinoTicket, qrUrl: qrUrlTicket, qrEtiqueta: qrEtiquetaTicket,
       });
-      setDatosTicketMensaje(result.success ? "Ticket actualizado correctamente." : (result.error ?? "Error al actualizar."));
       if (result.success) {
+        setDatosTicketMensaje({ tipo: "ok", texto: "Ticket actualizado correctamente." });
         router.refresh();
-        setTimeout(() => setDatosTicketMensaje(""), 3000);
+        setTimeout(() => setDatosTicketMensaje(null), 3000);
+      } else {
+        setDatosTicketMensaje({ tipo: "error", texto: result.error ?? "Error al actualizar." });
       }
     });
   };
@@ -389,7 +414,12 @@ export default function ConfiguracionClient({
   const [whatsappMostrarToken, setWhatsappMostrarToken] = useState(false);
   const [whatsappTieneToken, setWhatsappTieneToken] = useState(whatsappTieneTokenInicial);
   const [whatsappPending, startWhatsappTransition] = useTransition();
-  const [whatsappMensaje, setWhatsappMensaje] = useState("");
+  // 2026-10-05, a petición de Carlos (auditoría): "tipo" distingue el
+  // guardado completo (verde) del guardado a medias — Phone Number ID
+  // guardado sin que exista (ni uno nuevo ni uno ya guardado de antes)
+  // ningún Access Token, caso en el que la integración queda guardada pero
+  // todavía no puede mandar nada — ver sigueSinToken en guardarWhatsapp.
+  const [whatsappMensaje, setWhatsappMensaje] = useState<{ tipo: "ok" | "advertencia"; texto: string } | null>(null);
   const [whatsappError, setWhatsappError] = useState("");
 
   const guardarWhatsapp = () => {
@@ -403,13 +433,22 @@ export default function ConfiguracionClient({
         setWhatsappError(result.error ?? "Error al guardar");
         return;
       }
+      // Se calcula ANTES de actualizar whatsappTieneToken de abajo: true
+      // cuando este guardado no trajo un Access Token nuevo Y tampoco había
+      // uno guardado de antes — es decir, la conexión queda incompleta
+      // (sigue sin aparecer "Conectado" ni el bloque de "Enviar prueba").
+      const sigueSinToken = !whatsappAccessTokenInput.trim() && !whatsappTieneToken;
       if (whatsappAccessTokenInput.trim()) {
         setWhatsappTieneToken(true);
         setWhatsappAccessTokenInput("");
       }
-      setWhatsappMensaje("Guardado correctamente.");
+      setWhatsappMensaje(
+        sigueSinToken
+          ? { tipo: "advertencia", texto: "Guardado — pero sin Access Token los mensajes automáticos no van a funcionar todavía." }
+          : { tipo: "ok", texto: "Guardado correctamente." }
+      );
       router.refresh();
-      setTimeout(() => setWhatsappMensaje(""), 3000);
+      setTimeout(() => setWhatsappMensaje(null), sigueSinToken ? 6000 : 3000);
     });
   };
 
@@ -424,9 +463,9 @@ export default function ConfiguracionClient({
       }
       setWhatsappPhoneNumberId("");
       setWhatsappTieneToken(false);
-      setWhatsappMensaje("WhatsApp Business desconectado.");
+      setWhatsappMensaje({ tipo: "ok", texto: "WhatsApp Business desconectado." });
       router.refresh();
-      setTimeout(() => setWhatsappMensaje(""), 3000);
+      setTimeout(() => setWhatsappMensaje(null), 3000);
     });
   };
 
@@ -1025,7 +1064,11 @@ export default function ConfiguracionClient({
               {temaPending && <Loader2 className="w-4 h-4 animate-spin" />}
               {temaPending ? "Aplicando..." : "Guardar cambios"}
             </button>
-            {temaMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{temaMensaje}</span>}
+            {temaMensaje && (
+              <span className={`text-sm font-medium animate-in fade-in ${temaMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                {temaMensaje.texto}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1069,7 +1112,11 @@ export default function ConfiguracionClient({
               {rubroPending && <Loader2 className="w-4 h-4 animate-spin" />}
               {rubroPending ? "Aplicando..." : "Guardar cambios"}
             </button>
-            {rubroMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{rubroMensaje}</span>}
+            {rubroMensaje && (
+              <span className={`text-sm font-medium animate-in fade-in ${rubroMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                {rubroMensaje.texto}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1190,7 +1237,11 @@ export default function ConfiguracionClient({
               {weekStartDayPending && <Loader2 className="w-4 h-4 animate-spin" />}
               {weekStartDayPending ? "Aplicando..." : "Guardar cambios"}
             </button>
-            {weekStartDayMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{weekStartDayMensaje}</span>}
+            {weekStartDayMensaje && (
+              <span className={`text-sm font-medium animate-in fade-in ${weekStartDayMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                {weekStartDayMensaje.texto}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1228,7 +1279,11 @@ export default function ConfiguracionClient({
               {supportPhonePending && <Loader2 className="w-4 h-4 animate-spin" />}
               {supportPhonePending ? "Aplicando..." : "Guardar cambios"}
             </button>
-            {supportPhoneMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{supportPhoneMensaje}</span>}
+            {supportPhoneMensaje && (
+              <span className={`text-sm font-medium animate-in fade-in ${supportPhoneMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                {supportPhoneMensaje.texto}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1406,7 +1461,11 @@ export default function ConfiguracionClient({
               {datosTicketPending && <Loader2 className="w-4 h-4 animate-spin" />}
               {datosTicketPending ? "Aplicando..." : "Guardar cambios"}
             </button>
-            {datosTicketMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{datosTicketMensaje}</span>}
+            {datosTicketMensaje && (
+              <span className={`text-sm font-medium animate-in fade-in ${datosTicketMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                {datosTicketMensaje.texto}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1490,7 +1549,11 @@ export default function ConfiguracionClient({
                 <Unlink className="w-3.5 h-3.5" /> Desconectar
               </button>
             )}
-            {whatsappMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{whatsappMensaje}</span>}
+            {whatsappMensaje && (
+              <span className={`text-sm font-medium animate-in fade-in ${whatsappMensaje.tipo === "ok" ? "text-emerald-600" : "text-amber-600"}`}>
+                {whatsappMensaje.texto}
+              </span>
+            )}
             {whatsappError && <span className="text-sm font-medium text-destructive animate-in fade-in">{whatsappError}</span>}
           </div>
 

@@ -47,6 +47,21 @@ async function resolverTenantYUsuario(tenantSlug: string): Promise<ResolverResul
   return { ok: true, tenant, dbUser };
 }
 
+// Tenant.telefonoClienteObligatorio (ver el mismo candado en
+// app/actions/clientes-actions.ts, 2026-10-05, a petición de Carlos) — el
+// alta de "cliente nuevo" de este módulo (el atajo "Facturar a otro
+// receptor") es, en los hechos, otra alta de Customer más, así que debe
+// respetar la misma regla de negocio que Clientes: si el tenant la tiene
+// activa, el teléfono deja de ser opcional. Antes de este cambio, este
+// atajo era la única forma de crear un Customer sin pasar por esa validación
+// (un hueco real que la auditoría de Facturación/Soporte/Ayuda señaló).
+async function validarTelefonoObligatorio(tenantId: string, phone: string | null | undefined): Promise<string | null> {
+  if (phone?.trim()) return null;
+  const t = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { telefonoClienteObligatorio: true } });
+  if (t?.telefonoClienteObligatorio) return "El teléfono del cliente es obligatorio";
+  return null;
+}
+
 export interface CrearFacturaParams {
   tenantSlug: string;
   saleId: string;
@@ -87,6 +102,9 @@ export async function crearFacturaAction(params: CrearFacturaParams): Promise<Cr
       const cliente = await db.customer.findUnique({ where: { id: finalCustomerId }, select: { id: true } });
       if (!cliente) return { ok: false, error: "Cliente no encontrado" };
     } else if (clienteNuevo?.name.trim()) {
+      const errorTelefono = await validarTelefonoObligatorio(tenant.id, clienteNuevo.phone);
+      if (errorTelefono) return { ok: false, error: errorTelefono };
+
       const nuevoCliente = await db.customer.create({
         data: {
           tenantId: tenant.id,

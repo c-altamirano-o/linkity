@@ -27,6 +27,17 @@ import { construirMensajeReparacion } from "@/lib/whatsapp-mensaje";
 // (undefined = Prisma lo deja igual) — así un negocio que configuró sus
 // colores, cambió a otro tema y luego regresa a "Personalizado" no pierde
 // lo que ya había elegido.
+// 2026-10-05, corregido tras una auditoría completa a petición de Carlos:
+// esta función (y updateBusinessType, justo abajo) eran las ÚNICAS dos
+// Server Actions de toda la pantalla de Configuración que confiaban en el
+// tenantSlug recibido del cliente SIN verificar sesión — cualquiera que
+// supiera o adivinara el slug de OTRO negocio (visible en su catálogo
+// público /pub/slug) podía invocarlas sin haber iniciado sesión y cambiarle
+// el tema visual o el rubro a un negocio ajeno. Mismo criterio de
+// validación que el resto de este archivo (updateWeekStartDay,
+// updateSupportPhone, etc.): resolverActor con "configuracion", que ningún
+// rol de PIN de empleado tiene en su matriz de acceso — solo el
+// administrador dueño de la cuenta.
 export async function updateThemePreset(
   tenantSlug: string,
   preset: any,
@@ -46,9 +57,12 @@ export async function updateThemePreset(
   }
   const coloresValidados = preset === TEMA_PERSONALIZADO_ID ? parseColoresPersonalizados(customColors) : undefined;
 
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
   try {
     await prisma.tenant.update({
-      where: { slug: tenantSlug },
+      where: { id: resuelto.tenant.id },
       data: {
         themePreset: preset,
         themeIntensity: intensidadValida,
@@ -71,10 +85,16 @@ export async function updateThemePreset(
 // válidos vive en código, en lib/labels.ts (BUSINESS_TYPE_OPTIONS +
 // VERTICAL_LABEL_DEFAULTS). null = "sin especificar" (cae a los defaults
 // genéricos de labels).
+// Ver el comentario largo junto a updateThemePreset, arriba: esta función
+// tampoco verificaba sesión antes del 2026-10-05 — mismo fix, mismo criterio
+// (resolverActor con "configuracion").
 export async function updateBusinessType(tenantSlug: string, businessType: string | null) {
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
   try {
     await prisma.tenant.update({
-      where: { slug: tenantSlug },
+      where: { id: resuelto.tenant.id },
       data: { businessType },
     });
 
@@ -90,10 +110,9 @@ export async function updateBusinessType(tenantSlug: string, businessType: strin
 
 // Día de inicio de la semana laboral (2026-09-18, a petición de Carlos: ver
 // el comentario largo en Tenant.weekStartDay, schema.prisma, y en
-// lib/periodo-laboral.ts). A diferencia de updateThemePreset/
-// updateBusinessType de arriba (que confían en el tenantSlug recibido sin
-// verificar sesión — deuda previa a este archivo, no se toca aquí), esta
-// función sí valida con resolverActor: cambia un valor que afecta cálculos
+// lib/periodo-laboral.ts). Mismo criterio de validación que
+// updateThemePreset/updateBusinessType arriba (desde el 2026-10-05, las
+// tres ya validan con resolverActor): cambia un valor que afecta cálculos
 // de nómina (horas trabajadas, comisiones por período), así que solo el
 // administrador dueño de la cuenta (nunca un empleado con PIN —
 // "configuracion" no aparece en ninguna matriz de acceso de rol, ver

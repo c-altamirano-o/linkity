@@ -153,6 +153,9 @@ export default function DashboardClient({
   puedeConfigurarCategorias = true,
   montosVisibles = true,
   atajosPeriodo,
+  posActiva = true,
+  cajaActiva = true,
+  clientesActiva = true,
 }: {
   data: DashboardData;
   labels: LabelDictionary;
@@ -190,6 +193,16 @@ export default function DashboardClient({
   // resuelven ahí y no aquí porque "Semana" depende de Tenant.weekStartDay
   // (ver rangoSemanaLaboral, lib/periodo-laboral.ts).
   atajosPeriodo: AtajosPeriodoDashboard;
+  // 2026-10-05, a petición de Carlos (auditoría): "Nueva venta"/"Abrir
+  // caja"/"Nuevo cliente" de "Accesos rápidos" (más abajo) son módulos
+  // apagables (isCore:false, lib/modules-catalog.ts) — sin esto el botón se
+  // quedaba visible aun apagado y el guard de layout.tsx redirigía de
+  // vuelta a /dashboard en silencio. Mismo criterio que
+  // data.reparacionesActiva para "Nueva reparación": calculado en el
+  // servidor (dashboard/page.tsx), default true para no romper otros usos.
+  posActiva?: boolean;
+  cajaActiva?: boolean;
+  clientesActiva?: boolean;
 }) {
   const router = useRouter();
   const t = (key: string) => label(labels, key);
@@ -1060,12 +1073,18 @@ export default function DashboardClient({
             <p className="text-xs font-medium text-muted-foreground mb-2">Accesos rápidos</p>
             <div className="grid grid-cols-2 gap-1.5">
               {[
-                { label: "Nueva venta", color: "bg-primary", href: `/${tenantSlug}/pos` },
+                // 2026-10-05: mismo criterio que "Nueva reparación" de abajo
+                // — un acceso rápido a un módulo apagado (isCore:false, se
+                // puede apagar desde "Módulos de tu negocio") solo llevaba a
+                // un redirect silencioso de vuelta a /dashboard (guard de
+                // layout.tsx), así que ahora se omite el botón en vez de
+                // mostrar un callejón sin salida.
+                ...(posActiva ? [{ label: "Nueva venta", color: "bg-primary", href: `/${tenantSlug}/pos` }] : []),
                 ...(data.reparacionesActiva
                   ? [{ label: `Nueva ${t("entity.repair.singular").toLowerCase()}`, color: "bg-cyan-500", href: `/${tenantSlug}/reparaciones` }]
                   : []),
-                { label: "Abrir caja", color: "bg-emerald-500", href: `/${tenantSlug}/caja` },
-                { label: "Nuevo cliente", color: "bg-amber-500", href: `/${tenantSlug}/clientes` },
+                ...(cajaActiva ? [{ label: "Abrir caja", color: "bg-emerald-500", href: `/${tenantSlug}/caja` }] : []),
+                ...(clientesActiva ? [{ label: "Nuevo cliente", color: "bg-amber-500", href: `/${tenantSlug}/clientes` }] : []),
               ].map((btn) => (
                 <button key={btn.label} onClick={() => router.push(btn.href)}
                   className={`${btn.color} hover:opacity-90 text-white text-xs font-medium py-1.5 px-2 rounded-lg`}>

@@ -437,10 +437,15 @@ function VistaTienda({
   tecnicos: TecnicoOption[];
   productos: ProductoParaReparacion[];
   onAsignarTecnico: (repairId: string, staffId: string) => void;
-  onActualizarCosto: (repairId: string, costoEstimado: number) => void;
+  // onSuccess (hallazgo de auditoría 2026-10-05) — igual que el patrón
+  // ejecutar() de AduanaClient.tsx: el caller (ReparacionesClient) solo lo
+  // invoca cuando el servidor confirmó éxito, nunca de forma optimista, para
+  // que VistaTienda limpie/cierre sus formularios en el momento correcto.
+  onActualizarCosto: (repairId: string, costoEstimado: number, onSuccess?: () => void) => void;
   onAgregarPieza: (
     repairId: string,
-    item: { productId: string; quantity: number } | { nombre: string; precio: number; quantity: number }
+    item: { productId: string; quantity: number } | { nombre: string; precio: number; quantity: number },
+    onSuccess?: () => void
   ) => void;
   onQuitarPieza: (repairId: string, itemId: string) => void;
   onResolverAlerta: (repairId: string) => void;
@@ -470,18 +475,25 @@ function VistaTienda({
   const seleccionada = reparaciones.find((r) => r.id === seleccionadaId) ?? reparaciones[0] ?? null;
   const cerrada = seleccionada?.estado === "DELIVERED" || seleccionada?.estado === "CANCELLED";
 
+  // 2026-10-05, hallazgo de auditoría: estas tres funciones limpiaban los
+  // campos (y, en el caso de "Otro", cerraban el diálogo) de inmediato, SIN
+  // esperar la confirmación del servidor — si la Server Action fallaba, el
+  // empleado perdía en silencio lo que acababa de teclear. Ahora replican el
+  // mismo patrón que ya usaba correctamente AduanaClient.tsx (su helper
+  // ejecutar()): el reset solo ocurre dentro del callback onSuccess, que el
+  // padre (ReparacionesClient) únicamente invoca cuando res.ok es true.
   const handleGuardarCostoEdit = () => {
     if (!seleccionada) return;
-    onActualizarCosto(seleccionada.id, parseFloat(costoEditValor));
-    setCostoEditValor("");
+    onActualizarCosto(seleccionada.id, parseFloat(costoEditValor), () => setCostoEditValor(""));
   };
 
   const agregarPiezaEdit = () => {
     if (!seleccionada || !piezaEditId) return;
     const cantidad = Math.max(1, parseInt(piezaEditCantidad, 10) || 1);
-    onAgregarPieza(seleccionada.id, { productId: piezaEditId, quantity: cantidad });
-    setPiezaEditId("");
-    setPiezaEditCantidad("1");
+    onAgregarPieza(seleccionada.id, { productId: piezaEditId, quantity: cantidad }, () => {
+      setPiezaEditId("");
+      setPiezaEditCantidad("1");
+    });
   };
 
   const agregarPiezaEditPersonalizada = () => {
@@ -491,9 +503,10 @@ function VistaTienda({
     if (!nombre) { setOtroEditError("Escribe un nombre"); return; }
     if (!Number.isFinite(precio) || precio <= 0) { setOtroEditError("Escribe un precio válido"); return; }
     const cantidad = Math.max(1, parseInt(otroEditCantidad, 10) || 1);
-    onAgregarPieza(seleccionada.id, { nombre, precio, quantity: cantidad });
-    setOtroEditNombre(""); setOtroEditPrecio(""); setOtroEditCantidad("1"); setOtroEditError(null);
-    setOtroEditAbierto(false);
+    onAgregarPieza(seleccionada.id, { nombre, precio, quantity: cantidad }, () => {
+      setOtroEditNombre(""); setOtroEditPrecio(""); setOtroEditCantidad("1"); setOtroEditError(null);
+      setOtroEditAbierto(false);
+    });
   };
 
   const tiendaReps = reparaciones.filter((r) => {
@@ -853,6 +866,7 @@ function VistaTienda({
                             <button
                               onClick={() => onQuitarPieza(seleccionada.id, p.id)}
                               disabled={pending}
+                              title="Quitar pieza"
                               className="text-muted-foreground hover:text-red-600 disabled:opacity-50"
                             >
                               <X className="w-3 h-3" />
@@ -909,6 +923,7 @@ function VistaTienda({
                     <button
                       onClick={agregarPiezaEdit}
                       disabled={pending || !piezaEditId}
+                      title="Agregar pieza"
                       className="btn-secondary px-2.5 py-2 rounded-lg"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -918,8 +933,16 @@ function VistaTienda({
               </div>
 
               {(() => {
+                // DELIVERED se excluye SIEMPRE aquí (no solo cuando
+                // cobrarEnDevolucion está activo) — hallazgo de auditoría
+                // 2026-10-05: el botón "Entregar" del encabezado de arriba ya
+                // cubre los dos casos (cobrando vía POS cuando
+                // cobrarEnDevolucion está activo, o sin cobro cuando no lo
+                // está), así que ofrecer también "Entregar (sin cobro)" aquí
+                // duplicaba la misma acción con otro texto/ícono. Un solo
+                // camino visible para entregar, el del encabezado.
                 const siguientes = (SIGUIENTES_ESTADOS[seleccionada.estado] ?? []).filter(
-                  (s) => !(s.estado === "DELIVERED" && cobrarEnDevolucion)
+                  (s) => s.estado !== "DELIVERED"
                 );
                 if (siguientes.length === 0) return null;
                 return (
@@ -1225,24 +1248,29 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     });
   };
 
-  const handleActualizarCosto = (repairId: string, costoEstimado: number) => {
+  // onSuccess (2026-10-05, hallazgo de auditoría) — solo se invoca cuando
+  // res.ok es true, nunca de forma optimista; es lo que permite a
+  // VistaTienda limpiar/cerrar sus formularios únicamente tras confirmar
+  // éxito, igual que ya hacía el helper ejecutar() de AduanaClient.tsx.
+  const handleActualizarCosto = (repairId: string, costoEstimado: number, onSuccess?: () => void) => {
     if (!Number.isFinite(costoEstimado) || costoEstimado < 0) { setAccionError("Ingresa un costo válido"); return; }
     setAccionError(null);
     startAccion(async () => {
       const res = await actualizarCostoEstimadoAction({ tenantSlug, repairId, costoEstimado });
-      if (res.ok) router.refresh();
+      if (res.ok) { router.refresh(); onSuccess?.(); }
       else setAccionError(res.error);
     });
   };
 
   const handleAgregarPiezaTaller = (
     repairId: string,
-    item: { productId: string; quantity: number } | { nombre: string; precio: number; quantity: number }
+    item: { productId: string; quantity: number } | { nombre: string; precio: number; quantity: number },
+    onSuccess?: () => void
   ) => {
     setAccionError(null);
     startAccion(async () => {
       const res = await agregarPiezaReparacionAction({ tenantSlug, repairId, ...item });
-      if (res.ok) router.refresh();
+      if (res.ok) { router.refresh(); onSuccess?.(); }
       else setAccionError(res.error);
     });
   };

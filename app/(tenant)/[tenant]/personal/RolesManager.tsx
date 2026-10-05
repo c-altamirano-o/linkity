@@ -268,11 +268,11 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                     <p className="text-[11.5px] text-muted-foreground">{rol.cantidadEmpleados} empleado(s) con este rol</p>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={() => abrirEditar(rol)} className="btn-secondary p-1.5 rounded-lg">
+                    <button onClick={() => abrirEditar(rol)} title="Editar rol" aria-label="Editar rol" className="btn-secondary p-1.5 rounded-lg">
                       <Pencil className="w-3 h-3" />
                     </button>
                     {!rol.isSystem && (
-                      <button onClick={() => eliminarRol(rol)} className="p-1.5 border border-border hover:bg-red-50 hover:text-red-600 rounded-lg text-foreground">
+                      <button onClick={() => eliminarRol(rol)} title="Eliminar rol" aria-label="Eliminar rol" className="p-1.5 border border-border hover:bg-red-50 hover:text-red-600 rounded-lg text-foreground">
                         <Trash2 className="w-3 h-3" />
                       </button>
                     )}
