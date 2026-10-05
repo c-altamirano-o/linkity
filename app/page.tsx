@@ -23,8 +23,8 @@ const FEATURES = [
   },
   {
     icon: FileText,
-    title: "Facturación CFDI",
-    desc: "Genera y timbra facturas directo desde tus ventas, con el folio y los datos fiscales de tu cliente.",
+    title: "Integración API de Facturación",
+    desc: "Conecta tu proveedor mediante API para emitir facturas directamente desde tus ventas.",
   },
   {
     icon: BarChart3,
@@ -56,7 +56,7 @@ const PLANES = [
     caracteristicas: [
       "1 Sucursal",
       "Hasta 2 Usuarios",
-      "Módulo de facturación CFDI por separado"
+      "Integración de API de facturación por separado"
     ],
     destacado: false,
   },
@@ -67,7 +67,7 @@ const PLANES = [
     caracteristicas: [
       "De 1 a 3 Sucursales",
       "3 a 5 Usuarios por sucursal",
-      "50 folios CFDI al mes incluidos"
+      "Integración de API de facturación incluida"
     ],
     destacado: true,
   },
@@ -78,7 +78,7 @@ const PLANES = [
     caracteristicas: [
       "5 o más sucursales",
       "Usuarios ilimitados",
-      "200 folios CFDI al mes incluidos"
+      "Integración de API de facturación incluida"
     ],
     destacado: false,
   },
@@ -133,7 +133,7 @@ export default function LandingPage() {
               </h1>
               
               <p className="text-muted-foreground text-base sm:text-xl mb-8 leading-relaxed max-w-xl mx-auto lg:mx-0">
-                Administra ventas, inventario, reparaciones y facturación en una sola plataforma diseñada para crecer contigo.
+                Administra ventas, inventario, reparaciones y facturación vía API en una sola plataforma diseñada para crecer contigo.
               </p>
               
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 mb-6">

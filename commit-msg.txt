@@ -1,11 +1,11 @@
-feat: teléfono del cliente opcional/forzoso (Configuración)
+fix: acotar tipografia base 112% a escritorio (rompia layout movil)
 
-Nuevo campo Tenant.telefonoClienteObligatorio (default false) con su
-casilla en Configuración, mismo patrón que cobrarEnDevolucion. Cuando
-está activo, exige teléfono al dar de alta un cliente (Clientes y la
-rama "cliente nuevo" de Nueva reparación). Se agregó también el texto
-descriptivo junto al campo explicando que el teléfono se usa para las
-notificaciones de WhatsApp del estatus de la reparación.
+La regla global html{font-size:112%} (pedida para PC el 2026-09-21) no
+tenia guard de ancho, asi que tambien escalaba todo lo que usa rem en
+celular (texto y espaciados de Tailwind), provocando que algunos
+textos desbordaran su boton y que ciertos menus/tarjetas se encimaran
+o envolvieran mal en pantallas angostas. Se acota a >=1024px (breakpoint
+lg); en celular se queda en el 100% nativo del navegador.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01UokADUqM22UDVrqY4Ybr2n
