@@ -37,6 +37,10 @@ export default async function ReparacionesPage({
     // botón de una devolución (SHOP_RETURN) en tienda es "Entregar" (sin
     // cargo) o "Cobrar y entregar" (mismo camino a POS que un equipo
     // reparado) — ver el comentario largo en ReparacionesClient.tsx.
+    // telefonoClienteObligatorio (2026-10-05) — decide si el campo Teléfono
+    // del mini-formulario "cliente nuevo" (dentro de "Nueva reparación") es
+    // opcional o forzoso. include no trae campos escalares del modelo por
+    // default junto con `branches`, así que hace falta pedirlo aparte.
   });
 
   if (!tenant) notFound();
@@ -91,6 +95,7 @@ export default async function ReparacionesPage({
       telefonoNegocio={tenant.phone}
       negocioRecibo={negocioRecibo}
       cobrarEnDevolucion={tenant.cobrarEnDevolucion}
+      telefonoClienteObligatorio={tenant.telefonoClienteObligatorio}
       puedeControlarTaller={puedeControlarTaller}
       clienteInicialId={clienteId ?? null}
       // whatsappApiConectado (2026-10-02) — decide el modo del botón

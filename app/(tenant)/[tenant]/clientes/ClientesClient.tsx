@@ -69,6 +69,11 @@ interface ClientesClientProps {
   plantillasConsentimiento: PlantillaConsentimiento[];
   // Recetas digitales (M17, Fase 2, 2026-09-21) — mismo criterio.
   recetas: Record<string, RecetaUI[]>;
+  // Tenant.telefonoClienteObligatorio (2026-10-05, a petición de Carlos) —
+  // decide si el campo Teléfono del formulario de alta/edición es forzoso.
+  // Ver el comentario largo junto a Tenant.telefonoClienteObligatorio,
+  // schema.prisma.
+  telefonoClienteObligatorio: boolean;
 }
 
 const EXPEDIENTE_VACIO: ExpedienteCliente = { antecedentes: null, notas: [], dientes: [] };
@@ -391,7 +396,7 @@ const FORM_VACIO: DatosCliente = { name: "", phone: "", phoneCountryCode: PAIS_T
 export default function ClientesClient({
   clientes, labels, tenantSlug, reparacionesActiva, expedienteActiva, odontogramaActivo, expedientes,
   planesTratamiento, doctores, branches, consentimientos, plantillasConsentimiento, recetas,
-  puedeVerMontos = true,
+  puedeVerMontos = true, telefonoClienteObligatorio,
 }: ClientesClientProps) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -863,6 +868,13 @@ export default function ClientesClient({
       setFormError("El nombre es obligatorio");
       return;
     }
+    // Tenant.telefonoClienteObligatorio (2026-10-05, ver Configuración) — el
+    // servidor también lo valida (crearClienteAction/editarClienteAction),
+    // esto solo evita el viaje redondo cuando ya se sabe que va a fallar.
+    if (telefonoClienteObligatorio && !form.phone?.trim()) {
+      setFormError("El teléfono del cliente es obligatorio");
+      return;
+    }
     setFormError(null);
     startGuardar(async () => {
       const res =
@@ -902,7 +914,9 @@ export default function ClientesClient({
             />
           </div>
           <div data-tour="clientes-opcionales">
-            <label className="text-xs font-medium text-muted-foreground">Teléfono</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              Teléfono{telefonoClienteObligatorio ? " *" : ""}
+            </label>
             <div className="mt-1 flex gap-2">
               <select
                 value={form.phoneCountryCode || PAIS_TELEFONO_DEFAULT}
@@ -923,6 +937,14 @@ export default function ClientesClient({
                 placeholder="Número"
               />
             </div>
+            {/* 2026-10-05, a petición de Carlos: "en el texto descriptivo hay
+                que poner que el telefono se usa para que le lleguen
+                notificaciones de estatus de modo que el empleado se lo pueda
+                explicar al cliente" — texto siempre visible, sin importar si
+                el campo es opcional o forzoso en este tenant. */}
+            <p className="text-[11.5px] text-muted-foreground mt-1">
+              Se usa para enviarle al cliente notificaciones automáticas por WhatsApp sobre el estatus de su equipo.
+            </p>
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Correo electrónico</label>

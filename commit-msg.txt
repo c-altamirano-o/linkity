@@ -1,0 +1,11 @@
+feat: teléfono del cliente opcional/forzoso (Configuración)
+
+Nuevo campo Tenant.telefonoClienteObligatorio (default false) con su
+casilla en Configuración, mismo patrón que cobrarEnDevolucion. Cuando
+está activo, exige teléfono al dar de alta un cliente (Clientes y la
+rama "cliente nuevo" de Nueva reparación). Se agregó también el texto
+descriptivo junto al campo explicando que el teléfono se usa para las
+notificaciones de WhatsApp del estatus de la reparación.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01UokADUqM22UDVrqY4Ybr2n

@@ -90,6 +90,12 @@ interface ReparacionesClientProps {
   // (avanzarEstadoAction ya lo validaba, pero la UI nunca ofrecía la
   // alternativa). Se aprovecha este cambio para corregirlo también.
   cobrarEnDevolucion: boolean;
+  // Tenant.telefonoClienteObligatorio (2026-10-05, a petición de Carlos,
+  // probando esta misma pantalla) — decide si el campo Teléfono del
+  // mini-formulario "cliente nuevo" (abajo, modoClienteNuevo) es opcional o
+  // forzoso. Ver el comentario largo junto a Tenant.telefonoClienteObligatorio,
+  // schema.prisma.
+  telefonoClienteObligatorio: boolean;
   // 2026-09-25, a petición de Carlos: atajo para el operador único — cuando
   // se llega aquí desde el botón "Nueva reparación" de la ficha de un
   // cliente en /clientes, abre el modal de "Nueva reparación" ya con ese
@@ -1056,7 +1062,7 @@ function VistaTienda({
    NINGÚN rol — se movió por completo a /aduana, ver AduanaClient.tsx. Esta
    pantalla ahora es SIEMPRE la vista de tienda: recibir con folio, ver el
    detalle de solo lectura, y cobrar/entregar/avisar.) ── */
-export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, negocioRecibo, cobrarEnDevolucion, clienteInicialId, whatsappApiConectado, puedeControlarTaller }: ReparacionesClientProps) {
+export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, negocioRecibo, cobrarEnDevolucion, telefonoClienteObligatorio, clienteInicialId, whatsappApiConectado, puedeControlarTaller }: ReparacionesClientProps) {
   const { reparaciones, clientes, productos, tecnicos } = data;
   const router = useRouter();
   const negocio = nombreNegocio(tenantSlug);
@@ -1378,6 +1384,10 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
     if (!nuevaFalla.trim()) { setNuevaError("Describe la falla reportada"); return; }
     if (!modoClienteNuevo && !nuevaClienteId) { setNuevaError("Selecciona un cliente o registra uno nuevo"); return; }
     if (modoClienteNuevo && !nuevaClienteNuevoNombre.trim()) { setNuevaError("Escribe el nombre del cliente"); return; }
+    // Tenant.telefonoClienteObligatorio (2026-10-05, ver Configuración) — el
+    // servidor también lo valida (crearReparacionAction), esto solo evita el
+    // viaje redondo cuando ya se sabe que va a fallar.
+    if (modoClienteNuevo && telefonoClienteObligatorio && !nuevaClienteNuevoTelefono.trim()) { setNuevaError("El teléfono del cliente es obligatorio"); return; }
     // 2026-09-24, a petición de Carlos: "una reparación no puede ingresar
     // sin costo estipulado" — ver el comentario largo en
     // CrearReparacionParams.piezas (reparaciones-actions.ts).
@@ -1517,9 +1527,18 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
                         ))}
                       </select>
                       <input type="text" value={nuevaClienteNuevoTelefono} onChange={(e) => setNuevaClienteNuevoTelefono(e.target.value)}
-                        placeholder="Teléfono (opcional)"
+                        placeholder={telefonoClienteObligatorio ? "Teléfono" : "Teléfono (opcional)"}
                         className="flex-1 min-w-0 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                     </div>
+                    {/* 2026-10-05, a petición de Carlos: "en el texto
+                        descriptivo hay que poner que el telefono se usa para
+                        que le lleguen notificaciones de estatus de modo que
+                        el empleado se lo pueda explicar al cliente" — texto
+                        siempre visible, sin importar si el campo es opcional
+                        o forzoso en este tenant. */}
+                    <p className="text-[11.5px] text-muted-foreground">
+                      Se usa para enviarle al cliente notificaciones automáticas por WhatsApp sobre el estatus de su equipo.
+                    </p>
                     <button type="button" onClick={() => setModoClienteNuevo(false)} className="text-[12.5px] text-muted-foreground">
                       Buscar cliente existente
                     </button>

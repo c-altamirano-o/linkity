@@ -20,7 +20,7 @@ export default async function ClientesPage({
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
-    select: { id: true, businessType: true },
+    select: { id: true, businessType: true, telefonoClienteObligatorio: true },
   });
 
   if (!tenant) notFound();
@@ -93,6 +93,7 @@ export default async function ClientesPage({
       reparacionesActiva={reparacionesActiva}
       expedienteActiva={expedienteActiva}
       puedeVerMontos={puedeVerMontos}
+      telefonoClienteObligatorio={tenant.telefonoClienteObligatorio}
       // El odontograma solo aplica a un consultorio dental (dientes) — ver
       // el comentario largo en schema.prisma (M16).
       odontogramaActivo={tenant.businessType === "consultorio_dental"}

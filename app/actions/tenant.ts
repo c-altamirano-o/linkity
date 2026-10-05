@@ -281,6 +281,34 @@ export async function updateCobrarEnDevolucion(tenantSlug: string, valor: boolea
   }
 }
 
+// Teléfono del cliente obligatorio (Tenant.telefonoClienteObligatorio,
+// 2026-10-05, a petición de Carlos, probando el alta de clientes desde
+// "Nueva reparación": "en el campo 'Telefono' hay que habilitar en
+// Configuraciones una casilla de verificación si el campo será Opcional o
+// Forzoso") — una sola regla para TODO el negocio, no por sucursal (mismo
+// criterio que updateCobrarEnDevolucion arriba). Cuando está activo,
+// crearClienteAction/editarClienteAction (clientes-actions.ts) y la rama
+// "cliente nuevo" de crearReparacionAction (reparaciones-actions.ts) exigen
+// un teléfono capturado antes de guardar. Mismo criterio de validación que
+// updateCobrarEnDevolucion: solo el administrador dueño de la cuenta.
+export async function updateTelefonoClienteObligatorio(tenantSlug: string, valor: boolean) {
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
+  try {
+    await prisma.tenant.update({
+      where: { id: resuelto.tenant.id },
+      data: { telefonoClienteObligatorio: valor },
+    });
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al actualizar teléfono obligatorio del cliente:", error);
+    return { success: false, error: "No se pudo actualizar esta configuración" };
+  }
+}
+
 // Monto fijo a cobrar por una devolución (Tenant.montoDevolucion, 2026-09-26,
 // junto con la unificación del botón "Entregar" de Aduana/Reparaciones —
 // ver el comentario largo en Tenant.montoDevolucion, schema.prisma). Solo

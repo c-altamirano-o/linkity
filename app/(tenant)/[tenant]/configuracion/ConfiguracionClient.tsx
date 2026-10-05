@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateDatosTicket, guardarWhatsappBusinessAction, desconectarWhatsappBusinessAction, probarWhatsappBusinessAction, actualizarWhatsappNumeroManualAction } from "@/app/actions/tenant";
+import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateTelefonoClienteObligatorio, updateDatosTicket, guardarWhatsappBusinessAction, desconectarWhatsappBusinessAction, probarWhatsappBusinessAction, actualizarWhatsappNumeroManualAction } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction, activarModoSimpleAction, desactivarModoSimpleAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
@@ -147,6 +147,7 @@ interface ConfiguracionClientProps {
   supportPhoneInicial: string | null;
   cobrarEnDevolucionInicial: boolean;
   montoDevolucionInicial: number;
+  telefonoClienteObligatorioInicial: boolean;
   direccionTicketInicial: string | null;
   rfcTicketInicial: string | null;
   mensajePieTicketInicial: string | null;
@@ -182,6 +183,7 @@ export default function ConfiguracionClient({
   supportPhoneInicial,
   cobrarEnDevolucionInicial,
   montoDevolucionInicial,
+  telefonoClienteObligatorioInicial,
   direccionTicketInicial,
   rfcTicketInicial,
   mensajePieTicketInicial,
@@ -513,6 +515,33 @@ export default function ConfiguracionClient({
         router.refresh();
         setTimeout(() => setMontoDevolucionMensaje(""), 3000);
       }
+    });
+  };
+
+  // ── Teléfono del cliente obligatorio ───────────────────────
+  // 2026-10-05, a petición de Carlos, probando el alta de clientes desde
+  // "Nueva reparación": "en el campo 'Telefono' hay que habilitar en
+  // Configuraciones una casilla de verificación si el campo será Opcional o
+  // Forzoso". Guarda Tenant.telefonoClienteObligatorio, usado en
+  // crearClienteAction/editarClienteAction (clientes-actions.ts) y en la
+  // rama "cliente nuevo" de crearReparacionAction (reparaciones-actions.ts).
+  const [telefonoClienteObligatorio, setTelefonoClienteObligatorio] = useState(telefonoClienteObligatorioInicial);
+  const [telefonoClienteObligatorioPending, startTelefonoClienteObligatorioTransition] = useTransition();
+  const [telefonoClienteObligatorioMensaje, setTelefonoClienteObligatorioMensaje] = useState("");
+
+  const alternarTelefonoClienteObligatorio = (valor: boolean) => {
+    setTelefonoClienteObligatorio(valor); // optimista
+    setTelefonoClienteObligatorioMensaje("");
+    startTelefonoClienteObligatorioTransition(async () => {
+      const result = await updateTelefonoClienteObligatorio(tenantSlug, valor);
+      if (!result.success) {
+        setTelefonoClienteObligatorio(!valor); // revierte si el servidor lo rechazó
+        setTelefonoClienteObligatorioMensaje(result.error ?? "Error al actualizar.");
+        return;
+      }
+      router.refresh();
+      setTelefonoClienteObligatorioMensaje("Configuración actualizada correctamente.");
+      setTimeout(() => setTelefonoClienteObligatorioMensaje(""), 3000);
     });
   };
 
@@ -1631,6 +1660,50 @@ export default function ConfiguracionClient({
                 </p>
               )}
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Teléfono del cliente ─────────────────────────────────
+          2026-10-05, a petición de Carlos, probando el alta de clientes
+          desde "Nueva reparación": "en el campo 'Telefono' hay que
+          habilitar en Configuraciones una casilla de verificación si el
+          campo será Opcional o Forzoso". */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <Phone className="w-5 h-5 text-primary-text" />
+          <h2 className="text-base font-semibold text-foreground">Teléfono del cliente</h2>
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-muted-foreground mb-5">
+            El teléfono del cliente se usa para enviarle notificaciones automáticas por WhatsApp sobre el
+            estatus de su equipo. Decide si al dar de alta un cliente (en Clientes o al recibir una
+            reparación) este campo es opcional o forzoso. Esta regla aplica a TODAS tus sucursales por igual.
+          </p>
+
+          <label className="flex items-start gap-3 max-w-md cursor-pointer">
+            <input
+              type="checkbox"
+              checked={telefonoClienteObligatorio}
+              disabled={telefonoClienteObligatorioPending}
+              onChange={(e) => alternarTelefonoClienteObligatorio(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-primary disabled:opacity-50"
+            />
+            <span className="text-sm text-foreground">
+              Teléfono obligatorio al dar de alta un cliente
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                {telefonoClienteObligatorio
+                  ? "Activado — no se puede guardar un cliente nuevo sin teléfono."
+                  : "Desactivado — un cliente se puede guardar sin teléfono (no recibirá notificaciones de WhatsApp)."}
+              </span>
+            </span>
+          </label>
+
+          {telefonoClienteObligatorioMensaje && (
+            <p className={`text-sm font-medium mt-4 animate-in fade-in ${telefonoClienteObligatorioMensaje.startsWith("Error") || telefonoClienteObligatorioMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
+              {telefonoClienteObligatorioMensaje}
+            </p>
           )}
         </div>
       </div>

@@ -1,7 +1,7 @@
 // ruta: C:\linkity\app\actions\clientes-actions.ts
 "use server";
 
-import { getTenantPrisma } from "@/lib/prisma";
+import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { resolverActor, type ActorResult } from "@/lib/actor";
 import { PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
@@ -45,6 +45,19 @@ function validarDatosCliente(datos: DatosCliente): string | null {
   return null;
 }
 
+// Tenant.telefonoClienteObligatorio (2026-10-05, a petición de Carlos,
+// probando el alta de clientes desde "Nueva reparación") — una sola regla
+// para TODO el negocio, se lee aparte de validarDatosCliente porque necesita
+// el tenant ya resuelto (no se puede consultar la base antes de
+// resolverTenantYUsuario). Mismo criterio que la lectura de
+// cobrarEnDevolucion en avanzarEstadoAction, reparaciones-actions.ts.
+async function validarTelefonoObligatorio(tenantId: string, phone: string | null | undefined): Promise<string | null> {
+  if (phone?.trim()) return null;
+  const t = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { telefonoClienteObligatorio: true } });
+  if (t?.telefonoClienteObligatorio) return "El teléfono del cliente es obligatorio";
+  return null;
+}
+
 export type AccionClienteResult = { ok: true; id: string } | { ok: false; error: string };
 
 export async function crearClienteAction(
@@ -57,6 +70,9 @@ export async function crearClienteAction(
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
+
+  const errorTelefono = await validarTelefonoObligatorio(tenant.id, datos.phone);
+  if (errorTelefono) return { ok: false, error: errorTelefono };
 
   const db = getTenantPrisma(tenant.id);
 
@@ -95,6 +111,9 @@ export async function editarClienteAction(
   const resuelto = await resolverTenantYUsuario(tenantSlug);
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
   const { tenant } = resuelto;
+
+  const errorTelefono = await validarTelefonoObligatorio(tenant.id, datos.phone);
+  if (errorTelefono) return { ok: false, error: errorTelefono };
 
   const db = getTenantPrisma(tenant.id);
 

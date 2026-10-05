@@ -217,6 +217,17 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
       const cliente = await db.customer.findUnique({ where: { id: finalCustomerId }, select: { id: true } });
       if (!cliente) return { ok: false, error: "Cliente no encontrado" };
     } else if (clienteNuevo?.name.trim()) {
+      // Tenant.telefonoClienteObligatorio (2026-10-05, a petición de Carlos,
+      // probando esta misma pantalla: "en el campo 'Telefono' hay que
+      // habilitar en Configuraciones una casilla de verificación si el
+      // campo será Opcional o Forzoso") — mismo criterio de lectura que
+      // cobrarEnDevolucion en avanzarEstadoAction, más abajo en este archivo.
+      if (!clienteNuevo.phone?.trim()) {
+        const t = await prisma.tenant.findUnique({ where: { id: tenant.id }, select: { telefonoClienteObligatorio: true } });
+        if (t?.telefonoClienteObligatorio) {
+          return { ok: false, error: "El teléfono del cliente es obligatorio" };
+        }
+      }
       const nuevoCliente = await db.customer.create({
         data: {
           tenantId: tenant.id,
