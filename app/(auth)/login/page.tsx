@@ -53,14 +53,14 @@ export default function LoginPage() {
     // uso real, igual que con el PIN de personal.
     await supabase.auth.signOut({ scope: "others" });
 
+    const esSuperAdmin = await isSuperAdminBySupabaseId(data.user.id);
+
+    if (esSuperAdmin) {
+      window.location.href = "/maestro/dashboard";
+      return;
+    }
+
     if (!tenantSlug) {
-      // No tiene negocio asociado — puede ser un administrador de Panel
-      // Maestro (esas cuentas no son User de ningún tenant a propósito).
-      const esSuperAdmin = await isSuperAdminBySupabaseId(data.user.id);
-      if (esSuperAdmin) {
-        window.location.href = "/maestro/dashboard";
-        return;
-      }
       setError("Tu cuenta no está asociada a ningún negocio.");
       setLoading(false);
       return;
