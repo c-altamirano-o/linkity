@@ -16,6 +16,7 @@ import {
   listarSuperAdminsAction,
   alternarSuperAdminAction,
   invitarSuperAdminAction,
+  eliminarSuperAdminAction,
   type SuperAdminListItem,
 } from "./actions";
 
@@ -113,6 +114,29 @@ export default function ConfiguracionClient({
     );
   };
 
+  const eliminarAdmin = async (item: SuperAdminListItem) => {
+    const confirmar = window.confirm(
+      "¿Eliminar definitivamente a " + item.name + " (" + item.email + ")?\n\nEsta acción eliminará su acceso al Panel Maestro y no se puede deshacer."
+    );
+
+    if (!confirmar) return;
+
+    setGestionandoAdmin(item.id);
+    setErrorAdmins("");
+
+    const resultado = await eliminarSuperAdminAction(item.id);
+
+    setGestionandoAdmin("");
+
+    if (!resultado.ok) {
+      setErrorAdmins(resultado.error ?? "No se pudo eliminar el administrador.");
+      return;
+    }
+
+    setSuperAdmins((actuales) =>
+      actuales.filter((adminActual) => adminActual.id !== item.id)
+    );
+  };
   const abrirFormulario = () => {
     setErrorAdmins("");
     setExitoInvitacion("");
@@ -483,6 +507,22 @@ export default function ConfiguracionClient({
                           <UserX className="w-3.5 h-3.5" />
                         ) : (
                           <UserCheck className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+
+                    {!esActual && (
+                      <button
+                        type="button"
+                        onClick={() => eliminarAdmin(item)}
+                        disabled={enCurso}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                        title="Eliminar administrador"
+                      >
+                        {enCurso ? (
+                          <div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                        ) : (
+                          <X className="w-3.5 h-3.5" />
                         )}
                       </button>
                     )}

@@ -160,3 +160,77 @@ export async function invitarSuperAdminAction(params: {
   }
 }
 
+
+export async function eliminarSuperAdminAction(
+  id: string
+): Promise<SuperAdminActionResult> {
+  const resuelto = await requireSuperAdmin();
+  if (!resuelto.ok) return { ok: false, error: resuelto.error };
+
+  if (id === resuelto.admin.id) {
+    return {
+      ok: false,
+      error: "No puedes eliminar tu propia cuenta.",
+    };
+  }
+
+  const admin = await prisma.superAdmin.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      supabaseId: true,
+      email: true,
+      name: true,
+      isActive: true,
+      createdAt: true,
+    },
+  });
+
+  if (!admin) {
+    return {
+      ok: false,
+      error: "Administrador no encontrado.",
+    };
+  }
+
+  try {
+    await prisma.superAdmin.delete({
+      where: { id: admin.id },
+    });
+
+    const supabaseAdmin = createAdminClient();
+
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(
+      admin.supabaseId
+    );
+
+    if (error) {
+      await prisma.superAdmin.create({
+        data: {
+          id: admin.id,
+          supabaseId: admin.supabaseId,
+          email: admin.email,
+          name: admin.name,
+          isActive: admin.isActive,
+          createdAt: admin.createdAt,
+        },
+      });
+
+      console.error("Error eliminando usuario de Supabase:", error);
+
+      return {
+        ok: false,
+        error: "No se pudo eliminar la cuenta de autenticación. El administrador fue restaurado.",
+      };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error("Error eliminando SuperAdmin:", err);
+
+    return {
+      ok: false,
+      error: "No se pudo eliminar el administrador.",
+    };
+  }
+}
