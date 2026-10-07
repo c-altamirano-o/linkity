@@ -121,7 +121,7 @@ export async function invitarSuperAdminAction(params: {
   const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
     email,
     {
-      redirectTo: "https://linkity-phi.vercel.app/auth/invitacion",
+      redirectTo: "https://linkity-phi.vercel.app/invitacion",
       data: {
         name,
         role: "superadmin",
