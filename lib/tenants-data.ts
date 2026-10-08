@@ -32,8 +32,9 @@ export interface TenantListRow {
   modulosTotal: number;
   branchesCount: number;
   usersCount: number;
-  esquemaName: string | null;
-  esquemaMaxBranches: number | null;
+  // Plan comercial vigente (Subscription.commercialPlan). null = sin plan
+  // asignado (lo normal en prueba gratis).
+  planComercial: string | null;
   createdAt: string; // ISO
 }
 
@@ -43,9 +44,8 @@ export async function getTenantsListData(): Promise<TenantListRow[]> {
   const tenants = await prisma.tenant.findMany({
     orderBy: { createdAt: "desc" },
     include: {
-      subscription: true,
+      subscription: { include: { commercialPlan: { select: { name: true } } } },
       modules: { where: { isActive: true }, select: { moduleId: true } },
-      esquema: { select: { name: true, maxBranches: true } },
       _count: { select: { branches: true, users: true } },
     },
   });
@@ -65,8 +65,7 @@ export async function getTenantsListData(): Promise<TenantListRow[]> {
     modulosTotal: totalModulosCatalogo,
     branchesCount: t._count.branches,
     usersCount: t._count.users,
-    esquemaName: t.esquema?.name ?? null,
-    esquemaMaxBranches: t.esquema?.maxBranches ?? null,
+    planComercial: t.subscription?.commercialPlan?.name ?? null,
     createdAt: t.createdAt.toISOString(),
   }));
 }
@@ -120,10 +119,6 @@ export interface TenantDetail {
   // decidir si ofrecer el botón de renovar/eliminar.
   etapaCiclo: EtapaCiclo;
   diasVencida: number | null;
-  esquemaId: string | null;
-  esquemaName: string | null;
-  esquemaMaxBranches: number | null;
-  esquemaMaxStaffPerBranch: number | null;
   // Plan comercial (2026-10-08): el que de verdad define los límites. null =
   // sin plan asignado (en prueba gratis es lo normal).
   commercialPlanId: string | null;
@@ -139,7 +134,6 @@ export async function getTenantDetailData(slug: string): Promise<TenantDetail | 
     where: { slug },
     include: {
       subscription: { include: { commercialPlan: { select: { id: true, name: true } } } },
-      esquema: { select: { id: true, name: true, maxBranches: true, maxStaffPerBranch: true } },
       // Enforcement real de módulos (2026-09-17) = "default abierto": se
       // traen TODAS las filas (no solo isActive:true) para poder distinguir
       // "sin fila" (activo) de "fila explícita isActive:false" (inactivo) —
@@ -194,10 +188,6 @@ export async function getTenantDetailData(slug: string): Promise<TenantDetail | 
     autoRenew: t.subscription?.autoRenew ?? false,
     etapaCiclo: ciclo.etapa,
     diasVencida: ciclo.diasVencida,
-    esquemaId: t.esquema?.id ?? null,
-    esquemaName: t.esquema?.name ?? null,
-    esquemaMaxBranches: t.esquema?.maxBranches ?? null,
-    esquemaMaxStaffPerBranch: t.esquema?.maxStaffPerBranch ?? null,
     commercialPlanId: t.subscription?.commercialPlan?.id ?? null,
     commercialPlanName: t.subscription?.commercialPlan?.name ?? null,
     branchesActivas: t.branches.filter((b) => b.isActive).length,

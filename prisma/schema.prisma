@@ -276,13 +276,6 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Límites de capacidad (cuántas sucursales, cuánto personal por sucursal)
-  // que Carlos asigna/reasigna desde Panel Maestro — ver modelo PlanEsquema.
-  // null = sin esquema asignado = sin límite (así quedan los tenants que ya
-  // existían antes de este campo, para no romperles nada de golpe).
-  esquemaId String?
-  esquema   PlanEsquema? @relation(fields: [esquemaId], references: [id])
-
   branches                   Branch[]
   users                      User[]
   modules                    TenantModule[]
@@ -850,36 +843,6 @@ enum SubscriptionStatus {
   SUSPENDED
   CANCELLED
   TRIAL
-}
-
-/**
- * Esquema de capacidad (2026-09) — reemplaza la idea de "el cliente elige
- * su plan" en el registro público: ahora el cobro y los paquetes/usuarios
- * adicionales los gestiona Hotmart por fuera de la plataforma, y aquí
- * dentro Carlos define cuántas sucursales y cuánto personal por sucursal
- * puede tener cada negocio — configurable desde Panel Maestro
- * (/maestro/esquemas), y reasignable en cualquier momento por tenant desde
- * su pantalla de detalle, para poder "migrar" a un cliente de esquema
- * según el volumen que vaya necesitando, sin tocar código ni base de datos
- * a mano.
- * `isDefault` marca el esquema que se asigna automáticamente a un negocio
- * nuevo que se auto-registra (solo debe haber uno con isDefault=true a la
- * vez — las acciones en maestro/esquemas/actions.ts se encargan de eso).
- * `isActive=false` es un soft-delete: no se borra un esquema que ya tenga
- * tenants asignados (rompería su referencia), solo se oculta de la lista
- * para asignar esquemas nuevos.
- */
-model PlanEsquema {
-  id                String   @id @default(cuid())
-  name              String
-  maxBranches       Int
-  maxStaffPerBranch Int
-  isDefault         Boolean  @default(false)
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  tenants Tenant[]
 }
 
 enum BillingCycle {
