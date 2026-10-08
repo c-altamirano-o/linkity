@@ -54,3 +54,7 @@ next-env.d.ts
 /lib/generated/prisma
 
 prisma/DEMO_CREDENCIALES.md
+
+commit-msg.txt
+*.backup
+*.backup-*
