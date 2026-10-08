@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { randomBytes } from "node:crypto";
 import { cifrar, descifrar, cifradoDisponible } from "@/lib/cifrado-config";
 
 /**
@@ -41,22 +42,30 @@ export interface WhatsappPlataforma {
 
 type FilaCfg = { clave: string; valor: string; cifrado: boolean };
 
-function leerValor(filas: FilaCfg[], c: CampoWhatsapp): string | null {
-  const fila = filas.find((f) => f.clave === clave(c));
+function valorDeClave(filas: FilaCfg[], claveCompleta: string): string | null {
+  const fila = filas.find((f) => f.clave === claveCompleta);
   if (!fila) return null;
   if (!fila.cifrado) return fila.valor || null;
   const claro = descifrar(fila.valor);
   if (claro === null) {
-    console.error(`❌ No se pudo descifrar ${clave(c)} (¿cambió CONFIG_ENCRYPTION_KEY?). Vuelve a capturarlo en Panel Maestro → Configuración.`);
+    console.error(`❌ No se pudo descifrar ${claveCompleta} (¿cambió CONFIG_ENCRYPTION_KEY?). Vuelve a capturarlo en Panel Maestro → Conexiones.`);
   }
   return claro || null;
 }
 
-async function cargarFilas(): Promise<FilaCfg[]> {
+function leerValor(filas: FilaCfg[], c: CampoWhatsapp): string | null {
+  return valorDeClave(filas, clave(c));
+}
+
+async function cargarFilasConPrefijo(prefijo: string): Promise<FilaCfg[]> {
   return prisma.configuracionPlataforma.findMany({
-    where: { clave: { startsWith: "whatsapp." } },
+    where: { clave: { startsWith: prefijo } },
     select: { clave: true, valor: true, cifrado: true },
   });
+}
+
+async function cargarFilas(): Promise<FilaCfg[]> {
+  return cargarFilasConPrefijo("whatsapp.");
 }
 
 /** Valores efectivos (con respaldo a variables de entorno). Una consulta por petición. */
@@ -143,4 +152,134 @@ export async function guardarCamposWhatsapp(cambios: Partial<Record<CampoWhatsap
 
 export function esCampoSecreto(c: CampoWhatsapp): boolean {
   return SECRETOS.has(c);
+}
+
+// ---------------------------------------------------------------------------
+// Datos que Linkity aprende solo (Panel Maestro → Conexiones, 2026-10-08)
+// ---------------------------------------------------------------------------
+
+const CLAVE_CONTACTO_META = "whatsapp.metaContactoAt";
+const CLAVE_APP_ID = "whatsapp.appId";
+
+export interface EstadoExtraWhatsapp {
+  /** Última vez que Meta contactó a Linkity (verificó el webhook o mandó un aviso firmado). ISO. */
+  metaContactoAt: string | null;
+  /** ID de la app de Meta (se aprende solo en la prueba de conexión; sirve para armar enlaces directos). */
+  appId: string | null;
+}
+
+export async function obtenerEstadoExtraWhatsapp(): Promise<EstadoExtraWhatsapp> {
+  let filas: FilaCfg[] = [];
+  try {
+    filas = await cargarFilasConPrefijo("whatsapp.");
+  } catch (err) {
+    console.error("❌ No se pudo leer el estado extra de WhatsApp:", err);
+  }
+  return { metaContactoAt: valorDeClave(filas, CLAVE_CONTACTO_META), appId: valorDeClave(filas, CLAVE_APP_ID) };
+}
+
+async function guardarClaveSimple(claveCompleta: string, valor: string): Promise<void> {
+  await prisma.configuracionPlataforma.upsert({
+    where: { clave: claveCompleta },
+    create: { clave: claveCompleta, valor, cifrado: false },
+    update: { valor, cifrado: false },
+  });
+}
+
+/** Lo llama el webhook de WhatsApp cuando Meta verifica la URL o manda un aviso firmado. Nunca lanza. */
+export async function registrarContactoMeta(): Promise<void> {
+  try {
+    await guardarClaveSimple(CLAVE_CONTACTO_META, new Date().toISOString());
+  } catch (err) {
+    console.error("No se pudo registrar el contacto de Meta (se ignora):", err);
+  }
+}
+
+export async function guardarAppIdWhatsapp(appId: string): Promise<void> {
+  if (/^\d{5,30}$/.test(appId)) await guardarClaveSimple(CLAVE_APP_ID, appId);
+}
+
+/**
+ * El verify token lo genera el sistema (el dueño no debe inventarlo): si no hay
+ * ninguno guardado ni en variable de entorno, se crea uno al azar y se guarda
+ * cifrado. Devuelve el valor vigente (o null si no hay llave de cifrado).
+ */
+export async function asegurarVerifyToken(): Promise<string | null> {
+  const actual = (await obtenerWhatsappPlataforma()).verifyToken;
+  if (actual) return actual;
+  if (!cifradoDisponible()) return null;
+  const nuevo = randomBytes(16).toString("hex");
+  try {
+    await guardarCamposWhatsapp({ verifyToken: nuevo }, []);
+    return nuevo;
+  } catch (err) {
+    console.error("No se pudo generar el verify token:", err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hotmart (2026-10-08): antes vivía en variables de entorno de Vercel. Ahora se
+// captura en Panel Maestro → Conexiones; las variables anteriores
+// (HOTMART_HOTTOK, HOTMART_CHECKOUT_URL) siguen valiendo como respaldo.
+// ---------------------------------------------------------------------------
+
+const CLAVE_HOTTOK = "hotmart.hottok";
+const CLAVE_CHECKOUT = "hotmart.checkoutUrl";
+
+export interface HotmartPlataforma {
+  hottok: string | null;
+  checkoutUrl: string | null;
+}
+
+export const obtenerHotmartPlataforma = cache(async (): Promise<HotmartPlataforma> => {
+  let filas: FilaCfg[] = [];
+  try {
+    filas = await cargarFilasConPrefijo("hotmart.");
+  } catch (err) {
+    console.error("❌ No se pudo leer la configuración de Hotmart (se usan las variables de entorno):", err);
+  }
+  return {
+    hottok: valorDeClave(filas, CLAVE_HOTTOK) ?? (process.env.HOTMART_HOTTOK || null),
+    checkoutUrl: valorDeClave(filas, CLAVE_CHECKOUT) ?? (process.env.HOTMART_CHECKOUT_URL || null),
+  };
+});
+
+/** Link de pago de Hotmart (para el banner, la pantalla de bloqueo y los correos). */
+export async function obtenerCheckoutUrl(): Promise<string | null> {
+  return (await obtenerHotmartPlataforma()).checkoutUrl;
+}
+
+export interface HotmartPlataformaPanel {
+  cifradoListo: boolean;
+  hottok: CampoEnmascarado;
+  checkoutUrl: string | null;
+}
+
+export async function obtenerHotmartPlataformaParaPanel(): Promise<HotmartPlataformaPanel> {
+  const v = await obtenerHotmartPlataforma();
+  return { cifradoListo: cifradoDisponible(), hottok: enmascarar(v.hottok), checkoutUrl: v.checkoutUrl };
+}
+
+export async function guardarHotmart(cambios: { hottok?: string; checkoutUrl?: string }): Promise<void> {
+  const operaciones = [];
+  if (cambios.hottok !== undefined) {
+    operaciones.push(
+      prisma.configuracionPlataforma.upsert({
+        where: { clave: CLAVE_HOTTOK },
+        create: { clave: CLAVE_HOTTOK, valor: cifrar(cambios.hottok), cifrado: true },
+        update: { valor: cifrar(cambios.hottok), cifrado: true },
+      })
+    );
+  }
+  if (cambios.checkoutUrl !== undefined) {
+    operaciones.push(
+      prisma.configuracionPlataforma.upsert({
+        where: { clave: CLAVE_CHECKOUT },
+        create: { clave: CLAVE_CHECKOUT, valor: cambios.checkoutUrl, cifrado: false },
+        update: { valor: cambios.checkoutUrl, cifrado: false },
+      })
+    );
+  }
+  if (operaciones.length > 0) await prisma.$transaction(operaciones);
 }

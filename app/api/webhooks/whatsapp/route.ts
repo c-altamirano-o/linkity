@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { procesarEstadoWhatsapp } from "@/lib/whatsapp-tenant";
-import { obtenerWhatsappPlataforma } from "@/lib/config-plataforma";
+import { obtenerWhatsappPlataforma, registrarContactoMeta } from "@/lib/config-plataforma";
 import { verificarFirmaMeta } from "@/lib/firma-meta";
 import { descifrar } from "@/lib/cifrado-config";
 import { prisma } from "@/lib/prisma";
@@ -41,7 +41,7 @@ export const maxDuration = 60;
  * Linkity — ver WhatsappAppSecret en schema.prisma.
  *
  * 2026-10-08: el verify token y el App Secret de LINKITY ya se capturan en
- * Panel Maestro → Configuración (lib/config-plataforma.ts; si no hay nada
+ * Panel Maestro → Conexiones (lib/config-plataforma.ts; si no hay nada
  * guardado ahí se usa la variable de entorno anterior). Con eso, los avisos
  * que llegan por el número de Linkity (metadata.phone_number_id igual al
  * configurado) se aceptan solo con firma X-Hub-Signature-256 válida. Los
@@ -67,6 +67,8 @@ export async function GET(request: Request) {
 
   const config = await obtenerWhatsappPlataforma();
   if (modo === "subscribe" && challenge && token && config.verifyToken && iguales(token, config.verifyToken)) {
+    // Panel Maestro → Conexiones muestra "Meta ya se comunicó" con esta fecha.
+    await registrarContactoMeta();
     return new NextResponse(challenge, { status: 200 });
   }
   return new NextResponse("Verificación fallida", { status: 403 });
@@ -88,9 +90,12 @@ export async function POST(request: Request) {
           if (typeof id === "string") idsEnAviso.add(id);
         }
       }
-      if (idsEnAviso.has(config.phoneNumberId) && !verificarFirmaMeta(cuerpoCrudo, request.headers.get("x-hub-signature-256"), config.appSecret)) {
-        console.warn("⚠️  Aviso de WhatsApp del número de Linkity con firma inválida: rechazado.");
-        return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
+      if (idsEnAviso.has(config.phoneNumberId)) {
+        if (!verificarFirmaMeta(cuerpoCrudo, request.headers.get("x-hub-signature-256"), config.appSecret)) {
+          console.warn("⚠️  Aviso de WhatsApp del número de Linkity con firma inválida: rechazado.");
+          return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
+        }
+        await registrarContactoMeta();
       }
     }
 

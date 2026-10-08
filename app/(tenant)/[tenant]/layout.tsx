@@ -114,7 +114,7 @@ export default async function TenantLayout({
   // menú completo de módulos que de todos modos van a rechazar cualquier
   // acción (ver el mismo chequeo en lib/actor.ts). resolverActor cubre los
   // Server Actions; esto cubre la renderización de cualquier página.
-  const enlacesSuscripcion = obtenerEnlacesSuscripcion();
+  const enlacesSuscripcion = await obtenerEnlacesSuscripcion();
   // Aviso de días restantes dentro del SaaS (2026-10-06, ver
   // components/tenant/BannerSuscripcion.tsx) — solo mientras la cuenta está
   // en prueba gratis o en los días de gracia de una suscripción vencida.

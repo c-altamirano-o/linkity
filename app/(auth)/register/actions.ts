@@ -12,6 +12,7 @@ import { eliminarTenantPorCompleto } from "@/lib/eliminar-tenant";
 import { canonizarCorreo } from "@/lib/correo-canonico";
 import { permitirIntento, ipDeLaPeticion, LIMITE_REGISTRO, LIMITE_REENVIO, MENSAJE_DEMASIADOS_INTENTOS } from "@/lib/limite-intentos";
 import { verificarTurnstile } from "@/lib/turnstile";
+import { obtenerCheckoutUrl } from "@/lib/config-plataforma";
 
 /**
  * Alta de un negocio nuevo por auto-registro público (app/(auth)/register).
@@ -187,7 +188,7 @@ export async function registrarNegocioAction(
     }
     const yaUsoPrueba = await prisma.pruebaGratisUsada.findUnique({ where: { emailCanonico: correoCanonico }, select: { id: true } });
     if (yaUsoPrueba) {
-      const link = process.env.HOTMART_CHECKOUT_URL;
+      const link = await obtenerCheckoutUrl();
       return {
         success: false,
         error: `Este correo ya utilizó su prueba gratis de Linkity. Para seguir adelante, suscríbete${link ? ` aquí: ${link}` : " (escríbenos y te ayudamos)"}.`,

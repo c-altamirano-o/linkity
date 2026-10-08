@@ -56,11 +56,12 @@ export default function HotmartClient({ data }: { data: HotmartPanelData }) {
       {/* Estado de la configuración */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-2">
-          <p className="text-[13.5px] font-medium text-slate-800">Configuración del servidor</p>
-          <Semaforo ok={data.hottokConfigurado} textoOk="HOTMART_HOTTOK configurado" textoMal="Falta HOTMART_HOTTOK en Vercel: el webhook rechazará todo" />
-          <Semaforo ok={data.checkoutConfigurado} textoOk="HOTMART_CHECKOUT_URL configurado" textoMal="Falta HOTMART_CHECKOUT_URL: los clientes no tendrán a dónde pagar" />
+          <p className="text-[13.5px] font-medium text-slate-800">Conexión con Hotmart</p>
+          <Semaforo ok={data.hottokConfigurado} textoOk="Hottok guardado" textoMal="Falta el Hottok: el webhook rechazará todo" />
+          <Semaforo ok={data.checkoutConfigurado} textoOk="Link de pago guardado" textoMal="Falta el link de pago: los clientes no tendrán a dónde pagar" />
           <p className="text-[12px] text-slate-400 pt-1">
-            URL del webhook: <span className="font-mono">https://linkitysoluciones.mx/api/webhooks/hotmart</span>
+            Para cambiarlo o ver la URL del webhook, entra a{" "}
+            <Link href="/maestro/conexiones" className="text-[#4F46E5] hover:underline">Conexiones</Link>.
           </p>
         </div>
 

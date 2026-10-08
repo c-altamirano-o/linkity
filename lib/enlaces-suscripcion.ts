@@ -1,5 +1,7 @@
 import "server-only";
 
+import { obtenerCheckoutUrl } from "@/lib/config-plataforma";
+
 /**
  * Enlaces para que un negocio se suscriba (2026-10-06, a petición de
  * Carlos). Lo usan el banner de días restantes (components/tenant/
@@ -8,8 +10,8 @@ import "server-only";
  * aquí y se pasan como props a los componentes, nunca se exponen al
  * cliente por otro camino.
  *
- *  - HOTMART_CHECKOUT_URL: link de pago del producto de suscripción de
- *    Linkity en Hotmart. Es el camino principal.
+ *  - Link de pago de Hotmart: se captura en Panel Maestro → Conexiones (con
+ *    respaldo a la variable HOTMART_CHECKOUT_URL). Es el camino principal.
  *  - LINKITY_CONTACT_WHATSAPP / LINKITY_CONTACT_EMAIL: respaldo (ya existían
  *    para la pantalla de bloqueo) para cuando Carlos todavía no ha puesto el
  *    link de Hotmart — nunca queda un botón roto.
@@ -19,8 +21,8 @@ export interface EnlacesSuscripcion {
   contactoHref: string | null;
 }
 
-export function obtenerEnlacesSuscripcion(): EnlacesSuscripcion {
-  const checkoutUrl = process.env.HOTMART_CHECKOUT_URL || null;
+export async function obtenerEnlacesSuscripcion(): Promise<EnlacesSuscripcion> {
+  const checkoutUrl = await obtenerCheckoutUrl();
   const whatsapp = process.env.LINKITY_CONTACT_WHATSAPP; // wa.me: solo dígitos con código de país
   const correo = process.env.LINKITY_CONTACT_EMAIL;
   const contactoHref = whatsapp

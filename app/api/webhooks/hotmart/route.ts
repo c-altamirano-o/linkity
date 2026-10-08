@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { identificarPlan } from "@/lib/hotmart-plan";
 import { leerEvento } from "@/lib/hotmart-payload";
+import { obtenerHotmartPlataforma } from "@/lib/config-plataforma";
 
 export const maxDuration = 30;
 
@@ -82,9 +83,9 @@ type Resultado = {
 };
 
 export async function POST(request: Request) {
-  const esperado = process.env.HOTMART_HOTTOK;
+  const esperado = (await obtenerHotmartPlataforma()).hottok;
   if (!esperado) {
-    console.error("❌ Webhook Hotmart: HOTMART_HOTTOK no está configurado — se rechaza el evento.");
+    console.error("❌ Webhook Hotmart: el Hottok no está configurado (Panel Maestro → Conexiones) — se rechaza el evento.");
     return NextResponse.json({ error: "Webhook no configurado" }, { status: 500 });
   }
 

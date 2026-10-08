@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   LayoutDashboard, Building2, Puzzle, CreditCard, Layers,
-  Users, Ticket, BarChart3, Settings, Link as LinkIcon, ShieldAlert, ShoppingCart, Gift
+  Users, Ticket, BarChart3, Settings, Link as LinkIcon, ShieldAlert, ShoppingCart, Gift, Plug
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/maestro-auth";
@@ -66,6 +66,7 @@ function buildNavItems(totalNegocios: number, alertaSuscripciones: number, ticke
     {
       section: "SISTEMA",
       items: [
+        { label: "Conexiones", href: "/maestro/conexiones", icon: Plug, badge: null as string | null, badgeColor: undefined as string | undefined },
         { label: "Configuración", href: "/maestro/configuracion", icon: Settings, badge: null as string | null, badgeColor: undefined as string | undefined },
       ]
     }

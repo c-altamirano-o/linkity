@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { obtenerHotmartPlataforma } from "@/lib/config-plataforma";
 
 /**
  * Capa de datos de Panel Maestro → Hotmart (Paso 4, 2026-10-08): bitácora
@@ -49,13 +50,14 @@ export async function getHotmartPendientesCount(): Promise<number> {
 }
 
 export async function getHotmartPanelData(): Promise<HotmartPanelData> {
-  const [filas, pendientes, planes] = await Promise.all([
+  const [filas, pendientes, planes, hotmartCfg] = await Promise.all([
     prisma.hotmartEvent.findMany({ orderBy: { receivedAt: "desc" }, take: 200 }),
     getHotmartPendientesCount(),
     prisma.commercialPlan.findMany({
       orderBy: { displayOrder: "asc" },
       select: { id: true, code: true, name: true, isActive: true, hotmartProductId: true, hotmartOfferCode: true },
     }),
+    obtenerHotmartPlataforma(),
   ]);
 
   const tenantIds = [...new Set(filas.map((f) => f.tenantId).filter((x): x is string => !!x))];
@@ -68,8 +70,8 @@ export async function getHotmartPanelData(): Promise<HotmartPanelData> {
   const pMap = new Map(planesRef.map((p) => [p.id, p.name]));
 
   return {
-    hottokConfigurado: !!process.env.HOTMART_HOTTOK,
-    checkoutConfigurado: !!process.env.HOTMART_CHECKOUT_URL,
+    hottokConfigurado: !!hotmartCfg.hottok,
+    checkoutConfigurado: !!hotmartCfg.checkoutUrl,
     pendientes,
     planes,
     eventos: filas.map((f) => ({

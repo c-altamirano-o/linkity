@@ -1,6 +1,6 @@
 import "server-only";
 
-import { obtenerWhatsappPlataforma } from "@/lib/config-plataforma";
+import { obtenerWhatsappPlataforma, obtenerCheckoutUrl } from "@/lib/config-plataforma";
 
 /**
  * Envío de los 4 avisos del ciclo de vida de suscripción (ver el comentario
@@ -58,10 +58,11 @@ export type TipoAvisoSuscripcion =
 
 const TIPOS_SOLO_CORREO: TipoAvisoSuscripcion[] = ["prueba_7", "prueba_3", "prueba_1", "exceso_plan", "exceso_final"];
 
-/** Liga de pago en Hotmart (producto de suscripción de Linkity). Sin
+/** Liga de pago en Hotmart (producto de suscripción de Linkity), tomada de
+ *  Panel Maestro → Conexiones (con respaldo a la variable de entorno). Sin
  *  configurar, los textos simplemente no incluyen el link. */
-function linkSuscripcion(): string | null {
-  return process.env.HOTMART_CHECKOUT_URL || null;
+async function linkSuscripcion(): Promise<string | null> {
+  return obtenerCheckoutUrl();
 }
 
 interface DatosTenantAviso {
@@ -84,9 +85,9 @@ const ASUNTOS: Record<TipoAvisoSuscripcion, string> = {
   exceso_final: "Último día para ajustar tu negocio a tu plan de Linkity",
 };
 
-function construirCuerpo(tipo: TipoAvisoSuscripcion, tenant: DatosTenantAviso): string {
+async function construirCuerpo(tipo: TipoAvisoSuscripcion, tenant: DatosTenantAviso): Promise<string> {
   const base = construirCuerpoBase(tipo, tenant);
-  const link = linkSuscripcion();
+  const link = await linkSuscripcion();
   const esDePrueba = tipo.startsWith("prueba_");
   return esDePrueba && link ? `${base} Suscríbete aquí: ${link}` : base;
 }
@@ -137,7 +138,7 @@ async function enviarCorreo(tenant: DatosTenantAviso, tipo: TipoAvisoSuscripcion
         from,
         to: tenant.email,
         subject: ASUNTOS[tipo],
-        text: construirCuerpo(tipo, tenant),
+        text: await construirCuerpo(tipo, tenant),
       }),
     });
     if (!res.ok) {
@@ -178,7 +179,7 @@ async function enviarWhatsapp(tenant: DatosTenantAviso, tipo: TipoAvisoSuscripci
         template: {
           name: wa.plantilla,
           language: { code: wa.idioma },
-          components: [{ type: "body", parameters: [{ type: "text", text: construirCuerpo(tipo, tenant) }] }],
+          components: [{ type: "body", parameters: [{ type: "text", text: await construirCuerpo(tipo, tenant) }] }],
         },
       }),
     });
