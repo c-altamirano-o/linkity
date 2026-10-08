@@ -10,7 +10,7 @@ import { validarTelefono, PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
 import { horaValida, parseHoraAMinutos } from "@/lib/horarios-sucursal";
 import { hashPin, pinValido } from "@/lib/staff-auth";
 import { randomUUID } from "crypto";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { obtenerCapacidades, puedeAgregarUno, LIMITE_EMPLEADOS_POR_SUCURSAL } from "@/lib/capacidades-comerciales";
 
 /**
  * Server Actions del módulo Personal (M11). Mismo criterio de siempre:
@@ -144,6 +144,24 @@ async function validarRolDeTenant(tenantId: string, roleId: string): Promise<str
   return null;
 }
 
+/**
+ * Límite COMERCIAL de empleados activos por sucursal (plan contratado, ver
+ * lib/capacidades-comerciales.ts). Devuelve el mensaje de error a mostrar, o
+ * null si todavía cabe un empleado activo más en esa sucursal. Solo cuentan
+ * los Staff activos: el administrador (cuenta real) y la cuenta técnica oculta
+ * de cada empleado no cuentan. Se usa en TODA vía que deje a un empleado
+ * activo en una sucursal: crear, reactivar y mover de sucursal. `tenantId`
+ * debe venir ya resuelto/confiable, nunca del cliente.
+ */
+async function errorLimiteEmpleados(tenantId: string, branchId: string): Promise<string | null> {
+  const cap = await obtenerCapacidades(tenantId);
+  const limite = cap.limite(LIMITE_EMPLEADOS_POR_SUCURSAL);
+  if (limite.ilimitado) return null;
+  const activos = await getTenantPrisma(tenantId).staff.count({ where: { branchId, isActive: true } });
+  if (puedeAgregarUno(limite, activos)) return null;
+  return `Tu plan (${cap.planNombre}) permite hasta ${limite.valor} empleado(s) activo(s) por sucursal. Para agregar más, cambia a un plan superior.`;
+}
+
 export async function crearEmpleadoAction(
   params: { tenantSlug: string; pin: string } & DatosEmpleado
 ): Promise<AccionPersonalResult> {
@@ -162,24 +180,11 @@ export async function crearEmpleadoAction(
     const branch = await db.branch.findUnique({ where: { id: datos.branchId }, select: { id: true } });
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
 
-    // Límite de personal por sucursal del esquema asignado a este tenant
-    // (Panel Maestro, ver lib/esquemas-data.ts) — null si no tiene esquema
-    // asignado (sin límite). Se revisa ANTES de crear la cuenta de
-    // atribución oculta para no dejar un User huérfano si el límite bloquea
-    // el alta.
-    const tenantConEsquema = await prisma.tenant.findUnique({
-      where: { id: tenant.id },
-      select: { esquema: { select: { maxStaffPerBranch: true, name: true } } },
-    });
-    if (tenantConEsquema?.esquema) {
-      const staffActivos = await db.staff.count({ where: { branchId: datos.branchId, isActive: true } });
-      if (staffActivos >= tenantConEsquema.esquema.maxStaffPerBranch) {
-        return {
-          ok: false,
-          error: `Tu esquema (${tenantConEsquema.esquema.name}) permite hasta ${tenantConEsquema.esquema.maxStaffPerBranch} empleado(s) por sucursal. Contacta a soporte para ampliar tu esquema.`,
-        };
-      }
-    }
+    // Límite del plan (ver errorLimiteEmpleados). Se revisa ANTES de crear la
+    // cuenta de atribución oculta para no dejar un User huérfano si el límite
+    // bloquea el alta.
+    const errorLimite = await errorLimiteEmpleados(tenant.id, datos.branchId);
+    if (errorLimite) return { ok: false, error: errorLimite };
 
     const errorRol = await validarRolDeTenant(tenant.id, datos.roleId);
     if (errorRol) return { ok: false, error: errorRol };
@@ -255,11 +260,19 @@ export async function editarEmpleadoAction(
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const existente = await db.staff.findUnique({ where: { id: staffId }, select: { id: true, userId: true } });
+    const existente = await db.staff.findUnique({ where: { id: staffId }, select: { id: true, userId: true, branchId: true, isActive: true } });
     if (!existente) return { ok: false, error: "Empleado no encontrado" };
 
     const branch = await db.branch.findUnique({ where: { id: datos.branchId }, select: { id: true } });
     if (!branch) return { ok: false, error: "Sucursal no encontrada" };
+
+    // Mover a un empleado ACTIVO a otra sucursal lo suma a esa sucursal: sin
+    // este chequeo se podía saltar el límite por sucursal cambiándolo de lugar.
+    // Un empleado inactivo no cuenta, su límite se revisa al reactivarlo.
+    if (existente.isActive && existente.branchId !== datos.branchId) {
+      const errorLimite = await errorLimiteEmpleados(tenant.id, datos.branchId);
+      if (errorLimite) return { ok: false, error: errorLimite };
+    }
 
     const errorRol = await validarRolDeTenant(tenant.id, datos.roleId);
     if (errorRol) return { ok: false, error: errorRol };
@@ -371,8 +384,15 @@ export async function cambiarEstadoEmpleadoAction(params: {
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const existente = await db.staff.findUnique({ where: { id: staffId }, select: { id: true } });
+    const existente = await db.staff.findUnique({ where: { id: staffId }, select: { id: true, branchId: true, isActive: true } });
     if (!existente) return { ok: false, error: "Empleado no encontrado" };
+
+    // Reactivar cuenta igual que dar de alta: sin este chequeo, desactivar y
+    // reactivar era una forma de saltarse el límite del plan.
+    if (activo && !existente.isActive) {
+      const errorLimite = await errorLimiteEmpleados(tenant.id, existente.branchId);
+      if (errorLimite) return { ok: false, error: errorLimite };
+    }
 
     await db.staff.update({ where: { id: staffId }, data: { isActive: activo } });
 
@@ -791,132 +811,5 @@ export async function obtenerIncidenciasAsistenciaAction(params: {
   } catch (err: any) {
     console.error("Error al calcular incidencias de asistencia:", err);
     return { ok: false, error: "No se pudieron calcular las incidencias de asistencia" };
-  }
-}
-
-function generarPasswordTemporal(): string {
-  return "Temp" + Math.random().toString(36).slice(-8) + "!1";
-}
-
-/**
- * Invitación rápida de empleado desde la pantalla de Bienvenida (onboarding).
- * A diferencia de crearEmpleadoAction (que solo VINCULA un userId ya
- * existente a un Staff nuevo), esta acción SÍ crea la cuenta desde cero:
- * usuario de Supabase Auth con contraseña temporal + User + Staff, en una
- * sola transacción — mismo patrón que registrarNegocioAction en
- * app/(auth)/register/actions.ts (temp password generada en servidor,
- * user_metadata.must_change_password=true, el negocio nunca ve ni escribe
- * la contraseña real del empleado).
- *
- * Simplificaciones deliberadas, válidas porque esto solo se usa desde
- * Bienvenida (justo después del alta, cuando el negocio todavía tiene una
- * sola sucursal y un solo rol):
- * - La sucursal se resuelve sola (la primera/única que exista) en vez de
- *   pedirla en el formulario — el selector completo de sucursal ya existe
- *   en Personal para cuando haga falta.
- * - El empleado queda con el mismo rol "Administrador" que el dueño,
- *   porque hoy no existe una pantalla de permisos por rol (ver el aviso en
- *   BienvenidaClient.tsx) — es el mismo nivel de acceso que ya tiene
- *   cualquier cuenta del tenant, no un privilegio nuevo que se esté
- *   otorgando de más.
- * - Los 5 campos de esquema de pago (baseSalary, commissionRate, etc.)
- *   quedan en sus valores por defecto (sueldo base $0, sin comisión) — se
- *   terminan de configurar después en Personal, igual que cualquier otro
- *   empleado.
- */
-export type AccionInvitarEmpleadoResult =
-  | { ok: true; email: string; tempPassword: string }
-  | { ok: false; error: string };
-
-export async function invitarEmpleadoAction(params: {
-  tenantSlug: string;
-  name: string;
-  email: string;
-  position?: string | null;
-}): Promise<AccionInvitarEmpleadoResult> {
-  const { tenantSlug, name, position } = params;
-  const email = params.email.trim().toLowerCase();
-
-  if (!name.trim()) return { ok: false, error: "El nombre es obligatorio" };
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "El correo no es válido" };
-
-  const resuelto = await resolverTenantYUsuario(tenantSlug);
-  if (!resuelto.ok) return { ok: false, error: resuelto.error };
-  const { tenant } = resuelto;
-
-  const db = getTenantPrisma(tenant.id);
-
-  try {
-    const existente = await prisma.user.findFirst({ where: { email }, select: { id: true } });
-    if (existente) return { ok: false, error: "Ya existe una cuenta con ese correo" };
-
-    const branch = await db.branch.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } });
-    if (!branch) return { ok: false, error: "Tu negocio todavía no tiene ninguna sucursal" };
-
-    const rol = await db.role.findFirst({ where: { isSystem: true }, orderBy: { createdAt: "asc" }, select: { id: true } });
-
-    const supabaseAdmin = createAdminClient();
-    const tempPassword = generarPasswordTemporal();
-
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true,
-      user_metadata: { must_change_password: true },
-    });
-
-    if (authError || !authData.user) {
-      return { ok: false, error: `No se pudo crear la cuenta: ${authError?.message ?? "error desconocido"}` };
-    }
-
-    try {
-      await prisma.$transaction(async (tx) => {
-        const nuevoUsuario = await tx.user.create({
-          data: {
-            tenantId: tenant.id,
-            branchId: branch.id,
-            email,
-            name: name.trim(),
-            supabaseId: authData.user!.id,
-          },
-        });
-
-        if (rol) {
-          await tx.userRole.create({ data: { userId: nuevoUsuario.id, roleId: rol.id } });
-        }
-
-        await tx.staff.create({
-          data: {
-            tenantId: tenant.id,
-            branchId: branch.id,
-            userId: nuevoUsuario.id,
-            name: name.trim(),
-            email,
-            position: position?.trim() || null,
-            paymentScheme: PaymentScheme.FIJO,
-            baseSalary: 0,
-            commissionRate: 0,
-            commissionBase: CommissionBase.VENTAS,
-            paymentFrequency: PaymentFrequency.QUINCENAL,
-          },
-        });
-      });
-    } catch (txErr) {
-      // La cuenta de Supabase ya se creó pero la escritura en BD falló —
-      // se limpia para no dejar una cuenta huérfana que nadie puede usar
-      // ni volver a intentar registrar (el email quedaría "tomado" en Auth).
-      await supabaseAdmin.auth.admin.deleteUser(authData.user!.id).catch(() => {});
-      throw txErr;
-    }
-
-    revalidatePath(`/${tenantSlug}/personal`);
-    revalidatePath(`/${tenantSlug}/bienvenida`);
-    return { ok: true, email, tempPassword };
-  } catch (err: any) {
-    if (typeof err?.message === "string" && err.message.includes("Acceso denegado")) {
-      return { ok: false, error: "No tienes acceso a este recurso" };
-    }
-    console.error("Error al invitar empleado:", err);
-    return { ok: false, error: "No se pudo invitar al empleado" };
   }
 }

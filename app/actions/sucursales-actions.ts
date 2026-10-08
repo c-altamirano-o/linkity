@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { resolverActor, type ActorResult } from "@/lib/actor";
 import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
 import { horaValida } from "@/lib/horarios-sucursal";
+import { obtenerCapacidades, puedeAgregarUno, LIMITE_SUCURSALES } from "@/lib/capacidades-comerciales";
 
 /**
  * Server Actions del módulo Sucursales. Antes de este cambio no existía
@@ -51,20 +52,20 @@ function manejarErrorAcceso(err: any, mensajeGenerico: string): { ok: false; err
 }
 
 /**
- * Límite de sucursales del esquema asignado a este tenant (Panel Maestro,
- * ver lib/esquemas-data.ts) — null si no tiene esquema asignado (sin
- * límite, criterio deliberado para no romper tenants que ya existían antes
- * de este campo). Tenant no es un modelo de tenantModels (getTenantPrisma
- * no lo inyecta), así que aquí se usa el prisma cross-tenant normal, con el
- * tenant.id ya resuelto/confiable que entrega resolverActor.
+ * Límite COMERCIAL de sucursales activas (plan contratado, ver
+ * lib/capacidades-comerciales.ts). Devuelve el mensaje de error a mostrar, o
+ * null si todavía se puede agregar una sucursal activa más. Reemplaza al viejo
+ * límite por "esquema" (PlanEsquema), que ya no se consulta. En prueba gratis
+ * no hay límite; con plan se aplica el del plan; `tenantId` debe venir ya
+ * resuelto/confiable (resolverActor), nunca del cliente.
  */
-async function limiteSucursalesDe(tenantId: string): Promise<{ maxBranches: number; nombre: string } | null> {
-  const t = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { esquema: { select: { maxBranches: true, name: true } } },
-  });
-  if (!t?.esquema) return null;
-  return { maxBranches: t.esquema.maxBranches, nombre: t.esquema.name };
+async function errorLimiteSucursales(tenantId: string): Promise<string | null> {
+  const cap = await obtenerCapacidades(tenantId);
+  const limite = cap.limite(LIMITE_SUCURSALES);
+  if (limite.ilimitado) return null;
+  const activas = await getTenantPrisma(tenantId).branch.count({ where: { isActive: true } });
+  if (puedeAgregarUno(limite, activas)) return null;
+  return `Tu plan (${cap.planNombre}) permite hasta ${limite.valor} sucursal(es) activa(s). Para agregar más, cambia a un plan superior.`;
 }
 
 export interface DatosSucursal {
@@ -128,16 +129,8 @@ export async function crearSucursalAction(
   const db = getTenantPrisma(tenant.id);
 
   try {
-    const limite = await limiteSucursalesDe(tenant.id);
-    if (limite) {
-      const sucursalesActivas = await db.branch.count({ where: { isActive: true } });
-      if (sucursalesActivas >= limite.maxBranches) {
-        return {
-          ok: false,
-          error: `Tu esquema (${limite.nombre}) permite hasta ${limite.maxBranches} sucursal(es) activa(s). Contacta a soporte para ampliar tu esquema.`,
-        };
-      }
-    }
+    const errorLimite = await errorLimiteSucursales(tenant.id);
+    if (errorLimite) return { ok: false, error: errorLimite };
 
     const codigoLimpio = datos.code?.trim().toUpperCase() || null;
     if (codigoLimpio) {
@@ -196,20 +189,12 @@ export async function editarSucursalAction(
     if (!existente) return { ok: false, error: "Sucursal no encontrada" };
 
     // Reactivar una sucursal inactiva es, en la práctica, lo mismo que
-    // crear una nueva desde el punto de vista del límite del esquema — sin
+    // crear una nueva desde el punto de vista del límite del plan — sin
     // este chequeo, desactivar y reactivar sería una forma de saltarse el
     // límite que sí se aplica en crearSucursalAction.
     if (isActive && !existente.isActive) {
-      const limite = await limiteSucursalesDe(tenant.id);
-      if (limite) {
-        const sucursalesActivas = await db.branch.count({ where: { isActive: true } });
-        if (sucursalesActivas >= limite.maxBranches) {
-          return {
-            ok: false,
-            error: `Tu esquema (${limite.nombre}) permite hasta ${limite.maxBranches} sucursal(es) activa(s). Contacta a soporte para ampliar tu esquema.`,
-          };
-        }
-      }
+      const errorLimite = await errorLimiteSucursales(tenant.id);
+      if (errorLimite) return { ok: false, error: errorLimite };
     }
 
     const codigoLimpio = datos.code?.trim().toUpperCase() || null;

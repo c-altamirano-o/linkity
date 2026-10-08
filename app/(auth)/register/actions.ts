@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MODULE_CATALOG, ALL_MODULE_CODES } from "@/lib/modules-catalog";
 import { modulosRecomendadosOff } from "@/lib/modulos-rubro";
-import { getEsquemaDefault } from "@/lib/esquemas-data";
 import { asegurarRolesRubro } from "@/lib/roles-server";
 
 /**
@@ -19,14 +18,12 @@ import { asegurarRolesRubro } from "@/lib/roles-server";
  * así que el visitante ya no elige nada de eso aquí — el formulario es solo
  * el paso de datos, y la cuenta se crea directo al enviarlo.
  *
- * Lo que antes decidía el visitante (cuántas sucursales/empleados puede
- * tener) ahora lo decide Carlos desde Panel Maestro (/maestro/esquemas,
- * /maestro/tenants/[slug]): todo negocio nuevo recibe automáticamente el
- * esquema marcado como predeterminado (getEsquemaDefault(), lib/esquemas-data.ts)
- * — si Carlos no ha creado ningún esquema todavía, el negocio queda sin
- * esquema asignado (sin límite) hasta que le asigne uno a mano.
+ * Cuántas sucursales y empleados puede tener un negocio ya no se decide aquí
+ * ni con "esquemas": lo decide su PLAN COMERCIAL (lib/capacidades-comerciales.ts).
+ * Todo negocio nuevo arranca en prueba gratis (TRIAL, sin límites ni plan);
+ * el plan se asigna cuando Hotmart avisa del pago o a mano desde Panel Maestro.
  *
- * La Subscription se sigue creando (status ACTIVE, precio 0) solo para que
+ * La Subscription se sigue creando (status TRIAL, precio 0) solo para que
  * las pantallas de Suscripciones/Dashboard de Panel Maestro — que ya
  * dependen de que exista una fila — sigan funcionando; el precio real que
  * paga el cliente ya no vive en esta base de datos, vive en Hotmart.
@@ -146,8 +143,6 @@ export async function registrarNegocioAction(
       };
     }
 
-    const esquemaDefault = await getEsquemaDefault();
-
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
@@ -156,7 +151,6 @@ export async function registrarNegocioAction(
           businessType: input.businessType,
           email: input.ownerEmail.trim(),
           phone: input.ownerPhone?.trim() || null,
-          esquemaId: esquemaDefault?.id ?? null,
         },
       });
 

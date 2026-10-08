@@ -6,10 +6,9 @@ import Link from "next/link";
 import {
   Palette, UserCog, ArrowRight, PartyPopper, LayoutDashboard,
   BookOpen, DollarSign, ShoppingCart, CheckCircle2,
-  Sparkles, Loader2, Copy, Check, ChevronDown, ChevronUp,
+  Sparkles, Loader2,
 } from "lucide-react";
 import { cargarCatalogoArranqueAction } from "@/app/actions/catalogo-actions";
-import { invitarEmpleadoAction } from "@/app/actions/personal-actions";
 
 /**
  * Landing de onboarding que ve un negocio recién auto-registrado justo
@@ -29,9 +28,12 @@ import { invitarEmpleadoAction } from "@/app/actions/personal-actions";
  * real de gestión para ninguno de los dos: los módulos ya vienen todos
  * activos por defecto para negocios auto-registrados (sin toggle para
  * desactivarlos) y la gestión de permisos por rol (M4) nunca se construyó
- * como pantalla — Carlos está al tanto de este límite, por eso cualquier
- * empleado que se invite desde aquí queda con el mismo nivel de acceso
- * que el dueño (ver invitarEmpleadoAction).
+ * como pantalla.
+ *
+ * 2026-10-08, regla de Carlos: un negocio tiene UNA sola cuenta real (la del
+ * dueño/administrador). Los empleados NO se invitan por correo: el
+ * administrador los da de alta en Personal con nombre, puesto, rol y PIN. Por
+ * eso el paso "Equipo" ya no tiene formulario aquí, solo lleva a Personal.
  */
 
 interface BienvenidaClientProps {
@@ -83,52 +85,6 @@ export default function BienvenidaClient({
       }
       router.refresh();
     });
-  }
-
-  // ── Paso "Equipo": alta rápida de un empleado desde aquí ─────────
-  const [formEquipoAbierto, setFormEquipoAbierto] = useState(false);
-  const [nombreEmpleado, setNombreEmpleado] = useState("");
-  const [correoEmpleado, setCorreoEmpleado] = useState("");
-  const [puestoEmpleado, setPuestoEmpleado] = useState("");
-  const [invitando, setInvitando] = useState(false);
-  const [errorInvitar, setErrorInvitar] = useState<string | null>(null);
-  const [resultadoInvitar, setResultadoInvitar] = useState<{ email: string; tempPassword: string } | null>(null);
-  const [copiado, setCopiado] = useState(false);
-
-  function invitarEmpleado() {
-    setErrorInvitar(null);
-    setInvitando(true);
-    startTransition(async () => {
-      const res = await invitarEmpleadoAction({
-        tenantSlug,
-        name: nombreEmpleado,
-        email: correoEmpleado,
-        position: puestoEmpleado || null,
-      });
-      setInvitando(false);
-      if (!res.ok) {
-        setErrorInvitar(res.error);
-        return;
-      }
-      setResultadoInvitar({ email: res.email, tempPassword: res.tempPassword });
-      setNombreEmpleado("");
-      setCorreoEmpleado("");
-      setPuestoEmpleado("");
-      router.refresh();
-    });
-  }
-
-  async function copiarCredenciales() {
-    if (!resultadoInvitar) return;
-    const texto = `Usuario: ${resultadoInvitar.email}\nContraseña temporal: ${resultadoInvitar.tempPassword}`;
-    try {
-      await navigator.clipboard.writeText(texto);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 2000);
-    } catch {
-      // Portapapeles no disponible (ej. sin HTTPS) — no es crítico, las
-      // credenciales igual se ven en pantalla para copiarlas a mano.
-    }
   }
 
   const pasos = [
@@ -215,102 +171,19 @@ export default function BienvenidaClient({
           numero={3}
           icon={UserCog}
           titulo="Da de alta a tu equipo"
-          descripcion="Invita a tus empleados para que puedan entrar"
+          descripcion="Registra a tus empleados con su puesto, rol y un PIN para entrar"
           done={tieneEquipo}
           omitido={omitidos.has("equipo")}
           onOmitir={() => omitir("equipo")}
           onDeshacerOmitir={() => deshacerOmitir("equipo")}
         >
-          <button
-            onClick={() => setFormEquipoAbierto((v) => !v)}
-            className="btn-ghost flex items-center gap-1 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex-shrink-0"
+          <Link
+            href={`/${tenantSlug}/personal`}
+            className="flex items-center gap-1.5 text-xs font-medium text-primary-text hover:underline flex-shrink-0"
           >
-            Invitar ahora {formEquipoAbierto ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
+            Ir a Personal <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </PasoShell>
-
-        {formEquipoAbierto && (
-          <div className="ml-[52px] -mt-2 mb-1 p-3 bg-muted/50 border border-border rounded-lg">
-            {resultadoInvitar ? (
-              <div>
-                <div className="flex items-center gap-1.5 text-emerald-700 text-xs font-medium mb-2">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Cuenta creada — comparte estos datos con tu empleado
-                </div>
-                <div className="bg-card border border-border rounded-lg p-2.5 text-[12.5px] font-mono text-foreground space-y-0.5">
-                  <p>Usuario: {resultadoInvitar.email}</p>
-                  <p>Contraseña temporal: {resultadoInvitar.tempPassword}</p>
-                </div>
-                <p className="text-[11.5px] text-muted-foreground mt-1.5">
-                  Se le pedirá cambiarla la primera vez que inicie sesión.
-                </p>
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    onClick={copiarCredenciales}
-                    className="btn-ghost flex items-center gap-1 -mx-1.5 px-1.5 py-0.5 rounded-md text-[12.5px]"
-                  >
-                    {copiado ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    {copiado ? "Copiado" : "Copiar"}
-                  </button>
-                  <button
-                    onClick={() => { setResultadoInvitar(null); setFormEquipoAbierto(false); }}
-                    className="btn-ghost text-[12.5px] rounded-lg"
-                  >
-                    Cerrar
-                  </button>
-                  <button
-                    onClick={() => setResultadoInvitar(null)}
-                    className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-[12.5px] ml-auto"
-                  >
-                    Invitar a alguien más
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <input
-                  value={nombreEmpleado}
-                  onChange={(e) => setNombreEmpleado(e.target.value)}
-                  placeholder="Nombre del empleado"
-                  className="px-2.5 py-1.5 border border-border rounded-lg text-xs bg-card focus:outline-none focus:border-primary"
-                />
-                <input
-                  value={correoEmpleado}
-                  onChange={(e) => setCorreoEmpleado(e.target.value)}
-                  placeholder="Correo (con el que iniciará sesión)"
-                  type="email"
-                  className="px-2.5 py-1.5 border border-border rounded-lg text-xs bg-card focus:outline-none focus:border-primary"
-                />
-                <input
-                  value={puestoEmpleado}
-                  onChange={(e) => setPuestoEmpleado(e.target.value)}
-                  placeholder="Puesto (opcional)"
-                  className="px-2.5 py-1.5 border border-border rounded-lg text-xs bg-card focus:outline-none focus:border-primary"
-                />
-                {errorInvitar && <p className="text-[12.5px] text-red-600">{errorInvitar}</p>}
-                <div className="flex items-center gap-2 justify-end">
-                  <button
-                    onClick={() => setFormEquipoAbierto(false)}
-                    className="btn-ghost text-[12.5px] rounded-lg"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={invitarEmpleado}
-                    disabled={invitando || !nombreEmpleado.trim() || !correoEmpleado.trim()}
-                    className="btn-primary flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12.5px]"
-                  >
-                    {invitando && <Loader2 className="w-3 h-3 animate-spin" />}
-                    {invitando ? "Creando…" : "Crear cuenta"}
-                  </button>
-                </div>
-                <p className="text-[11.5px] text-muted-foreground">
-                  Le generamos una contraseña temporal automáticamente — no necesitas pedírsela ni definirla tú.
-                  El sueldo y esquema de comisión se configuran después en Personal.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* 4. Caja */}
         <PasoShell
@@ -352,9 +225,8 @@ export default function BienvenidaClient({
       </div>
 
       <div className="bg-muted/50 border border-border rounded-lg px-4 py-3 text-xs text-muted-foreground mb-8">
-        Por ahora todos los módulos del sistema están activos para tu negocio y no hay una pantalla para
-        personalizar permisos por rol todavía — cualquier empleado que agregues tiene el mismo nivel de acceso
-        que tú. Si necesitas restringir accesos, coméntalo con tu proveedor.
+        Tú eres la única cuenta con acceso completo. Tus empleados entran con su PIN y solo ven los módulos
+        que permita su rol; puedes ajustar esos permisos en Personal, en «Roles y permisos».
       </div>
 
       <Link
