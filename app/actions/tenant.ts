@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ReciboFormato, ReciboQrDestino } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { resolverActor } from "@/lib/actor";
+import { cifrar, cifradoDisponible } from "@/lib/cifrado-config";
 import { parseColoresPersonalizados, TEMA_PERSONALIZADO_ID } from "@/lib/theme-presets";
 import { enviarWhatsappTenant } from "@/lib/whatsapp-tenant";
 import { construirMensajeReparacion } from "@/lib/whatsapp-mensaje";
@@ -396,16 +397,30 @@ export async function updateWeekStartDay(tenantSlug: string, weekStartDay: numbe
 
 export async function guardarWhatsappBusinessAction(
   tenantSlug: string,
-  datos: { phoneNumberId: string; accessToken: string }
+  datos: { phoneNumberId: string; accessToken: string; appSecret?: string }
 ) {
   const phoneNumberId = datos.phoneNumberId.trim();
   const accessToken = datos.accessToken.trim();
+  // App Secret de la app de Meta del negocio (2026-10-08): opcional, pero con
+  // él el webhook comprueba la firma de los avisos de entrega (ver
+  // app/api/webhooks/whatsapp/route.ts). Mismo criterio que el token: vacío =
+  // "no lo toques". Se guarda CIFRADO (lib/cifrado-config.ts).
+  const appSecret = (datos.appSecret ?? "").trim();
 
   if (!phoneNumberId) {
     return { success: false, error: "El Phone Number ID es obligatorio" };
   }
   if (!/^\d+$/.test(phoneNumberId)) {
     return { success: false, error: "El Phone Number ID de Meta es solo números" };
+  }
+
+  if (appSecret) {
+    if (!/^[A-Za-z0-9]{16,128}$/.test(appSecret)) {
+      return { success: false, error: "El App Secret no parece válido (solo letras y números; está en Meta → Configuración → Básica)" };
+    }
+    if (!cifradoDisponible()) {
+      return { success: false, error: "Por el momento no se puede guardar el App Secret. Avisa a soporte de Linkity." };
+    }
   }
 
   const resuelto = await resolverActor(tenantSlug, "configuracion");
@@ -418,6 +433,7 @@ export async function guardarWhatsappBusinessAction(
         whatsappPhoneNumberId: phoneNumberId,
         // Ver el comentario largo arriba: cadena vacía = "no lo toques".
         ...(accessToken ? { whatsappAccessToken: accessToken } : {}),
+        ...(appSecret ? { whatsappAppSecret: cifrar(appSecret) } : {}),
       },
     });
 
@@ -436,7 +452,7 @@ export async function desconectarWhatsappBusinessAction(tenantSlug: string) {
   try {
     await prisma.tenant.update({
       where: { id: resuelto.tenant.id },
-      data: { whatsappPhoneNumberId: null, whatsappAccessToken: null },
+      data: { whatsappPhoneNumberId: null, whatsappAccessToken: null, whatsappAppSecret: null },
     });
 
     revalidatePath("/", "layout");

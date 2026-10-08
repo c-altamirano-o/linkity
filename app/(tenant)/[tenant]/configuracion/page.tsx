@@ -24,7 +24,7 @@ export default async function ConfiguracionPage({
       // jamás debe llegar a un Client Component. whatsappPhoneNumberId no
       // es secreto, ese sí se pasa tal cual. whatsappNumeroManual tampoco es
       // secreto (ver el comentario en schema.prisma) — se pasa tal cual.
-      whatsappPhoneNumberId: true, whatsappAccessToken: true, whatsappNumeroManual: true,
+      whatsappPhoneNumberId: true, whatsappAccessToken: true, whatsappAppSecret: true, whatsappNumeroManual: true,
     },
   });
 
@@ -73,6 +73,7 @@ export default async function ConfiguracionPage({
       qrEtiquetaTicketInicial={tenant.reciboQrEtiqueta}
       whatsappPhoneNumberIdInicial={tenant.whatsappPhoneNumberId}
       whatsappTieneTokenInicial={Boolean(tenant.whatsappAccessToken)}
+      whatsappTieneAppSecretInicial={Boolean(tenant.whatsappAppSecret)}
       whatsappNumeroManualInicial={tenant.whatsappNumeroManual}
       checklistTaller={checklistTaller}
     />

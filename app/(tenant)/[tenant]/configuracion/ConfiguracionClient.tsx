@@ -162,6 +162,8 @@ interface ConfiguracionClientProps {
   // "conectado" sin exponer el valor.
   whatsappPhoneNumberIdInicial: string | null;
   whatsappTieneTokenInicial: boolean;
+  // Igual que el token: solo dice si ya hay un App Secret guardado (2026-10-08).
+  whatsappTieneAppSecretInicial: boolean;
   // WhatsApp MANUAL (2026-10-02) — alternativa sin API al modo de arriba,
   // ver el comentario largo junto a Tenant.whatsappNumeroManual
   // (schema.prisma). Nunca es secreto, a diferencia del token de arriba.
@@ -195,6 +197,7 @@ export default function ConfiguracionClient({
   qrEtiquetaTicketInicial,
   whatsappPhoneNumberIdInicial,
   whatsappTieneTokenInicial,
+  whatsappTieneAppSecretInicial,
   whatsappNumeroManualInicial,
   checklistTaller,
 }: ConfiguracionClientProps) {
@@ -413,6 +416,8 @@ export default function ConfiguracionClient({
   const [whatsappAccessTokenInput, setWhatsappAccessTokenInput] = useState("");
   const [whatsappMostrarToken, setWhatsappMostrarToken] = useState(false);
   const [whatsappTieneToken, setWhatsappTieneToken] = useState(whatsappTieneTokenInicial);
+  const [whatsappAppSecretInput, setWhatsappAppSecretInput] = useState("");
+  const [whatsappTieneAppSecret, setWhatsappTieneAppSecret] = useState(whatsappTieneAppSecretInicial);
   const [whatsappPending, startWhatsappTransition] = useTransition();
   // 2026-10-05, a petición de Carlos (auditoría): "tipo" distingue el
   // guardado completo (verde) del guardado a medias — Phone Number ID
@@ -428,10 +433,15 @@ export default function ConfiguracionClient({
       const result = await guardarWhatsappBusinessAction(tenantSlug, {
         phoneNumberId: whatsappPhoneNumberId,
         accessToken: whatsappAccessTokenInput,
+        appSecret: whatsappAppSecretInput,
       });
       if (!result.success) {
         setWhatsappError(result.error ?? "Error al guardar");
         return;
+      }
+      if (whatsappAppSecretInput.trim()) {
+        setWhatsappTieneAppSecret(true);
+        setWhatsappAppSecretInput("");
       }
       // Se calcula ANTES de actualizar whatsappTieneToken de abajo: true
       // cuando este guardado no trajo un Access Token nuevo Y tampoco había
@@ -463,6 +473,7 @@ export default function ConfiguracionClient({
       }
       setWhatsappPhoneNumberId("");
       setWhatsappTieneToken(false);
+      setWhatsappTieneAppSecret(false);
       setWhatsappMensaje({ tipo: "ok", texto: "WhatsApp Business desconectado." });
       router.refresh();
       setTimeout(() => setWhatsappMensaje(null), 3000);
@@ -1528,6 +1539,24 @@ export default function ConfiguracionClient({
                   {whatsappMostrarToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                App Secret <span className="font-normal text-muted-foreground">(opcional, recomendado)</span>{" "}
+                {whatsappTieneAppSecret && <span className="font-normal text-muted-foreground">(ya hay uno guardado — déjalo vacío para no cambiarlo)</span>}
+              </label>
+              <input
+                type="password"
+                autoComplete="off"
+                value={whatsappAppSecretInput}
+                onChange={(e) => setWhatsappAppSecretInput(e.target.value)}
+                placeholder={whatsappTieneAppSecret ? "•••••••••••••••••••••" : "Meta → Configuración → Básica"}
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Sirve para comprobar que los avisos de entrega de tus mensajes de verdad vienen de Meta.
+              </p>
             </div>
           </div>
 

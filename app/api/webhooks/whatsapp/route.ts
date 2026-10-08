@@ -3,6 +3,8 @@ import { timingSafeEqual } from "node:crypto";
 import { procesarEstadoWhatsapp } from "@/lib/whatsapp-tenant";
 import { obtenerWhatsappPlataforma } from "@/lib/config-plataforma";
 import { verificarFirmaMeta } from "@/lib/firma-meta";
+import { descifrar } from "@/lib/cifrado-config";
+import { prisma } from "@/lib/prisma";
 
 function iguales(a: string, b: string): boolean {
   const ba = Buffer.from(a);
@@ -45,6 +47,10 @@ export const maxDuration = 60;
  * configurado) se aceptan solo con firma X-Hub-Signature-256 válida. Los
  * avisos de los números de cada negocio siguen sin verificación de firma
  * hasta el siguiente paso (usará Tenant.whatsappAppSecret).
+ *
+ * Los avisos de entrega de un NEGOCIO se verifican con el App Secret que ese
+ * negocio guardó en su Configuración (Tenant.whatsappAppSecret, cifrado). Si
+ * no guardó uno se aceptan sin firma, como antes — el secreto es opcional.
  */
 
 export async function GET(request: Request) {
@@ -85,6 +91,50 @@ export async function POST(request: Request) {
       if (idsEnAviso.has(config.phoneNumberId) && !verificarFirmaMeta(cuerpoCrudo, request.headers.get("x-hub-signature-256"), config.appSecret)) {
         console.warn("⚠️  Aviso de WhatsApp del número de Linkity con firma inválida: rechazado.");
         return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
+      }
+    }
+
+    // Avisos de entrega de los mensajes de un NEGOCIO (2026-10-08): el negocio
+    // se identifica por el wamid (WhatsappMensajeEnviado ya trae su tenantId).
+    // Si ese negocio guardó el App Secret de su app de Meta, el aviso debe
+    // traer firma válida; si no lo guardó se acepta como antes (compatibilidad)
+    // y queda una advertencia en el log. Un mismo aviso viene de una sola app,
+    // así que basta comprobarlo con el secreto de cualquiera de los negocios
+    // involucrados que lo tenga.
+    const wamids = new Set<string>();
+    for (const e of Array.isArray(payload?.entry) ? payload.entry : []) {
+      for (const c of Array.isArray(e?.changes) ? e.changes : []) {
+        for (const st of Array.isArray(c?.value?.statuses) ? c.value.statuses : []) {
+          if (typeof st?.id === "string") wamids.add(st.id);
+        }
+      }
+    }
+    if (wamids.size > 0) {
+      const mensajes = await prisma.whatsappMensajeEnviado.findMany({
+        where: { wamid: { in: [...wamids] } },
+        select: { tenantId: true },
+      });
+      const idsNegocios = [...new Set(mensajes.map((m) => m.tenantId))];
+      if (idsNegocios.length > 0) {
+        const negocios = await prisma.tenant.findMany({
+          where: { id: { in: idsNegocios } },
+          select: { slug: true, whatsappAppSecret: true },
+        });
+        for (const n of negocios) {
+          if (!n.whatsappAppSecret) {
+            console.warn(`⚠️  WhatsApp: el negocio ${n.slug} no tiene App Secret; sus avisos de entrega se aceptan sin verificar la firma.`);
+            continue;
+          }
+          const secretoNegocio = descifrar(n.whatsappAppSecret);
+          if (!secretoNegocio) {
+            console.error(`❌ WhatsApp: no se pudo descifrar el App Secret de ${n.slug} (¿cambió CONFIG_ENCRYPTION_KEY?); aviso aceptado sin verificar.`);
+            continue;
+          }
+          if (!verificarFirmaMeta(cuerpoCrudo, request.headers.get("x-hub-signature-256"), secretoNegocio)) {
+            console.warn(`⚠️  Aviso de WhatsApp de ${n.slug} con firma inválida: rechazado.`);
+            return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
+          }
+        }
       }
     }
 
