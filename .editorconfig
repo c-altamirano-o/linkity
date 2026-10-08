@@ -1,0 +1,8 @@
+# Mantiene todos los archivos en UTF-8 (sin BOM) sin importar el editor.
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+indent_style = space
+indent_size = 2
