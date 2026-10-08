@@ -71,6 +71,8 @@ export default function TenantDetailClient({
   const [planEnCurso, setPlanEnCurso] = useState(false);
   const [planRenovar, setPlanRenovar] = useState(tenant.commercialPlanId ?? "");
   const [nuevaFechaFin, setNuevaFechaFin] = useState("");
+  // Precio cobrado al renovar a mano (texto para poder dejarlo vacío = conservar el actual).
+  const [precioRenovar, setPrecioRenovar] = useState("");
   const [renovacionEnCurso, setRenovacionEnCurso] = useState(false);
   const [confirmarNombreEliminar, setConfirmarNombreEliminar] = useState("");
   const [eliminacionEnCurso, setEliminacionEnCurso] = useState(false);
@@ -109,6 +111,12 @@ export default function TenantDetailClient({
 
   function renovarSuscripcion() {
     if (!nuevaFechaFin || !planRenovar) return;
+    const textoPrecio = precioRenovar.trim().replace(/,/g, "");
+    const precio = textoPrecio === "" ? null : Number(textoPrecio);
+    if (precio !== null && (!Number.isFinite(precio) || precio < 0)) {
+      setError("El precio debe ser un número válido");
+      return;
+    }
     setError(null);
     setRenovacionEnCurso(true);
     startTransition(async () => {
@@ -117,6 +125,7 @@ export default function TenantDetailClient({
         slug: tenant.slug,
         nuevaFechaFin,
         commercialPlanId: planRenovar,
+        precio,
       });
       setRenovacionEnCurso(false);
       if (!res.ok) {
@@ -272,6 +281,22 @@ export default function TenantDetailClient({
                 </option>
               ))}
             </select>
+          </div>
+          <div className="mb-2">
+            <label className="text-[12px] font-medium text-slate-500">Precio cobrado (MXN)</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={precioRenovar}
+              onChange={(e) => setPrecioRenovar(e.target.value)}
+              placeholder={tenant.price !== null ? `Actual: ${formatMXN(tenant.price)} (vacío = conservar)` : "Ej. 499"}
+              className="mt-1 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+            />
+            {(tenant.price === null || tenant.price === 0) && precioRenovar.trim() === "" && (
+              <p className="mt-1 text-[11.5px] text-amber-700">
+                El precio actual es $0: este negocio no suma al ingreso mensual del panel. Captura lo que realmente paga (déjalo vacío solo si es una cuenta de cortesía).
+              </p>
+            )}
           </div>
           <div className="flex items-end gap-2">
             <div className="flex-1">

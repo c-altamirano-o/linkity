@@ -76,9 +76,9 @@ async function validarPlanComercial(
 // En prueba gratis NO aplica: la prueba trae todas las funciones y ningún
 // límite, y el plan se elige al activar la cuenta con «Renovar».
 //
-// Ojo (pendiente, Paso 5): si el negocio ya usa más de lo que permite el plan
-// nuevo, aquí no se desactiva nada ni se avisa todavía; solo deja de poder
-// agregar más. El aviso con 7 días de gracia llega con el flujo de excedentes.
+// Si el negocio ya usa más de lo que permite el plan nuevo, aquí no se
+// desactiva nada: el sistema lo detecta solo y le da 7 días para elegir qué
+// conservar (Paso 5, ver lib/exceso-plan.ts).
 export async function asignarPlanComercialAction(params: {
   tenantId: string;
   slug: string;
@@ -133,6 +133,12 @@ export async function renovarSuscripcionAction(params: {
   slug: string;
   nuevaFechaFin: string; // YYYY-MM-DD
   commercialPlanId: string;
+  // Precio realmente cobrado por periodo (MXN), opcional. Subscription.price
+  // alimenta el ingreso mensual de Panel Maestro; una cuenta activada a mano
+  // se quedaba en $0 y no contaba. null/undefined = conservar el precio
+  // actual (por ejemplo una cuenta de cortesía que de verdad es $0). Cuando
+  // el cobro es por Hotmart, el webhook lo reemplaza con el precio real.
+  precio?: number | null;
 }): Promise<AccionMaestroResult> {
   const resuelto = await requireSuperAdmin();
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
@@ -146,6 +152,14 @@ export async function renovarSuscripcionAction(params: {
   const nuevaFecha = new Date(`${params.nuevaFechaFin}T23:59:59-06:00`);
   if (Number.isNaN(nuevaFecha.getTime())) return { ok: false, error: "Fecha inválida" };
 
+  let precio: number | null = null;
+  if (params.precio !== null && params.precio !== undefined) {
+    if (typeof params.precio !== "number" || !Number.isFinite(params.precio) || params.precio < 0 || params.precio > 1_000_000) {
+      return { ok: false, error: "El precio debe ser un monto entre 0 y 1,000,000" };
+    }
+    precio = Math.round(params.precio * 100) / 100;
+  }
+
   try {
     const subscription = await prisma.subscription.findUnique({ where: { tenantId: params.tenantId } });
     if (!subscription) return { ok: false, error: "Este negocio no tiene una suscripción registrada" };
@@ -157,6 +171,7 @@ export async function renovarSuscripcionAction(params: {
         endDate: nuevaFecha,
         commercialPlanId: plan.plan.id,
         plan: plan.plan.name,
+        ...(precio !== null ? { price: precio } : {}),
         expiredNoticeSentAt: null,
         blockNoticeSentAt: null,
         renewalReminderSentAt: null,
