@@ -3,13 +3,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   LayoutDashboard, Building2, Puzzle, CreditCard, Layers,
-  Users, Ticket, BarChart3, Settings, Link as LinkIcon, ShieldAlert
+  Users, Ticket, BarChart3, Settings, Link as LinkIcon, ShieldAlert, ShoppingCart
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/maestro-auth";
 import { prisma } from "@/lib/prisma";
 import { getSuscripcionesData } from "@/lib/suscripciones-data";
 import { getTicketsAbiertosCount } from "@/lib/maestro-soporte-data";
+import { getHotmartPendientesCount } from "@/lib/hotmart-data";
 import { CerrarSesionMaestro } from "@/components/maestro/CerrarSesionMaestro";
 
 export const metadata: Metadata = {
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
 // atención de cobro (vencidas + por vencer en los próximos 7 días) y
 // "Soporte" cuenta los tickets abiertos + en progreso — mismo criterio de
 // no fabricar datos que se usó en el resto del Panel Maestro.
-function buildNavItems(totalNegocios: number, alertaSuscripciones: number, ticketsAbiertos: number) {
+function buildNavItems(totalNegocios: number, alertaSuscripciones: number, ticketsAbiertos: number, hotmartPendientes: number) {
   return [
     {
       section: "PRINCIPAL",
@@ -36,6 +37,13 @@ function buildNavItems(totalNegocios: number, alertaSuscripciones: number, ticke
           href: "/maestro/suscripciones",
           icon: CreditCard,
           badge: alertaSuscripciones > 0 ? String(alertaSuscripciones) : null,
+          badgeColor: "red" as string | undefined,
+        },
+        {
+          label: "Hotmart",
+          href: "/maestro/hotmart",
+          icon: ShoppingCart,
+          badge: hotmartPendientes > 0 ? String(hotmartPendientes) : null,
           badgeColor: "red" as string | undefined,
         },
       ]
@@ -102,13 +110,14 @@ export default async function MaestroLayout({
   // Badges reales del sidebar (antes eran números fijos en el mockup):
   // "Negocios" = total de tenants; "Suscripciones" = cuántos requieren
   // atención de cobro ahora mismo (ya vencidos + por vencer en ≤7 días).
-  const [totalNegocios, suscripciones, ticketsAbiertos] = await Promise.all([
+  const [totalNegocios, suscripciones, ticketsAbiertos, hotmartPendientes] = await Promise.all([
     prisma.tenant.count(),
     getSuscripcionesData(),
     getTicketsAbiertosCount(),
+    getHotmartPendientesCount(),
   ]);
   const alertaSuscripciones = suscripciones.resumen.vencidas + suscripciones.resumen.porVencerPronto;
-  const navItems = buildNavItems(totalNegocios, alertaSuscripciones, ticketsAbiertos);
+  const navItems = buildNavItems(totalNegocios, alertaSuscripciones, ticketsAbiertos, hotmartPendientes);
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">

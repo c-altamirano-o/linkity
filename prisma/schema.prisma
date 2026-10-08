@@ -2316,3 +2316,42 @@ model CommercialPlanLimit {
 
   @@id([planId, limitId])
 }
+
+/**
+ * Bitácora de webhooks de Hotmart (Paso 4 de planes comerciales,
+ * 2026-10-08). Cada evento que llega queda registrado AQUÍ, haya activado
+ * una cuenta o no — es la única forma de enterarse de un cobro que no se
+ * pudo ligar a un negocio o a un plan (si solo se escribiera al log del
+ * servidor, un pago sin identificar se perdería).
+ *
+ * `needsAttention=true` + `attendedAt=null` = pendiente de revisar en Panel
+ * Maestro → Hotmart. `eventId` es el `id` del evento de Hotmart (único):
+ * evita registrar dos veces el mismo reintento. NO guarda datos personales
+ * sensibles del comprador (ver lib/hotmart-payload.ts → resumen).
+ * Sin relaciones a propósito: tenantId/commercialPlanId son solo
+ * referencia informativa, y un negocio o plan borrado no debe borrar el
+ * historial de cobros.
+ */
+model HotmartEvent {
+  id               String    @id @default(cuid())
+  eventId          String?   @unique
+  event            String
+  transaction      String?
+  buyerEmail       String?
+  subscriberCode   String?
+  productId        String?
+  offerCode        String?
+  tenantId         String?
+  commercialPlanId String?
+  outcome          String
+  needsAttention   Boolean   @default(false)
+  note             String?
+  summary          Json
+  receivedAt       DateTime  @default(now())
+  attendedAt       DateTime?
+  attendedBy       String?
+
+  @@index([needsAttention, attendedAt])
+  @@index([receivedAt])
+  @@index([transaction])
+}

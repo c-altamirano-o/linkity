@@ -1,57 +1,68 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { identificarPlan } from "@/lib/hotmart-plan";
+import { leerEvento } from "@/lib/hotmart-payload";
 
 export const maxDuration = 30;
 
 /**
- * Webhook de Hotmart (2026-10-06, a petición de Carlos: "se puedan
- * suscribir y usar su mes gratis… al terminar el periodo de prueba, se les
- * bloquee el acceso"). El cobro vive en Hotmart; este endpoint es lo único
- * que activa una cuenta de forma automática cuando el cliente paga.
+ * Webhook de Hotmart, versión 2 (Paso 4 de planes comerciales, 2026-10-08).
+ * El cobro vive en Hotmart; este endpoint es lo único que activa una cuenta
+ * de forma automática cuando el cliente paga.
  *
- * CONFIGURACIÓN (la hace Carlos, ver instrucciones al final del archivo):
+ * CONFIGURACIÓN (la hace Carlos):
  *   - Variable de entorno HOTMART_HOTTOK en Vercel = el "hottok" que Hotmart
  *     muestra al crear el webhook (Herramientas → Webhook).
- *   - URL a registrar en Hotmart: https://linkitysoluciones.mx/api/webhooks/hotmart
- *   - Eventos a marcar: Compra aprobada, Compra completa, Compra reembolsada,
- *     Chargeback, Cancelación de suscripción.
+ *   - URL a registrar: https://linkitysoluciones.mx/api/webhooks/hotmart
+ *   - Eventos: Compra aprobada, Compra completa, Compra reembolsada,
+ *     Chargeback, Cancelación de suscripción (opcional: Cambio de plan).
+ *   - Cada plan de Panel Maestro → Planes comerciales debe tener su ID de
+ *     producto y/o código de oferta de Hotmart: así se sabe QUÉ plan compró.
  *
- * AUTENTICACIÓN: Hotmart manda el hottok en el header `X-HOTMART-HOTTOK`
- * (versión 2.0.0 del webhook) — por si alguna versión lo manda en el cuerpo
- * (`hottok`, como la 1.0), también se acepta de ahí. Se compara en tiempo
- * constante. Sin HOTMART_HOTTOK configurado el endpoint RECHAZA todo (500)
- * en vez de dejarse abierto: nunca "falla abierto".
+ * AUTENTICACIÓN: header `X-HOTMART-HOTTOK` (o `hottok` en el cuerpo, versión
+ * 1.0). Comparación en tiempo constante. Sin HOTMART_HOTTOK el endpoint
+ * RECHAZA todo (500): nunca "falla abierto".
  *
- * CÓMO SE LIGA UNA COMPRA CON UN NEGOCIO: por el CORREO del comprador
- * (`data.buyer.email`) — se busca primero como correo del negocio
- * (Tenant.email, que el auto-registro llena con el del dueño) y, si no,
- * como correo de algún usuario. Por eso el cliente debe pagar en Hotmart con
- * el MISMO correo con el que se registró (el banner/pantalla de bloqueo ya se
- * lo indican). Si no hay coincidencia se responde 200 (para que Hotmart no
- * reintente eternamente) y se deja el evento en el log del servidor para que
- * Carlos active la cuenta a mano desde Panel Maestro → Renovar.
- * Para renovaciones y cancelaciones se usa además el código de suscriptor
- * (`data.subscription.subscriber.code`) que se guarda en el primer pago.
+ * REGLAS DE NEGOCIO (cambios respecto a la v1):
+ *  - Una cuenta NUNCA queda ACTIVE sin plan comercial. El plan se identifica
+ *    por la oferta/producto de la compra (lib/hotmart-plan.ts). Si no se
+ *    puede identificar y el negocio no tenía plan, NO se activa: queda
+ *    registrado como "sin_plan" para que Carlos lo resuelva en Panel Maestro
+ *    → Hotmart (o con Renovar). Si el negocio ya tenía plan (renovación) se
+ *    conserva el plan actual y se extiende la vigencia, pero se marca para
+ *    revisar la configuración.
+ *  - Si el correo del comprador coincide con MÁS de un negocio no se adivina:
+ *    se registra como "correo_ambiguo" sin activar nada.
+ *  - TODO evento queda en la tabla HotmartEvent (también los que no
+ *    activan). Los que requieren una decisión humana llevan
+ *    needsAttention=true y salen en Panel Maestro → Hotmart, con contador
+ *    en el menú. Se responde 200 aunque no se pueda procesar (para que
+ *    Hotmart no reintente eternamente algo que no mejorará solo); solo un
+ *    fallo temporal (base de datos) responde 500 para que Hotmart reintente.
  *
- * IDEMPOTENCIA: Hotmart reintenta si no recibe 200, y manda varios eventos
- * por la misma compra (APPROVED y COMPLETE) — cada pago se procesa una sola
- * vez por su `purchase.transaction` (Subscription.hotmartLastTransaction).
+ * IDEMPOTENCIA: por `id` del evento (HotmartEvent.eventId) y por
+ * `purchase.transaction` (Subscription.hotmartLastTransaction): APPROVED y
+ * COMPLETE de la misma compra no extienden la vigencia dos veces.
  *
- * QUÉ HACE CADA EVENTO:
- *   - PURCHASE_APPROVED / PURCHASE_COMPLETE → status ACTIVE, endDate = próxima
- *     fecha de cobro que informa Hotmart (o +31 días si no la manda), limpia
- *     todos los avisos (prueba y vencimiento) y guarda código de suscriptor.
- *   - PURCHASE_REFUNDED / PURCHASE_CHARGEBACK → status SUSPENDED (bloquea de
- *     inmediato). Carlos puede reactivar a mano desde Panel Maestro.
- *   - SUBSCRIPTION_CANCELLATION → NO bloquea (el cliente ya pagó el periodo
- *     actual); solo marca autoRenew=false. Cuando llegue su endDate sin
- *     renovar, el ciclo normal de vencimiento se encarga.
- *   - Cualquier otro evento → se ignora (200).
+ * LIGA COMPRA↔NEGOCIO: primero por código de suscriptor (se guarda en el
+ * primer pago), luego por correo del comprador (Tenant.email, luego
+ * User.email). El cliente debe pagar con el mismo correo con que se registró.
+ *
+ * NOTA: los nombres de campos de la v2.0.0 se confirmaron con fuentes de
+ * terceros, no con un evento real: con el primer evento de prueba hay que
+ * revisar en Panel Maestro → Hotmart que producto, oferta y correo se
+ * leyeron bien (si un campo no se encuentra, el evento queda para revisión).
  */
 
 const MS_DIA = 24 * 60 * 60 * 1000;
 const DIAS_VIGENCIA_POR_DEFECTO = 31;
+
+const EVENTOS_PAGO = ["PURCHASE_APPROVED", "PURCHASE_COMPLETE"];
+const EVENTOS_REVERSA = ["PURCHASE_REFUNDED", "PURCHASE_CHARGEBACK"];
+const EVENTOS_CANCELACION = ["SUBSCRIPTION_CANCELLATION"];
+// Eventos que no cambian nada automáticamente pero que alguien debe ver.
+const EVENTOS_A_REVISAR = ["SWITCH_PLAN"];
 
 function tokenValido(recibido: string | null | undefined, esperado: string): boolean {
   if (!recibido) return false;
@@ -61,13 +72,14 @@ function tokenValido(recibido: string | null | undefined, esperado: string): boo
   return timingSafeEqual(a, b);
 }
 
-/** Hotmart manda fechas como milisegundos desde epoch. */
-function fechaDeHotmart(valor: unknown): Date | null {
-  const n = typeof valor === "number" ? valor : typeof valor === "string" ? Number(valor) : NaN;
-  if (!Number.isFinite(n) || n <= 0) return null;
-  const d = new Date(n);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
+type Resultado = {
+  outcome: string;
+  needsAttention?: boolean;
+  note?: string;
+  tenantId?: string | null;
+  commercialPlanId?: string | null;
+  respuesta?: Record<string, unknown>;
+};
 
 export async function POST(request: Request) {
   const esperado = process.env.HOTMART_HOTTOK;
@@ -88,122 +100,219 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const evento: string = String(payload?.event ?? "");
-  const data = payload?.data ?? {};
-  const emailComprador: string = String(data?.buyer?.email ?? "").trim().toLowerCase();
-  const transaccion: string | null = data?.purchase?.transaction ? String(data.purchase.transaction) : null;
-  const codigoSuscriptor: string | null = data?.subscription?.subscriber?.code ? String(data.subscription.subscriber.code) : null;
+  const ev = leerEvento(payload);
 
+  // --- Registrar el evento (o retomar uno que falló antes) ----------------
+  let registroId: string;
   try {
-    const eventosPago = ["PURCHASE_APPROVED", "PURCHASE_COMPLETE"];
-    const eventosReversa = ["PURCHASE_REFUNDED", "PURCHASE_CHARGEBACK"];
-    const eventosCancelacion = ["SUBSCRIPTION_CANCELLATION"];
-
-    if (![...eventosPago, ...eventosReversa, ...eventosCancelacion].includes(evento)) {
-      return NextResponse.json({ ok: true, ignorado: evento || "sin evento" });
-    }
-
-    // --- Localizar el negocio ---------------------------------------------
-    let tenantId: string | null = null;
-
-    if (codigoSuscriptor) {
-      const porCodigo = await prisma.subscription.findFirst({
-        where: { hotmartSubscriberCode: codigoSuscriptor },
-        select: { tenantId: true },
+    if (ev.eventId) {
+      const previo = await prisma.hotmartEvent.findUnique({
+        where: { eventId: ev.eventId },
+        select: { id: true, outcome: true },
       });
-      tenantId = porCodigo?.tenantId ?? null;
-    }
-    if (!tenantId && emailComprador) {
-      const porCorreoNegocio = await prisma.tenant.findFirst({
-        where: { email: { equals: emailComprador, mode: "insensitive" } },
-        select: { id: true },
-      });
-      tenantId = porCorreoNegocio?.id ?? null;
-      if (!tenantId) {
-        const porCorreoUsuario = await prisma.user.findFirst({
-          where: { email: { equals: emailComprador, mode: "insensitive" } },
-          select: { tenantId: true },
-        });
-        tenantId = porCorreoUsuario?.tenantId ?? null;
-      }
-    }
-
-    if (!tenantId) {
-      console.warn(
-        `⚠️  Webhook Hotmart (${evento}): no se encontró ningún negocio para el comprador "${emailComprador || "(sin correo)"}" / suscriptor "${codigoSuscriptor ?? "(sin código)"}" — transacción ${transaccion ?? "?"}. Activar a mano desde Panel Maestro → Renovar.`
-      );
-      return NextResponse.json({ ok: true, negocio: null });
-    }
-
-    const sub = await prisma.subscription.findUnique({ where: { tenantId } });
-    if (!sub) {
-      console.warn(`⚠️  Webhook Hotmart (${evento}): el negocio ${tenantId} no tiene fila de suscripción.`);
-      return NextResponse.json({ ok: true, suscripcion: null });
-    }
-
-    // --- Pago aprobado: activar / renovar ----------------------------------
-    if (eventosPago.includes(evento)) {
-      // Idempotencia: este mismo pago ya se procesó (reintento de Hotmart o
-      // segundo evento — APPROVED y COMPLETE — de la misma compra).
-      if (transaccion && sub.hotmartLastTransaction === transaccion) {
+      if (previo && previo.outcome !== "error" && previo.outcome !== "recibido") {
         return NextResponse.json({ ok: true, duplicado: true });
       }
-
-      const proximoCobro = fechaDeHotmart(data?.purchase?.date_next_charge);
-      const ahora = new Date();
-      const endDate =
-        proximoCobro && proximoCobro.getTime() > ahora.getTime()
-          ? proximoCobro
-          : new Date(ahora.getTime() + DIAS_VIGENCIA_POR_DEFECTO * MS_DIA);
-
-      const precio = Number(data?.purchase?.price?.value);
-
-      await prisma.subscription.update({
-        where: { tenantId },
-        data: {
-          status: "ACTIVE",
-          endDate,
-          autoRenew: true,
-          ...(Number.isFinite(precio) && precio > 0 ? { price: precio } : {}),
-          hotmartLastTransaction: transaccion,
-          hotmartSubscriberCode: codigoSuscriptor ?? sub.hotmartSubscriberCode,
-          // Cuenta al corriente: todos los avisos arrancan de cero para el
-          // próximo vencimiento (mismo criterio que renovarSuscripcionAction).
-          expiredNoticeSentAt: null,
-          blockNoticeSentAt: null,
-          renewalReminderSentAt: null,
-          deletionNoticeSentAt: null,
-          trialNotice7SentAt: null,
-          trialNotice3SentAt: null,
-          trialNotice1SentAt: null,
-          trialEndedNoticeSentAt: null,
-        },
-      });
-      console.log(`✅ Webhook Hotmart (${evento}): negocio ${tenantId} activado hasta ${endDate.toISOString()} (transacción ${transaccion ?? "?"}).`);
-      return NextResponse.json({ ok: true, activado: true });
+      if (previo) registroId = previo.id;
+      else registroId = await crearRegistro(ev);
+    } else {
+      registroId = await crearRegistro(ev);
     }
-
-    // --- Reembolso / contracargo: bloquear ---------------------------------
-    if (eventosReversa.includes(evento)) {
-      await prisma.subscription.update({
-        where: { tenantId },
-        data: { status: "SUSPENDED", autoRenew: false },
-      });
-      console.log(`⛔ Webhook Hotmart (${evento}): negocio ${tenantId} suspendido.`);
-      return NextResponse.json({ ok: true, suspendido: true });
-    }
-
-    // --- Cancelación de la suscripción: no bloquea, deja de renovarse ------
-    await prisma.subscription.update({
-      where: { tenantId },
-      data: { autoRenew: false },
-    });
-    console.log(`ℹ️  Webhook Hotmart (${evento}): negocio ${tenantId} ya no se renovará (conserva acceso hasta su fecha de vencimiento).`);
-    return NextResponse.json({ ok: true, cancelada: true });
   } catch (err) {
-    // 500 → Hotmart reintenta después, que es lo que queremos ante un fallo
-    // temporal de base de datos.
-    console.error("❌ Error procesando webhook de Hotmart:", err);
+    if ((err as { code?: string } | null)?.code === "P2002") {
+      // Mismo evento llegando en paralelo: el otro request lo procesa.
+      return NextResponse.json({ ok: true, duplicado: true });
+    }
+    console.error("❌ Webhook Hotmart: no se pudo registrar el evento:", err);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
+
+  try {
+    const r = await procesar(ev);
+    await prisma.hotmartEvent.update({
+      where: { id: registroId },
+      data: {
+        outcome: r.outcome,
+        needsAttention: r.needsAttention ?? false,
+        note: r.note ?? null,
+        tenantId: r.tenantId ?? null,
+        commercialPlanId: r.commercialPlanId ?? null,
+      },
+    });
+    return NextResponse.json({ ok: true, resultado: r.outcome, ...(r.respuesta ?? {}) });
+  } catch (err) {
+    console.error("❌ Error procesando webhook de Hotmart:", err);
+    // Best-effort: dejar constancia. 500 → Hotmart reintenta (fallo temporal).
+    await prisma.hotmartEvent
+      .update({
+        where: { id: registroId },
+        data: { outcome: "error", needsAttention: true, note: err instanceof Error ? err.message.slice(0, 500) : "Error desconocido" },
+      })
+      .catch(() => {});
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+  }
+}
+
+async function crearRegistro(ev: ReturnType<typeof leerEvento>): Promise<string> {
+  const fila = await prisma.hotmartEvent.create({
+    data: {
+      eventId: ev.eventId,
+      event: ev.evento || "(sin evento)",
+      transaction: ev.transaccion,
+      buyerEmail: ev.email,
+      subscriberCode: ev.codigoSuscriptor,
+      productId: ev.productId,
+      offerCode: ev.offerCode,
+      outcome: "recibido",
+      summary: JSON.parse(JSON.stringify(ev.resumen)),
+    },
+    select: { id: true },
+  });
+  return fila.id;
+}
+
+async function localizarNegocio(
+  ev: ReturnType<typeof leerEvento>
+): Promise<{ tipo: "ok"; tenantId: string } | { tipo: "ninguno" } | { tipo: "ambiguo"; cuantos: number }> {
+  if (ev.codigoSuscriptor) {
+    const porCodigo = await prisma.subscription.findFirst({
+      where: { hotmartSubscriberCode: ev.codigoSuscriptor },
+      select: { tenantId: true },
+    });
+    if (porCodigo) return { tipo: "ok", tenantId: porCodigo.tenantId };
+  }
+  if (ev.email) {
+    const ids = new Set<string>();
+    const porNegocio = await prisma.tenant.findMany({
+      where: { email: { equals: ev.email, mode: "insensitive" } },
+      select: { id: true },
+      take: 3,
+    });
+    porNegocio.forEach((t) => ids.add(t.id));
+    if (ids.size === 0) {
+      const porUsuario = await prisma.user.findMany({
+        where: { email: { equals: ev.email, mode: "insensitive" } },
+        select: { tenantId: true },
+        take: 3,
+      });
+      porUsuario.forEach((u) => ids.add(u.tenantId));
+    }
+    if (ids.size === 1) return { tipo: "ok", tenantId: [...ids][0] };
+    if (ids.size > 1) return { tipo: "ambiguo", cuantos: ids.size };
+  }
+  return { tipo: "ninguno" };
+}
+
+async function procesar(ev: ReturnType<typeof leerEvento>): Promise<Resultado> {
+  const { evento } = ev;
+
+  if (EVENTOS_A_REVISAR.includes(evento)) {
+    return { outcome: "ignorado", needsAttention: true, note: `Evento ${evento}: no se aplica solo. Revisa en Hotmart si el cliente cambió de plan; el siguiente cobro actualizará el plan automáticamente.` };
+  }
+  if (![...EVENTOS_PAGO, ...EVENTOS_REVERSA, ...EVENTOS_CANCELACION].includes(evento)) {
+    return { outcome: "ignorado", respuesta: { ignorado: evento || "sin evento" } };
+  }
+
+  // --- Localizar el negocio ---------------------------------------------
+  const loc = await localizarNegocio(ev);
+  if (loc.tipo === "ninguno") {
+    console.warn(`⚠️  Webhook Hotmart (${evento}): sin negocio para "${ev.email ?? "(sin correo)"}" / suscriptor "${ev.codigoSuscriptor ?? "(sin código)"}" — transacción ${ev.transaccion ?? "?"}.`);
+    return { outcome: "sin_negocio", needsAttention: true, note: "No se encontró ningún negocio con ese correo ni código de suscriptor. Activar a mano desde Negocios → Renovar eligiendo plan." };
+  }
+  if (loc.tipo === "ambiguo") {
+    return { outcome: "correo_ambiguo", needsAttention: true, note: `El correo del comprador coincide con ${loc.cuantos} negocios; no se activó ninguno.` };
+  }
+  const tenantId = loc.tenantId;
+
+  const sub = await prisma.subscription.findUnique({ where: { tenantId } });
+  if (!sub) {
+    return { outcome: "sin_suscripcion", needsAttention: true, tenantId, note: "El negocio no tiene fila de suscripción." };
+  }
+
+  // --- Reembolso / contracargo: bloquear ---------------------------------
+  if (EVENTOS_REVERSA.includes(evento)) {
+    await prisma.subscription.update({ where: { tenantId }, data: { status: "SUSPENDED", autoRenew: false } });
+    console.log(`⛔ Webhook Hotmart (${evento}): negocio ${tenantId} suspendido.`);
+    return { outcome: "suspendido", needsAttention: true, tenantId, commercialPlanId: sub.commercialPlanId, note: "Reembolso o contracargo: cuenta suspendida. Reactívala a mano si corresponde." };
+  }
+
+  // --- Cancelación: no bloquea, deja de renovarse ------------------------
+  if (EVENTOS_CANCELACION.includes(evento)) {
+    await prisma.subscription.update({ where: { tenantId }, data: { autoRenew: false } });
+    console.log(`ℹ️  Webhook Hotmart (${evento}): negocio ${tenantId} ya no se renovará.`);
+    return { outcome: "cancelacion_registrada", tenantId, commercialPlanId: sub.commercialPlanId };
+  }
+
+  // --- Pago aprobado: activar / renovar ----------------------------------
+  if (ev.transaccion && sub.hotmartLastTransaction === ev.transaccion) {
+    return { outcome: "duplicado", tenantId, commercialPlanId: sub.commercialPlanId, respuesta: { duplicado: true } };
+  }
+
+  const planes = await prisma.commercialPlan.findMany({
+    select: { id: true, code: true, name: true, isActive: true, hotmartProductId: true, hotmartOfferCode: true },
+  });
+  const id = identificarPlan(planes, { offerCode: ev.offerCode, productId: ev.productId });
+
+  let planFinal: { id: string; name: string } | null = null;
+  let aviso: string | null = null;
+  let atencion = false;
+
+  if (id.tipo === "ok") {
+    planFinal = { id: id.plan.id, name: id.plan.name };
+  } else if (sub.commercialPlanId) {
+    // Renovación de un cliente que ya tenía plan: se conserva y se extiende,
+    // pero se avisa porque la compra no coincide con ningún plan configurado.
+    const actual = planes.find((p) => p.id === sub.commercialPlanId);
+    planFinal = actual ? { id: actual.id, name: actual.name } : null;
+    atencion = true;
+    aviso = `La compra (producto ${ev.productId ?? "?"}, oferta ${ev.offerCode ?? "?"}) ${id.tipo === "ambiguo" ? "coincide con varios planes" : "no coincide con ningún plan"}; se conservó el plan actual. Revisa los códigos de Hotmart en Planes comerciales.`;
+  }
+
+  if (!planFinal) {
+    console.warn(`⚠️  Webhook Hotmart (${evento}): pago de ${ev.email ?? "?"} sin plan identificable (producto ${ev.productId ?? "?"}, oferta ${ev.offerCode ?? "?"}). NO se activó.`);
+    return {
+      outcome: "sin_plan",
+      needsAttention: true,
+      tenantId,
+      note: `Pago recibido pero no se pudo identificar el plan (producto ${ev.productId ?? "?"}, oferta ${ev.offerCode ?? "?"}). La cuenta NO se activó: captura los códigos de Hotmart del plan en Planes comerciales y activa con Negocios → Renovar.`,
+    };
+  }
+
+  const ahora = new Date();
+  const endDate =
+    ev.proximoCobro && ev.proximoCobro.getTime() > ahora.getTime()
+      ? ev.proximoCobro
+      : new Date(ahora.getTime() + DIAS_VIGENCIA_POR_DEFECTO * MS_DIA);
+
+  await prisma.subscription.update({
+    where: { tenantId },
+    data: {
+      status: "ACTIVE",
+      endDate,
+      autoRenew: true,
+      commercialPlanId: planFinal.id,
+      plan: planFinal.name,
+      ...(ev.precio !== null && ev.precio > 0 ? { price: ev.precio } : {}),
+      hotmartLastTransaction: ev.transaccion,
+      hotmartSubscriberCode: ev.codigoSuscriptor ?? sub.hotmartSubscriberCode,
+      // Cuenta al corriente: todos los avisos arrancan de cero.
+      expiredNoticeSentAt: null,
+      blockNoticeSentAt: null,
+      renewalReminderSentAt: null,
+      deletionNoticeSentAt: null,
+      trialNotice7SentAt: null,
+      trialNotice3SentAt: null,
+      trialNotice1SentAt: null,
+      trialEndedNoticeSentAt: null,
+    },
+  });
+  console.log(`✅ Webhook Hotmart (${evento}): negocio ${tenantId} activado con plan ${planFinal.name} hasta ${endDate.toISOString()}.`);
+  return {
+    outcome: "activado",
+    needsAttention: atencion,
+    note: aviso ?? undefined,
+    tenantId,
+    commercialPlanId: planFinal.id,
+    respuesta: { activado: true },
+  };
 }
