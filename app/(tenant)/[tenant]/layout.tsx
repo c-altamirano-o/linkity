@@ -13,6 +13,7 @@ import { getTenantLabels } from "@/lib/labels-server";
 import type { LabelDictionary } from "@/lib/labels";
 import { calcularEstadoCiclo } from "@/lib/ciclo-suscripcion";
 import CuentaBloqueada from "@/components/tenant/CuentaBloqueada";
+import { obtenerEnlacesSuscripcion } from "@/lib/enlaces-suscripcion";
 import { getNotificaciones, contarNotificacionesNoLeidas } from "@/lib/notificaciones";
 import { obtenerEstadoPasosBienvenida } from "@/lib/onboarding";
 import { MODULOS_OCULTOS_MODO_SIMPLE } from "@/lib/modules-catalog";
@@ -107,10 +108,26 @@ export default async function TenantLayout({
   // menú completo de módulos que de todos modos van a rechazar cualquier
   // acción (ver el mismo chequeo en lib/actor.ts). resolverActor cubre los
   // Server Actions; esto cubre la renderización de cualquier página.
+  const enlacesSuscripcion = obtenerEnlacesSuscripcion();
+  // Aviso de días restantes dentro del SaaS (2026-10-06, ver
+  // components/tenant/BannerSuscripcion.tsx) — solo mientras la cuenta está
+  // en prueba gratis o en los días de gracia de una suscripción vencida.
+  let avisoSuscripcion: { etapa: "en_prueba" | "en_gracia"; diasRestantes: number } | null = null;
   if (dbTenant) {
     const cicloSuscripcion = calcularEstadoCiclo(dbTenant.subscription);
     if (cicloSuscripcion.bloqueada) {
-      return <CuentaBloqueada etapa={cicloSuscripcion.etapa} tenantSlug={tenant} />;
+      return (
+        <CuentaBloqueada
+          etapa={cicloSuscripcion.etapa}
+          tenantSlug={tenant}
+          checkoutUrl={enlacesSuscripcion.checkoutUrl}
+          contactoHref={enlacesSuscripcion.contactoHref}
+          correoCuenta={user?.email ?? null}
+        />
+      );
+    }
+    if ((cicloSuscripcion.etapa === "en_prueba" || cicloSuscripcion.etapa === "en_gracia") && cicloSuscripcion.diasRestantes !== null) {
+      avisoSuscripcion = { etapa: cicloSuscripcion.etapa, diasRestantes: cicloSuscripcion.diasRestantes };
     }
   }
 
@@ -369,6 +386,9 @@ export default async function TenantLayout({
         onboardingCompletados={onboardingCompletados}
         onboardingTotal={onboardingTotal}
         onboardingPasos={onboardingPasos}
+        avisoSuscripcion={avisoSuscripcion}
+        checkoutUrl={enlacesSuscripcion.checkoutUrl}
+        contactoHref={enlacesSuscripcion.contactoHref}
       >
         {children}
       </TenantShell>

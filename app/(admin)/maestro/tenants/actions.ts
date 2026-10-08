@@ -121,6 +121,12 @@ export async function renovarSuscripcionAction(params: {
         blockNoticeSentAt: null,
         renewalReminderSentAt: null,
         deletionNoticeSentAt: null,
+        // Avisos de la prueba gratis (2026-10-06) — misma razón: una
+        // cuenta que sale de la prueba arranca el ciclo desde cero.
+        trialNotice7SentAt: null,
+        trialNotice3SentAt: null,
+        trialNotice1SentAt: null,
+        trialEndedNoticeSentAt: null,
       },
     });
 

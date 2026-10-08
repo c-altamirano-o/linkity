@@ -201,7 +201,7 @@ export default function SuscripcionesClient({ data }: { data: SuscripcionesData 
                       <span className={`text-[12.5px] font-medium px-2 py-0.5 rounded-full ${estadoCfg?.classes ?? "bg-slate-100 text-slate-400"}`}>
                         {estadoCfg?.label ?? "Sin suscripción"}
                       </span>
-                      {(r.etapaCiclo === "en_gracia" || r.etapaCiclo === "bloqueada" || r.etapaCiclo === "lista_para_eliminar") && (
+                      {(r.etapaCiclo === "en_gracia" || r.etapaCiclo === "prueba_vencida" || r.etapaCiclo === "bloqueada" || r.etapaCiclo === "lista_para_eliminar") && (
                         <span
                           className={`block mt-1 text-[11.5px] font-medium ${
                             r.etapaCiclo === "lista_para_eliminar" ? "text-red-600" : "text-amber-600"

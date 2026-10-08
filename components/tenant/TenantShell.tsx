@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import BannerSuscripcion from "@/components/tenant/BannerSuscripcion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
@@ -164,6 +165,9 @@ export default function TenantShell({
   onboardingCompletados = 0,
   onboardingTotal = 0,
   onboardingPasos = [],
+  avisoSuscripcion = null,
+  checkoutUrl = null,
+  contactoHref = null,
 }: {
   children: React.ReactNode;
   tenant: string;
@@ -234,6 +238,12 @@ export default function TenantShell({
   onboardingCompletados?: number;
   onboardingTotal?: number;
   onboardingPasos?: { id: string; titulo: string; done: boolean; href: string }[];
+  // Aviso de días restantes de prueba gratis / gracia (2026-10-06, a
+  // petición de Carlos) — ya calculado en el servidor (TenantLayout). null =
+  // cuenta al corriente, no se muestra nada. Ver BannerSuscripcion.tsx.
+  avisoSuscripcion?: { etapa: "en_prueba" | "en_gracia"; diasRestantes: number } | null;
+  checkoutUrl?: string | null;
+  contactoHref?: string | null;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -1179,6 +1189,16 @@ export default function TenantShell({
             </div>
           </div>
         </div>
+
+        {avisoSuscripcion && (
+          <BannerSuscripcion
+            etapa={avisoSuscripcion.etapa}
+            diasRestantes={avisoSuscripcion.diasRestantes}
+            puedeSuscribirse={modo === "admin"}
+            checkoutUrl={checkoutUrl}
+            contactoHref={contactoHref}
+          />
+        )}
 
         <div className="flex-1 overflow-y-auto">
           {children}

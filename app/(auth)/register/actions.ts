@@ -1,5 +1,6 @@
 "use server";
 
+import { DIAS_PRUEBA } from "@/lib/ciclo-suscripcion";
 import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MODULE_CATALOG, ALL_MODULE_CODES } from "@/lib/modules-catalog";
@@ -187,12 +188,20 @@ export async function registrarNegocioAction(
       // Precio en 0 y plan fijo a "Hotmart": el cobro real ya no vive aquí.
       // Esta fila solo existe para que Suscripciones/Dashboard (Panel
       // Maestro) — que hoy asumen que todo tenant tiene una — no se rompan.
+      //
+      // 2026-10-06, a petición de Carlos: todo auto-registro arranca con la
+      // PRUEBA GRATIS de 30 días que ya promete la landing (status TRIAL +
+      // endDate a 30 días). Antes se creaba ACTIVE sin endDate — o sea,
+      // acceso gratis para siempre y nunca se bloqueaba. Al terminar la
+      // prueba el acceso se bloquea solo (ver lib/ciclo-suscripcion.ts) y se
+      // reactiva cuando Hotmart avisa del pago (app/api/webhooks/hotmart).
       await tx.subscription.create({
         data: {
           tenantId: tenant.id,
           plan: "Hotmart",
-          status: "ACTIVE",
+          status: "TRIAL",
           price: 0,
+          endDate: new Date(Date.now() + DIAS_PRUEBA * 24 * 60 * 60 * 1000),
         },
       });
 

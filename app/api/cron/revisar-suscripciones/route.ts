@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { calcularEstadoCiclo, DIAS_GRACIA, DIAS_RECORDATORIO, DIAS_AVISO_ELIMINACION } from "@/lib/ciclo-suscripcion";
+import { calcularEstadoCiclo, DIAS_GRACIA, DIAS_RECORDATORIO, DIAS_AVISO_ELIMINACION, DIAS_AVISOS_PRUEBA } from "@/lib/ciclo-suscripcion";
 import { enviarAvisoSuscripcion } from "@/lib/notificaciones-suscripcion";
 
 /**
@@ -17,6 +17,17 @@ import { enviarAvisoSuscripcion } from "@/lib/notificaciones-suscripcion";
  * corrida se pone al día solo (manda de un jalón los avisos que le falten,
  * nunca se salta ninguno ni lo repite — cada aviso se guarda con su propio
  * `...SentAt`, ver el schema).
+ *
+ * Prueba gratis (2026-10-06): además de las suscripciones ya vencidas, el
+ * cron mira las pruebas (status TRIAL) que vencen en los próximos 7 días
+ * para mandar los avisos de 7/3/1 días antes (solo correo — ver
+ * lib/notificaciones-suscripcion.ts). Si el cron falló varios días y una
+ * prueba ya está a 2 días de terminar sin haber recibido el aviso de 7 ni el
+ * de 3, solo se manda el más urgente que corresponda (el de 3) y los
+ * anteriores se marcan como enviados — nunca llegan 3 correos de golpe. Las
+ * pruebas que ya terminaron reciben "prueba_terminada" (en vez de
+ * "expirada"/"bloqueada", que hablan de 7 días de gracia que la prueba no
+ * tiene).
  */
 export const maxDuration = 60;
 
@@ -31,10 +42,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
+  const ahora = new Date();
+  const limiteAvisoPrueba = new Date(ahora.getTime() + Math.max(...DIAS_AVISOS_PRUEBA) * 24 * 60 * 60 * 1000);
+
   const candidatos = await prisma.subscription.findMany({
     where: {
-      status: { in: ["ACTIVE", "TRIAL"] },
-      endDate: { not: null, lt: new Date() },
+      OR: [
+        // Ya vencidas (de paga o prueba) — flujo de siempre.
+        { status: { in: ["ACTIVE", "TRIAL"] }, endDate: { not: null, lt: ahora } },
+        // Pruebas que vencen en los próximos 7 días — avisos previos.
+        { status: "TRIAL", endDate: { gte: ahora, lte: limiteAvisoPrueba } },
+      ],
     },
     include: { tenant: { select: { id: true, slug: true, name: true, email: true, phone: true } } },
   });
@@ -45,20 +63,56 @@ export async function GET(request: Request) {
   for (const sub of candidatos) {
     try {
       const estado = calcularEstadoCiclo({ status: sub.status, endDate: sub.endDate });
-      if (estado.diasVencida === null) continue;
-
       const datosTenant = { name: sub.tenant.name, slug: sub.tenant.slug, email: sub.tenant.email, phone: sub.tenant.phone };
       const data: Record<string, Date> = {};
 
-      if (estado.diasVencida >= 0 && !sub.expiredNoticeSentAt) {
-        await enviarAvisoSuscripcion(datosTenant, "expirada");
-        data.expiredNoticeSentAt = new Date();
-        avisados.push({ slug: sub.tenant.slug, tipo: "expirada" });
+      // --- Prueba gratis, todavía vigente: avisos de 7 / 3 / 1 día(s) antes ---
+      if (estado.etapa === "en_prueba" && estado.diasRestantes !== null) {
+        const dr = estado.diasRestantes;
+        const yaEnviado: Record<number, Date | null> = {
+          7: sub.trialNotice7SentAt,
+          3: sub.trialNotice3SentAt,
+          1: sub.trialNotice1SentAt,
+        };
+        // El umbral más urgente que ya se cruzó (1 < 3 < 7).
+        const umbral = [...DIAS_AVISOS_PRUEBA].sort((a, b) => a - b).find((u) => dr <= u);
+        if (umbral !== undefined && !yaEnviado[umbral]) {
+          const tipo = (`prueba_${umbral}` as "prueba_7" | "prueba_3" | "prueba_1");
+          await enviarAvisoSuscripcion(datosTenant, tipo);
+          const ahoraEnvio = new Date();
+          // Marca este umbral y los menos urgentes (7 y 3 si estamos en 1,
+          // etc.) para no mandarlos después de golpe.
+          if (umbral <= 7 && !sub.trialNotice7SentAt) data.trialNotice7SentAt = ahoraEnvio;
+          if (umbral <= 3 && !sub.trialNotice3SentAt) data.trialNotice3SentAt = ahoraEnvio;
+          if (umbral <= 1 && !sub.trialNotice1SentAt) data.trialNotice1SentAt = ahoraEnvio;
+          avisados.push({ slug: sub.tenant.slug, tipo });
+        }
+        if (Object.keys(data).length > 0) {
+          await prisma.subscription.update({ where: { id: sub.id }, data });
+        }
+        continue;
       }
-      if (estado.diasVencida >= DIAS_GRACIA && !sub.blockNoticeSentAt) {
-        await enviarAvisoSuscripcion(datosTenant, "bloqueada");
-        data.blockNoticeSentAt = new Date();
-        avisados.push({ slug: sub.tenant.slug, tipo: "bloqueada" });
+
+      if (estado.diasVencida === null) continue;
+
+      // --- Prueba gratis terminada (sin gracia) ---
+      if (sub.status === "TRIAL") {
+        if (estado.diasVencida >= 0 && !sub.trialEndedNoticeSentAt) {
+          await enviarAvisoSuscripcion(datosTenant, "prueba_terminada");
+          data.trialEndedNoticeSentAt = new Date();
+          avisados.push({ slug: sub.tenant.slug, tipo: "prueba_terminada" });
+        }
+      } else {
+        if (estado.diasVencida >= 0 && !sub.expiredNoticeSentAt) {
+          await enviarAvisoSuscripcion(datosTenant, "expirada");
+          data.expiredNoticeSentAt = new Date();
+          avisados.push({ slug: sub.tenant.slug, tipo: "expirada" });
+        }
+        if (estado.diasVencida >= DIAS_GRACIA && !sub.blockNoticeSentAt) {
+          await enviarAvisoSuscripcion(datosTenant, "bloqueada");
+          data.blockNoticeSentAt = new Date();
+          avisados.push({ slug: sub.tenant.slug, tipo: "bloqueada" });
+        }
       }
       if (estado.diasVencida >= DIAS_RECORDATORIO && !sub.renewalReminderSentAt) {
         await enviarAvisoSuscripcion(datosTenant, "recordatorio");

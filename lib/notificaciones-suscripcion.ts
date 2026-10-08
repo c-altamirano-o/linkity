@@ -33,7 +33,28 @@ import "server-only";
  *    responderá con error y quedará logueado, sin tronar el cron.
  */
 
-export type TipoAvisoSuscripcion = "expirada" | "bloqueada" | "recordatorio" | "eliminacion";
+export type TipoAvisoSuscripcion =
+  | "expirada"
+  | "bloqueada"
+  | "recordatorio"
+  | "eliminacion"
+  // Prueba gratis (2026-10-06): 3 avisos ANTES de que termine y uno al
+  // terminar. Los 3 previos van SOLO por correo (decisión de Carlos: banner
+  // dentro del SaaS + correo); si algún día quiere sumar WhatsApp basta con
+  // quitarlos de TIPOS_SOLO_CORREO. "prueba_terminada" sí usa todos los
+  // canales configurados, igual que los avisos posteriores al vencimiento.
+  | "prueba_7"
+  | "prueba_3"
+  | "prueba_1"
+  | "prueba_terminada";
+
+const TIPOS_SOLO_CORREO: TipoAvisoSuscripcion[] = ["prueba_7", "prueba_3", "prueba_1"];
+
+/** Liga de pago en Hotmart (producto de suscripción de Linkity). Sin
+ *  configurar, los textos simplemente no incluyen el link. */
+function linkSuscripcion(): string | null {
+  return process.env.HOTMART_CHECKOUT_URL || null;
+}
 
 interface DatosTenantAviso {
   name: string;
@@ -47,11 +68,30 @@ const ASUNTOS: Record<TipoAvisoSuscripcion, string> = {
   bloqueada: "Tu cuenta de Linkity fue bloqueada por falta de pago",
   recordatorio: "Recordatorio: tu cuenta de Linkity sigue bloqueada",
   eliminacion: "Última oportunidad: tu información en Linkity será eliminada",
+  prueba_7: "Te quedan 7 días de tu prueba gratis de Linkity",
+  prueba_3: "Te quedan 3 días de tu prueba gratis de Linkity",
+  prueba_1: "Tu prueba gratis de Linkity termina mañana",
+  prueba_terminada: "Tu prueba gratis de Linkity terminó — suscríbete para recuperar el acceso",
 };
 
 function construirCuerpo(tipo: TipoAvisoSuscripcion, tenant: DatosTenantAviso): string {
+  const base = construirCuerpoBase(tipo, tenant);
+  const link = linkSuscripcion();
+  const esDePrueba = tipo.startsWith("prueba_");
+  return esDePrueba && link ? `${base} Suscríbete aquí: ${link}` : base;
+}
+
+function construirCuerpoBase(tipo: TipoAvisoSuscripcion, tenant: DatosTenantAviso): string {
   const negocio = tenant.name;
   switch (tipo) {
+    case "prueba_7":
+      return `Hola, equipo de ${negocio}. Les quedan 7 días de prueba gratis en Linkity. Para seguir usando el sistema sin interrupciones, suscríbanse antes de que termine la prueba — todo lo que ya capturaron (ventas, clientes, inventario) se conserva.`;
+    case "prueba_3":
+      return `Hola, equipo de ${negocio}. Quedan solo 3 días de su prueba gratis en Linkity. Al terminar, el acceso se bloquea hasta que se suscriban (sus datos no se pierden).`;
+    case "prueba_1":
+      return `Hola, equipo de ${negocio}. Su prueba gratis en Linkity termina mañana. Suscríbanse hoy para no perder el acceso al sistema.`;
+    case "prueba_terminada":
+      return `Hola, equipo de ${negocio}. Su prueba gratis en Linkity terminó y el acceso quedó bloqueado. Sus datos siguen guardados — en cuanto se suscriban, recuperan el acceso de inmediato.`;
     case "expirada":
       return `Hola, equipo de ${negocio}. Tu suscripción a Linkity venció hoy. Tienes 7 días de gracia para renovar sin perder acceso al sistema. Pasado ese plazo, tu cuenta se bloqueará hasta que renueves. Si ya renovaste, ignora este mensaje.`;
     case "bloqueada":
@@ -145,7 +185,10 @@ async function enviarWhatsapp(tenant: DatosTenantAviso, tipo: TipoAvisoSuscripci
  * tumba el cron completo.
  */
 export async function enviarAvisoSuscripcion(tenant: DatosTenantAviso, tipo: TipoAvisoSuscripcion): Promise<ResultadoAviso[]> {
-  const resultados = await Promise.all([enviarCorreo(tenant, tipo), enviarWhatsapp(tenant, tipo)]);
+  const soloCorreo = TIPOS_SOLO_CORREO.includes(tipo);
+  const resultados = await Promise.all(
+    soloCorreo ? [enviarCorreo(tenant, tipo)] : [enviarCorreo(tenant, tipo), enviarWhatsapp(tenant, tipo)]
+  );
   const algunoEnviado = resultados.some((r) => r.enviado);
   if (!algunoEnviado) {
     console.warn(`⚠️  No se pudo avisar a ${tenant.slug} (${tipo}) por ningún canal:`, resultados.map((r) => r.motivo).join(" / "));

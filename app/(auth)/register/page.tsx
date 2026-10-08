@@ -106,6 +106,7 @@ export default function RegisterPage() {
 
           <ul className="space-y-3">
             {[
+              "1 mes de prueba gratis, sin tarjeta",
               "Todos los módulos activos desde el día uno",
               "Personalizado a tu giro de negocio",
               "Tus datos aislados de cualquier otro negocio",
@@ -185,7 +186,7 @@ export default function RegisterPage() {
                 </span>
                 <h1 className="text-2xl font-bold text-foreground dark:text-white">Solicita acceso</h1>
                 <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                  Cuéntanos de tu negocio para continuar.
+                  Cuéntanos de tu negocio para continuar. Tu primer mes es gratis.
                 </p>
               </div>
 
@@ -281,7 +282,11 @@ export default function RegisterPage() {
                 </button>
               </form>
 
-              <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
+              <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-4">
+                Al terminar tu mes gratis podrás suscribirte para seguir usando Linkity; si no, el acceso se pausa y tus datos se conservan.
+              </p>
+
+              <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-4">
                 ¿Ya tienes cuenta?{" "}
                 <Link href="/login" className="text-primary font-medium hover:underline">
                   Inicia sesión

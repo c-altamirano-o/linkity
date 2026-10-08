@@ -33,6 +33,8 @@ const ESTADO_CONFIG: Record<string, { label: string; classes: string }> = {
 const ETAPA_CLASSES: Record<string, string> = {
   activa: "bg-emerald-500/10 text-emerald-600",
   en_gracia: "bg-amber-500/10 text-amber-600",
+  en_prueba: "bg-sky-500/10 text-sky-600",
+  prueba_vencida: "bg-red-500/10 text-red-600",
   bloqueada: "bg-red-500/10 text-red-600",
   lista_para_eliminar: "bg-red-600 text-white",
   suspendida_manual: "bg-slate-200 text-slate-500",
@@ -185,7 +187,7 @@ export default function TenantDetailClient({
               {estadoCfg?.label ?? "Sin suscripción"}
             </span>
           </div>
-          {(tenant.etapaCiclo === "en_gracia" || tenant.etapaCiclo === "bloqueada" || tenant.etapaCiclo === "lista_para_eliminar") && (
+          {(tenant.etapaCiclo === "en_gracia" || tenant.etapaCiclo === "prueba_vencida" || tenant.etapaCiclo === "bloqueada" || tenant.etapaCiclo === "lista_para_eliminar") && (
             <div className={`text-[12px] font-medium px-2.5 py-1.5 rounded-lg mb-3 flex items-center gap-1.5 ${ETAPA_CLASSES[tenant.etapaCiclo]}`}>
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
               {ETAPA_LABEL[tenant.etapaCiclo]} · vencida hace {tenant.diasVencida} día{tenant.diasVencida === 1 ? "" : "s"}
