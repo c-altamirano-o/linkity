@@ -1,5 +1,7 @@
 import "server-only";
 
+import { obtenerWhatsappPlataforma } from "@/lib/config-plataforma";
+
 /**
  * Envío de los 4 avisos del ciclo de vida de suscripción (ver el comentario
  * largo en Subscription, schema.prisma, y lib/ciclo-suscripcion.ts) —
@@ -24,10 +26,11 @@ import "server-only";
  *    campos". Meta exige que un mensaje que INICIA tu negocio (no es
  *    respuesta a algo que el cliente escribió en las últimas 24h) use una
  *    PLANTILLA pre-aprobada por Meta Business Manager — no se puede mandar
- *    texto libre. Carlos va a necesitar, aparte de
- *    WHATSAPP_BUSINESS_TOKEN + WHATSAPP_PHONE_NUMBER_ID, dar de alta y
- *    esperar la aprobación de una plantilla llamada exactamente
- *    "aviso_suscripcion_linkity" con un solo parámetro de texto (el cuerpo
+ *    texto libre. Carlos va a necesitar, aparte del token y el Phone Number
+ *    ID (se capturan en Panel Maestro → Configuración, ya no son variables de
+ *    entorno), dar de alta y esperar la aprobación de una plantilla (por
+ *    defecto "aviso_suscripcion_linkity", el nombre también se cambia en
+ *    Panel Maestro) con un solo parámetro de texto (el cuerpo
  *    del aviso) en business.facebook.com antes de que esto envíe algo de
  *    verdad — mientras esa plantilla no exista/esté aprobada, Meta
  *    responderá con error y quedará logueado, sin tronar el cron.
@@ -150,9 +153,12 @@ async function enviarCorreo(tenant: DatosTenantAviso, tipo: TipoAvisoSuscripcion
 }
 
 async function enviarWhatsapp(tenant: DatosTenantAviso, tipo: TipoAvisoSuscripcion): Promise<ResultadoAviso> {
-  const token = process.env.WHATSAPP_BUSINESS_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneNumberId) return { enviado: false, canal: "ninguno", motivo: "WHATSAPP_BUSINESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID no configurados" };
+  // Datos del WhatsApp de Linkity: se capturan en Panel Maestro → Configuración
+  // (con respaldo a las variables de entorno anteriores) — ver lib/config-plataforma.ts.
+  const wa = await obtenerWhatsappPlataforma();
+  const token = wa.accessToken;
+  const phoneNumberId = wa.phoneNumberId;
+  if (!token || !phoneNumberId) return { enviado: false, canal: "ninguno", motivo: "WhatsApp de Linkity sin configurar (Panel Maestro → Configuración)" };
   if (!tenant.phone) return { enviado: false, canal: "ninguno", motivo: "el negocio no tiene teléfono registrado" };
 
   try {
@@ -170,8 +176,8 @@ async function enviarWhatsapp(tenant: DatosTenantAviso, tipo: TipoAvisoSuscripci
         to: tenant.phone,
         type: "template",
         template: {
-          name: "aviso_suscripcion_linkity",
-          language: { code: "es_MX" },
+          name: wa.plantilla,
+          language: { code: wa.idioma },
           components: [{ type: "body", parameters: [{ type: "text", text: construirCuerpo(tipo, tenant) }] }],
         },
       }),

@@ -2404,3 +2404,17 @@ model IntentoAcceso {
   @@index([tipo, claveHash, createdAt])
   @@index([tipo, createdAt])
 }
+
+/**
+ * Configuración de la plataforma editable desde Panel Maestro (2026-10-08),
+ * en formato clave/valor — ver lib/config-plataforma.ts. Hoy guarda el
+ * WhatsApp Business de Linkity ("whatsapp.numero", "whatsapp.accessToken"…).
+ * `cifrado` = true cuando `valor` es un secreto cifrado con
+ * CONFIG_ENCRYPTION_KEY (lib/cifrado-config.ts).
+ */
+model ConfiguracionPlataforma {
+  clave     String   @id
+  valor     String
+  cifrado   Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}

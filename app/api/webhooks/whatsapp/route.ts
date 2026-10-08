@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { procesarEstadoWhatsapp } from "@/lib/whatsapp-tenant";
+import { obtenerWhatsappPlataforma } from "@/lib/config-plataforma";
+import { verificarFirmaMeta } from "@/lib/firma-meta";
+
+function iguales(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ba.length === bb.length && timingSafeEqual(ba, bb);
+}
 
 export const maxDuration = 60;
 
@@ -28,6 +37,14 @@ export const maxDuration = 60;
  * ejecuta una acción sensible ni expone datos). Pendiente activarlo antes
  * de ofrecer el envío de WhatsApp como servicio a clientes externos de
  * Linkity — ver WhatsappAppSecret en schema.prisma.
+ *
+ * 2026-10-08: el verify token y el App Secret de LINKITY ya se capturan en
+ * Panel Maestro → Configuración (lib/config-plataforma.ts; si no hay nada
+ * guardado ahí se usa la variable de entorno anterior). Con eso, los avisos
+ * que llegan por el número de Linkity (metadata.phone_number_id igual al
+ * configurado) se aceptan solo con firma X-Hub-Signature-256 válida. Los
+ * avisos de los números de cada negocio siguen sin verificación de firma
+ * hasta el siguiente paso (usará Tenant.whatsappAppSecret).
  */
 
 export async function GET(request: Request) {
@@ -42,7 +59,8 @@ export async function GET(request: Request) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  if (modo === "subscribe" && challenge && token && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+  const config = await obtenerWhatsappPlataforma();
+  if (modo === "subscribe" && challenge && token && config.verifyToken && iguales(token, config.verifyToken)) {
     return new NextResponse(challenge, { status: 200 });
   }
   return new NextResponse("Verificación fallida", { status: 403 });
@@ -50,7 +68,26 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.json();
+    // Se lee el cuerpo EXACTO como texto: la firma de Meta se calcula sobre
+    // esos bytes, no sobre el JSON ya interpretado.
+    const cuerpoCrudo = await request.text();
+    const payload = JSON.parse(cuerpoCrudo);
+
+    const config = await obtenerWhatsappPlataforma();
+    if (config.appSecret && config.phoneNumberId) {
+      const idsEnAviso = new Set<string>();
+      for (const e of Array.isArray(payload?.entry) ? payload.entry : []) {
+        for (const c of Array.isArray(e?.changes) ? e.changes : []) {
+          const id = c?.value?.metadata?.phone_number_id;
+          if (typeof id === "string") idsEnAviso.add(id);
+        }
+      }
+      if (idsEnAviso.has(config.phoneNumberId) && !verificarFirmaMeta(cuerpoCrudo, request.headers.get("x-hub-signature-256"), config.appSecret)) {
+        console.warn("⚠️  Aviso de WhatsApp del número de Linkity con firma inválida: rechazado.");
+        return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
+      }
+    }
+
     const entradas: any[] = Array.isArray(payload?.entry) ? payload.entry : [];
 
     for (const entrada of entradas) {

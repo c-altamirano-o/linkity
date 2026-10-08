@@ -1,5 +1,7 @@
 import { requireSuperAdmin } from "@/lib/maestro-auth";
 import ConfiguracionClient from "./ConfiguracionClient";
+import WhatsappPlataformaCard from "./WhatsappPlataformaCard";
+import { obtenerWhatsappPlataformaParaPanel } from "@/lib/config-plataforma";
 
 export default async function ConfiguracionPage() {
   const resuelto = await requireSuperAdmin();
@@ -7,6 +9,11 @@ export default async function ConfiguracionPage() {
   // extra es solo para tener los datos a mostrar, mismo patrón que las
   // Server Actions de esta sección.
   const admin = resuelto.ok ? resuelto.admin : { id: "", email: "", name: "" };
+
+  // WhatsApp Business de Linkity (2026-10-08): solo se cargan los datos si hay
+  // un administrador válido; los secretos llegan enmascarados.
+  const whatsapp = resuelto.ok ? await obtenerWhatsappPlataformaParaPanel() : null;
+  const sitio = (process.env.NEXT_PUBLIC_SITE_URL || "https://linkitysoluciones.mx").replace(/\/+$/, "");
 
   return (
     <>
@@ -23,7 +30,12 @@ export default async function ConfiguracionPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-5">
-        <ConfiguracionClient admin={admin} />
+        <div className="max-w-3xl space-y-4">
+          {whatsapp && <WhatsappPlataformaCard datos={whatsapp} urlWebhook={`${sitio}/api/webhooks/whatsapp`} />}
+        </div>
+        <div className="mt-4">
+          <ConfiguracionClient admin={admin} />
+        </div>
       </div>
     </>
   );
