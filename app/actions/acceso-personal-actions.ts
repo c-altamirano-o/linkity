@@ -58,7 +58,7 @@ export async function iniciarSesionPersonalAction(params: {
       id: true, tenantId: true, branchId: true, name: true, isActive: true,
       pinHash: true, userId: true,
       role: { select: { name: true } },
-      branch: { select: { name: true } },
+      branch: { select: { name: true, isActive: true } },
     },
   });
 
@@ -68,7 +68,7 @@ export async function iniciarSesionPersonalAction(params: {
   // mano (o un link de entrada viejo, cacheado) podría iniciar sesión como
   // un empleado de OTRA sucursal. Mismo mensaje genérico que el resto de
   // los checks de este bloque, para no revelar en cuál sucursal sí está.
-  if (!staff || staff.tenantId !== tenant.id || !staff.isActive || staff.branchId !== branchId) {
+  if (!staff || staff.tenantId !== tenant.id || !staff.isActive || !staff.branch.isActive || staff.branchId !== branchId) {
     return { ok: false, error: "Empleado no encontrado" };
   }
   if (!staff.pinHash || !staff.userId || !staff.role) {

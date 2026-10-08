@@ -17,6 +17,11 @@ import { obtenerEnlacesSuscripcion } from "@/lib/enlaces-suscripcion";
 import { getNotificaciones, contarNotificacionesNoLeidas } from "@/lib/notificaciones";
 import { obtenerEstadoPasosBienvenida } from "@/lib/onboarding";
 import { MODULOS_OCULTOS_MODO_SIMPLE } from "@/lib/modules-catalog";
+import { sincronizarExceso, obtenerDatosAjuste } from "@/lib/exceso-plan";
+import { calcularEstadoExceso, type EstadoExceso } from "@/lib/exceso-plan-estado";
+import AjustePlanClient from "@/components/tenant/AjustePlanClient";
+import AjustePlanPendiente from "@/components/tenant/AjustePlanPendiente";
+import BannerExceso from "@/components/tenant/BannerExceso";
 
 export const metadata: Metadata = {
   title: "Linkity",
@@ -97,7 +102,7 @@ export default async function TenantLayout({
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
-    select: { id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, logo: true, subscription: { select: { status: true, endDate: true } } },
+    select: { id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, logo: true, subscription: { select: { status: true, endDate: true, excesoDetectadoAt: true } } },
   });
 
   // Bloqueo por ciclo de vida de suscripción (2026-09-22, a petición de
@@ -113,6 +118,11 @@ export default async function TenantLayout({
   // components/tenant/BannerSuscripcion.tsx) — solo mientras la cuenta está
   // en prueba gratis o en los días de gracia de una suscripción vencida.
   let avisoSuscripcion: { etapa: "en_prueba" | "en_gracia"; diasRestantes: number } | null = null;
+  // Exceso de plan (Paso 5, 2026-10-08 — ver lib/exceso-plan.ts): si el negocio
+  // tiene más sucursales/empleados activos de los que permite su plan corren 7
+  // días de gracia (banner) y después el sistema se pausa hasta que el
+  // administrador elija qué conservar. La marca se sincroniza sola aquí.
+  let estadoExceso: EstadoExceso = calcularEstadoExceso(null);
   if (dbTenant) {
     const cicloSuscripcion = calcularEstadoCiclo(dbTenant.subscription);
     if (cicloSuscripcion.bloqueada) {
@@ -128,6 +138,12 @@ export default async function TenantLayout({
     }
     if ((cicloSuscripcion.etapa === "en_prueba" || cicloSuscripcion.etapa === "en_gracia") && cicloSuscripcion.diasRestantes !== null) {
       avisoSuscripcion = { etapa: cicloSuscripcion.etapa, diasRestantes: cicloSuscripcion.diasRestantes };
+    }
+    if (dbTenant.subscription) {
+      estadoExceso = await sincronizarExceso(dbTenant.id, {
+        status: dbTenant.subscription.status,
+        excesoDetectadoAt: dbTenant.subscription.excesoDetectadoAt,
+      });
     }
   }
 
@@ -294,6 +310,18 @@ export default async function TenantLayout({
     userRole = dbUser.role?.role.name ?? "";
   }
 
+  // Exceso de plan VENCIDO (Paso 5): ya identificada la sesión, se pausa todo
+  // el panel. El administrador (cuenta real) ve la pantalla para elegir qué
+  // conservar; el personal de PIN solo un aviso. Los Server Actions se
+  // bloquean aparte en lib/actor.ts.
+  if (dbTenant && estadoExceso.vencido) {
+    if (modo === "admin" && user) {
+      const datosAjuste = await obtenerDatosAjuste(dbTenant.id, estadoExceso);
+      return <AjustePlanClient tenantSlug={tenant} datos={datosAjuste} modo="bloqueo" />;
+    }
+    return <AjustePlanPendiente tenantSlug={tenant} />;
+  }
+
   // Guard de módulo desactivado por rubro/negocio (2026-09-17) — a
   // diferencia del guard de arriba (por ROL, solo aplica a personal de
   // PIN), este aplica a CUALQUIER sesión, incluido el dueño con cuenta
@@ -390,6 +418,9 @@ export default async function TenantLayout({
         checkoutUrl={enlacesSuscripcion.checkoutUrl}
         contactoHref={enlacesSuscripcion.contactoHref}
       >
+        {estadoExceso.activo && estadoExceso.diasRestantes !== null && (
+          <BannerExceso tenantSlug={tenant} diasRestantes={estadoExceso.diasRestantes} esAdmin={modo === "admin"} />
+        )}
         {children}
       </TenantShell>
     </div>

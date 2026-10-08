@@ -5,6 +5,7 @@ import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import type { ModuloKey } from "@/lib/roles";
 import { modulosPermitidosParaRolPorNombre } from "@/lib/roles-server";
 import { calcularEstadoCiclo } from "@/lib/ciclo-suscripcion";
+import { calcularEstadoExceso } from "@/lib/exceso-plan-estado";
 
 /**
  * Resolutor de "quién está haciendo esta acción", compartido por todos los
@@ -124,7 +125,7 @@ export async function resolverActor(tenantSlug: string, modulo: ModuloKey | Modu
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlug },
-    select: { id: true, subscription: { select: { status: true, endDate: true } } },
+    select: { id: true, subscription: { select: { status: true, endDate: true, excesoDetectadoAt: true } } },
   });
   if (!tenant) return { ok: false, error: "Negocio no encontrado" };
 
@@ -139,6 +140,17 @@ export async function resolverActor(tenantSlug: string, modulo: ModuloKey | Modu
   const cicloSuscripcion = calcularEstadoCiclo(tenant.subscription);
   if (cicloSuscripcion.bloqueada) {
     return { ok: false, error: "Esta cuenta está bloqueada por falta de renovación. Contacta a Linkity para reactivarla." };
+  }
+
+  // Exceso de plan vencido (Paso 5, 2026-10-08 — ver lib/exceso-plan.ts): pasaron
+  // los 7 días y el administrador todavía no eligió qué sucursales/empleados
+  // conservar. El layout ya pausa la pantalla; esto cierra los Server Actions.
+  // Solo aplica a cuentas de paga: una prueba gratis nunca tiene límites.
+  if (tenant.subscription?.status === "ACTIVE" && calcularEstadoExceso(tenant.subscription.excesoDetectadoAt).vencido) {
+    return {
+      ok: false,
+      error: "El administrador debe elegir qué sucursales y empleados conservar según el plan contratado. Avísale para poder continuar.",
+    };
   }
 
   // 1. Sesión de personal por PIN — se revisa PRIMERO (ver comentario de

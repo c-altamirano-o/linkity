@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calcularEstadoCiclo, DIAS_GRACIA, DIAS_RECORDATORIO, DIAS_AVISO_ELIMINACION, DIAS_AVISOS_PRUEBA } from "@/lib/ciclo-suscripcion";
 import { enviarAvisoSuscripcion } from "@/lib/notificaciones-suscripcion";
+import { sincronizarExceso } from "@/lib/exceso-plan";
+import { calcularEstadoExceso } from "@/lib/exceso-plan-estado";
 
 /**
  * Cron diario (ver vercel.json) que revisa TODAS las suscripciones
@@ -134,5 +136,49 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, revisadas: candidatos.length, avisados, omitidos });
+  // --- Exceso de plan (Paso 5, 2026-10-08) ---------------------------------
+  // Revisa las cuentas de paga vigentes: detecta excesos nuevos (por ejemplo
+  // porque Carlos redujo un límite del catálogo) aunque nadie abra el sistema,
+  // y manda el correo de aviso al detectarlo y el de último día. Cada aviso se
+  // marca para no repetirse; si el correo no se pudo mandar (Resend sin
+  // configurar, sin correo del negocio) se marca igual: el banner dentro del
+  // sistema es el aviso principal y no se reintenta cada día.
+  const conExceso: { slug: string; tipo: string }[] = [];
+  const vigentes = await prisma.subscription.findMany({
+    where: { status: "ACTIVE", OR: [{ endDate: null }, { endDate: { gte: ahora } }] },
+    include: { tenant: { select: { id: true, slug: true, name: true, email: true, phone: true } } },
+  });
+  for (const sub of vigentes) {
+    try {
+      const estado = await sincronizarExceso(sub.tenantId, { status: sub.status, excesoDetectadoAt: sub.excesoDetectadoAt });
+      if (!estado.activo) continue;
+      const datosTenant = { name: sub.tenant.name, slug: sub.tenant.slug, email: sub.tenant.email, phone: sub.tenant.phone };
+      // Si la marca se acaba de crear, el aviso inicial todavía no se ha enviado.
+      const actual = await prisma.subscription.findUnique({
+        where: { tenantId: sub.tenantId },
+        select: { excesoDetectadoAt: true, excesoNoticeSentAt: true, excesoFinalNoticeSentAt: true },
+      });
+      if (!actual?.excesoDetectadoAt) continue;
+      const estadoActual = calcularEstadoExceso(actual.excesoDetectadoAt, ahora);
+      const data: Record<string, Date> = {};
+      if (!actual.excesoNoticeSentAt) {
+        await enviarAvisoSuscripcion(datosTenant, "exceso_plan");
+        data.excesoNoticeSentAt = new Date();
+        conExceso.push({ slug: sub.tenant.slug, tipo: "exceso_plan" });
+      }
+      if (!estadoActual.vencido && estadoActual.diasRestantes !== null && estadoActual.diasRestantes <= 1 && !actual.excesoFinalNoticeSentAt) {
+        await enviarAvisoSuscripcion(datosTenant, "exceso_final");
+        data.excesoFinalNoticeSentAt = new Date();
+        conExceso.push({ slug: sub.tenant.slug, tipo: "exceso_final" });
+      }
+      if (Object.keys(data).length > 0) {
+        await prisma.subscription.update({ where: { tenantId: sub.tenantId }, data });
+      }
+    } catch (err) {
+      console.error(`❌ Error revisando el exceso de plan de ${sub.tenant.slug}:`, err);
+      omitidos.push(sub.tenant.slug);
+    }
+  }
+
+  return NextResponse.json({ ok: true, revisadas: candidatos.length, avisados, omitidos, conExceso });
 }

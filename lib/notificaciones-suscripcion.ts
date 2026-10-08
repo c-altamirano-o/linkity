@@ -46,9 +46,14 @@ export type TipoAvisoSuscripcion =
   | "prueba_7"
   | "prueba_3"
   | "prueba_1"
-  | "prueba_terminada";
+  | "prueba_terminada"
+  // Exceso de plan (Paso 5, 2026-10-08): el negocio tiene más sucursales o
+  // empleados activos de los que permite su plan. "exceso_plan" al detectarlo
+  // y "exceso_final" cuando falta 1 día o menos del plazo de 7. Solo correo.
+  | "exceso_plan"
+  | "exceso_final";
 
-const TIPOS_SOLO_CORREO: TipoAvisoSuscripcion[] = ["prueba_7", "prueba_3", "prueba_1"];
+const TIPOS_SOLO_CORREO: TipoAvisoSuscripcion[] = ["prueba_7", "prueba_3", "prueba_1", "exceso_plan", "exceso_final"];
 
 /** Liga de pago en Hotmart (producto de suscripción de Linkity). Sin
  *  configurar, los textos simplemente no incluyen el link. */
@@ -72,6 +77,8 @@ const ASUNTOS: Record<TipoAvisoSuscripcion, string> = {
   prueba_3: "Te quedan 3 días de tu prueba gratis de Linkity",
   prueba_1: "Tu prueba gratis de Linkity termina mañana",
   prueba_terminada: "Tu prueba gratis de Linkity terminó — suscríbete para recuperar el acceso",
+  exceso_plan: "Tu negocio excede tu plan de Linkity — tienes 7 días para ajustarlo",
+  exceso_final: "Último día para ajustar tu negocio a tu plan de Linkity",
 };
 
 function construirCuerpo(tipo: TipoAvisoSuscripcion, tenant: DatosTenantAviso): string {
@@ -92,6 +99,10 @@ function construirCuerpoBase(tipo: TipoAvisoSuscripcion, tenant: DatosTenantAvis
       return `Hola, equipo de ${negocio}. Su prueba gratis en Linkity termina mañana. Suscríbanse hoy para no perder el acceso al sistema.`;
     case "prueba_terminada":
       return `Hola, equipo de ${negocio}. Su prueba gratis en Linkity terminó y el acceso quedó bloqueado. Sus datos siguen guardados — en cuanto se suscriban, recuperan el acceso de inmediato.`;
+    case "exceso_plan":
+      return `Hola, equipo de ${negocio}. Tu plan de Linkity permite menos sucursales o empleados activos de los que hoy tienes. Tienes 7 días para entrar al sistema y elegir cuáles conservar activos (lo demás se desactiva, no se borra), o bien cambiar a un plan superior. Pasado ese plazo el sistema se pausará hasta que lo hagas.`;
+    case "exceso_final":
+      return `Hola, equipo de ${negocio}. Hoy es el último día para ajustar tu negocio a tu plan de Linkity: elige qué sucursales y empleados conservar activos, o cambia a un plan superior. Si no, el sistema se pausará hasta que lo hagas. Tus datos no se pierden.`;
     case "expirada":
       return `Hola, equipo de ${negocio}. Tu suscripción a Linkity venció hoy. Tienes 7 días de gracia para renovar sin perder acceso al sistema. Pasado ese plazo, tu cuenta se bloqueará hasta que renueves. Si ya renovaste, ignora este mensaje.`;
     case "bloqueada":

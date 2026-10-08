@@ -137,7 +137,7 @@ export async function verificarSesionPersonalVigente(): Promise<SesionPersonal |
   // porque un login más nuevo la reemplazó en otro lado, y este dispositivo
   // debe quedar fuera aquí mismo, sin esperar a que expire su cookie de 12h.
   const [staff, loginSession] = await Promise.all([
-    prisma.staff.findUnique({ where: { id: sesion.staffId }, select: { isActive: true } }),
+    prisma.staff.findUnique({ where: { id: sesion.staffId }, select: { isActive: true, branch: { select: { isActive: true } } } }),
     prisma.staffLoginSession.findUnique({ where: { id: sesion.loginSessionId }, select: { checkOut: true } }),
   ]);
 
@@ -146,7 +146,10 @@ export async function verificarSesionPersonalVigente(): Promise<SesionPersonal |
     return null;
   }
 
-  if (!staff || !staff.isActive) {
+  // Paso 5 (2026-10-08): una sucursal desactivada (por ejemplo al ajustar el
+  // negocio a un plan menor) no puede seguir operando, aunque la ficha del
+  // empleado siga activa — se trata igual que un empleado desactivado.
+  if (!staff || !staff.isActive || !staff.branch.isActive) {
     await prisma.staffLoginSession.updateMany({
       where: { id: sesion.loginSessionId, checkOut: null },
       data: { checkOut: new Date(), closedBy: "STAFF_INACTIVO" },

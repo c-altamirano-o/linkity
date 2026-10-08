@@ -175,7 +175,7 @@ export function puedeAgregarUno(limite: LimiteResuelto, usoActual: number): bool
 
 // ---------------------------------------------------------------------------
 // Excedentes (los usa el flujo de baja de plan / límite reducido; ver
-// Subscription.excesoDetectadoAt cuando se agregue en el Paso 5).
+// lib/exceso-plan.ts y Subscription.excesoDetectadoAt, Paso 5).
 // ---------------------------------------------------------------------------
 
 export interface ExcesoSucursales {

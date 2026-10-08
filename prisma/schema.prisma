@@ -823,6 +823,17 @@ model Subscription {
   trialNotice1SentAt     DateTime?
   trialEndedNoticeSentAt DateTime?
 
+  // Exceso de plan (Paso 5, 2026-10-08 — ver lib/exceso-plan.ts): cuándo se
+  // detectó que el negocio tiene más sucursales o empleados activos de los que
+  // permite su plan. Null = sin exceso. Desde esa fecha corren 7 días para que
+  // el administrador elija qué conservar; pasados, el sistema se pausa. Se pone
+  // y se quita sola (sincronizarExceso) al comparar el uso real contra el plan,
+  // sin importar por qué cambió (bajó de plan, Carlos redujo un límite…).
+  // Los dos ...SentAt evitan repetir el correo de aviso y el de último día.
+  excesoDetectadoAt       DateTime?
+  excesoNoticeSentAt      DateTime?
+  excesoFinalNoticeSentAt DateTime?
+
   // Hotmart (2026-10-06) — el cobro vive en Hotmart; el webhook
   // (app/api/webhooks/hotmart) activa la cuenta al recibir un pago.
   // hotmartLastTransaction evita procesar dos veces el mismo evento (Hotmart

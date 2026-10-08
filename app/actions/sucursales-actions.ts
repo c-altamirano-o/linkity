@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { resolverActor, type ActorResult } from "@/lib/actor";
 import { verTodoNegocioParaRolPorNombre } from "@/lib/roles-server";
 import { horaValida } from "@/lib/horarios-sucursal";
-import { obtenerCapacidades, puedeAgregarUno, LIMITE_SUCURSALES } from "@/lib/capacidades-comerciales";
+import { obtenerCapacidades, puedeAgregarUno, LIMITE_SUCURSALES, LIMITE_EMPLEADOS_POR_SUCURSAL } from "@/lib/capacidades-comerciales";
 
 /**
  * Server Actions del módulo Sucursales. Antes de este cambio no existía
@@ -195,6 +195,22 @@ export async function editarSucursalAction(
     if (isActive && !existente.isActive) {
       const errorLimite = await errorLimiteSucursales(tenant.id);
       if (errorLimite) return { ok: false, error: errorLimite };
+
+      // Al ajustar el negocio a un plan menor (ajuste-plan-actions.ts) los
+      // empleados de una sucursal desactivada siguen "activos" en su ficha:
+      // si al reactivarla tuviera más de los que permite el plan, volvería a
+      // quedar en exceso. Se pide dejar primero en regla a esos empleados.
+      const cap = await obtenerCapacidades(tenant.id);
+      const limEmp = cap.limite(LIMITE_EMPLEADOS_POR_SUCURSAL);
+      if (!limEmp.ilimitado) {
+        const activosAhi = await db.staff.count({ where: { branchId, isActive: true } });
+        if (activosAhi > (limEmp.valor ?? 0)) {
+          return {
+            ok: false,
+            error: `Esta sucursal tiene ${activosAhi} empleados activos y tu plan (${cap.planNombre}) permite ${limEmp.valor} por sucursal. Desactiva a los que sobren desde Personal y vuelve a activarla.`,
+          };
+        }
+      }
     }
 
     const codigoLimpio = datos.code?.trim().toUpperCase() || null;
