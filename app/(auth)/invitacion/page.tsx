@@ -14,8 +14,38 @@ export default function InvitacionPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const verificarSesion = async () => {
+    const verificarInvitacion = async () => {
       const supabase = createClient();
+
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
+      const type = params.get("type");
+
+      if (type === "invite" && accessToken && refreshToken) {
+        const { error: sessionError } =
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+        if (sessionError) {
+          console.error("Error procesando invitación:", sessionError);
+          setError(
+            "No se pudo validar la invitación. Abre nuevamente el enlace del correo."
+          );
+          setChecking(false);
+          return;
+        }
+
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname
+        );
+      }
 
       const {
         data: { user },
@@ -33,7 +63,7 @@ export default function InvitacionPage() {
       setChecking(false);
     };
 
-    verificarSesion();
+    verificarInvitacion();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
