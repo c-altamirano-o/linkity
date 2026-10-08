@@ -7,6 +7,7 @@ import { marcarEventoAtendidoAction } from "./actions";
 
 const RESULTADOS: Record<string, { label: string; clase: string }> = {
   activado: { label: "Cuenta activada", clase: "bg-emerald-50 text-emerald-700" },
+  cuenta_creada: { label: "Cuenta creada", clase: "bg-emerald-50 text-emerald-700" },
   duplicado: { label: "Duplicado", clase: "bg-slate-100 text-slate-500" },
   cancelacion_registrada: { label: "Cancelación", clase: "bg-slate-100 text-slate-600" },
   suspendido: { label: "Suspendida", clase: "bg-red-50 text-red-700" },

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { identificarPlan } from "@/lib/hotmart-plan";
 import { leerEvento } from "@/lib/hotmart-payload";
 import { obtenerHotmartPlataforma } from "@/lib/config-plataforma";
+import { altaDesdeCompra } from "@/lib/hotmart-alta";
 
 export const maxDuration = 30;
 
@@ -45,6 +46,11 @@ export const maxDuration = 30;
  * IDEMPOTENCIA: por `id` del evento (HotmartEvent.eventId) y por
  * `purchase.transaction` (Subscription.hotmartLastTransaction): APPROVED y
  * COMPLETE de la misma compra no extienden la vigencia dos veces.
+ *
+ * ALTA AUTOMÁTICA (2026-10-08): una compra aprobada de alguien SIN cuenta en
+ * Linkity crea el negocio, el dueño y su suscripción en el acto y le manda su
+ * contraseña temporal por correo (lib/hotmart-alta.ts). Solo si el plan se
+ * identifica; si no, queda en "sin_plan" para revisión.
  *
  * LIGA COMPRA↔NEGOCIO: primero por código de suscriptor (se guarda en el
  * primer pago), luego por correo del comprador (Tenant.email, luego
@@ -215,7 +221,36 @@ async function procesar(ev: ReturnType<typeof leerEvento>): Promise<Resultado> {
   }
 
   // --- Localizar el negocio ---------------------------------------------
-  const loc = await localizarNegocio(ev);
+  let loc = await localizarNegocio(ev);
+
+  // Compra aprobada de alguien que todavía no existe en Linkity: la cuenta se
+  // crea sola (lib/hotmart-alta.ts). Reembolsos y cancelaciones de alguien sin
+  // cuenta NO crean nada.
+  if (loc.tipo === "ninguno" && EVENTOS_PAGO.includes(evento)) {
+    const alta = await altaDesdeCompra(ev);
+    if (alta.tipo === "creada") {
+      return {
+        outcome: "cuenta_creada",
+        needsAttention: alta.needsAttention,
+        note: alta.note,
+        tenantId: alta.tenantId,
+        commercialPlanId: alta.commercialPlanId,
+        respuesta: { cuentaCreada: true },
+      };
+    }
+    if (alta.tipo === "sin_resolver") {
+      return { outcome: alta.outcome, needsAttention: true, note: alta.note };
+    }
+    // "correo_en_uso": existe una cuenta de acceso con ese correo. Puede ser
+    // otro aviso de la misma compra creándola en este instante: se vuelve a
+    // buscar el negocio; si aún no aparece, se responde 500 para que Hotmart
+    // reintente en un rato (cuando el negocio ya exista).
+    loc = await localizarNegocio(ev);
+    if (loc.tipo === "ninguno") {
+      throw new Error(`El correo ${ev.email ?? "?"} ya tiene cuenta de acceso pero ningún negocio todavía; se reintentará.`);
+    }
+  }
+
   if (loc.tipo === "ninguno") {
     console.warn(`⚠️  Webhook Hotmart (${evento}): sin negocio para "${ev.email ?? "(sin correo)"}" / suscriptor "${ev.codigoSuscriptor ?? "(sin código)"}" — transacción ${ev.transaccion ?? "?"}.`);
     return { outcome: "sin_negocio", needsAttention: true, note: "No se encontró ningún negocio con ese correo ni código de suscriptor. Activar a mano desde Negocios → Renovar eligiendo plan." };

@@ -63,3 +63,38 @@ export function correoAccesoTemporal(params: { password: string }): { subject: s
     ].join("\n"),
   };
 }
+
+/**
+ * Correo de bienvenida cuando la cuenta se crea sola porque el cliente se
+ * suscribió en Hotmart. Solo incluye datos nuestros (plan, fecha) y nunca
+ * texto escrito por el comprador, igual que correoAccesoTemporal: el correo
+ * puede llegar a una persona distinta de quien llenó el checkout.
+ */
+export function correoBienvenidaSuscripcion(params: { password: string; plan: string; finDePrueba?: Date | null }): { subject: string; text: string } {
+  const base = process.env.NEXT_PUBLIC_SITE_URL || "https://linkitysoluciones.mx";
+  const lineasPrueba = params.finDePrueba
+    ? [
+        `Tu prueba gratis dura hasta el ${params.finDePrueba.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Mexico_City" })}.`,
+        "Después, Hotmart cobrará la mensualidad a la tarjeta que registraste. Si no quieres continuar, cancela tu suscripción en Hotmart antes de esa fecha.",
+        "",
+      ]
+    : [];
+  return {
+    subject: "Bienvenido a Linkity — tu acceso",
+    text: [
+      "Hola,",
+      "",
+      `Gracias por suscribirte a Linkity (plan ${params.plan}). Ya creamos tu cuenta con este correo.`,
+      "",
+      ...lineasPrueba,
+      "Para entrar usa esta contraseña temporal:",
+      "",
+      params.password,
+      "",
+      `Inicia sesión en: ${base}/login`,
+      "Al entrar te pediremos crear tu propia contraseña y los datos de tu negocio.",
+      "",
+      "Si no te suscribiste a Linkity, ignora este correo: sin usar la contraseña no pasa nada.",
+    ].join("\n"),
+  };
+}
