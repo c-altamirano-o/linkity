@@ -23,6 +23,7 @@ import { calcularEstadoExceso, type EstadoExceso } from "@/lib/exceso-plan-estad
 import AjustePlanClient from "@/components/tenant/AjustePlanClient";
 import AjustePlanPendiente from "@/components/tenant/AjustePlanPendiente";
 import BannerExceso from "@/components/tenant/BannerExceso";
+import DatosNegocioClient from "@/components/tenant/DatosNegocioClient";
 
 export const metadata: Metadata = {
   title: "Linkity",
@@ -103,7 +104,7 @@ export default async function TenantLayout({
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
-    select: { id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, logo: true, subscription: { select: { status: true, endDate: true, excesoDetectadoAt: true } } },
+    select: { id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, datosPendientes: true, logo: true, subscription: { select: { status: true, endDate: true, excesoDetectadoAt: true } } },
   });
 
   // Bloqueo por ciclo de vida de suscripción (2026-09-22, a petición de
@@ -319,6 +320,16 @@ export default async function TenantLayout({
 
     userName = dbUser.name;
     userRole = dbUser.role?.role.name ?? "";
+
+    // Negocio creado desde Hotmart (2026-10-08): el checkout no pregunta el
+    // nombre ni el giro, así que el dueño debe capturarlos antes de usar el
+    // sistema (app/actions/datos-negocio-actions.ts). No hay redirect: se pinta
+    // esta pantalla EN LUGAR de las páginas, sea cual sea la URL, y al guardar
+    // el cliente entra por la dirección nueva. Solo el dueño con cuenta real la
+    // ve; el personal de PIN no pasa por este bloque.
+    if (dbTenant.datosPendientes) {
+      return <DatosNegocioClient tenantSlug={tenant} />;
+    }
   }
 
   // Exceso de plan VENCIDO (Paso 5): ya identificada la sesión, se pausa todo

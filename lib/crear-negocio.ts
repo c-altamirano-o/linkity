@@ -21,7 +21,8 @@ import { slugify } from "@/lib/slug";
  * deshace nada porque el cliente ya pagó).
  *
  * `businessType` puede ser null: así llegan los negocios creados desde Hotmart
- * (el checkout no pregunta el giro; se pide en el primer acceso). Sin giro
+ * (el checkout no pregunta el giro; se pide en el primer acceso, y para eso se
+ * marcan con `datosPendientes: true`). Sin giro
  * todos los módulos quedan activos y no se crean roles de rubro todavía.
  */
 
@@ -41,6 +42,8 @@ export interface CrearNegocioParams {
   /** Slug ya validado/único (ver generarSlugUnico). */
   slug: string;
   businessType: string | null;
+  /** true = el dueño aún debe capturar nombre real y giro en su primer acceso (negocios de Hotmart). */
+  datosPendientes?: boolean;
   ownerName: string;
   ownerEmail: string;
   ownerPhone?: string | null;
@@ -63,6 +66,7 @@ export async function crearNegocio(p: CrearNegocioParams): Promise<NegocioCreado
         name: p.businessName.trim(),
         slug: p.slug,
         businessType: p.businessType,
+        datosPendientes: p.datosPendientes ?? false,
         email: p.ownerEmail.trim(),
         phone: p.ownerPhone?.trim() || null,
       },

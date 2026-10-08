@@ -39,7 +39,7 @@ import {
  *    creada y se relanza el error (el webhook responde 500 y Hotmart
  *    reintenta; no queda nada a medias).
  *  - El negocio nace con nombre provisional y sin giro: se piden en el primer
- *    acceso (businessType null = pendiente).
+ *    acceso (Tenant.datosPendientes = true marca que faltan).
  */
 
 export type ResultadoAlta =
@@ -106,6 +106,7 @@ export async function altaDesdeCompra(ev: EventoHotmart): Promise<ResultadoAlta>
       businessName: nombreNegocio,
       slug: await generarSlugUnico(nombreNegocio),
       businessType: null,
+      datosPendientes: true,
       ownerName: nombreDelDueno(ev.nombreComprador, correo),
       ownerEmail: correo,
       authUserId,
