@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getTenantDetailData } from "@/lib/tenants-data";
-import { getEsquemasOptions } from "@/lib/esquemas-data";
+import { getPlanesComercialesOpciones } from "@/lib/planes-comerciales-data";
+import { obtenerCapacidades, LIMITE_SUCURSALES, LIMITE_EMPLEADOS_POR_SUCURSAL } from "@/lib/capacidades-comerciales";
 import TenantDetailClient from "./TenantDetailClient";
 
 export default async function TenantDetailPage({
@@ -11,9 +12,21 @@ export default async function TenantDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const [tenant, esquemas] = await Promise.all([getTenantDetailData(slug), getEsquemasOptions()]);
+  const [tenant, planes] = await Promise.all([getTenantDetailData(slug), getPlanesComercialesOpciones()]);
 
   if (!tenant) notFound();
+
+  // Límites que de verdad se le aplican hoy a este negocio (prueba = sin
+  // límites; con plan, los del plan; ACTIVE sin plan, los de Básico). null =
+  // sin límite. Se resuelve con la misma capa que usan las acciones.
+  const capacidades = await obtenerCapacidades(tenant.id);
+  const limiteSuc = capacidades.limite(LIMITE_SUCURSALES);
+  const limiteEmp = capacidades.limite(LIMITE_EMPLEADOS_POR_SUCURSAL);
+  const limites = {
+    modo: capacidades.modo,
+    sucursales: limiteSuc.ilimitado ? null : limiteSuc.valor,
+    empleadosPorSucursal: limiteEmp.ilimitado ? null : limiteEmp.valor,
+  };
 
   return (
     <>
@@ -33,7 +46,7 @@ export default async function TenantDetailPage({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-5">
-        <TenantDetailClient tenant={tenant} esquemas={esquemas} />
+        <TenantDetailClient tenant={tenant} planes={planes} limites={limites} />
       </div>
     </>
   );

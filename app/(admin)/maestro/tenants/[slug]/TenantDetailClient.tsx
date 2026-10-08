@@ -4,10 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Settings, Building2, Users as UsersIcon, Layers, AlertTriangle, Trash2 } from "lucide-react";
 import type { TenantDetail } from "@/lib/tenants-data";
-import type { EsquemaOption } from "@/lib/esquemas-data";
+import type { PlanComercialOpcion } from "@/lib/planes-comerciales-data";
 import { ETAPA_LABEL } from "@/lib/ciclo-suscripcion";
 import { alternarSuscripcionAction } from "../../dashboard/actions";
-import { alternarModuloTenantAction, asignarEsquemaAction, renovarSuscripcionAction, eliminarTenantAction } from "../actions";
+import { alternarModuloTenantAction, asignarPlanComercialAction, renovarSuscripcionAction, eliminarTenantAction } from "../actions";
 
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
@@ -42,20 +42,34 @@ const ETAPA_CLASSES: Record<string, string> = {
   sin_suscripcion: "bg-slate-100 text-slate-400",
 };
 
+export interface LimitesAplicados {
+  modo: "prueba" | "plan" | "plan_por_defecto";
+  /** null = sin límite */
+  sucursales: number | null;
+  /** null = sin límite */
+  empleadosPorSucursal: number | null;
+}
+
 export default function TenantDetailClient({
   tenant,
-  esquemas,
+  planes,
+  limites,
 }: {
   tenant: TenantDetail;
-  esquemas: EsquemaOption[];
+  planes: PlanComercialOpcion[];
+  limites: LimitesAplicados;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [moduloEnCurso, setModuloEnCurso] = useState<string | null>(null);
   const [suscripcionEnCurso, setSuscripcionEnCurso] = useState(false);
-  const [esquemaSeleccionado, setEsquemaSeleccionado] = useState(tenant.esquemaId ?? "");
-  const [esquemaEnCurso, setEsquemaEnCurso] = useState(false);
+  // Planes que se pueden elegir: los activos, más el que el negocio ya tenga
+  // aunque luego se haya desactivado (para que el selector no quede en blanco).
+  const planesElegibles = planes.filter((p) => p.isActive || p.id === tenant.commercialPlanId);
+  const [planSeleccionado, setPlanSeleccionado] = useState(tenant.commercialPlanId ?? "");
+  const [planEnCurso, setPlanEnCurso] = useState(false);
+  const [planRenovar, setPlanRenovar] = useState(tenant.commercialPlanId ?? "");
   const [nuevaFechaFin, setNuevaFechaFin] = useState("");
   const [renovacionEnCurso, setRenovacionEnCurso] = useState(false);
   const [confirmarNombreEliminar, setConfirmarNombreEliminar] = useState("");
@@ -94,11 +108,16 @@ export default function TenantDetailClient({
   }
 
   function renovarSuscripcion() {
-    if (!nuevaFechaFin) return;
+    if (!nuevaFechaFin || !planRenovar) return;
     setError(null);
     setRenovacionEnCurso(true);
     startTransition(async () => {
-      const res = await renovarSuscripcionAction({ tenantId: tenant.id, slug: tenant.slug, nuevaFechaFin });
+      const res = await renovarSuscripcionAction({
+        tenantId: tenant.id,
+        slug: tenant.slug,
+        nuevaFechaFin,
+        commercialPlanId: planRenovar,
+      });
       setRenovacionEnCurso(false);
       if (!res.ok) {
         setError(res.error);
@@ -123,16 +142,17 @@ export default function TenantDetailClient({
     });
   }
 
-  function guardarEsquema() {
+  function guardarPlan() {
+    if (!planSeleccionado) return;
     setError(null);
-    setEsquemaEnCurso(true);
+    setPlanEnCurso(true);
     startTransition(async () => {
-      const res = await asignarEsquemaAction({
+      const res = await asignarPlanComercialAction({
         tenantId: tenant.id,
         slug: tenant.slug,
-        esquemaId: esquemaSeleccionado || null,
+        commercialPlanId: planSeleccionado,
       });
-      setEsquemaEnCurso(false);
+      setPlanEnCurso(false);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -238,7 +258,22 @@ export default function TenantDetailClient({
           {/* Renovar (2026-09-22): mueve el vencimiento a una fecha nueva,
               reactiva la cuenta si estaba bloqueada/suspendida/cancelada, y
               reinicia los 4 avisos del ciclo — ver renovarSuscripcionAction. */}
-          <div className="mt-3 pt-3 border-t border-slate-100 flex items-end gap-2">
+          <div className="mt-3 pt-3 border-t border-slate-100">
+            <label className="text-[12px] font-medium text-slate-500">Plan</label>
+            <select
+              value={planRenovar}
+              onChange={(e) => setPlanRenovar(e.target.value)}
+              className="mt-1 mb-2 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+            >
+              <option value="">Elige un plan…</option>
+              {planesElegibles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}{p.resumen ? ` — ${p.resumen}` : ""}{!p.isActive ? " (desactivado)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end gap-2">
             <div className="flex-1">
               <label className="text-[12px] font-medium text-slate-500">Renovar hasta</label>
               <input
@@ -250,7 +285,7 @@ export default function TenantDetailClient({
             </div>
             <button
               type="button"
-              disabled={!nuevaFechaFin || renovacionEnCurso}
+              disabled={!nuevaFechaFin || !planRenovar || renovacionEnCurso}
               onClick={renovarSuscripcion}
               className="px-3 py-1.5 text-[12.5px] rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium disabled:opacity-50 flex-shrink-0"
             >
@@ -295,44 +330,65 @@ export default function TenantDetailClient({
         </div>
       </div>
 
-      {/* Esquema (límite de sucursales/personal) */}
+      {/* Plan comercial (límites de sucursales y empleados + funciones).
+          Reemplaza al viejo "Esquema" (2026-10-08). */}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <p className="text-[14.5px] font-medium text-slate-700 mb-1 flex items-center gap-1.5">
           <Layers className="w-3.5 h-3.5 text-slate-400" />
-          Esquema
+          Plan comercial
         </p>
         <p className="text-[12.5px] text-slate-400 mb-3">
-          Cuántas sucursales y cuánto personal por sucursal puede tener este negocio. El cobro real lo gestiona
-          Hotmart — esto solo controla capacidad dentro de la plataforma.
+          Define cuántas sucursales y cuántos empleados por sucursal puede tener este negocio, y qué funciones incluye.
+          El cobro real lo gestiona Hotmart; esto solo controla la capacidad dentro de la plataforma.
         </p>
-        <div className="flex items-end gap-2 mb-2">
-          <div className="flex-1">
-            <label className="text-[12.5px] font-medium text-slate-500">Esquema asignado</label>
-            <select
-              value={esquemaSeleccionado}
-              onChange={(e) => setEsquemaSeleccionado(e.target.value)}
-              className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[13.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
-            >
-              <option value="">Sin esquema (sin límite)</option>
-              {esquemas.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name} — {e.maxBranches} sucursal(es), {e.maxStaffPerBranch} personal c/u{!e.isActive ? " (desactivado)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="button"
-            disabled={esquemaEnCurso || esquemaSeleccionado === (tenant.esquemaId ?? "")}
-            onClick={guardarEsquema}
-            className="px-3 py-2 text-[13.5px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50 flex-shrink-0"
-          >
-            {esquemaEnCurso ? "Guardando…" : "Guardar"}
-          </button>
-        </div>
+
+        {tenant.status === "TRIAL" ? (
+          <p className="text-[12.5px] text-sky-700 bg-sky-50 border border-sky-200 rounded-lg p-2.5">
+            En prueba gratis: todas las funciones y sin límites. El plan se elige al activar la cuenta con «Renovar».
+          </p>
+        ) : (
+          <>
+            {tenant.status === "ACTIVE" && !tenant.commercialPlanId && (
+              <p className="text-[12.5px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 mb-3">
+                Este negocio está activo pero no tiene plan asignado: mientras tanto se le aplican los límites de Básico.
+                Elige su plan abajo.
+              </p>
+            )}
+            <div className="flex items-end gap-2 mb-2">
+              <div className="flex-1">
+                <label className="text-[12.5px] font-medium text-slate-500">Plan asignado</label>
+                <select
+                  value={planSeleccionado}
+                  onChange={(e) => setPlanSeleccionado(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[13.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                >
+                  <option value="">Sin plan</option>
+                  {planesElegibles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.resumen ? ` — ${p.resumen}` : ""}{!p.isActive ? " (desactivado)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                disabled={planEnCurso || !planSeleccionado || planSeleccionado === (tenant.commercialPlanId ?? "")}
+                onClick={guardarPlan}
+                className="px-3 py-2 text-[13.5px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50 flex-shrink-0"
+              >
+                {planEnCurso ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+            <p className="text-[12px] text-slate-400 mb-2">
+              Si cambias a un plan más chico y el negocio ya usa más de lo permitido, no se desactiva nada: solo deja
+              de poder agregar más. El aviso con 7 días de gracia se agrega en el siguiente paso.
+            </p>
+          </>
+        )}
+
         <p className="text-[12.5px] text-slate-500">
           Uso actual: {tenant.branchesActivas} sucursal(es) activa(s)
-          {tenant.esquemaMaxBranches !== null ? ` de ${tenant.esquemaMaxBranches} permitida(s)` : ""}.
+          {limites.sucursales !== null ? ` de ${limites.sucursales} permitida(s)` : " (sin límite)"}.
         </p>
       </div>
 
@@ -355,7 +411,7 @@ export default function TenantDetailClient({
                   </div>
                   <div className="text-right">
                     <p className="text-[12.5px] text-slate-500">
-                      {b.staffCount}{tenant.esquemaMaxStaffPerBranch !== null ? `/${tenant.esquemaMaxStaffPerBranch}` : ""} personal
+                      {b.staffCount}{limites.empleadosPorSucursal !== null ? `/${limites.empleadosPorSucursal}` : ""} personal
                     </p>
                     {!b.isActive && <span className="text-[11.5px] text-slate-400">Inactiva</span>}
                   </div>

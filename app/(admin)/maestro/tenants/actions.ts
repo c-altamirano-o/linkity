@@ -51,38 +51,66 @@ export async function alternarModuloTenantAction(params: {
   }
 }
 
-// Reasignar el esquema (límite de sucursales/personal) de un negocio desde
-// su pantalla de detalle — así Carlos "migra" a un cliente de esquema según
-// el volumen que vea, sin tocar la base de datos a mano. esquemaId=null
-// quita el límite (el tenant queda sin esquema asignado, sin restricción).
-export async function asignarEsquemaAction(params: {
+// Plan comercial (2026-10-08): helper común para validar el plan que Carlos
+// elige. Un plan desactivado ya no se puede asignar a negocios nuevos (los que
+// ya lo tienen lo conservan).
+async function validarPlanComercial(
+  commercialPlanId: string | null | undefined
+): Promise<{ ok: true; plan: { id: string; name: string } } | { ok: false; error: string }> {
+  if (!commercialPlanId?.trim()) return { ok: false, error: "Elige un plan comercial" };
+  const plan = await prisma.commercialPlan.findUnique({
+    where: { id: commercialPlanId },
+    select: { id: true, name: true, isActive: true },
+  });
+  if (!plan) return { ok: false, error: "Plan comercial no encontrado" };
+  if (!plan.isActive) return { ok: false, error: "Ese plan está desactivado" };
+  return { ok: true, plan: { id: plan.id, name: plan.name } };
+}
+
+// Cambiar el plan comercial de un negocio que ya está activo (subir o bajar
+// de plan) sin tocar su fecha de vencimiento. El plan define cuántas
+// sucursales y cuántos empleados por sucursal puede tener, y qué funciones
+// incluye (ver lib/capacidades-comerciales.ts).
+//
+// En prueba gratis NO aplica: la prueba trae todas las funciones y ningún
+// límite, y el plan se elige al activar la cuenta con «Renovar».
+//
+// Ojo (pendiente, Paso 5): si el negocio ya usa más de lo que permite el plan
+// nuevo, aquí no se desactiva nada ni se avisa todavía; solo deja de poder
+// agregar más. El aviso con 7 días de gracia llega con el flujo de excedentes.
+export async function asignarPlanComercialAction(params: {
   tenantId: string;
   slug: string;
-  esquemaId: string | null;
+  commercialPlanId: string;
 }): Promise<AccionMaestroResult> {
   const resuelto = await requireSuperAdmin();
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
 
+  const plan = await validarPlanComercial(params.commercialPlanId);
+  if (!plan.ok) return { ok: false, error: plan.error };
+
   try {
-    if (params.esquemaId) {
-      const esquema = await prisma.planEsquema.findUnique({
-        where: { id: params.esquemaId },
-        select: { id: true },
-      });
-      if (!esquema) return { ok: false, error: "Esquema no encontrado" };
+    const subscription = await prisma.subscription.findUnique({
+      where: { tenantId: params.tenantId },
+      select: { status: true },
+    });
+    if (!subscription) return { ok: false, error: "Este negocio no tiene una suscripción registrada" };
+    if (subscription.status === "TRIAL") {
+      return { ok: false, error: "Este negocio está en prueba gratis. El plan se elige al activarlo con «Renovar»." };
     }
 
-    await prisma.tenant.update({
-      where: { id: params.tenantId },
-      data: { esquemaId: params.esquemaId },
+    await prisma.subscription.update({
+      where: { tenantId: params.tenantId },
+      data: { commercialPlanId: plan.plan.id, plan: plan.plan.name },
     });
 
     revalidatePath(`/maestro/tenants/${params.slug}`);
     revalidatePath("/maestro/tenants");
+    revalidatePath("/maestro/suscripciones");
     return { ok: true };
   } catch (err) {
-    console.error("Error al asignar esquema al negocio:", err);
-    return { ok: false, error: "No se pudo asignar el esquema" };
+    console.error("Error al asignar el plan comercial:", err);
+    return { ok: false, error: "No se pudo asignar el plan" };
   }
 }
 
@@ -94,13 +122,22 @@ export async function asignarEsquemaAction(params: {
 // enviado (expiredNoticeSentAt y hermanos) — así, si esta suscripción
 // vuelve a vencer más adelante, el ciclo de avisos arranca desde cero en
 // vez de creer que ya se avisó todo.
+//
+// Plan comercial (2026-10-08, regla de Carlos: "nadie puede aparecer como
+// ACTIVE sin haber elegido un plan"): renovar EXIGE elegir el plan, y lo
+// guarda junto con la nueva fecha. Así es imposible dejar una cuenta activa
+// sin plan desde Panel Maestro.
 export async function renovarSuscripcionAction(params: {
   tenantId: string;
   slug: string;
   nuevaFechaFin: string; // YYYY-MM-DD
+  commercialPlanId: string;
 }): Promise<AccionMaestroResult> {
   const resuelto = await requireSuperAdmin();
   if (!resuelto.ok) return { ok: false, error: resuelto.error };
+
+  const plan = await validarPlanComercial(params.commercialPlanId);
+  if (!plan.ok) return { ok: false, error: plan.error };
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(params.nuevaFechaFin)) {
     return { ok: false, error: "Fecha inválida" };
@@ -117,6 +154,8 @@ export async function renovarSuscripcionAction(params: {
       data: {
         status: "ACTIVE",
         endDate: nuevaFecha,
+        commercialPlanId: plan.plan.id,
+        plan: plan.plan.name,
         expiredNoticeSentAt: null,
         blockNoticeSentAt: null,
         renewalReminderSentAt: null,

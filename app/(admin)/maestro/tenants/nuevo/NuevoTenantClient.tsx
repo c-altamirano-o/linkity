@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Building2, User, Package, Check, Layers } from "lucide-react";
-import type { EsquemaOption } from "@/lib/esquemas-data";
+import { ArrowLeft, Building2, User, Package, Check } from "lucide-react";
 import { MODULE_CATALOG } from "@/lib/modules-catalog";
 import { createTenantAction } from "./actions";
 
@@ -18,7 +17,7 @@ const modulosDisponibles = Object.entries(MODULE_CATALOG).map(([code, info]) => 
   isCore: info.isCore,
 }));
 
-export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOption[] }) {
+export default function NuevoTenantClient() {
   const [form, setForm] = useState({
     businessName: "",
     rfc: "",
@@ -34,11 +33,9 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
   // lib/modules-catalog.ts) — Carlos desmarca lo que ese negocio en
   // particular no necesite.
   const [modulosActivos, setModulosActivos] = useState<string[]>(modulosDisponibles.map((m) => m.code));
-  // El default es el esquema marcado como predeterminado (el mismo que se
-  // le asigna a un negocio que se auto-registra) — Carlos puede cambiarlo
-  // aquí mismo antes de crear el negocio, o después desde su ficha.
-  const [esquemaId, setEsquemaId] = useState<string>(esquemas.find((e) => e.isActive)?.id ?? "");
-  const [trialDays, setTrialDays] = useState(0);
+  // Todo negocio nuevo nace en prueba gratis (30 días por defecto). Para dejarlo
+  // activo de paga se usa «Renovar» en su ficha, eligiendo plan.
+  const [trialDays, setTrialDays] = useState(30);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
@@ -57,8 +54,6 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
     );
   };
 
-  const esquemaSeleccionado = esquemas.find((e) => e.id === esquemaId) ?? null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -73,7 +68,6 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
       ownerName: form.ownerName,
       ownerEmail: form.ownerEmail,
       ownerPhone: form.ownerPhone,
-      esquemaId: esquemaId || null,
       trialDays,
       modules: modulosActivos,
     });
@@ -235,32 +229,6 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
 
             <div className="space-y-4">
               <div className="bg-white border border-slate-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Layers className="w-4 h-4 text-[#4F46E5]" />
-                  <h2 className="text-[14.5px] font-medium text-slate-700">Esquema</h2>
-                </div>
-                {esquemas.length === 0 ? (
-                  <p className="text-[12.5px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                    Todavía no defines ningún esquema en /maestro/esquemas — este negocio se creará sin límite de
-                    sucursales/personal hasta que le asignes uno.
-                  </p>
-                ) : (
-                  <select
-                    value={esquemaId}
-                    onChange={(e) => setEsquemaId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
-                  >
-                    <option value="">Sin esquema (sin límite)</option>
-                    {esquemas.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.name} — {e.maxBranches} sucursal(es), {e.maxStaffPerBranch} personal c/u
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-lg p-4">
                 <h2 className="text-[14.5px] font-medium text-slate-700 mb-3">Periodo de prueba</h2>
                 <div>
                   <label className="block text-[12.5px] font-medium text-slate-500 mb-1">Dias de prueba</label>
@@ -268,11 +236,14 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
                     value={trialDays}
                     onChange={(e) => setTrialDays(Number(e.target.value))}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[14.5px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]">
-                    <option value={0}>Sin periodo de prueba</option>
                     <option value={7}>7 dias</option>
                     <option value={14}>14 dias</option>
                     <option value={30}>30 dias</option>
                   </select>
+                  <p className="text-[12px] text-slate-400 mt-1.5">
+                    Durante la prueba el negocio tiene todas las funciones y sin límites. Para activarlo de paga,
+                    abre su ficha y usa «Renovar» eligiendo un plan.
+                  </p>
                 </div>
               </div>
 
@@ -280,8 +251,8 @@ export default function NuevoTenantClient({ esquemas }: { esquemas: EsquemaOptio
                 <h2 className="text-[14.5px] font-medium text-[#4F46E5] mb-2">Resumen</h2>
                 <div className="space-y-1.5">
                   <div className="flex justify-between">
-                    <span className="text-[12.5px] text-slate-500">Esquema</span>
-                    <span className="text-[12.5px] font-medium text-slate-700">{esquemaSeleccionado?.name ?? "Sin límite"}</span>
+                    <span className="text-[12.5px] text-slate-500">Prueba gratis</span>
+                    <span className="text-[12.5px] font-medium text-slate-700">{trialDays} días</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[12.5px] text-slate-500">Modulos</span>

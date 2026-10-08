@@ -95,3 +95,40 @@ export async function getPlanesComercialesData(): Promise<PlanComercialUI[]> {
     }),
   }));
 }
+
+export type PlanComercialOpcion = {
+  id: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+  /** Texto corto con los límites del plan, p. ej. "4 sucursales · 5 empleados". */
+  resumen: string;
+};
+
+/**
+ * Lista ligera de planes para los selectores de Panel Maestro (asignar plan,
+ * Renovar). El resumen se arma desde el catálogo de límites, así un límite
+ * nuevo aparece solo en el texto sin tocar nada aquí.
+ */
+export async function getPlanesComercialesOpciones(): Promise<PlanComercialOpcion[]> {
+  const [planes, limitesCatalogo] = await Promise.all([
+    prisma.commercialPlan.findMany({ orderBy: { displayOrder: "asc" }, include: { limits: true } }),
+    prisma.commercialLimit.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" } }),
+  ]);
+
+  return planes.map((plan) => ({
+    id: plan.id,
+    code: plan.code,
+    name: plan.name,
+    isActive: plan.isActive,
+    resumen: limitesCatalogo
+      .map((limit) => {
+        const fila = plan.limits.find((l) => l.limitId === limit.id);
+        if (!fila) return null;
+        const unidad = (limit.unit ?? limit.name) + (limit.scope === "branch" ? " por sucursal" : "");
+        return fila.isUnlimited || fila.value === null ? `${unidad} sin límite` : `${Number(fila.value)} ${unidad}`;
+      })
+      .filter(Boolean)
+      .join(" · "),
+  }));
+}

@@ -14,7 +14,6 @@ interface CreateTenantInput {
   ownerName: string;
   ownerEmail: string;
   ownerPhone: string;
-  esquemaId: string | null;
   trialDays: number;
   modules: string[];
 }
@@ -51,6 +50,13 @@ export async function createTenantAction(
   try {
     if (!input.businessName || !input.ownerName || !input.ownerEmail) {
       return { success: false, error: "Faltan campos obligatorios." };
+    }
+
+    // Regla de Carlos (2026-10-08): nadie puede quedar ACTIVE sin plan. Todo
+    // negocio nuevo nace en prueba gratis; para activarlo se usa «Renovar» en
+    // su ficha, que obliga a elegir plan.
+    if (!Number.isInteger(input.trialDays) || input.trialDays < 1 || input.trialDays > 90) {
+      return { success: false, error: "Elige los días de prueba (de 1 a 90)." };
     }
 
     const baseSlug = slugify(input.businessName);
@@ -91,7 +97,6 @@ export async function createTenantAction(
           city: input.city || null,
           state: input.state || null,
           email: input.ownerEmail,
-          esquemaId: input.esquemaId,
         },
       });
 
@@ -126,19 +131,15 @@ export async function createTenantAction(
       // Hotmart fuera de la plataforma (ver comentario en
       // app/(auth)/register/actions.ts) — esta fila solo existe para que
       // Suscripciones/Dashboard, que asumen que todo tenant tiene una, no
-      // se rompan. El período de prueba sigue siendo interno (no lo ve
-      // Hotmart) porque Carlos lo usa para negocios que está probando antes
-      // de mandarlos a Hotmart.
-      const hasTrial = input.trialDays > 0;
+      // se rompan. Siempre nace en prueba gratis (TRIAL, sin plan ni límites);
+      // pasa a ACTIVE con «Renovar», eligiendo plan.
       await tx.subscription.create({
         data: {
           tenantId: tenant.id,
           plan: "Hotmart",
-          status: hasTrial ? "TRIAL" : "ACTIVE",
+          status: "TRIAL",
           price: 0,
-          endDate: hasTrial
-            ? new Date(Date.now() + input.trialDays * 24 * 60 * 60 * 1000)
-            : null,
+          endDate: new Date(Date.now() + input.trialDays * 24 * 60 * 60 * 1000),
         },
       });
 

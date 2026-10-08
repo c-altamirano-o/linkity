@@ -31,6 +31,16 @@ export async function alternarSuscripcionAction(params: {
     const subscription = await prisma.subscription.findUnique({ where: { tenantId } });
     if (!subscription) return { ok: false, error: "Este negocio no tiene una suscripción registrada" };
 
+    // Regla de Carlos (2026-10-08): nadie puede quedar ACTIVE sin plan
+    // comercial. Reactivar solo vale si ya tiene uno; si no, hay que pasar
+    // por «Renovar» (en el detalle del negocio), que obliga a elegirlo.
+    if (nuevoEstado === "ACTIVE" && !subscription.commercialPlanId) {
+      return {
+        ok: false,
+        error: "Este negocio no tiene plan comercial. Ábrelo en Negocios y usa «Renovar» eligiendo un plan.",
+      };
+    }
+
     await prisma.subscription.update({
       where: { tenantId },
       data: { status: nuevoEstado },
