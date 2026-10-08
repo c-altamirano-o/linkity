@@ -4,6 +4,11 @@ import {
   ArrowRight, ShoppingCart, Wrench, GitBranch, FileText, BarChart3, ShieldCheck,
   Smartphone, Car, Bike, Scissors, Stethoscope, PawPrint, Store, Check,
 } from "lucide-react";
+import { obtenerEnlacesLanding } from "@/lib/enlaces-planes";
+
+// La landing se regenera cada 5 minutos (en vez de pedir la base en cada visita):
+// así un código de oferta nuevo en Panel Maestro aparece solo en pocos minutos.
+export const revalidate = 300;
 
 const FEATURES = [
   {
@@ -50,6 +55,7 @@ const RUBROS = [
 
 const PLANES = [
   {
+    code: "BASICO",
     nombre: "Básico",
     precio: 499,
     desc: "Para un negocio con una sola sucursal que está arrancando.",
@@ -61,6 +67,7 @@ const PLANES = [
     destacado: false,
   },
   {
+    code: "PRO",
     nombre: "Pro",
     precio: 999,
     desc: "Para negocios en crecimiento con varias sucursales.",
@@ -72,6 +79,7 @@ const PLANES = [
     destacado: true,
   },
   {
+    code: "ENTERPRISE",
     nombre: "Enterprise",
     precio: 1999,
     desc: "Para franquicias y operaciones con varias sucursales activas.",
@@ -84,7 +92,8 @@ const PLANES = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const enlaces = await obtenerEnlacesLanding();
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
@@ -104,10 +113,10 @@ export default function LandingPage() {
               Iniciar sesión
             </Link>
             <Link
-              href="/register"
+              href="#planes"
               className="text-xs sm:text-sm font-semibold bg-primary hover:bg-primary/90 text-primary-foreground px-4 sm:px-5 py-2 sm:py-2.5 rounded-full transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
             >
-              Crear cuenta
+              Ver planes
             </Link>
           </div>
         </div>
@@ -138,10 +147,10 @@ export default function LandingPage() {
               
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 mb-6">
                 <Link
-                  href="/register"
+                  href="#planes"
                   className="flex justify-center items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-7 py-3.5 rounded-full transition-all duration-300 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 w-full sm:w-auto"
                 >
-                  Prueba 1 mes gratis <ArrowRight className="w-5 h-5" />
+                  Prueba 30 días gratis <ArrowRight className="w-5 h-5" />
                 </Link>
               </div>
             </div>
@@ -209,7 +218,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
           <h2 className="text-2xl sm:text-4xl font-bold text-center tracking-tight">Para el giro de tu negocio</h2>
           <p className="text-muted-foreground text-center mt-3 max-w-lg mx-auto text-base sm:text-lg">
-            Al registrarte eliges tu rubro y la plataforma ajusta los nombres y el enfoque a tu operación.
+            Al entrar por primera vez eliges tu rubro y la plataforma ajusta los nombres y el enfoque a tu operación.
           </p>
           <div className="flex flex-wrap justify-center gap-2.5 sm:gap-3 mt-10 sm:mt-12">
             {RUBROS.map((r) => (
@@ -228,15 +237,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="border-t border-border bg-muted/30">
+      <section id="planes" className="border-t border-border bg-muted/30 scroll-mt-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
           <div className="text-center max-w-2xl mx-auto">
             <span className="inline-block bg-green-500/10 text-green-600 font-semibold px-3.5 py-1 rounded-full text-xs sm:text-sm mb-4 border border-green-500/20">
-              🎁 Todos los planes incluyen 1 mes de prueba gratis
+              🎁 Todos los planes incluyen 30 días de prueba gratis
             </span>
             <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">Planes simples, sin sorpresas</h2>
             <p className="text-muted-foreground mt-3 text-base sm:text-lg">
-              Elige tu vigencia al registrarte — 1, 3, 6 o 12 meses — con la opción de renovar automáticamente. Cancela cuando quieras.
+              Registras tu tarjeta en Hotmart y no se te cobra nada durante los 30 días de prueba. Si cancelas antes de que terminen, no pagas. Después, el cobro es mensual y puedes cancelar cuando quieras.
             </p>
           </div>
           
@@ -269,33 +278,50 @@ export default function LandingPage() {
                   ))}
                 </ul>
 
-                <Link
-                  href="/register"
-                  className={`flex items-center justify-center gap-2 w-full py-3 sm:py-3.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                {(() => {
+                  const claseBoton = `flex items-center justify-center gap-2 w-full py-3 sm:py-3.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
                     p.destacado
                       ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
                       : "border-2 border-border hover:border-primary/50 text-foreground"
-                  }`}
-                >
-                  Empezar prueba gratis <ArrowRight className="w-4 h-4" />
-                </Link>
+                  }`;
+                  const enlacePago = enlaces.porPlan[p.code];
+                  if (enlacePago) {
+                    return (
+                      <a href={enlacePago} rel="noopener" className={claseBoton}>
+                        Empezar 30 días gratis <ArrowRight className="w-4 h-4" />
+                      </a>
+                    );
+                  }
+                  // Plan sin link de pago todavía: nunca un botón roto, se ofrece contacto.
+                  if (enlaces.contactoHref) {
+                    return (
+                      <a href={enlaces.contactoHref} rel="noopener" className={claseBoton}>
+                        Contáctanos para empezar <ArrowRight className="w-4 h-4" />
+                      </a>
+                    );
+                  }
+                  return <span className={`${claseBoton} opacity-60 cursor-default`}>Disponible muy pronto</span>;
+                })()}
               </div>
             ))}
           </div>
+          <p className="text-center text-xs sm:text-sm text-muted-foreground mt-10 max-w-xl mx-auto">
+            El pago lo procesa Hotmart. Al terminar, te llega por correo tu acceso a Linkity en unos minutos.
+          </p>
         </div>
       </section>
 
       <section className="border-t border-border">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24 text-center">
-          <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">Crea tu cuenta en menos de dos minutos</h2>
+          <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">Empieza hoy, en menos de dos minutos</h2>
           <p className="text-muted-foreground mt-3 max-w-md mx-auto text-base sm:text-lg">
-            Sin instalar nada. Configura tu negocio y empieza a vender hoy mismo.
+            Sin instalar nada. Elige tu plan, y tu acceso te llega por correo para configurar tu negocio y empezar a vender.
           </p>
           <Link
-            href="/register"
+            href="#planes"
             className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-7 sm:px-8 py-3.5 sm:py-4 rounded-xl mt-8 transition-all shadow-lg shadow-primary/25 hover:-translate-y-1 text-sm sm:text-base"
           >
-            Comenzar mi mes gratis <ArrowRight className="w-5 h-5" />
+            Elegir mi plan <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
       </section>
@@ -314,7 +340,7 @@ export default function LandingPage() {
           </p>
           <div className="flex items-center gap-6 text-xs sm:text-sm text-muted-foreground font-medium">
             <Link href="/login" className="hover:text-foreground transition-colors">Iniciar sesión</Link>
-            <Link href="/register" className="hover:text-foreground transition-colors">Crear cuenta</Link>
+            <Link href="#planes" className="hover:text-foreground transition-colors">Planes</Link>
           </div>
         </div>
       </footer>

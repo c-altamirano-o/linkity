@@ -248,8 +248,8 @@ export default function LoginPage() {
 
           <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
             ¿No tienes cuenta?{" "}
-            <Link href="/register" className="text-primary font-medium hover:underline">
-              Solicita acceso
+            <Link href="/#planes" className="text-primary font-medium hover:underline">
+              Ver planes
             </Link>
           </p>
         </div>
