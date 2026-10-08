@@ -18,6 +18,7 @@ import { getNotificaciones, contarNotificacionesNoLeidas } from "@/lib/notificac
 import { obtenerEstadoPasosBienvenida } from "@/lib/onboarding";
 import { MODULOS_OCULTOS_MODO_SIMPLE } from "@/lib/modules-catalog";
 import { sincronizarExceso, obtenerDatosAjuste } from "@/lib/exceso-plan";
+import { tieneFeature, FUNCION_API_FACTURACION } from "@/lib/capacidades-comerciales";
 import { calcularEstadoExceso, type EstadoExceso } from "@/lib/exceso-plan-estado";
 import AjustePlanClient from "@/components/tenant/AjustePlanClient";
 import AjustePlanPendiente from "@/components/tenant/AjustePlanPendiente";
@@ -173,7 +174,7 @@ export default async function TenantLayout({
   let notificacionesIniciales: Awaited<ReturnType<typeof getNotificaciones>> = [];
   let notificacionesNoLeidas = 0;
   if (dbTenant) {
-    const [labelsResueltos, inactivos, notifs, noLeidas] = await Promise.all([
+    const [labelsResueltos, inactivos, notifs, noLeidas, incluyeFacturacion] = await Promise.all([
       getTenantLabels(dbTenant.id, dbTenant.businessType),
       prisma.tenantModule.findMany({
         where: { tenantId: dbTenant.id, isActive: false },
@@ -181,6 +182,9 @@ export default async function TenantLayout({
       }),
       getNotificaciones(dbTenant.id),
       contarNotificacionesNoLeidas(dbTenant.id),
+      // Funciones del plan comercial (2026-10-08): Facturación solo existe en
+      // los planes que incluyen API_FACTURACION. Prueba gratis = todo incluido.
+      tieneFeature(dbTenant.id, FUNCION_API_FACTURACION),
     ]);
     labels = labelsResueltos;
     modulosInactivos = inactivos.map((tm) => tm.module.code);
@@ -197,6 +201,13 @@ export default async function TenantLayout({
     // completo) — Modo Simple es una simplificación pensada para el dueño.
     const modulosInactivosSet = new Set(modulosInactivos);
     modoSimpleActivo = MODULOS_OCULTOS_MODO_SIMPLE.every((code) => modulosInactivosSet.has(code));
+    // Después del cálculo de Modo Simple (no debe verse afectado). Se agrega a
+    // la lista de módulos inactivos para reutilizar el menú oculto y el guard
+    // de ruta de más abajo; ver también facturacion/page.tsx y
+    // facturacion-actions.ts, que lo vuelven a revisar del lado del servidor.
+    if (!incluyeFacturacion && !modulosInactivos.includes("facturacion")) {
+      modulosInactivos = [...modulosInactivos, "facturacion"];
+    }
     notificacionesIniciales = notifs;
     notificacionesNoLeidas = noLeidas;
   }

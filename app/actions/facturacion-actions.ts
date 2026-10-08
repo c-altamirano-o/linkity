@@ -1,7 +1,8 @@
 "use server";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { resolverActor } from "@/lib/actor";
+import { tieneFeature, FUNCION_API_FACTURACION } from "@/lib/capacidades-comerciales";
 import { revalidatePath } from "next/cache";
 import { InvoiceStatus, SaleStatus } from "@prisma/client";
 import crypto from "crypto";
@@ -26,25 +27,23 @@ type ResolverResult =
   | { ok: true; tenant: { id: string }; dbUser: { id: string; tenantId: string } }
   | { ok: false; error: string };
 
+// Delega en resolverActor (lib/actor.ts): además de validar la sesión aplica el
+// bloqueo por suscripción vencida y por exceso de plan vencido, que este
+// módulo no tenía. "facturacion" está excluido de los módulos que se le pueden
+// dar a un empleado de PIN (MODULOS_BASE_EXCLUIDOS, lib/roles.ts), así que
+// solo el administrador con cuenta real pasa.
+//
+// Plan comercial (2026-10-08, decisión de Carlos): la pantalla de Facturación
+// solo existe en los planes que incluyen la función API_FACTURACION (Pro y
+// Enterprise); el plan Básico no la tiene. Se revisa aquí porque ocultar el
+// menú no protege una acción llamada directo. Prueba gratis = todo incluido.
 async function resolverTenantYUsuario(tenantSlug: string): Promise<ResolverResult> {
-  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
-  if (!tenant) return { ok: false, error: "Negocio no encontrado" };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Sesión no válida, vuelve a iniciar sesión" };
-
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    select: { id: true, tenantId: true },
-  });
-  if (!dbUser || dbUser.tenantId !== tenant.id) {
-    return { ok: false, error: "No tienes acceso a este negocio" };
+  const actor = await resolverActor(tenantSlug, "facturacion");
+  if (!actor.ok) return { ok: false, error: actor.error };
+  if (!(await tieneFeature(actor.tenant.id, FUNCION_API_FACTURACION))) {
+    return { ok: false, error: "La facturación no está incluida en tu plan. Cambia a un plan superior para usarla." };
   }
-
-  return { ok: true, tenant, dbUser };
+  return { ok: true, tenant: actor.tenant, dbUser: actor.dbUser };
 }
 
 // Tenant.telefonoClienteObligatorio (ver el mismo candado en

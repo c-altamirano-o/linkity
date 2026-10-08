@@ -2388,3 +2388,19 @@ model PruebaGratisUsada {
   tenantSlug    String?
   createdAt     DateTime @default(now())
 }
+
+/**
+ * Intentos recientes de acciones públicas con costo (registro, reenvío de
+ * contraseña) para limitar abuso por IP — ver lib/limite-intentos.ts. Guarda
+ * un hash de la IP, nunca la IP en claro. El cron diario borra lo de más de
+ * 48 horas.
+ */
+model IntentoAcceso {
+  id        String   @id @default(cuid())
+  tipo      String
+  claveHash String
+  createdAt DateTime @default(now())
+
+  @@index([tipo, claveHash, createdAt])
+  @@index([tipo, createdAt])
+}

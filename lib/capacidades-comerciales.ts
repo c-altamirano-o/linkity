@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -122,14 +123,16 @@ function capacidadesDeRespaldo(): Capacidades {
 }
 
 /**
- * Resuelve las capacidades de un negocio. Hace 2 consultas pequeñas; si una
+ * Resuelve las capacidades de un negocio. Hace 2 consultas pequeñas (y dentro
+ * de una misma petición el resultado se reutiliza: React `cache`, así el
+ * layout, el exceso de plan y las acciones no repiten las consultas); si una
  * acción necesita varias respuestas, conviene llamarla una vez y reutilizar el
  * resultado en vez de llamar tieneFeature/obtenerLimite varias veces.
  *
  * `tenantId` debe venir ya resuelto/confiable (tenant.id de resolverActor o
  * resolverTenantYUsuario), nunca de un parámetro del cliente.
  */
-export async function obtenerCapacidades(tenantId: string): Promise<Capacidades> {
+export const obtenerCapacidades = cache(async (tenantId: string): Promise<Capacidades> => {
   const sub = await prisma.subscription.findUnique({
     where: { tenantId },
     select: { status: true, commercialPlanId: true },
@@ -154,7 +157,7 @@ export async function obtenerCapacidades(tenantId: string): Promise<Capacidades>
 
   console.error(`❌ Capacidades: no existe el plan ${PLAN_POR_DEFECTO} en la base (¿falta correr el seed comercial?). Se usan los límites de respaldo.`);
   return capacidadesDeRespaldo();
-}
+});
 
 export async function tieneFeature(tenantId: string, codigo: string): Promise<boolean> {
   return (await obtenerCapacidades(tenantId)).tieneFeature(codigo);

@@ -10,6 +10,8 @@ import { generarPasswordTemporal } from "@/lib/password-temporal";
 import { correoConfigurado, correoAccesoTemporal, enviarCorreo } from "@/lib/correo-transaccional";
 import { eliminarTenantPorCompleto } from "@/lib/eliminar-tenant";
 import { canonizarCorreo } from "@/lib/correo-canonico";
+import { permitirIntento, ipDeLaPeticion, LIMITE_REGISTRO, LIMITE_REENVIO, MENSAJE_DEMASIADOS_INTENTOS } from "@/lib/limite-intentos";
+import { verificarTurnstile } from "@/lib/turnstile";
 
 /**
  * Alta de un negocio nuevo por auto-registro público (app/(auth)/register).
@@ -71,6 +73,8 @@ interface RegistrarNegocioInput {
   ownerName: string;
   ownerEmail: string;
   ownerPhone?: string;
+  /** Token de Cloudflare Turnstile (obligatorio cuando TURNSTILE_SECRET_KEY está configurada). */
+  turnstileToken?: string | null;
 }
 
 interface RegistrarNegocioResult {
@@ -137,6 +141,17 @@ export async function registrarNegocioAction(
     if (!input.businessType) {
       return { success: false, error: "Selecciona el giro de tu negocio." };
     }
+
+    // Límite de intentos por IP (y global) — evita registros masivos y que se
+    // use el formulario para disparar correos. Ver lib/limite-intentos.ts.
+    if (!(await permitirIntento(LIMITE_REGISTRO))) {
+      return { success: false, error: MENSAJE_DEMASIADOS_INTENTOS };
+    }
+
+    // Captcha (Cloudflare Turnstile) — después del límite de intentos, para que
+    // tampoco se pueda usar este paso para saturar a Cloudflare.
+    const captcha = await verificarTurnstile(input.turnstileToken, await ipDeLaPeticion());
+    if (!captcha.ok) return { success: false, error: captcha.error };
 
     const baseSlug = slugify(input.businessName);
     if (!baseSlug) {
@@ -354,6 +369,9 @@ export async function reenviarContrasenaTemporalAction(emailEntrada: string): Pr
     const email = String(emailEntrada ?? "").trim();
     if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return { ok: false, mensaje: "Escribe un correo electrónico válido." };
+    }
+    if (!(await permitirIntento(LIMITE_REENVIO))) {
+      return { ok: false, mensaje: MENSAJE_DEMASIADOS_INTENTOS };
     }
     if (!correoConfigurado()) {
       console.error("❌ Reenvío de contraseña imposible: Resend no está configurado.");

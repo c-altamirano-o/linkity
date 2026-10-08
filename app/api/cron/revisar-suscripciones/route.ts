@@ -4,6 +4,7 @@ import { calcularEstadoCiclo, DIAS_GRACIA, DIAS_RECORDATORIO, DIAS_AVISO_ELIMINA
 import { enviarAvisoSuscripcion } from "@/lib/notificaciones-suscripcion";
 import { sincronizarExceso } from "@/lib/exceso-plan";
 import { calcularEstadoExceso } from "@/lib/exceso-plan-estado";
+import { limpiarIntentosViejos } from "@/lib/limite-intentos";
 
 /**
  * Cron diario (ver vercel.json) que revisa TODAS las suscripciones
@@ -178,6 +179,13 @@ export async function GET(request: Request) {
       console.error(`❌ Error revisando el exceso de plan de ${sub.tenant.slug}:`, err);
       omitidos.push(sub.tenant.slug);
     }
+  }
+
+  // Limpieza diaria del registro de intentos (límite por IP del registro).
+  try {
+    await limpiarIntentosViejos();
+  } catch (err) {
+    console.error("❌ No se pudo limpiar el registro de intentos:", err);
   }
 
   return NextResponse.json({ ok: true, revisadas: candidatos.length, avisados, omitidos, conExceso });

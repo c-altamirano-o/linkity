@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Building2, User, ArrowRight, Check, Loader2 } from "lucide-react";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
 import { registrarNegocioAction, reenviarContrasenaTemporalAction } from "./actions";
+import TurnstileWidget, { TURNSTILE_SITE_KEY } from "@/components/auth/TurnstileWidget";
 
 type Paso = "datos" | "listo";
 
@@ -23,6 +24,10 @@ export default function RegisterPage() {
   const [errorCodigo, setErrorCodigo] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ tenantSlug: string; correo: string; tempPasswordDev?: string } | null>(null);
   const [reenviando, setReenviando] = useState(false);
+  // Captcha (Turnstile): el token es de un solo uso, así que tras cada intento
+  // se cambia widgetKey para volver a montar el widget y pedir uno nuevo.
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [widgetKey, setWidgetKey] = useState(0);
   const [mensajeReenvio, setMensajeReenvio] = useState("");
 
   // Reenvío de la contraseña temporal (correo que no llegó, o correo que ya
@@ -60,9 +65,12 @@ export default function RegisterPage() {
       ownerName: form.ownerName,
       ownerEmail: form.ownerEmail,
       ownerPhone: form.ownerPhone,
+      turnstileToken,
     });
 
     setLoading(false);
+    setTurnstileToken(null);
+    setWidgetKey((k) => k + 1);
 
     if (!res.success || !res.tenantSlug) {
       setError(res.error ?? "No se pudo crear tu cuenta.");
@@ -287,9 +295,11 @@ export default function RegisterPage() {
                   </div>
                 </div>
 
+                <TurnstileWidget key={widgetKey} onToken={setTurnstileToken} />
+
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || (!!TURNSTILE_SITE_KEY && !turnstileToken)}
                   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 rounded-lg text-sm transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70"
                 >
                   {loading ? (
