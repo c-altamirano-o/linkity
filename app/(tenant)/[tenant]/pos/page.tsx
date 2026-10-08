@@ -7,7 +7,7 @@ import { getRepairParaCobro, type RepairParaCobro } from "@/lib/reparaciones-dat
 import { getTenantLabels } from "@/lib/labels-server";
 import { nombreNegocioDeSlug, type DatosNegocioRecibo } from "@/lib/recibo-imprimible";
 import POSClient from "./POSClient";
-import { getActiveDiscounts } from "@/app/actions/discounts";
+import { getActiveDiscounts } from "@/lib/descuentos-activos";
 
 export default async function POSPage({
   params,

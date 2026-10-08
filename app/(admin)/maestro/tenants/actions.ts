@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/maestro-auth";
 import { MODULE_CATALOG } from "@/lib/modules-catalog";
 import { eliminarTenantPorCompleto } from "@/lib/eliminar-tenant";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type AccionMaestroResult = { ok: true } | { ok: false; error: string };
 
@@ -209,7 +210,18 @@ export async function eliminarTenantAction(params: {
       return { ok: false, error: "El nombre no coincide — no se borró nada" };
     }
 
-    await eliminarTenantPorCompleto(tenant.id);
+    const { authIds } = await eliminarTenantPorCompleto(tenant.id);
+
+    // Libera el correo del dueño: sin esto no podría volver a registrarse.
+    // Después del borrado de datos y fuera de su transacción a propósito: si
+    // Auth fallara, el negocio ya está borrado y solo se deja constancia.
+    if (authIds.length > 0) {
+      const admin = createAdminClient();
+      for (const id of authIds) {
+        const { error } = await admin.auth.admin.deleteUser(id);
+        if (error) console.error(`El negocio se borró pero no se pudo borrar su cuenta de Auth (${id}):`, error.message);
+      }
+    }
 
     revalidatePath("/maestro/tenants");
     revalidatePath("/maestro/suscripciones");

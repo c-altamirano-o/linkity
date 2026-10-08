@@ -40,38 +40,11 @@ function manejarErrorAcceso(err: any, mensajeGenerico: string): { ok: false; err
   return { ok: false, error: mensajeGenerico };
 }
 
-export async function getActiveDiscounts(tenantId: string) {
-  try {
-    const currentDate = new Date();
-    const db = getTenantPrisma(tenantId);
-
-    const discounts = await db.discount.findMany({
-      where: {
-        isActive: true,
-        // Filtramos para asegurar que el descuento haya iniciado y no haya expirado
-        OR: [
-          { endsAt: null },
-          { endsAt: { gte: currentDate } }
-        ],
-        AND: [
-          {
-            OR: [
-              { startsAt: null },
-              { startsAt: { lte: currentDate } }
-            ]
-          }
-        ]
-      },
-      include: { products: true, categories: true },
-      orderBy: { priority: 'desc' }
-    });
-
-    return { success: true, data: discounts };
-  } catch (error) {
-    console.error("Error al obtener descuentos:", error);
-    return { success: false, error: "Hubo un error al cargar los descuentos activos." };
-  }
-}
+// getActiveDiscounts se movió a lib/descuentos-activos.ts (2026-10-08): aquí
+// todo lo exportado es una Server Action que cualquiera puede invocar por
+// POST, y esta recibía el tenantId desde el cliente SIN verificar sesión —
+// permitía leer los descuentos de cualquier negocio. Ahora solo la llama
+// el servidor (pos/page.tsx) con el tenant ya resuelto.
 
 export type TipoDescuentoInput = "SEASONAL" | "CUSTOMER" | "ONE_TIME";
 export type TipoValorInput = "PERCENTAGE" | "FIXED";

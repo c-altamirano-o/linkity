@@ -585,6 +585,11 @@ model User {
   email      String
   name       String
   avatarUrl  String?
+  // OJO: existe en la base un índice único PARCIAL que Prisma no puede
+  // representar — "User_una_cuenta_real_por_negocio" (tenantId, solo donde
+  // supabaseId NO empieza con 'staff-placeholder-'): garantiza una sola
+  // cuenta real por negocio. Ver prisma/migrations/20261008190000_*.
+  // No correr `prisma migrate dev`/`db push` sin revisar que no lo borre.
   supabaseId String   @unique
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())

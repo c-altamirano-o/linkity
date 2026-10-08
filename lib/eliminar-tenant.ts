@@ -27,20 +27,45 @@ import { prisma } from "@/lib/prisma";
  * (fuera de esta función a propósito, para no atar un borrado de datos de
  * negocio a un borrado de credenciales de acceso).
  */
-export async function eliminarTenantPorCompleto(tenantId: string): Promise<void> {
-  await prisma.$transaction(async (tx) => {
+export async function eliminarTenantPorCompleto(tenantId: string): Promise<{ authIds: string[] }> {
+  return prisma.$transaction(async (tx) => {
     const saleIds = (await tx.sale.findMany({ where: { tenantId }, select: { id: true } })).map((s) => s.id);
     const repairIds = (await tx.repair.findMany({ where: { tenantId }, select: { id: true } })).map((r) => r.id);
     const cashSessionIds = (await tx.cashSession.findMany({ where: { tenantId }, select: { id: true } })).map((c) => c.id);
     const purchaseIds = (await tx.purchase.findMany({ where: { tenantId }, select: { id: true } })).map((p) => p.id);
     const staffIds = (await tx.staff.findMany({ where: { tenantId }, select: { id: true } })).map((s) => s.id);
     const roleIds = (await tx.role.findMany({ where: { tenantId }, select: { id: true } })).map((r) => r.id);
-    const userIds = (await tx.user.findMany({ where: { tenantId }, select: { id: true } })).map((u) => u.id);
+    const usuarios = await tx.user.findMany({ where: { tenantId }, select: { id: true, supabaseId: true } });
+    const userIds = usuarios.map((u) => u.id);
+
+    // Cuentas REALES de Supabase Auth de este negocio (las de empleados con
+    // PIN son ids sintéticos "staff-placeholder-…" que no existen en Auth).
+    // Revisión del 2026-10-08: antes la cuenta del dueño quedaba viva en
+    // Auth tras borrar el negocio, y su correo no podía volver a
+    // registrarse nunca. NUNCA se incluye a un superadmin. La función solo
+    // DEVUELVE los ids; quien llama las borra de Auth después de que el
+    // borrado de datos haya salido bien (ver eliminarTenantAction).
+    const candidatos = usuarios.map((u) => u.supabaseId).filter((id) => !id.startsWith("staff-placeholder-"));
+    const superadmins = candidatos.length
+      ? await tx.superAdmin.findMany({ where: { supabaseId: { in: candidatos } }, select: { supabaseId: true } })
+      : [];
+    const protegidos = new Set(superadmins.map((a) => a.supabaseId));
+    const authIds = candidatos.filter((id) => !protegidos.has(id));
     const branchIds = (await tx.branch.findMany({ where: { tenantId }, select: { id: true } })).map((b) => b.id);
     const supportTicketIds = (await tx.supportTicket.findMany({ where: { tenantId }, select: { id: true } })).map((t) => t.id);
     const treatmentPlanIds = (await tx.treatmentPlan.findMany({ where: { tenantId }, select: { id: true } })).map((t) => t.id);
 
     // ── Fase 1: hojas (nada más las referencia) ──────────────────────────
+    // Tablas con llave a Tenant que faltaban (revisión 2026-10-08): sin
+    // estas, la base rechazaba el borrado (ON DELETE RESTRICT) y el negocio
+    // no se eliminaba. Descuentos: sus tablas de unión se borran en cascada.
+    await tx.discount.deleteMany({ where: { tenantId } });
+    await tx.notificacion.deleteMany({ where: { tenantId } });
+    await tx.pushSubscription.deleteMany({ where: { tenantId } });
+    await tx.solicitudDispositivo.deleteMany({ where: { tenantId } });
+    await tx.whatsappMensajeEnviado.deleteMany({ where: { tenantId } });
+    await tx.whatsappNumeroConfirmado.deleteMany({ where: { tenantId } });
+
     await tx.saleMixedPayment.deleteMany({ where: { saleId: { in: saleIds } } });
     await tx.saleItem.deleteMany({ where: { saleId: { in: saleIds } } });
     await tx.repairItem.deleteMany({ where: { repairId: { in: repairIds } } });
@@ -93,5 +118,7 @@ export async function eliminarTenantPorCompleto(tenantId: string): Promise<void>
 
     // ── Fase 7: el tenant mismo ────────────────────────────────────────────
     await tx.tenant.delete({ where: { id: tenantId } });
+
+    return { authIds };
   }, { timeout: 30000 });
 }

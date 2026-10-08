@@ -103,6 +103,14 @@ function mensajeErrorRegistro(authError: { message?: string } | null | undefined
 export async function registrarNegocioAction(
   input: RegistrarNegocioInput
 ): Promise<RegistrarNegocioResult> {
+  // Revisión de "una cuenta real por negocio" (2026-10-08): si la cuenta de
+  // Supabase Auth se crea pero el alta del negocio falla después (slug
+  // repetido por dos registros simultáneos, caída de base de datos, etc.),
+  // la cuenta quedaba HUÉRFANA: el correo ya estaba tomado ("ya existe una
+  // cuenta, inicia sesión") pero iniciar sesión no llevaba a ningún negocio,
+  // y el cliente no podía volver a registrarse. Ahora se borra en ese caso.
+  let authUserIdCreado: string | null = null;
+  let negocioCreado = false;
   try {
     if (!input.businessName.trim() || !input.ownerName.trim() || !input.ownerEmail.trim()) {
       return { success: false, error: "Faltan campos obligatorios." };
@@ -142,6 +150,8 @@ export async function registrarNegocioAction(
         error: mensajeErrorRegistro(authError),
       };
     }
+
+    authUserIdCreado = authData.user.id;
 
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
@@ -221,7 +231,16 @@ export async function registrarNegocioAction(
     // el alta del tenant; si llegara a fallar, el negocio igual queda
     // creado y "Roles y permisos" los crea solo en el primer vistazo, ver
     // listarRolesTenant en lib/roles-server.ts).
-    await asegurarRolesRubro(result.id, input.businessType);
+    negocioCreado = true;
+
+    try {
+      await asegurarRolesRubro(result.id, input.businessType);
+    } catch (errRoles) {
+      // El negocio YA existe: si esto fallara y se reportara como error, el
+      // cliente se quedaría con una cuenta creada pero creyendo que no se
+      // registró. "Roles y permisos" los vuelve a crear solo (ver arriba).
+      console.error("No se pudieron crear los roles del rubro (se crearán al abrir Roles y permisos):", errRoles);
+    }
 
     return { success: true, tenantSlug: result.slug, ownerEmail: input.ownerEmail.trim(), tempPassword };
   } catch (err) {
@@ -230,6 +249,11 @@ export async function registrarNegocioAction(
     // mensajes de Prisma/DB sin traducir) — se registra en el log del
     // servidor y se responde con un mensaje genérico en español.
     console.error("Error en auto-registro de negocio:", err);
+    if (authUserIdCreado && !negocioCreado) {
+      await createAdminClient()
+        .auth.admin.deleteUser(authUserIdCreado)
+        .catch((e: unknown) => console.error("No se pudo borrar la cuenta huérfana del registro:", e));
+    }
     return {
       success: false,
       error: "No se pudo crear tu cuenta. Intenta de nuevo en unos minutos.",
