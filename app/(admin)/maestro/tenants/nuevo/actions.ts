@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MODULE_CATALOG } from "@/lib/modules-catalog";
 import { requireSuperAdmin } from "@/lib/maestro-auth";
+import { generarPasswordTemporal } from "@/lib/password-temporal";
+import { canonizarCorreo } from "@/lib/correo-canonico";
 
 interface CreateTenantInput {
   businessName: string;
@@ -34,10 +36,6 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-function generateTempPassword(): string {
-  return "Temp" + Math.random().toString(36).slice(-8) + "!1";
-}
-
 export async function createTenantAction(
   input: CreateTenantInput
 ): Promise<CreateTenantResult> {
@@ -46,11 +44,6 @@ export async function createTenantAction(
   // Ver lib/maestro-auth.ts.
   const resuelto = await requireSuperAdmin();
   if (!resuelto.ok) return { success: false, error: resuelto.error };
-
-  // Mismo criterio que el registro público: si el alta falla después de crear
-  // la cuenta de Supabase Auth, se borra para no dejar el correo tomado.
-  let authUserIdCreado: string | null = null;
-  let negocioCreado = false;
 
   try {
     if (!input.businessName || !input.ownerName || !input.ownerEmail) {
@@ -75,7 +68,7 @@ export async function createTenantAction(
     }
 
     const supabaseAdmin = createAdminClient();
-    const tempPassword = generateTempPassword();
+    const tempPassword = generarPasswordTemporal();
 
     const { data: authData, error: authError } =
       await supabaseAdmin.auth.admin.createUser({
@@ -92,8 +85,6 @@ export async function createTenantAction(
       };
     }
 
-    authUserIdCreado = authData.user.id;
-
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
@@ -106,6 +97,18 @@ export async function createTenantAction(
           email: input.ownerEmail,
         },
       });
+
+      // Carlos puede dar de alta a quien ya usó su prueba (decisión suya, no
+      // se bloquea), pero igual queda registrado el correo — sin fallar si ya
+      // estaba — para que no use además el auto-registro público.
+      const correoCanonico = canonizarCorreo(input.ownerEmail);
+      if (correoCanonico) {
+        await tx.pruebaGratisUsada.upsert({
+          where: { emailCanonico: correoCanonico },
+          update: {},
+          create: { emailCanonico: correoCanonico, emailOriginal: input.ownerEmail.trim(), tenantSlug: tenant.slug },
+        });
+      }
 
       const branch = await tx.branch.create({
         data: { tenantId: tenant.id, name: "Sucursal Principal" },
@@ -177,15 +180,9 @@ export async function createTenantAction(
       return tenant;
     });
 
-    negocioCreado = true;
     return { success: true, tenantSlug: result.slug, tempPassword };
   } catch (err) {
     console.error("Error creando tenant:", err);
-    if (authUserIdCreado && !negocioCreado) {
-      await createAdminClient()
-        .auth.admin.deleteUser(authUserIdCreado)
-        .catch((e: unknown) => console.error("No se pudo borrar la cuenta huérfana del alta:", e));
-    }
     return {
       success: false,
       error: err instanceof Error ? err.message : "Error desconocido",

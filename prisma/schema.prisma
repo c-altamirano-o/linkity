@@ -2360,3 +2360,20 @@ model HotmartEvent {
   @@index([receivedAt])
   @@index([transaction])
 }
+
+/**
+ * Registro de correos que ya usaron su prueba gratis (2026-10-08, política
+ * de Carlos: UNA prueba por persona, para siempre). Guarda el correo en su
+ * forma canónica (sin "+etiqueta", sin puntos en Gmail — ver
+ * lib/correo-canonico.ts) para reconocer a la misma persona aunque cambie
+ * cómo lo escribe. Sin relaciones a propósito: sobrevive a la eliminación
+ * del negocio (justo para eso existe). Carlos puede quitar un registro a
+ * mano desde Panel Maestro → Pruebas usadas para permitir otra prueba.
+ */
+model PruebaGratisUsada {
+  id            String   @id @default(cuid())
+  emailCanonico String   @unique
+  emailOriginal String
+  tenantSlug    String?
+  createdAt     DateTime @default(now())
+}

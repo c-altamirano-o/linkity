@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   LayoutDashboard, Building2, Puzzle, CreditCard, Layers,
-  Users, Ticket, BarChart3, Settings, Link as LinkIcon, ShieldAlert, ShoppingCart
+  Users, Ticket, BarChart3, Settings, Link as LinkIcon, ShieldAlert, ShoppingCart, Gift
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/maestro-auth";
@@ -46,6 +46,7 @@ function buildNavItems(totalNegocios: number, alertaSuscripciones: number, ticke
           badge: hotmartPendientes > 0 ? String(hotmartPendientes) : null,
           badgeColor: "red" as string | undefined,
         },
+        { label: "Pruebas usadas", href: "/maestro/pruebas", icon: Gift, badge: null as string | null, badgeColor: undefined as string | undefined },
       ]
     },
     {

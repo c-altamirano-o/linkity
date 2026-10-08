@@ -4,9 +4,8 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Building2, User, ArrowRight, Check, Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
-import { registrarNegocioAction } from "./actions";
+import { registrarNegocioAction, reenviarContrasenaTemporalAction } from "./actions";
 
 type Paso = "datos" | "listo";
 
@@ -20,9 +19,22 @@ export default function RegisterPage() {
     ownerPhone: "",
   });
   const [loading, setLoading] = useState(false);
-  const [entrando, setEntrando] = useState(false);
   const [error, setError] = useState("");
-  const [resultado, setResultado] = useState<{ tenantSlug: string; tempPassword: string } | null>(null);
+  const [errorCodigo, setErrorCodigo] = useState<string | null>(null);
+  const [resultado, setResultado] = useState<{ tenantSlug: string; correo: string; tempPasswordDev?: string } | null>(null);
+  const [reenviando, setReenviando] = useState(false);
+  const [mensajeReenvio, setMensajeReenvio] = useState("");
+
+  // Reenvío de la contraseña temporal (correo que no llegó, o correo que ya
+  // estaba ocupado por un registro hecho con tu dirección). La respuesta es
+  // siempre la misma exista o no el correo — ver la acción.
+  const handleReenviar = async (correo: string) => {
+    setReenviando(true);
+    setMensajeReenvio("");
+    const r = await reenviarContrasenaTemporalAction(correo);
+    setMensajeReenvio(r.mensaje);
+    setReenviando(false);
+  };
 
   const setField = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
@@ -38,6 +50,8 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setErrorCodigo(null);
+    setMensajeReenvio("");
     setLoading(true);
 
     const res = await registrarNegocioAction({
@@ -50,34 +64,21 @@ export default function RegisterPage() {
 
     setLoading(false);
 
-    if (!res.success || !res.tenantSlug || !res.tempPassword) {
+    if (!res.success || !res.tenantSlug) {
       setError(res.error ?? "No se pudo crear tu cuenta.");
+      setErrorCodigo(res.codigo ?? null);
       return;
     }
 
-    setResultado({ tenantSlug: res.tenantSlug, tempPassword: res.tempPassword });
-    setPaso("listo");
-
-    // Tu cuenta ya existe con la contraseña temporal que acaba de generar
-    // el servidor — se usa aquí solo para dejarte entrando de inmediato,
-    // nunca la escribes tú en ningún campo. Como la cuenta se crea con
-    // must_change_password=true, el login te manda directo a
-    // /primer-acceso para que definas tu propia contraseña.
-    setEntrando(true);
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: res.ownerEmail ?? form.ownerEmail,
-      password: res.tempPassword,
+    // La contraseña temporal ya NO llega al navegador: se manda por correo
+    // (así solo entra quien controla ese buzón). Se muestra la pantalla de
+    // "revisa tu correo" y la persona inicia sesión desde /login.
+    setResultado({
+      tenantSlug: res.tenantSlug,
+      correo: res.ownerEmail ?? form.ownerEmail,
+      tempPasswordDev: res.tempPasswordDev,
     });
-
-    if (signInError) {
-      // No debería pasar, pero si falla te dejamos el resumen en pantalla
-      // con el link manual a login en vez de quedarte trabado.
-      setEntrando(false);
-      return;
-    }
-
-    window.location.href = "/primer-acceso";
+    setPaso("listo");
   };
 
   return (
@@ -145,38 +146,44 @@ export default function RegisterPage() {
                 <span className="inline-block bg-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1 rounded-full mb-3 tracking-wide">
                   ¡LISTO!
                 </span>
-                <h1 className="text-2xl font-bold text-foreground dark:text-white">Tu negocio ya está creado</h1>
+                <h1 className="text-2xl font-bold text-foreground dark:text-white">Revisa tu correo</h1>
               </div>
 
-              {entrando ? (
-                <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Entrando para que definas tu contraseña...
-                </div>
-              ) : (
-                <>
-                  <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 text-sm space-y-1 mb-4">
-                    <p className="text-slate-500 dark:text-slate-400">
-                      No pudimos iniciar tu sesión automáticamente, pero tu cuenta ya existe. Guarda estos datos:
-                    </p>
-                    <p className="text-foreground dark:text-white">
-                      Negocio: <span className="font-mono">{resultado.tenantSlug}</span>
-                    </p>
-                    <p className="text-foreground dark:text-white">
-                      Correo: <span className="font-mono">{form.ownerEmail}</span>
-                    </p>
-                    <p className="text-foreground dark:text-white">
-                      Contraseña temporal: <span className="font-mono">{resultado.tempPassword}</span>
-                    </p>
-                  </div>
-                  <Link
-                    href="/login"
-                    className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 rounded-lg text-sm transition-all"
-                  >
-                    Iniciar sesión <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </>
+              <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 text-sm space-y-2 mb-4">
+                <p className="text-foreground dark:text-white">
+                  Tu negocio ya está creado. Te enviamos una contraseña temporal a{" "}
+                  <span className="font-mono">{resultado.correo}</span>.
+                </p>
+                <p className="text-slate-500 dark:text-slate-400">
+                  Úsala para iniciar sesión; después te pediremos crear tu propia contraseña. Si no la ves en unos
+                  minutos, revisa tu carpeta de spam.
+                </p>
+              </div>
+
+              {resultado.tempPasswordDev && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                  Solo desarrollo (sin correo configurado). Contraseña temporal:{" "}
+                  <span className="font-mono">{resultado.tempPasswordDev}</span>
+                </p>
               )}
+
+              <Link
+                href="/login"
+                className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 rounded-lg text-sm transition-all"
+              >
+                Ir a iniciar sesión <ArrowRight className="w-4 h-4" />
+              </Link>
+
+              <button
+                type="button"
+                disabled={reenviando}
+                onClick={() => handleReenviar(resultado.correo)}
+                className="mt-3 w-full flex items-center justify-center gap-2 text-sm text-primary hover:underline disabled:opacity-50"
+              >
+                {reenviando && <Loader2 className="w-4 h-4 animate-spin" />}
+                ¿No te llegó? Reenviar contraseña
+              </button>
+              {mensajeReenvio && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{mensajeReenvio}</p>}
             </div>
           ) : (
             <>
@@ -193,6 +200,19 @@ export default function RegisterPage() {
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-2.5 rounded-lg mb-4">
                   {error}
+                  {errorCodigo === "correo_existente" && form.ownerEmail && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        disabled={reenviando}
+                        onClick={() => handleReenviar(form.ownerEmail)}
+                        className="font-medium underline disabled:opacity-50"
+                      >
+                        Reenviar contraseña temporal a este correo
+                      </button>
+                      {mensajeReenvio && <p className="mt-1 text-xs text-red-500">{mensajeReenvio}</p>}
+                    </div>
+                  )}
                 </div>
               )}
 

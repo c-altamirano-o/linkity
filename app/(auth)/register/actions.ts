@@ -6,6 +6,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { MODULE_CATALOG, ALL_MODULE_CODES } from "@/lib/modules-catalog";
 import { modulosRecomendadosOff } from "@/lib/modulos-rubro";
 import { asegurarRolesRubro } from "@/lib/roles-server";
+import { generarPasswordTemporal } from "@/lib/password-temporal";
+import { correoConfigurado, correoAccesoTemporal, enviarCorreo } from "@/lib/correo-transaccional";
+import { eliminarTenantPorCompleto } from "@/lib/eliminar-tenant";
+import { canonizarCorreo } from "@/lib/correo-canonico";
 
 /**
  * Alta de un negocio nuevo por auto-registro público (app/(auth)/register).
@@ -35,11 +39,21 @@ import { asegurarRolesRubro } from "@/lib/roles-server";
  *
  * El visitante nunca escribe una contraseña en este formulario: la cuenta
  * de Supabase se crea con una contraseña temporal generada por el
- * servidor (igual que Panel Maestro) y con el flag
- * user_metadata.must_change_password=true — RegisterPage.tsx usa esa
- * contraseña (que el servidor le regresa) para iniciar sesión al
- * visitante automáticamente y mandarlo a /primer-acceso, donde SÍ teclea
- * su propia contraseña nueva él mismo antes de llegar a su negocio.
+ * servidor y con el flag user_metadata.must_change_password=true.
+ *
+ * VERIFICACIÓN DE CORREO (2026-10-08, revisión de "una cuenta real por
+ * negocio"): la contraseña temporal YA NO se devuelve al navegador. Se
+ * envía por correo (Resend) al correo que se registró: quien no controle
+ * ese buzón no puede entrar. Antes se mostraba en pantalla, así que
+ * cualquiera podía registrarse con el correo de otra persona, ocupar ese
+ * correo (la persona real ya no podía registrarse) y hasta recibir un pago
+ * de Hotmart hecho con ese correo. Entrar con la temporal lleva a
+ * /primer-acceso, donde el dueño teclea su propia contraseña. Si el correo
+ * no sale, se deshace el alta completa (no queda nada a medias) y se pide
+ * reintentar. Quien no recibió el correo puede pedir un reenvío
+ * (reenviarContrasenaTemporalAction) mientras no haya fijado su propia
+ * contraseña — eso también rescata a quien encuentre su correo ya
+ * ocupado por un registro ajeno.
  *
  * Todo negocio que se auto-registra empieza con los módulos que
  * recomienda su rubro (2026-09-17, personalización por rubro — ver
@@ -64,7 +78,12 @@ interface RegistrarNegocioResult {
   error?: string;
   tenantSlug?: string;
   ownerEmail?: string;
-  tempPassword?: string;
+  /** El correo con la contraseña temporal salió bien. */
+  correoEnviado?: boolean;
+  /** Solo en desarrollo local SIN Resend configurado (nunca en producción). */
+  tempPasswordDev?: string;
+  /** Para que la pantalla ofrezca "reenviar contraseña" cuando el correo ya existe. */
+  codigo?: "correo_existente";
 }
 
 function slugify(text: string): string {
@@ -76,9 +95,6 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-function generateTempPassword(): string {
-  return "Temp" + Math.random().toString(36).slice(-8) + "!1";
-}
 
 // Traduce los mensajes de Supabase Auth (siempre en inglés) a algo que un
 // visitante real pueda leer — antes se mostraba el texto crudo de
@@ -86,10 +102,13 @@ function generateTempPassword(): string {
 // registered"), rompiendo el idioma y el tono del resto del flujo y sin
 // decirle a la persona qué hacer. Los casos no reconocidos caen a un
 // mensaje genérico en español en vez de filtrar el texto de Supabase.
+const MENSAJE_CORREO_EXISTENTE =
+  "Ya existe una cuenta con ese correo. Si todavía no has entrado por primera vez, reenvía tu contraseña temporal; si ya la tienes, inicia sesión.";
+
 function mensajeErrorRegistro(authError: { message?: string } | null | undefined): string {
   const msg = authError?.message?.toLowerCase() ?? "";
   if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("already been registered")) {
-    return "Ya existe una cuenta con ese correo — intenta iniciar sesión.";
+    return MENSAJE_CORREO_EXISTENTE;
   }
   if (msg.includes("password")) {
     return "La contraseña generada no cumple los requisitos de seguridad. Intenta de nuevo.";
@@ -124,6 +143,15 @@ export async function registrarNegocioAction(
       return { success: false, error: "El nombre del negocio no es válido." };
     }
 
+    // Sin envío de correo nadie podría recibir su contraseña: se rechaza ANTES
+    // de crear nada. Solo en desarrollo local se permite seguir (la contraseña
+    // se devuelve en tempPasswordDev para poder probar sin Resend).
+    const esDesarrollo = process.env.NODE_ENV === "development";
+    if (!correoConfigurado() && !esDesarrollo) {
+      console.error("❌ Registro bloqueado: RESEND_API_KEY / RESEND_FROM_EMAIL no están configurados en este entorno.");
+      return { success: false, error: "El registro no está disponible por el momento. Intenta de nuevo más tarde." };
+    }
+
     const existingTenant = await prisma.tenant.findUnique({ where: { slug: baseSlug } });
     if (existingTenant) {
       return { success: false, error: "Ya existe un negocio registrado con ese nombre." };
@@ -131,23 +159,41 @@ export async function registrarNegocioAction(
 
     const existingUser = await prisma.user.findFirst({ where: { email: input.ownerEmail.trim() } });
     if (existingUser) {
-      return { success: false, error: "Ya existe una cuenta con ese correo." };
+      return { success: false, error: MENSAJE_CORREO_EXISTENTE, codigo: "correo_existente" };
+    }
+
+    // UNA prueba gratis por persona, para siempre (política de Carlos,
+    // 2026-10-08): se compara el correo en su forma canónica (sin
+    // "+etiqueta" ni puntos de Gmail), y el registro sobrevive aunque el
+    // negocio anterior se haya eliminado. Quien ya la usó debe suscribirse.
+    const correoCanonico = canonizarCorreo(input.ownerEmail);
+    if (!correoCanonico) {
+      return { success: false, error: "El correo electrónico no es válido." };
+    }
+    const yaUsoPrueba = await prisma.pruebaGratisUsada.findUnique({ where: { emailCanonico: correoCanonico }, select: { id: true } });
+    if (yaUsoPrueba) {
+      const link = process.env.HOTMART_CHECKOUT_URL;
+      return {
+        success: false,
+        error: `Este correo ya utilizó su prueba gratis de Linkity. Para seguir adelante, suscríbete${link ? ` aquí: ${link}` : " (escríbenos y te ayudamos)"}.`,
+      };
     }
 
     const supabaseAdmin = createAdminClient();
-    const tempPassword = generateTempPassword();
+    const tempPassword = generarPasswordTemporal();
 
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: input.ownerEmail.trim(),
       password: tempPassword,
       email_confirm: true,
-      user_metadata: { must_change_password: true },
+      user_metadata: { must_change_password: true, temp_sent_at: new Date().toISOString() },
     });
 
     if (authError || !authData.user) {
       return {
         success: false,
         error: mensajeErrorRegistro(authError),
+        codigo: authError && mensajeErrorRegistro(authError) === MENSAJE_CORREO_EXISTENTE ? "correo_existente" : undefined,
       };
     }
 
@@ -162,6 +208,12 @@ export async function registrarNegocioAction(
           email: input.ownerEmail.trim(),
           phone: input.ownerPhone?.trim() || null,
         },
+      });
+
+      // Deja constancia de que este correo ya usó su prueba (misma
+      // transacción: si el alta falla, tampoco se "gasta" la prueba).
+      await tx.pruebaGratisUsada.create({
+        data: { emailCanonico: correoCanonico, emailOriginal: input.ownerEmail.trim(), tenantSlug: tenant.slug },
       });
 
       const branch = await tx.branch.create({
@@ -242,7 +294,27 @@ export async function registrarNegocioAction(
       console.error("No se pudieron crear los roles del rubro (se crearán al abrir Roles y permisos):", errRoles);
     }
 
-    return { success: true, tenantSlug: result.slug, ownerEmail: input.ownerEmail.trim(), tempPassword };
+    // Envío de la contraseña temporal. Si falla, se DESHACE el alta (negocio y
+    // cuenta de Auth) para no dejar un correo ocupado sin forma de entrar.
+    if (correoConfigurado()) {
+      const correo = correoAccesoTemporal({ password: tempPassword });
+      const envio = await enviarCorreo({ to: input.ownerEmail.trim(), ...correo });
+      if (!envio.ok) {
+        console.error(`❌ No se pudo enviar el correo de acceso (${envio.motivo}); se deshace el alta de ${result.slug}.`);
+        try {
+          const { authIds } = await eliminarTenantPorCompleto(result.id);
+          const admin = createAdminClient();
+          for (const id of authIds) await admin.auth.admin.deleteUser(id);
+        } catch (errLimpieza) {
+          console.error("❌ No se pudo deshacer el alta tras fallar el correo:", errLimpieza);
+        }
+        return { success: false, error: "No pudimos enviar el correo con tu contraseña. Intenta de nuevo en unos minutos." };
+      }
+      return { success: true, tenantSlug: result.slug, ownerEmail: input.ownerEmail.trim(), correoEnviado: true };
+    }
+
+    // Solo desarrollo local (el bloqueo de arriba impide llegar aquí en producción).
+    return { success: true, tenantSlug: result.slug, ownerEmail: input.ownerEmail.trim(), correoEnviado: false, tempPasswordDev: tempPassword };
   } catch (err) {
     // Mismo criterio que mensajeErrorRegistro arriba: nunca se le muestra al
     // visitante el texto crudo de un error interno (antes podía filtrar
@@ -258,5 +330,65 @@ export async function registrarNegocioAction(
       success: false,
       error: "No se pudo crear tu cuenta. Intenta de nuevo en unos minutos.",
     };
+  }
+}
+
+/**
+ * Reenvía la contraseña temporal a quien todavía no fijó la suya. Sirve para
+ * (a) el cliente al que no le llegó el correo y (b) quien encuentra su
+ * correo ocupado por un registro hecho con su dirección por otra persona:
+ * al recibir la contraseña (solo llega a su buzón) toma control de la cuenta.
+ *
+ * Responde SIEMPRE lo mismo, exista o no el correo, para que no sirva para
+ * averiguar qué correos están registrados. Solo actúa si la cuenta sigue
+ * con must_change_password=true (nunca toca una cuenta que ya tiene su propia
+ * contraseña) y como máximo una vez cada 10 minutos por cuenta (evita usarlo
+ * para llenar de correos el buzón de alguien).
+ */
+const MS_ESPERA_REENVIO = 10 * 60 * 1000;
+const MENSAJE_REENVIO = "Si ese correo tiene un registro pendiente de primer acceso, te enviamos una nueva contraseña temporal. Revisa también tu carpeta de spam.";
+
+export async function reenviarContrasenaTemporalAction(emailEntrada: string): Promise<{ ok: boolean; mensaje: string }> {
+  const respuesta = { ok: true, mensaje: MENSAJE_REENVIO };
+  try {
+    const email = String(emailEntrada ?? "").trim();
+    if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { ok: false, mensaje: "Escribe un correo electrónico válido." };
+    }
+    if (!correoConfigurado()) {
+      console.error("❌ Reenvío de contraseña imposible: Resend no está configurado.");
+      return { ok: false, mensaje: "No se pudo enviar el correo por el momento. Intenta más tarde." };
+    }
+
+    const usuario = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" }, NOT: { supabaseId: { startsWith: "staff-placeholder-" } } },
+      select: { supabaseId: true, email: true },
+    });
+    if (!usuario) return respuesta;
+
+    const admin = createAdminClient();
+    const { data, error } = await admin.auth.admin.getUserById(usuario.supabaseId);
+    const meta = data?.user?.user_metadata as Record<string, unknown> | undefined;
+    if (error || !data?.user || meta?.must_change_password !== true) return respuesta;
+
+    const ultimo = typeof meta.temp_sent_at === "string" ? Date.parse(meta.temp_sent_at) : NaN;
+    if (Number.isFinite(ultimo) && Date.now() - ultimo < MS_ESPERA_REENVIO) return respuesta;
+
+    const password = generarPasswordTemporal();
+    const { error: errActualizar } = await admin.auth.admin.updateUserById(usuario.supabaseId, {
+      password,
+      user_metadata: { ...meta, must_change_password: true, temp_sent_at: new Date().toISOString() },
+    });
+    if (errActualizar) {
+      console.error("❌ No se pudo actualizar la contraseña temporal:", errActualizar.message);
+      return { ok: false, mensaje: "No se pudo reenviar la contraseña. Intenta más tarde." };
+    }
+
+    const envio = await enviarCorreo({ to: usuario.email, ...correoAccesoTemporal({ password }) });
+    if (!envio.ok) return { ok: false, mensaje: "No se pudo enviar el correo por el momento. Intenta más tarde." };
+    return respuesta;
+  } catch (err) {
+    console.error("Error al reenviar la contraseña temporal:", err);
+    return { ok: false, mensaje: "No se pudo reenviar la contraseña. Intenta más tarde." };
   }
 }
