@@ -63,10 +63,10 @@ const PLANES = [
   {
     nombre: "Pro",
     precio: 999,
-    desc: "Para negocios en crecimiento con más de una sucursal.",
+    desc: "Para negocios en crecimiento con varias sucursales.",
     caracteristicas: [
-      "De 1 a 3 Sucursales",
-      "3 a 5 Usuarios por sucursal",
+      "De 2 a 4 Sucursales",
+      "De 1 a 5 Usuarios por sucursal",
       "Integración de API de facturación incluida"
     ],
     destacado: true,
