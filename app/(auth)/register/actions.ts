@@ -3,9 +3,8 @@
 import { DIAS_PRUEBA } from "@/lib/ciclo-suscripcion";
 import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MODULE_CATALOG, ALL_MODULE_CODES } from "@/lib/modules-catalog";
-import { modulosRecomendadosOff } from "@/lib/modulos-rubro";
-import { asegurarRolesRubro } from "@/lib/roles-server";
+import { crearNegocio } from "@/lib/crear-negocio";
+import { slugify } from "@/lib/slug";
 import { generarPasswordTemporal } from "@/lib/password-temporal";
 import { correoConfigurado, correoAccesoTemporal, enviarCorreo } from "@/lib/correo-transaccional";
 import { eliminarTenantPorCompleto } from "@/lib/eliminar-tenant";
@@ -90,16 +89,6 @@ interface RegistrarNegocioResult {
   /** Para que la pantalla ofrezca "reenviar contraseña" cuando el correo ya existe. */
   codigo?: "correo_existente";
 }
-
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
 
 // Traduce los mensajes de Supabase Auth (siempre en inglés) a algo que un
 // visitante real pueda leer — antes se mostraba el texto crudo de
@@ -215,100 +204,32 @@ export async function registrarNegocioAction(
 
     authUserIdCreado = authData.user.id;
 
-    const result = await prisma.$transaction(async (tx) => {
-      const tenant = await tx.tenant.create({
-        data: {
-          name: input.businessName.trim(),
-          slug: baseSlug,
-          businessType: input.businessType,
-          email: input.ownerEmail.trim(),
-          phone: input.ownerPhone?.trim() || null,
-        },
-      });
-
-      // Deja constancia de que este correo ya usó su prueba (misma
-      // transacción: si el alta falla, tampoco se "gasta" la prueba).
-      await tx.pruebaGratisUsada.create({
-        data: { emailCanonico: correoCanonico, emailOriginal: input.ownerEmail.trim(), tenantSlug: tenant.slug },
-      });
-
-      const branch = await tx.branch.create({
-        data: { tenantId: tenant.id, name: "Sucursal Principal" },
-      });
-
-      const user = await tx.user.create({
-        data: {
-          tenantId: tenant.id,
-          branchId: branch.id,
-          email: input.ownerEmail.trim(),
-          name: input.ownerName.trim(),
-          supabaseId: authData.user!.id,
-        },
-      });
-
-      const role = await tx.role.create({
-        data: {
-          tenantId: tenant.id,
-          name: "Administrador",
-          description: "Acceso completo",
-          isSystem: true,
-        },
-      });
-
-      await tx.userRole.create({ data: { userId: user.id, roleId: role.id } });
-
-      // Precio en 0 y plan fijo a "Hotmart": el cobro real ya no vive aquí.
-      // Esta fila solo existe para que Suscripciones/Dashboard (Panel
-      // Maestro) — que hoy asumen que todo tenant tiene una — no se rompan.
-      //
-      // 2026-10-06, a petición de Carlos: todo auto-registro arranca con la
-      // PRUEBA GRATIS de 30 días que ya promete la landing (status TRIAL +
-      // endDate a 30 días). Antes se creaba ACTIVE sin endDate — o sea,
-      // acceso gratis para siempre y nunca se bloqueaba. Al terminar la
-      // prueba el acceso se bloquea solo (ver lib/ciclo-suscripcion.ts) y se
-      // reactiva cuando Hotmart avisa del pago (app/api/webhooks/hotmart).
-      await tx.subscription.create({
-        data: {
-          tenantId: tenant.id,
-          plan: "Hotmart",
-          status: "TRIAL",
-          price: 0,
-          endDate: new Date(Date.now() + DIAS_PRUEBA * 24 * 60 * 60 * 1000),
-        },
-      });
-
-      const recomendadosOff = new Set(modulosRecomendadosOff(input.businessType));
-      for (const code of ALL_MODULE_CODES) {
-        const info = MODULE_CATALOG[code];
-        const mod = await tx.module.upsert({
-          where: { code },
-          update: {},
-          create: { code, name: info.name, isCore: info.isCore },
-        });
-        await tx.tenantModule.create({
-          data: { tenantId: tenant.id, moduleId: mod.id, isActive: !recomendadosOff.has(code) },
-        });
-      }
-
-      return tenant;
+    // Alta del negocio (sucursal, dueño, rol, suscripción y módulos): ver
+    // lib/crear-negocio.ts — la misma pieza que usa el webhook de Hotmart.
+    //
+    // Precio en 0 y plan fijo a "Hotmart": el cobro real ya no vive aquí.
+    // 2026-10-06, a petición de Carlos: todo auto-registro arranca con la
+    // PRUEBA GRATIS de 30 días (status TRIAL + endDate a 30 días). Al terminar
+    // se bloquea solo (ver lib/ciclo-suscripcion.ts) y se reactiva cuando
+    // Hotmart avisa del pago (app/api/webhooks/hotmart).
+    const result = await crearNegocio({
+      businessName: input.businessName,
+      slug: baseSlug,
+      businessType: input.businessType,
+      ownerName: input.ownerName,
+      ownerEmail: input.ownerEmail,
+      ownerPhone: input.ownerPhone,
+      authUserId: authData.user.id,
+      suscripcion: {
+        plan: "Hotmart",
+        status: "TRIAL",
+        price: 0,
+        endDate: new Date(Date.now() + DIAS_PRUEBA * 24 * 60 * 60 * 1000),
+      },
+      // Constancia de que este correo ya usó su prueba (misma transacción).
+      pruebaUsada: { emailCanonico: correoCanonico, emailOriginal: input.ownerEmail.trim() },
     });
-
-    // Roles con jerarquía y permisos reales para el rubro elegido (lib/
-    // roles-rubro.ts, 2026-09-21 a petición de Carlos) — fuera de la
-    // transacción de arriba a propósito (no es una operación atómica con
-    // el alta del tenant; si llegara a fallar, el negocio igual queda
-    // creado y "Roles y permisos" los crea solo en el primer vistazo, ver
-    // listarRolesTenant en lib/roles-server.ts).
     negocioCreado = true;
-
-    try {
-      await asegurarRolesRubro(result.id, input.businessType);
-    } catch (errRoles) {
-      // El negocio YA existe: si esto fallara y se reportara como error, el
-      // cliente se quedaría con una cuenta creada pero creyendo que no se
-      // registró. "Roles y permisos" los vuelve a crear solo (ver arriba).
-      console.error("No se pudieron crear los roles del rubro (se crearán al abrir Roles y permisos):", errRoles);
-    }
 
     // Envío de la contraseña temporal. Si falla, se DESHACE el alta (negocio y
     // cuenta de Auth) para no dejar un correo ocupado sin forma de entrar.
