@@ -96,3 +96,60 @@ export function urlPublicaDelSitio(host: string | null | undefined, _proto: stri
   }
   return (respaldo || "https://linkitysoluciones.mx").replace(/\/+$/, "");
 }
+
+/**
+ * Lee la respuesta de Meta a «¿qué webhook tiene configurada esta app?»
+ * (GET /{app-id}/subscriptions) y dice si ya apunta a Linkity y si está
+ * suscrito el campo «messages». `confirmado` = todo en orden.
+ */
+export function evaluarSuscripcionWebhook(json: unknown): { confirmado: boolean; nivel: NivelPrueba; titulo: string; detalle: string } {
+  const datos = (json as { data?: unknown } | null)?.data;
+  const lista = Array.isArray(datos) ? (datos as Array<Record<string, unknown>>) : [];
+  const wa = lista.find((x) => x?.object === "whatsapp_business_account");
+  if (!wa || typeof wa.callback_url !== "string" || !wa.callback_url) {
+    return {
+      confirmado: false,
+      nivel: "aviso",
+      titulo: "Meta todavía no tiene la dirección de Linkity",
+      detalle: "Haz el paso 2: pega la dirección y el código en Meta y pulsa «Verificar y guardar».",
+    };
+  }
+  let ruta = "";
+  let host = "";
+  try {
+    const u = new URL(wa.callback_url);
+    ruta = u.pathname.replace(/\/+$/, "");
+    host = u.hostname;
+  } catch {
+    /* se trata como dirección incorrecta */
+  }
+  if (ruta !== "/api/webhooks/whatsapp") {
+    return {
+      confirmado: false,
+      nivel: "error",
+      titulo: "Meta apunta a otra dirección",
+      detalle: `Meta tiene «${wa.callback_url}». Cámbiala por la dirección del paso 2 y pulsa «Verificar y guardar».`,
+    };
+  }
+  if (host === "linkitysoluciones.mx") {
+    return {
+      confirmado: false,
+      nivel: "error",
+      titulo: "La dirección en Meta no lleva www",
+      detalle: "Meta no sigue redirecciones: usa exactamente la dirección del paso 2 (empieza con https://www.).",
+    };
+  }
+  const campos = Array.isArray(wa.fields) ? (wa.fields as Array<Record<string, unknown>>) : [];
+  if (!campos.some((c) => c?.name === "messages")) {
+    return {
+      confirmado: false,
+      nivel: "aviso",
+      titulo: "Falta encender «messages» en Meta",
+      detalle: "En la pantalla del webhook de Meta, baja a la fila «messages» y enciende su interruptor (debe decir Suscrito).",
+    };
+  }
+  if (wa.active === false) {
+    return { confirmado: false, nivel: "aviso", titulo: "El webhook está inactivo en Meta", detalle: "Pulsa «Verificar y guardar» en Meta para reactivarlo." };
+  }
+  return { confirmado: true, nivel: "ok", titulo: "Meta ya está conectada con Linkity", detalle: "La dirección y «messages» están bien configurados en Meta." };
+}

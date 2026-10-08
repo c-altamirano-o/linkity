@@ -8,6 +8,7 @@ import {
   obtenerEstadoExtraWhatsapp,
   guardarCamposWhatsapp,
   guardarAppIdWhatsapp,
+  registrarContactoMeta,
   guardarHotmart,
   esCampoSecreto,
   type CampoWhatsapp,
@@ -18,6 +19,7 @@ import {
   horasRestantes,
   resumenVigenciaToken,
   formatearNumeroInternacional,
+  evaluarSuscripcionWebhook,
   type NivelPrueba,
 } from "@/lib/conexiones-meta";
 
@@ -236,22 +238,39 @@ export async function probarWhatsappAction(): Promise<ProbarResult> {
     }
   }
 
-  // 4) ¿Meta ya contactó a Linkity?
+  // 4) ¿Meta ya tiene la dirección de Linkity y «messages» encendido?
+  // Se le pregunta directamente a Meta (no hay que esperar a que nos contacte).
   const extra = await obtenerEstadoExtraWhatsapp();
-  if (extra.metaContactoAt) {
-    items.push({
-      id: "meta",
-      nivel: "ok",
-      titulo: "Meta ya está conectada con Linkity",
-      detalle: `Último contacto: ${new Date(extra.metaContactoAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}.`,
-    });
-  } else {
-    items.push({
-      id: "meta",
-      nivel: "aviso",
-      titulo: "Meta todavía no se ha conectado con Linkity",
-      detalle: "Haz el paso 2: pega la dirección y el código en Meta y pulsa «Verificar y guardar».",
-    });
+  let metaResuelto = false;
+  if (appId && cfg.appSecret) {
+    try {
+      const r = await graph(`${appId}/subscriptions`, `${appId}|${cfg.appSecret}`);
+      if (r.status < 400 && !r.json?.error) {
+        const ev = evaluarSuscripcionWebhook(r.json);
+        if (ev.confirmado && !extra.metaContactoAt) await registrarContactoMeta();
+        items.push({ id: "meta", nivel: ev.nivel, titulo: ev.titulo, detalle: ev.detalle });
+        metaResuelto = true;
+      }
+    } catch {
+      /* se usa el respaldo de abajo */
+    }
+  }
+  if (!metaResuelto) {
+    if (extra.metaContactoAt) {
+      items.push({
+        id: "meta",
+        nivel: "ok",
+        titulo: "Meta ya está conectada con Linkity",
+        detalle: `Último contacto: ${new Date(extra.metaContactoAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}.`,
+      });
+    } else {
+      items.push({
+        id: "meta",
+        nivel: "aviso",
+        titulo: "Meta todavía no se ha conectado con Linkity",
+        detalle: "Haz el paso 2: pega la dirección y el código en Meta y pulsa «Verificar y guardar».",
+      });
+    }
   }
 
   revalidatePath("/maestro/conexiones");

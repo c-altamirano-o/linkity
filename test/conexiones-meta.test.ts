@@ -6,6 +6,7 @@ import {
   formatearNumeroInternacional,
   enlacesMeta,
   urlPublicaDelSitio,
+  evaluarSuscripcionWebhook,
 } from "../lib/conexiones-meta";
 
 // Errores de Meta → frase con la acción a seguir
@@ -52,5 +53,20 @@ assert.equal(urlPublicaDelSitio("127.0.0.1:3000", null, undefined), "http://127.
 assert.equal(urlPublicaDelSitio(null, null, "https://miapp.mx/"), "https://miapp.mx");
 assert.equal(urlPublicaDelSitio("x y", null, undefined), "https://linkitysoluciones.mx");
 assert.equal(urlPublicaDelSitio("evil.com/path", null, undefined), "https://linkitysoluciones.mx");
+
+// Estado del webhook según Meta
+const bueno = { data: [{ object: "whatsapp_business_account", callback_url: "https://www.linkitysoluciones.mx/api/webhooks/whatsapp", active: true, fields: [{ name: "messages", version: "v25.0" }] }] };
+assert.equal(evaluarSuscripcionWebhook(bueno).confirmado, true);
+assert.equal(evaluarSuscripcionWebhook({ data: [] }).confirmado, false);
+assert.equal(evaluarSuscripcionWebhook({ data: [] }).nivel, "aviso");
+assert.equal(evaluarSuscripcionWebhook(null).confirmado, false);
+const sinWww = { data: [{ object: "whatsapp_business_account", callback_url: "https://linkitysoluciones.mx/api/webhooks/whatsapp", fields: [{ name: "messages" }] }] };
+assert.match(evaluarSuscripcionWebhook(sinWww).titulo, /www/);
+const otra = { data: [{ object: "whatsapp_business_account", callback_url: "https://otro.com/x", fields: [] }] };
+assert.match(evaluarSuscripcionWebhook(otra).titulo, /otra dirección/);
+const sinMsg = { data: [{ object: "whatsapp_business_account", callback_url: "https://www.linkitysoluciones.mx/api/webhooks/whatsapp/", fields: [{ name: "account_alerts" }] }] };
+assert.match(evaluarSuscripcionWebhook(sinMsg).titulo, /messages/);
+const inactivo = { data: [{ object: "whatsapp_business_account", callback_url: "https://www.linkitysoluciones.mx/api/webhooks/whatsapp", active: false, fields: [{ name: "messages" }] }] };
+assert.equal(evaluarSuscripcionWebhook(inactivo).confirmado, false);
 
 console.log("conexiones-meta: OK");
