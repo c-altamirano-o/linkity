@@ -6,7 +6,168 @@ import {
   alternarFeaturePlanAction,
   actualizarHotmartPlanAction,
   actualizarLimitePlanAction,
+  crearFuncionComercialAction,
+  crearLimiteComercialAction,
 } from "./actions";
+
+/** "Reportes avanzados" -> "REPORTES_AVANZADOS" (sin acentos). */
+function codigoDesdeNombre(nombre: string): string {
+  return nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 50);
+}
+
+const CLASE_INPUT =
+  "mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white outline-none focus:border-[#4F46E5] focus:ring-1 focus:ring-[#4F46E5]/20";
+
+/**
+ * Formulario para agregar una función o un límite al catálogo. El código se
+ * sugiere solo a partir del nombre (editable) hasta que se escribe a mano.
+ */
+function NuevoElementoCatalogo({ tipo, onError }: { tipo: "funcion" | "limite"; onError: (m: string | null) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [codigoManual, setCodigoManual] = useState(false);
+  const [descripcion, setDescripcion] = useState("");
+  const [unidad, setUnidad] = useState("");
+  const [alcance, setAlcance] = useState<"tenant" | "branch">("tenant");
+  const [guardando, setGuardando] = useState(false);
+  const [creado, setCreado] = useState<string | null>(null);
+
+  const esFuncion = tipo === "funcion";
+
+  function reiniciar() {
+    setNombre("");
+    setCodigo("");
+    setCodigoManual(false);
+    setDescripcion("");
+    setUnidad("");
+    setAlcance("tenant");
+  }
+
+  async function crear() {
+    onError(null);
+    setCreado(null);
+    setGuardando(true);
+    const resultado = esFuncion
+      ? await crearFuncionComercialAction({ code: codigo, name: nombre, description: descripcion || null })
+      : await crearLimiteComercialAction({
+          code: codigo,
+          name: nombre,
+          description: descripcion || null,
+          unit: unidad || null,
+          scope: alcance,
+        });
+    setGuardando(false);
+
+    if (!resultado.ok) {
+      onError(resultado.error);
+      return;
+    }
+    setCreado(`${esFuncion ? "Función" : "Límite"} «${nombre.trim()}» creado.`);
+    reiniciar();
+    setAbierto(false);
+  }
+
+  return (
+    <div className="border border-slate-200 rounded-lg p-3 bg-white">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[13px] font-medium text-slate-700">{esFuncion ? "Nueva función" : "Nuevo límite"}</p>
+        <button
+          type="button"
+          onClick={() => setAbierto((v) => !v)}
+          className="text-[12px] font-medium text-[#4F46E5] hover:underline"
+        >
+          {abierto ? "Cancelar" : "Agregar"}
+        </button>
+      </div>
+      <p className="text-[11.5px] text-slate-400 mt-0.5">
+        {esFuncion
+          ? "Nace habilitada en todos los planes, así nadie pierde nada; luego la apagas donde no aplique."
+          : "Nace ilimitado en todos los planes, así no recorta a nadie; luego fijas el número de cada plan."}
+      </p>
+      {creado && <p className="text-[12px] text-emerald-600 mt-1.5">{creado}</p>}
+
+      {abierto && (
+        <div className="mt-3 space-y-2.5">
+          <div>
+            <label className="text-[12px] font-medium text-slate-500">Nombre</label>
+            <input
+              type="text"
+              value={nombre}
+              onChange={(e) => {
+                setNombre(e.target.value);
+                if (!codigoManual) setCodigo(codigoDesdeNombre(e.target.value));
+              }}
+              placeholder={esFuncion ? "Ej. Reportes avanzados" : "Ej. Máximo de productos"}
+              className={CLASE_INPUT}
+            />
+          </div>
+          <div>
+            <label className="text-[12px] font-medium text-slate-500">Código (no se puede cambiar después)</label>
+            <input
+              type="text"
+              value={codigo}
+              onChange={(e) => {
+                setCodigo(e.target.value.toUpperCase());
+                setCodigoManual(true);
+              }}
+              placeholder="REPORTES_AVANZADOS"
+              className={`${CLASE_INPUT} font-mono`}
+            />
+          </div>
+          <div>
+            <label className="text-[12px] font-medium text-slate-500">Descripción (opcional)</label>
+            <input
+              type="text"
+              value={descripcion}
+              onChange={(e) => setDescripcion(e.target.value)}
+              className={CLASE_INPUT}
+            />
+          </div>
+          {!esFuncion && (
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[12px] font-medium text-slate-500">Unidad (opcional)</label>
+                <input
+                  type="text"
+                  value={unidad}
+                  onChange={(e) => setUnidad(e.target.value)}
+                  placeholder="productos"
+                  className={CLASE_INPUT}
+                />
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-slate-500">Se cuenta</label>
+                <select
+                  value={alcance}
+                  onChange={(e) => setAlcance(e.target.value as "tenant" | "branch")}
+                  className={CLASE_INPUT}
+                >
+                  <option value="tenant">Por negocio</option>
+                  <option value="branch">Por sucursal</option>
+                </select>
+              </div>
+            </div>
+          )}
+          <button
+            type="button"
+            disabled={guardando || !nombre.trim() || !codigo.trim()}
+            onClick={crear}
+            className="px-3 py-2 rounded-lg bg-[#4F46E5] text-white text-[12.5px] font-medium disabled:opacity-50"
+          >
+            {guardando ? "Creando..." : esFuncion ? "Crear función" : "Crear límite"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type LimiteUI = PlanComercialUI["limits"][number];
 
@@ -374,6 +535,21 @@ export default function PlanesComercialesClient({
           </div>
         </div>
       )}
+
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200">
+          <h2 className="text-[14.5px] font-medium text-slate-800">Catálogo</h2>
+          <p className="text-[12px] text-slate-400 mt-0.5">
+            Agrega funciones y límites nuevos sin tocar el código. Ojo: aquí solo se registran y se asignan a los
+            planes; para que el sistema los haga cumplir, el punto que debe protegerse tiene que consultarlos
+            (una línea de código por función o límite).
+          </p>
+        </div>
+        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <NuevoElementoCatalogo tipo="funcion" onError={setError} />
+          <NuevoElementoCatalogo tipo="limite" onError={setError} />
+        </div>
+      </div>
     </div>
   );
 }
