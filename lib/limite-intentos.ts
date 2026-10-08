@@ -81,6 +81,5 @@ export async function limpiarIntentosViejos(): Promise<number> {
   return r.count;
 }
 
-export const LIMITE_REGISTRO: OpcionesLimite = { tipo: "registro", maxPorIp: 5, maxGlobal: 100, ventanaMs: 60 * 60 * 1000 };
 export const LIMITE_REENVIO: OpcionesLimite = { tipo: "reenvio", maxPorIp: 6, maxGlobal: 200, ventanaMs: 60 * 60 * 1000 };
 export const MENSAJE_DEMASIADOS_INTENTOS = "Hiciste demasiados intentos en poco tiempo. Espera un rato e inténtalo de nuevo.";

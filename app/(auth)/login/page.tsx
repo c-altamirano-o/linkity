@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getTenantAccesoBySupabaseId, isSuperAdminBySupabaseId } from "./actions";
+import { reenviarContrasenaTemporalAction } from "./reenviar-actions";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -13,6 +14,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [reenviando, setReenviando] = useState(false);
+  const [mensajeReenvio, setMensajeReenvio] = useState("");
+
+  // Quien se suscribió en Hotmart recibe por correo una contraseña temporal; si
+  // no le llegó, la pide de nuevo con el correo que ya escribió arriba.
+  const handleReenviar = async () => {
+    setMensajeReenvio("");
+    if (!email.trim()) {
+      setMensajeReenvio("Escribe primero tu correo electrónico arriba.");
+      return;
+    }
+    setReenviando(true);
+    const r = await reenviarContrasenaTemporalAction(email);
+    setMensajeReenvio(r.mensaje);
+    setReenviando(false);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,7 +263,20 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
+          <div className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
+            ¿Te acabas de suscribir y no te llegó tu contraseña temporal?{" "}
+            <button
+              type="button"
+              disabled={reenviando}
+              onClick={handleReenviar}
+              className="text-primary font-medium hover:underline disabled:opacity-50"
+            >
+              {reenviando ? "Enviando…" : "Reenviar contraseña"}
+            </button>
+            {mensajeReenvio && <p className="mt-2">{mensajeReenvio}</p>}
+          </div>
+
+          <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-4">
             ¿No tienes cuenta?{" "}
             <Link href="/#planes" className="text-primary font-medium hover:underline">
               Ver planes

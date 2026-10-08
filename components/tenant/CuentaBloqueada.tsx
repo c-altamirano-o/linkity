@@ -47,7 +47,7 @@ export default function CuentaBloqueada({
   const mensaje = esCancelada
     ? "Tu suscripción a Linkity fue cancelada. Contáctanos si quieres reactivar tu negocio."
     : esPrueba
-      ? "Tu mes de prueba gratis en Linkity ya terminó y el acceso quedó bloqueado. Todo lo que capturaste (ventas, clientes, inventario) sigue guardado — en cuanto te suscribas, recuperas el acceso de inmediato."
+      ? "Tu prueba gratis en Linkity ya terminó y el acceso quedó bloqueado. Todo lo que capturaste (ventas, clientes, inventario) sigue guardado — en cuanto te suscribas, recuperas el acceso de inmediato."
       : "Tu suscripción a Linkity está vencida y el acceso quedó bloqueado. Tus datos siguen guardados — en cuanto renueves, recuperas el acceso de inmediato.";
 
   return (
