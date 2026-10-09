@@ -145,6 +145,7 @@ interface ConfiguracionClientProps {
   vocabularioActual: Record<string, string>;
   labels: LabelDictionary;
   reparacionesActivo: boolean;
+  clinicoActivo: boolean;
   modulos: ModuloPersonalizable[];
   recomendadosOff: string[];
   logoInicial: string | null;
@@ -186,6 +187,7 @@ export default function ConfiguracionClient({
   vocabularioActual,
   labels,
   reparacionesActivo,
+  clinicoActivo,
   modulos,
   recomendadosOff,
   logoInicial,
@@ -1140,7 +1142,7 @@ export default function ConfiguracionClient({
         </div>
       </div>
 
-      <VocabularioNegocio tenantSlug={tenantSlug} businessType={businessTypeInicial} actuales={vocabularioActual} mostrarReparaciones={reparacionesActivo} />
+      <VocabularioNegocio tenantSlug={tenantSlug} businessType={businessTypeInicial} actuales={vocabularioActual} mostrarReparaciones={reparacionesActivo} mostrarClinico={clinicoActivo} />
 
       {/* ── Configura tu Taller (checklist) ────────────────────── */}
       {/* 2026-09-24, a petición de Carlos: el escudo genérico de Taller no

@@ -30,9 +30,9 @@ export async function crearRecetaAction(params: {
 }): Promise<AccionRecetaResult> {
   const { tenantSlug, customerId, doctorUserId, medications, indications, firmaImagen } = params;
 
-  if (!doctorUserId) return { ok: false, error: "Selecciona un doctor" };
+  if (!doctorUserId) return { ok: false, error: "Selecciona quién atiende" };
   if (!medications?.trim()) return { ok: false, error: "Especifica al menos un medicamento" };
-  if (!firmaImagen?.startsWith("data:image/")) return { ok: false, error: "Falta capturar la firma del doctor" };
+  if (!firmaImagen?.startsWith("data:image/")) return { ok: false, error: "Falta capturar la firma de quien atiende" };
 
   const resuelto = await resolverActor(tenantSlug, "expediente-clinico");
   if (!resuelto.ok) return { ok: false, error: resuelto.error };

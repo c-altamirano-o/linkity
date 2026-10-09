@@ -61,6 +61,7 @@ export default async function ConfiguracionPage({
       vocabularioActual={vocabularioActual}
       labels={labelsResueltos}
       reparacionesActivo={!codigosInactivos.has("reparaciones")}
+      clinicoActivo={!codigosInactivos.has("expediente-clinico") && !recomendadosOff.includes("expediente-clinico")}
       modulos={modulosPersonalizables}
       recomendadosOff={recomendadosOff}
       logoInicial={tenant.logo}

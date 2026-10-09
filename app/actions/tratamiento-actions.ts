@@ -1,5 +1,6 @@
 "use server";
 
+import { getLabelsDeTenant } from "@/lib/labels-server";
 import { getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { PaymentMethod, CashSessionStatus, MovementType } from "@prisma/client";
@@ -40,7 +41,7 @@ export async function crearPlanTratamientoAction(params: {
 
   if (!titulo?.trim()) return { ok: false, error: "Dale un título al plan de tratamiento" };
   if (!branchId) return { ok: false, error: "Selecciona una sucursal" };
-  if (!doctorUserId) return { ok: false, error: "Selecciona un doctor" };
+  if (!doctorUserId) return { ok: false, error: "Selecciona quién atiende" };
   if (!items || items.length === 0) return { ok: false, error: "Agrega al menos una fase al plan" };
   for (const it of items) {
     if (!it.descripcion?.trim()) return { ok: false, error: "Cada fase necesita una descripción" };
@@ -179,7 +180,8 @@ export async function cobrarItemPlanAction(params: {
     });
     if (!item || item.treatmentPlan.tenantId !== tenant.id) return { ok: false, error: "Fase no encontrada" };
     if (item.status !== "ACEPTADO") {
-      return { ok: false, error: "Esta fase debe estar aceptada por el paciente antes de cobrarse" };
+      const labelsT = await getLabelsDeTenant(tenant.id);
+      return { ok: false, error: `Esta fase debe estar aceptada por el ${labelsT["vocab.paciente"] ?? "paciente"} antes de cobrarse` };
     }
 
     let sinCajaAbierta = false;

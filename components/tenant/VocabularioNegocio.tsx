@@ -16,12 +16,15 @@ export default function VocabularioNegocio({
   businessType,
   actuales,
   mostrarReparaciones,
+  mostrarClinico,
 }: {
   tenantSlug: string;
   businessType: string | null;
   actuales: Record<string, string>;
   // true si el negocio recibe objetos para reparar/atender (módulo de Reparaciones activo).
   mostrarReparaciones: boolean;
+  // true si el negocio usa expediente clínico (nombres y ejemplos de pacientes, recetas, planes).
+  mostrarClinico: boolean;
 }) {
   const router = useRouter();
   const [valores, setValores] = useState<Record<string, string>>(actuales);
@@ -57,6 +60,7 @@ export default function VocabularioNegocio({
         <div className="space-y-4 max-w-xl">
           {VOCABULARIO_PERSONALIZABLE.filter((campo) => {
             if (campo.grupo === "reparaciones" && !mostrarReparaciones) return false;
+            if (campo.grupo === "clinico" && !mostrarClinico) return false;
             const enUso = (k: string) => valores[k] ?? valorPorDefectoDeRubro(businessType, k);
             // Los nombres de campos solo se muestran si ese campo se usa.
             if ((campo.key === "repair.field.brand" || campo.key === "repair.field.model") && enUso("repair.field.single") === "1") return false;

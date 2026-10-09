@@ -227,7 +227,7 @@ export default async function ReportesPage({ params }: PageProps) {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Stethoscope className="h-4 w-4 text-muted-foreground" /> Producción por doctor este mes
+                    <Stethoscope className="h-4 w-4 text-muted-foreground" /> Producción por {label(labels, "vocab.especialista.singular").toLowerCase()} este mes
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -280,7 +280,7 @@ export default async function ReportesPage({ params }: PageProps) {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <CalendarCheck className="h-4 w-4 text-muted-foreground" /> Citas por doctor este mes
+                <CalendarCheck className="h-4 w-4 text-muted-foreground" /> Citas por {label(labels, "vocab.especialista.singular").toLowerCase()} este mes
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -299,7 +299,7 @@ export default async function ReportesPage({ params }: PageProps) {
                 </div>
               )}
               <p className="text-xs text-muted-foreground mt-3">
-                Proxy de ocupación de agenda a partir de citas realizadas — un % de ocupación real requeriría definir horario/capacidad por doctor, que Linkity todavía no modela.
+                Proxy de ocupación de agenda a partir de citas realizadas — un % de ocupación real requeriría definir horario/capacidad por {label(labels, "vocab.especialista.singular").toLowerCase()}, que Linkity todavía no modela.
               </p>
             </CardContent>
           </Card>

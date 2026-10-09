@@ -135,6 +135,12 @@ export const DEFAULT_LABELS: LabelDictionary = {
   // Nombre del tipo de catálogo que en reparación se llama "Refacción" (tipo PART).
   "catalog.part.singular": "Refacción",
   "catalog.part.plural": "Refacciones",
+  // Expediente clínico (grupo C): quien recibe la atención y firma/autoriza, y ejemplos.
+  "vocab.paciente": "paciente",
+  "example.clinical.allergy": "Penicilina",
+  "example.clinical.plan": "Plan de seguimiento",
+  "example.clinical.plan.item": "Tratamiento o procedimiento",
+  "example.clinical.prescription": "Medicamento, dosis y duración",
   // Reparaciones/servicios (grupo B, 2026-10-09): lugar de trabajo y campos del
   // formulario de recepción. "unlock.enabled" y "single" son interruptores "1"/"0".
   "vocab.lugar": "taller",
@@ -247,7 +253,7 @@ export const VERTICAL_LABEL_DEFAULTS: Record<string, LabelDictionary> = {
 // Vocabulario por rubro (especialista, ejemplos y ícono). Se mezcla dentro de
 // VERTICAL_LABEL_DEFAULTS, así el negocio puede seguir sobreescribiendo
 // cualquiera de estas keys desde TenantLabel.
-const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: string; icono: string; cita?: string; parte?: [string, string]; rep?: { falla?: string; desbloqueo?: boolean; unico?: boolean } }> = {
+const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: string; icono: string; cita?: string; parte?: [string, string]; clin?: { paciente?: string; alergia: string; plan: string; item: string; receta: string }; rep?: { falla?: string; desbloqueo?: boolean; unico?: boolean } }> = {
   reparacion_celulares: { esp: ["Técnico", "Técnicos"], producto: "Pantalla iPhone 13", icono: "Smartphone", rep: { desbloqueo: true } },
   taller_autos: { esp: ["Mecánico", "Mecánicos"], producto: "Balatas delanteras", icono: "Car", rep: { falla: "Falla o servicio solicitado" } },
   taller_motos: { esp: ["Mecánico", "Mecánicos"], producto: "Kit de arrastre", icono: "Bike", rep: { falla: "Falla o servicio solicitado" } },
@@ -260,9 +266,9 @@ const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: strin
   cerrajeria: { esp: ["Cerrajero", "Cerrajeros"], producto: "Chapa de seguridad", icono: "Key", rep: { unico: true, falla: "Servicio solicitado" } },
   tapiceria: { esp: ["Tapicero", "Tapiceros"], producto: "Vinil por metro", icono: "Sofa", rep: { unico: true, falla: "Trabajo solicitado" } },
   barberia: { esp: ["Barbero", "Barberos"], producto: "Cera para peinar", icono: "Scissors", cita: "Corte de cabello", parte: ["Insumo", "Insumos"] },
-  consultorio_dental: { esp: ["Dentista", "Dentistas"], producto: "Cepillo dental", icono: "Stethoscope", cita: "Limpieza dental", parte: ["Insumo", "Insumos"] },
-  consultorio_medico: { esp: ["Médico", "Médicos"], producto: "Termómetro digital", icono: "Stethoscope", cita: "Consulta general", parte: ["Insumo", "Insumos"] },
-  veterinaria: { esp: ["Veterinario", "Veterinarios"], producto: "Alimento para perro 20 kg", icono: "PawPrint", cita: "Vacuna", parte: ["Insumo", "Insumos"] },
+  consultorio_dental: { esp: ["Dentista", "Dentistas"], producto: "Cepillo dental", icono: "Stethoscope", cita: "Limpieza dental", parte: ["Insumo", "Insumos"], clin: { alergia: "Penicilina", plan: "Rehabilitación oral, Plan de ortodoncia", item: "Corona diente 16", receta: "Amoxicilina 500mg, 1 cápsula cada 8 horas por 7 días" } },
+  consultorio_medico: { esp: ["Médico", "Médicos"], producto: "Termómetro digital", icono: "Stethoscope", cita: "Consulta general", parte: ["Insumo", "Insumos"], clin: { alergia: "Penicilina", plan: "Control de diabetes, Plan de rehabilitación", item: "Electrocardiograma", receta: "Paracetamol 500mg, 1 tableta cada 8 horas por 3 días" } },
+  veterinaria: { esp: ["Veterinario", "Veterinarios"], producto: "Alimento para perro 20 kg", icono: "PawPrint", cita: "Vacuna", parte: ["Insumo", "Insumos"], clin: { paciente: "dueño", alergia: "Pollo", plan: "Plan de vacunación, Plan de esterilización", item: "Esterilización", receta: "Antibiótico 5 ml cada 12 horas por 7 días" } },
   estetica: { esp: ["Esteticista", "Esteticistas"], producto: "Shampoo profesional", icono: "Sparkles", cita: "Limpieza facial", parte: ["Insumo", "Insumos"] },
   spa: { esp: ["Terapeuta", "Terapeutas"], producto: "Aceite para masaje", icono: "Flower2", cita: "Masaje relajante", parte: ["Insumo", "Insumos"] },
   gimnasio: { esp: ["Entrenador", "Entrenadores"], producto: "Proteína 2 lb", icono: "Dumbbell", cita: "Clase de prueba", parte: ["Insumo", "Insumos"] },
@@ -277,6 +283,13 @@ for (const [rubro, v] of Object.entries(VOCABULARIO_RUBRO)) {
     "example.catalog.product": v.producto,
     "icon.catalog.product": v.icono,
     ...(v.cita ? { "example.appointment.reason": v.cita } : {}),
+    ...(v.clin ? {
+      "vocab.paciente": v.clin.paciente ?? "paciente",
+      "example.clinical.allergy": v.clin.alergia,
+      "example.clinical.plan": v.clin.plan,
+      "example.clinical.plan.item": v.clin.item,
+      "example.clinical.prescription": v.clin.receta,
+    } : {}),
     ...(v.parte ? { "catalog.part.singular": v.parte[0], "catalog.part.plural": v.parte[1] } : {}),
     ...(v.rep?.falla ? { "repair.field.fault": v.rep.falla } : {}),
     ...(v.rep?.desbloqueo ? { "repair.field.unlock.enabled": "1" } : {}),
@@ -402,7 +415,7 @@ export type CampoVocabulario = {
   // Solo para tipo "opciones": valores permitidos y su texto.
   opciones?: { value: string; label: string }[];
   // "reparaciones": solo se muestra si el negocio usa recepción de trabajos.
-  grupo?: "general" | "reparaciones";
+  grupo?: "general" | "reparaciones" | "clinico";
 };
 
 export const VOCABULARIO_PERSONALIZABLE: CampoVocabulario[] = [
@@ -412,6 +425,11 @@ export const VOCABULARIO_PERSONALIZABLE: CampoVocabulario[] = [
   { key: "icon.catalog.product", titulo: "Ícono de Productos en el Catálogo", ayuda: "Elige el que más se parezca a lo que vendes.", tipo: "icono", max: 30 },
   { key: "catalog.part.singular", titulo: "Nombre del tipo de catálogo \"Refacción\" (singular)", ayuda: "Ej. Refacción, Insumo, Material. Es el segundo tipo de producto del Catálogo.", tipo: "texto", max: 30 },
   { key: "catalog.part.plural", titulo: "Nombre del tipo de catálogo \"Refacción\" (plural)", ayuda: "Ej. Refacciones, Insumos, Materiales. Se ve en las pestañas del Catálogo y en Inventario.", tipo: "texto", max: 30 },
+  { key: "vocab.paciente", titulo: "Cómo llamas a quien recibe la atención y firma", ayuda: "Ej. paciente, dueño. Escríbelo en minúsculas y en masculino singular: se usa como \"el paciente\" o \"del paciente\".", tipo: "texto", max: 30, grupo: "clinico" },
+  { key: "example.clinical.allergy", titulo: "Ejemplo de alergia en el expediente", ayuda: "Solo es el texto de ejemplo.", tipo: "texto", max: 60, grupo: "clinico" },
+  { key: "example.clinical.plan", titulo: "Ejemplo de plan de tratamiento", ayuda: "Solo es el texto de ejemplo al crear un plan.", tipo: "texto", max: 80, grupo: "clinico" },
+  { key: "example.clinical.plan.item", titulo: "Ejemplo de una fase del plan", ayuda: "Solo es el texto de ejemplo.", tipo: "texto", max: 60, grupo: "clinico" },
+  { key: "example.clinical.prescription", titulo: "Ejemplo de receta", ayuda: "Solo es el texto de ejemplo al crear una receta.", tipo: "texto", max: 100, grupo: "clinico" },
   { key: "example.appointment.reason", titulo: "Ejemplo de motivo de una cita", ayuda: "Solo es el texto de ejemplo al agendar una cita.", tipo: "texto", max: 60 },
   { key: "entity.repair.asset", titulo: "Lo que recibes del cliente", ayuda: "Ej. Dispositivo, Vehículo, Calzado, Artículo.", tipo: "texto", max: 40, grupo: "reparaciones" },
   { key: "vocab.lugar", titulo: "Dónde se hace el trabajo", ayuda: "Ej. taller, área de trabajo. Se escribe en minúsculas: \"del taller\".", tipo: "texto", max: 30, grupo: "reparaciones" },

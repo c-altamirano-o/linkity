@@ -177,7 +177,7 @@ export async function getReportesClinicosData(tenantId: string, expedienteActiva
     if (existente) return existente;
     const nueva: ProduccionDoctorItem = {
       doctorUserId,
-      doctor: nombreDoctor[doctorUserId] ?? "Doctor no encontrado",
+      doctor: nombreDoctor[doctorUserId] ?? "No encontrado",
       ventas: 0,
       tratamientos: 0,
       total: 0,
@@ -225,7 +225,7 @@ export async function getReportesClinicosData(tenantId: string, expedienteActiva
     if (existente) return existente;
     const nueva: CitasPorDoctorItem = {
       doctorUserId,
-      doctor: nombreDoctor[doctorUserId] ?? "Doctor no encontrado",
+      doctor: nombreDoctor[doctorUserId] ?? "No encontrado",
       completadas: 0,
       noShow: 0,
       canceladas: 0,

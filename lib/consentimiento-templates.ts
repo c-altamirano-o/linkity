@@ -20,8 +20,9 @@ export interface PlantillaConsentimiento {
   cuerpo: string;
 }
 
-export const NOTA_FIRMA_SIMULADA =
-  "Nota: esta firma se capturó de forma digital dentro del sistema, como respaldo de que el procedimiento fue explicado y aceptado por el paciente (o su representante). No es una firma electrónica avanzada (e.firma) ni sustituye, para efectos legales o notariales, una firma autógrafa en papel.";
+export function notaFirmaSimulada(paciente: string = "paciente"): string {
+  return `Nota: esta firma se capturó de forma digital dentro del sistema, como respaldo de que el procedimiento fue explicado y aceptado por el ${paciente} (o su representante). No es una firma electrónica avanzada (e.firma) ni sustituye, para efectos legales o notariales, una firma autógrafa en papel.`;
+}
 
 export const PLANTILLAS_CONSENTIMIENTO: Record<string, PlantillaConsentimiento[]> = {
   consultorio_dental: [

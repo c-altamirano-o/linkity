@@ -3,7 +3,8 @@
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { resolverActor } from "@/lib/actor";
-import { obtenerPlantilla, NOTA_FIRMA_SIMULADA } from "@/lib/consentimiento-templates";
+import { obtenerPlantilla, notaFirmaSimulada } from "@/lib/consentimiento-templates";
+import { getLabelsDeTenant } from "@/lib/labels-server";
 
 /**
  * Server Actions de Consentimiento Informado (M17 — Fase 2 de "Propuesta:
@@ -66,13 +67,14 @@ export async function crearConsentimientoAction(params: {
       }
     }
 
+    const labelsT = await getLabelsDeTenant(tenant.id);
     await db.informedConsent.create({
       data: {
         tenantId: tenant.id,
         customerId,
         userId: dbUser.id,
         procedureType,
-        content: `${plantilla.cuerpo}\n\n${NOTA_FIRMA_SIMULADA}`,
+        content: `${plantilla.cuerpo}\n\n${notaFirmaSimulada(labelsT["vocab.paciente"] ?? "paciente")}`,
         treatmentPlanItemId: treatmentPlanItemId || null,
         patientSignature: firmaImagen,
         signedByName: firmadoPor.trim(),

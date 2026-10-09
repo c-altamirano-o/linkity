@@ -13,7 +13,7 @@ import type { ExpedienteCliente } from "@/lib/expediente-data";
 import { type CondicionDiente, DIENTES_SUPERIOR, DIENTES_INFERIOR } from "@/lib/odontograma-fdi";
 import type { PlanTratamientoUI } from "@/lib/tratamiento-data";
 import type { ConsentimientoUI } from "@/lib/consentimiento-data";
-import { type PlantillaConsentimiento, NOTA_FIRMA_SIMULADA } from "@/lib/consentimiento-templates";
+import { type PlantillaConsentimiento, notaFirmaSimulada } from "@/lib/consentimiento-templates";
 import type { RecetaUI } from "@/lib/receta-data";
 import type { DoctorOption } from "@/lib/citas-data";
 import { label, type LabelDictionary } from "@/lib/labels";
@@ -399,6 +399,8 @@ export default function ClientesClient({
   puedeVerMontos = true, telefonoClienteObligatorio,
 }: ClientesClientProps) {
   const router = useRouter();
+  const pac = label(labels, "vocab.paciente");
+  const espClin = label(labels, "vocab.especialista.singular");
   const [busqueda, setBusqueda] = useState("");
   const [seleccionadoId, setSeleccionadoId] = useState<string | null>(clientes[0]?.id ?? null);
   const [filtroHistorial, setFiltroHistorial] = useState<FiltroHistorial>("Todo");
@@ -800,7 +802,7 @@ export default function ClientesClient({
   function handleGuardarReceta() {
     if (!seleccionado) return;
     if (!recetaDoctorUserId) {
-      setRecetaError("Selecciona un doctor");
+      setRecetaError("Selecciona quién atiende");
       return;
     }
     if (!recetaMedications.trim()) {
@@ -808,7 +810,7 @@ export default function ClientesClient({
       return;
     }
     if (!recetaFirma) {
-      setRecetaError("Falta capturar la firma del doctor");
+      setRecetaError("Falta capturar la firma de quien atiende");
       return;
     }
     setRecetaError(null);
@@ -1373,7 +1375,7 @@ export default function ClientesClient({
                           type="text"
                           value={antecedentesForm.alergias ?? ""}
                           onChange={(e) => { setAntecedentesForm({ ...antecedentesForm, alergias: e.target.value }); setAntecedentesGuardado(false); }}
-                          placeholder="ej. Penicilina"
+                          placeholder={`ej. ${label(labels, "example.clinical.allergy")}`}
                           className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                         />
                       </div>
@@ -1612,7 +1614,7 @@ export default function ClientesClient({
                                         <button
                                           disabled={itemEnCurso === it.id}
                                           onClick={() => handleAccionItem(it.id, "ACEPTADO")}
-                                          title="El paciente acepta esta fase"
+                                          title={`El ${pac} acepta esta fase`}
                                           className="p-1 rounded hover:bg-emerald-100 text-emerald-700 disabled:opacity-50"
                                         >
                                           <Check className="w-3.5 h-3.5" />
@@ -1620,7 +1622,7 @@ export default function ClientesClient({
                                         <button
                                           disabled={itemEnCurso === it.id}
                                           onClick={() => handleAccionItem(it.id, "RECHAZADO")}
-                                          title="El paciente rechaza esta fase"
+                                          title={`El ${pac} rechaza esta fase`}
                                           className="p-1 rounded hover:bg-red-100 text-red-700 disabled:opacity-50"
                                         >
                                           <Ban className="w-3.5 h-3.5" />
@@ -1857,7 +1859,7 @@ export default function ClientesClient({
                   value={planForm.titulo}
                   onChange={(e) => setPlanForm({ ...planForm, titulo: e.target.value })}
                   className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  placeholder="ej. Rehabilitación oral, Plan de ortodoncia"
+                  placeholder={`ej. ${label(labels, "example.clinical.plan")}`}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1874,7 +1876,7 @@ export default function ClientesClient({
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Doctor</label>
+                  <label className="text-xs font-medium text-muted-foreground">{espClin}</label>
                   <select
                     value={planForm.doctorUserId}
                     onChange={(e) => setPlanForm({ ...planForm, doctorUserId: e.target.value })}
@@ -1901,7 +1903,7 @@ export default function ClientesClient({
                         type="text"
                         value={it.descripcion}
                         onChange={(e) => actualizarFilaItem(i, "descripcion", e.target.value)}
-                        placeholder="Descripción (ej. Corona diente 16)"
+                        placeholder={`Descripción (ej. ${label(labels, "example.clinical.plan.item")})`}
                         className="flex-1 min-w-0 px-2.5 py-1.5 border border-border rounded-lg text-xs bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                       />
                       {odontogramaActivo && (
@@ -2053,7 +2055,7 @@ export default function ClientesClient({
               {plantillaConsentSeleccionada && (
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <p className="text-xs text-foreground whitespace-pre-line">{plantillaConsentSeleccionada.cuerpo}</p>
-                  <p className="text-[11.5px] text-muted-foreground mt-2 italic">{NOTA_FIRMA_SIMULADA}</p>
+                  <p className="text-[11.5px] text-muted-foreground mt-2 italic">{notaFirmaSimulada(pac)}</p>
                 </div>
               )}
 
@@ -2064,7 +2066,7 @@ export default function ClientesClient({
                   value={consentFirmadoPor}
                   onChange={(e) => setConsentFirmadoPor(e.target.value)}
                   className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  placeholder="Nombre del paciente o su representante"
+                  placeholder={`Nombre del ${pac} o su representante`}
                 />
               </div>
 
@@ -2129,7 +2131,7 @@ export default function ClientesClient({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={consentVerModal.firmaImagen}
-                    alt="Firma del paciente"
+                    alt={`Firma del ${pac}`}
                     className="mt-1 w-full h-40 object-contain rounded-lg border border-border bg-white"
                   />
                 </div>
@@ -2158,7 +2160,7 @@ export default function ClientesClient({
             </div>
             <div className="p-5 space-y-3">
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Doctor(a) *</label>
+                <label className="text-xs font-medium text-muted-foreground">{espClin} *</label>
                 <select
                   value={recetaDoctorUserId}
                   onChange={(e) => setRecetaDoctorUserId(e.target.value)}
@@ -2177,7 +2179,7 @@ export default function ClientesClient({
                   onChange={(e) => setRecetaMedications(e.target.value)}
                   rows={4}
                   className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                  placeholder={"Ej. Amoxicilina 500mg, 1 cápsula cada 8 horas por 7 días"}
+                  placeholder={`Ej. ${label(labels, "example.clinical.prescription")}`}
                 />
               </div>
 
@@ -2193,7 +2195,7 @@ export default function ClientesClient({
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Firma del doctor(a) *</label>
+                <label className="text-xs font-medium text-muted-foreground">Firma de quien atiende *</label>
                 <FirmaCanvas onChange={setRecetaFirma} className="mt-1" />
               </div>
 
@@ -2243,14 +2245,14 @@ export default function ClientesClient({
               )}
               {recetaVerModal.firmaImagen && (
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Firma del doctor(a)</label>
+                  <label className="text-xs font-medium text-muted-foreground">Firma de quien atiende</label>
                   {/* Mismo h-40 + object-contain que la firma del paciente en
                       "Ver consentimiento" — ver el comentario de ese bloque
                       arriba (bug del placeholder de demo estirado). */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={recetaVerModal.firmaImagen}
-                    alt="Firma del doctor"
+                    alt="Firma de quien atiende"
                     className="mt-1 w-full h-40 object-contain rounded-lg border border-border bg-white"
                   />
                 </div>
