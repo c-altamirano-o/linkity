@@ -409,10 +409,10 @@ export default function ClientesClient({
   // "Muéstrame cómo" (ver lib/tours.ts) — esta pantalla también hospeda al
   // expediente clínico (odontograma, notas, planes), así que son 4 tours
   // posibles desde aquí, cada uno con su propio ?tour=<id>.
-  useTourDesdeUrl("clientes-dar-de-alta", TOUR_CLIENTES_ALTA);
-  useTourDesdeUrl("odontograma-marcar", TOUR_ODONTOGRAMA_MARCAR);
-  useTourDesdeUrl("expediente-nota-evolucion", TOUR_NOTA_EVOLUCION);
-  useTourDesdeUrl("expediente-plan-tratamiento", TOUR_PLAN_TRATAMIENTO);
+  useTourDesdeUrl("clientes-dar-de-alta", TOUR_CLIENTES_ALTA, labels);
+  useTourDesdeUrl("odontograma-marcar", TOUR_ODONTOGRAMA_MARCAR, labels);
+  useTourDesdeUrl("expediente-nota-evolucion", TOUR_NOTA_EVOLUCION, labels);
+  useTourDesdeUrl("expediente-plan-tratamiento", TOUR_PLAN_TRATAMIENTO, labels);
 
   // Body del detalle: "historial" (compras/reparaciones, comportamiento de
   // siempre) o "expediente" (M16) — solo existe la segunda opción cuando el

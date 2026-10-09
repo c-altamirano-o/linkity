@@ -110,8 +110,8 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   // interactivo real, no un video) — ver lib/tours.ts. Lanza el tour de
   // "Registrar una venta" cuando se llega aquí desde el botón del mismo
   // nombre en /ayuda (?tour=pos-registrar-venta).
-  useTourDesdeUrl("pos-registrar-venta", TOUR_POS_VENTA);
-  useTourDesdeUrl("pos-cobrar-reparacion", TOUR_POS_COBRAR_REPARACION);
+  useTourDesdeUrl("pos-registrar-venta", TOUR_POS_VENTA, labels);
+  useTourDesdeUrl("pos-cobrar-reparacion", TOUR_POS_COBRAR_REPARACION, labels);
 
   const [branchId, setBranchId] = useState<string | null>(branchInicial);
   const [busqueda, setBusqueda] = useState("");

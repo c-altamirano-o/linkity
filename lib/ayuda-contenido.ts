@@ -42,6 +42,8 @@ export interface FlujoPasos {
   // que navega a `/${tenantSlug}/${ruta}?tour=${tourId}` — ese Client
   // Component (ver lib/tours.ts) lo detecta y lanza el tour real.
   tourId?: string;
+  // Si se indica, el flujo solo se muestra a negocios de esos rubros (businessType).
+  rubros?: string[];
 }
 
 export interface ContenidoModuloAyuda {
@@ -130,27 +132,28 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
   },
   reparaciones: {
     labelKey: "module.repair.name",
-    esencial: `Aquí recibes un equipo nuevo con su folio, y cobras/entregas cuando ya esté marcado como listo.`,
-    avanzado: `No puedes cambiar el estatus, asignar técnico ni ajustar el costo desde aquí — eso se hace exclusivamente en "Taller", el panel de recepción central.`,
+    esencial: `Aquí registras cada trabajo nuevo con su folio, y cobras/entregas cuando ya esté marcado como listo.`,
+    avanzado: `No puedes cambiar el estatus, asignar {esp} ni ajustar el costo desde aquí — eso se hace exclusivamente en "{recepcion}", el panel de recepción central.`,
     flujos: [
       {
-        titulo: "Recibir un equipo nuevo",
+        titulo: "Registrar un trabajo nuevo",
         tourId: "reparaciones-recibir-equipo",
         pasos: [
           "Presiona \"Nueva\" arriba de la lista.",
           "Busca al cliente por nombre; si no existe, presiona \"+ Registrar cliente nuevo\" y captura su Nombre y Teléfono (y elige la sucursal, si tienes más de una).",
-          "Captura la Marca — el fabricante del equipo (ej. Samsung, Apple, Huawei, Motorola).",
-          "Captura el Modelo — el modelo específico de esa marca (ej. \"A16\", \"iPhone 8\", \"Nova 2\"); lo encuentras en la caja del equipo, en los Ajustes del equipo, o te lo dice el cliente.",
-          "Describe la Falla reportada: lo que el cliente dice que le pasa al equipo, o lo que tú notaste al revisarlo y diagnosticarlo.",
-          "Si el equipo tiene bloqueo, captura la Contraseña de desbloqueo (opcional) — es solo para que el técnico pueda hacer pruebas, nunca se muestra al cliente.",
-          "Agrega al menos una pieza y/o un servicio cotizado — indica qué se le cotizó al cliente (refacción, mano de obra, o ambos); es lo que verá en su ticket, y el sistema no deja crear el folio sin esto.",
-          "Elige la Prioridad — qué tan urgente es que el equipo quede listo, normalmente te lo indica el propio cliente.",
-          "Captura la Fecha estimada de entrega (opcional) — la defines tú según la carga de taller, o la que acordaste con el cliente.",
+          "[dosCampos]Captura el campo \"{Marca}\" — el fabricante o la marca de lo que recibes{ejMarca}.",
+          "[dosCampos]Captura el campo \"{Modelo}\" — el dato específico dentro de esa marca{ejModelo}; lo encuentras en la caja, en la etiqueta o placa, o te lo dice el cliente.",
+          "[unaDescripcion]Captura el campo \"{Descripcion}\" — describe con claridad lo que el cliente deja (tipo, marca o características) para poder identificarlo después.",
+          "Captura el campo \"{Falla}\": lo que el cliente dice que necesita o que le pasa, o lo que tú notaste al revisarlo.",
+          "[desbloqueo]Si tiene bloqueo, captura \"{Desbloqueo}\" (opcional) — es solo para que quien lo trabaje pueda hacer pruebas, nunca se muestra al cliente.",
+          "Agrega al menos una pieza y/o un servicio cotizado — indica qué se le cotizó al cliente ({parte}, mano de obra, o ambos); es lo que verá en su ticket, y el sistema no deja crear el folio sin esto.",
+          "Elige la Prioridad — qué tan urgente es que quede terminado, normalmente te lo indica el propio cliente.",
+          "Captura la Fecha estimada de entrega (opcional) — la defines tú según tu carga de trabajo, o la que acordaste con el cliente.",
           "Presiona \"Crear\" — el folio lo genera el sistema, no se captura a mano.",
         ],
       },
       {
-        titulo: "Entregar un equipo ya listo",
+        titulo: "Entregar un trabajo ya listo",
         tourId: "reparaciones-entregar-equipo",
         pasos: [
           "Abre el folio y presiona \"Entregar\".",
@@ -162,15 +165,15 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
   },
   taller: {
     labelKey: "module.workshop.name",
-    esencial: "Esta es tu vista de técnico, de solo lectura: ves los equipos asignados a ti (o a todo el equipo, si tu rol es \"Jefe de técnicos\") para dar seguimiento a tu carga de trabajo.",
-    avanzado: `Aquí NO puedes cambiar el estatus, asignar técnico ni editar piezas/costo — eso es exclusivo de "Taller" (el módulo de recepción central). Lo único que puedes hacer es avisarle a recepción.`,
+    esencial: "Esta es tu vista de {esp}, de solo lectura: ves los trabajos asignados a ti (o todos los asignados, si tu rol es \"{encargado}\") para dar seguimiento a tu carga de trabajo.",
+    avanzado: `Aquí NO puedes cambiar el estatus, asignar {esp} ni editar piezas/costo — eso es exclusivo de "{recepcion}" (el módulo de recepción central). Lo único que puedes hacer es avisarle a recepción.`,
     flujos: [
       {
-        titulo: "Avisar algo a Recepción/Tienda",
+        titulo: "Avisar algo a {recepcion} / Tienda",
         tourId: "taller-avisar-recepcion",
         pasos: [
           "Abre el folio de la lista.",
-          "Escribe tu mensaje en el cuadro \"Enviar alerta a Recepción / Tienda\".",
+          "Escribe tu mensaje en el cuadro \"Enviar alerta a {recepcion} / Tienda\".",
           "Opcional: activa la casilla para que el cliente también vea ese mensaje en su página de seguimiento.",
           "Presiona \"Enviar alerta\".",
         ],
@@ -179,25 +182,25 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
   },
   aduana: {
     labelKey: "module.reception.name",
-    esencial: "Este es el panel central de recepción del taller: aquí asignas técnico, avanzas el estatus del equipo y ajustas costo/piezas cotizadas.",
-    avanzado: "El panel lateral \"Resumen de taller\" te muestra KPIs operativos, la distribución de estatus (con selector de periodo propio) y un ranking de técnicos.",
+    esencial: "Este es el panel central de recepción: aquí asignas {esp}, avanzas el estatus de cada trabajo y ajustas costo/piezas cotizadas.",
+    avanzado: "El panel lateral \"Resumen de {lugar}\" te muestra KPIs operativos, la distribución de estatus (con selector de periodo propio) y un ranking de {esps}.",
     flujos: [
       {
-        titulo: "Asignar técnico y avanzar un folio",
+        titulo: "Asignar {esp} y avanzar un folio",
         tourId: "aduana-asignar-tecnico",
         pasos: [
           "Abre el folio de la lista.",
-          "En \"Técnico asignado\", elige al técnico del selector — se guarda solo con elegirlo, sin botón aparte.",
-          "Si el costo cambió tras el diagnóstico, corrígelo en \"Costo estimado / pieza cotizada\" — queda registrado en el Historial con fecha y hora.",
+          "En \"{Esp} asignado\", elige a la persona del selector — se guarda solo con elegirla, sin botón aparte.",
+          "Si el costo cambió tras la revisión, corrígelo en \"Costo estimado / pieza cotizada\" — queda registrado en el Historial con fecha y hora.",
           "Agrega piezas y/o servicios cotizados con el selector y el botón \"+\" (o \"Otro\" para un nombre/precio libre).",
           "En \"Cambiar estatus\", presiona el botón con el siguiente estatus (ej. \"Listo\") para avanzarlo.",
         ],
       },
       {
-        titulo: "Cobrar y entregar un equipo listo",
+        titulo: "Cobrar y entregar un trabajo listo",
         tourId: "aduana-cobrar-entregar",
         pasos: [
-          "Si el equipo ya está \"Listo\" y tu rol también tiene acceso a Punto de Venta, usa el atajo \"Cobrar y entregar\" que aparece en el folio.",
+          "Si el trabajo ya está \"Listo\" y tu rol también tiene acceso a Punto de Venta, usa el atajo \"Cobrar y entregar\" que aparece en el folio.",
         ],
       },
     ],
@@ -215,7 +218,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
           "Elige el cliente del selector, o presiona \"+ Cliente nuevo\" y captura su Nombre (obligatorio) y, si quieres, Teléfono.",
           "Si tienes más de una sucursal, elígela.",
           "En \"Atiende\", elige quién va a atender la cita.",
-          "Describe el Motivo (ej. \"Limpieza dental\").",
+          "Describe el Motivo (ej. \"{ejCita}\").",
           "Captura la Fecha y hora.",
           "Opcional: ajusta la Duración (15, 30, 45, 60, 90 o 120 minutos — 30 por defecto) y agrega Notas.",
           "Presiona \"Guardar\".",
@@ -232,12 +235,13 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
   },
   "expediente-clinico": {
     labelKey: "module.clinicalRecord.name",
-    esencial: "Historial y notas clínicas del paciente: diagnósticos, tratamientos, consentimientos y recetas.",
-    avanzado: "Solo lo tienen permitido roles que de verdad atienden pacientes (ej. un dentista/doctor con PIN) — no quien solo cobra, por la sensibilidad de este tipo de datos.",
+    esencial: "Historial y notas clínicas de cada cliente atendido: diagnósticos, tratamientos, consentimientos y recetas.",
+    avanzado: "Solo lo tienen permitido roles que de verdad dan atención clínica (ej. {esp} con PIN) — no quien solo cobra, por la sensibilidad de este tipo de datos.",
     flujos: [
       {
         titulo: "Marcar el odontograma",
         tourId: "odontograma-marcar",
+        rubros: ["consultorio_dental"],
         pasos: [
           "Entra a la ficha del cliente y abre su expediente.",
           "Da clic en un diente.",
@@ -262,7 +266,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
         pasos: [
           "Presiona \"Nuevo plan\".",
           "Captura el Título del plan (obligatorio, ej. \"Rehabilitación oral\").",
-          "Si tienes más de una sucursal, elige la Sucursal y el Doctor responsable.",
+          "Si tienes más de una sucursal, elige la Sucursal y {Esp} responsable.",
           "Agrega cada fase con \"+ Agregar fase\": la Descripción y el Costo son obligatorios por fase (el Diente es opcional).",
           "Opcional: agrega Notas.",
           "Presiona \"Guardar plan\".",
@@ -385,7 +389,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
   personal: {
     labelKey: "module.staff.name",
     esencial: "Aquí das de alta a tus empleados y les asignas un PIN y un rol — sin esto, nadie más que tú puede entrar al sistema.",
-    avanzado: "Los roles controlan módulo por módulo qué puede ver y hacer cada quien. Puedes usar los roles base (Gerente/Cajero/Técnico) o crear los tuyos propios, módulo por módulo.",
+    avanzado: "Los roles controlan módulo por módulo qué puede ver y hacer cada quien. Puedes usar los roles base (Gerente/Cajero/{Esp}) o crear los tuyos propios, módulo por módulo.",
     flujos: [
       {
         titulo: "Dar de alta un empleado",

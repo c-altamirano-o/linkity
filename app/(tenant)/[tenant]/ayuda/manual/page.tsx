@@ -36,5 +36,5 @@ export default async function ManualAyudaPage({
 
   const labels = await getTenantLabels(tenant.id, tenant.businessType);
 
-  return <ManualAyudaClient tenantSlug={tenantSlug} labels={labels} modulosInactivos={modulosInactivos} />;
+  return <ManualAyudaClient tenantSlug={tenantSlug} labels={labels} businessType={tenant.businessType} modulosInactivos={modulosInactivos} />;
 }

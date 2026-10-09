@@ -149,6 +149,8 @@ export const DEFAULT_LABELS: LabelDictionary = {
   "repair.field.fault": "Falla reportada",
   "repair.field.unlock": "Contraseña de desbloqueo",
   "repair.field.unlock.enabled": "0",
+  "example.repair.brand": "",
+  "example.repair.model": "",
   "repair.field.single": "0",
   "repair.field.single.label": "Descripción del objeto",
 
@@ -253,16 +255,16 @@ export const VERTICAL_LABEL_DEFAULTS: Record<string, LabelDictionary> = {
 // Vocabulario por rubro (especialista, ejemplos y ícono). Se mezcla dentro de
 // VERTICAL_LABEL_DEFAULTS, así el negocio puede seguir sobreescribiendo
 // cualquiera de estas keys desde TenantLabel.
-const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: string; icono: string; cita?: string; parte?: [string, string]; clin?: { paciente?: string; alergia: string; plan: string; item: string; receta: string }; rep?: { falla?: string; desbloqueo?: boolean; unico?: boolean } }> = {
-  reparacion_celulares: { esp: ["Técnico", "Técnicos"], producto: "Pantalla iPhone 13", icono: "Smartphone", rep: { desbloqueo: true } },
-  taller_autos: { esp: ["Mecánico", "Mecánicos"], producto: "Balatas delanteras", icono: "Car", rep: { falla: "Falla o servicio solicitado" } },
-  taller_motos: { esp: ["Mecánico", "Mecánicos"], producto: "Kit de arrastre", icono: "Bike", rep: { falla: "Falla o servicio solicitado" } },
-  electrodomesticos: { esp: ["Técnico", "Técnicos"], producto: "Motor de lavadora", icono: "WashingMachine" },
-  computadoras: { esp: ["Técnico", "Técnicos"], producto: "Disco SSD 480 GB", icono: "Laptop", rep: { desbloqueo: true } },
+const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: string; icono: string; cita?: string; parte?: [string, string]; clin?: { paciente?: string; alergia: string; plan: string; item: string; receta: string }; rep?: { falla?: string; desbloqueo?: boolean; unico?: boolean; ejMarca?: string; ejModelo?: string } }> = {
+  reparacion_celulares: { esp: ["Técnico", "Técnicos"], producto: "Pantalla iPhone 13", icono: "Smartphone", rep: { ejMarca: "Samsung, Apple, Huawei o Motorola", ejModelo: '"A16", "iPhone 8" o "Nova 2"', desbloqueo: true } },
+  taller_autos: { esp: ["Mecánico", "Mecánicos"], producto: "Balatas delanteras", icono: "Car", rep: { ejMarca: "Nissan, Chevrolet, Ford o Volkswagen", ejModelo: '"Versa 2018" o "Aveo 2015"', falla: "Falla o servicio solicitado" } },
+  taller_motos: { esp: ["Mecánico", "Mecánicos"], producto: "Kit de arrastre", icono: "Bike", rep: { ejMarca: "Italika, Honda, Yamaha o Suzuki", ejModelo: '"FT150" o "CBR 250"', falla: "Falla o servicio solicitado" } },
+  electrodomesticos: { esp: ["Técnico", "Técnicos"], producto: "Motor de lavadora", icono: "WashingMachine", rep: { ejMarca: "Mabe, LG, Samsung o Whirlpool", ejModelo: '"lavadora de 18 kg" o "refrigerador de 14 pies"' } },
+  computadoras: { esp: ["Técnico", "Técnicos"], producto: "Disco SSD 480 GB", icono: "Laptop", rep: { ejMarca: "HP, Dell, Lenovo o Apple", ejModelo: '"Pavilion 15" o "MacBook Air M1"', desbloqueo: true } },
   relojeria_joyeria: { esp: ["Especialista", "Especialistas"], producto: "Pila para reloj", icono: "Watch", rep: { unico: true } },
   zapateria: { esp: ["Zapatero", "Zapateros"], producto: "Suela de goma", icono: "Footprints", rep: { unico: true, falla: "Daño o trabajo solicitado" } },
-  refrigeracion_ac: { esp: ["Técnico", "Técnicos"], producto: "Compresor de 1/4 HP", icono: "Snowflake" },
-  bicicletas: { esp: ["Mecánico", "Mecánicos"], producto: "Cámara rodada 26", icono: "Bike", rep: { falla: "Falla o servicio solicitado" } },
+  refrigeracion_ac: { esp: ["Técnico", "Técnicos"], producto: "Compresor de 1/4 HP", icono: "Snowflake", rep: { ejMarca: "Mirage, LG, Carrier o York", ejModelo: '"minisplit de 1 tonelada"' } },
+  bicicletas: { esp: ["Mecánico", "Mecánicos"], producto: "Cámara rodada 26", icono: "Bike", rep: { ejMarca: "Trek, Specialized, Giant o Benotto", ejModelo: '"Marlin 5" o "rodada 29"', falla: "Falla o servicio solicitado" } },
   cerrajeria: { esp: ["Cerrajero", "Cerrajeros"], producto: "Chapa de seguridad", icono: "Key", rep: { unico: true, falla: "Servicio solicitado" } },
   tapiceria: { esp: ["Tapicero", "Tapiceros"], producto: "Vinil por metro", icono: "Sofa", rep: { unico: true, falla: "Trabajo solicitado" } },
   barberia: { esp: ["Barbero", "Barberos"], producto: "Cera para peinar", icono: "Scissors", cita: "Corte de cabello", parte: ["Insumo", "Insumos"] },
@@ -294,6 +296,8 @@ for (const [rubro, v] of Object.entries(VOCABULARIO_RUBRO)) {
     ...(v.rep?.falla ? { "repair.field.fault": v.rep.falla } : {}),
     ...(v.rep?.desbloqueo ? { "repair.field.unlock.enabled": "1" } : {}),
     ...(v.rep?.unico ? { "repair.field.single": "1" } : {}),
+    ...(v.rep?.ejMarca ? { "example.repair.brand": v.rep.ejMarca } : {}),
+    ...(v.rep?.ejModelo ? { "example.repair.model": v.rep.ejModelo } : {}),
   };
 }
 
@@ -437,6 +441,8 @@ export const VOCABULARIO_PERSONALIZABLE: CampoVocabulario[] = [
   { key: "repair.field.single.label", titulo: "Nombre del campo de descripción", ayuda: "Solo si usas un solo campo. Ej. Descripción del objeto.", tipo: "texto", max: 40, grupo: "reparaciones" },
   { key: "repair.field.brand", titulo: "Nombre del campo Marca", ayuda: "Solo si usas dos campos.", tipo: "texto", max: 30, grupo: "reparaciones" },
   { key: "repair.field.model", titulo: "Nombre del campo Modelo", ayuda: "Solo si usas dos campos.", tipo: "texto", max: 30, grupo: "reparaciones" },
+  { key: "example.repair.brand", titulo: "Ejemplos de marcas (en tours y ayuda)", ayuda: "Solo es texto de ayuda. Ej. Samsung, Apple o Motorola. Déjalo vacío si no aplica.", tipo: "texto", max: 80, grupo: "reparaciones" },
+  { key: "example.repair.model", titulo: "Ejemplos de modelos (en tours y ayuda)", ayuda: "Solo es texto de ayuda. Déjalo vacío si no aplica.", tipo: "texto", max: 80, grupo: "reparaciones" },
   { key: "repair.field.fault", titulo: "Nombre del campo de la falla", ayuda: "Ej. Falla reportada, Servicio solicitado, Trabajo solicitado.", tipo: "texto", max: 40, grupo: "reparaciones" },
   { key: "repair.field.unlock.enabled", titulo: "Pedir contraseña o patrón de desbloqueo", ayuda: "Útil para celulares y computadoras.", tipo: "opciones", max: 1, grupo: "reparaciones", opciones: [{ value: "0", label: "No" }, { value: "1", label: "Sí" }] },
   { key: "repair.field.unlock", titulo: "Nombre del campo de desbloqueo", ayuda: "Solo si lo pides.", tipo: "texto", max: 40, grupo: "reparaciones" },

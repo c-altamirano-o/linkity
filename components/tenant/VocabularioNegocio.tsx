@@ -63,7 +63,7 @@ export default function VocabularioNegocio({
             if (campo.grupo === "clinico" && !mostrarClinico) return false;
             const enUso = (k: string) => valores[k] ?? valorPorDefectoDeRubro(businessType, k);
             // Los nombres de campos solo se muestran si ese campo se usa.
-            if ((campo.key === "repair.field.brand" || campo.key === "repair.field.model") && enUso("repair.field.single") === "1") return false;
+            if ((campo.key === "repair.field.brand" || campo.key === "repair.field.model" || campo.key === "example.repair.brand" || campo.key === "example.repair.model") && enUso("repair.field.single") === "1") return false;
             if (campo.key === "repair.field.single.label" && enUso("repair.field.single") !== "1") return false;
             if (campo.key === "repair.field.unlock" && enUso("repair.field.unlock.enabled") !== "1") return false;
             return true;

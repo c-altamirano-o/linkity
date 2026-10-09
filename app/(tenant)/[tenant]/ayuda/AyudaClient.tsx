@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { label, type LabelDictionary } from "@/lib/labels";
-import { AYUDA_MODULO, PLACEHOLDER_REPARACIONES, MODULO_ICON, MODULO_RUTA } from "@/lib/ayuda-contenido";
+import { AYUDA_MODULO, MODULO_ICON, MODULO_RUTA } from "@/lib/ayuda-contenido";
+import { resolverTextoVocabulario, flujosVisibles } from "@/lib/textos-vocabulario";
 import type { ModuloKey } from "@/lib/roles";
 import type { EstadoPasosBienvenida } from "@/lib/onboarding";
 import { LifeBuoy, CheckCircle2, Circle, ArrowRight, BookMarked, ChevronDown, ChevronRight, PlayCircle } from "lucide-react";
@@ -14,6 +15,7 @@ interface AyudaClientProps {
   userName: string | null;
   userRole: string | null;
   labels: LabelDictionary;
+  businessType: string | null;
   modulosVisibles: ModuloKey[];
   onboarding: EstadoPasosBienvenida | null;
   weekStartDay: number;
@@ -27,6 +29,7 @@ export default function AyudaClient({
   userName,
   userRole,
   labels,
+  businessType,
   modulosVisibles,
   onboarding,
   weekStartDay,
@@ -34,8 +37,7 @@ export default function AyudaClient({
   tieneRfc,
 }: AyudaClientProps) {
   const nombreReparaciones = label(labels, "module.repair.name");
-
-  const resolverTexto = (texto: string) => texto.replaceAll(PLACEHOLDER_REPARACIONES, nombreReparaciones);
+  const resolverTexto = (texto: string) => resolverTextoVocabulario(texto, labels);
 
   const diasSemana = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
@@ -153,7 +155,8 @@ export default function AyudaClient({
               const Icon = MODULO_ICON[modulo];
               const ruta = MODULO_RUTA[modulo] ?? modulo;
               const abierto = expandidos.has(modulo);
-              const tienePasos = contenido.flujos.length > 0;
+              const flujos = flujosVisibles(contenido.flujos, labels, businessType);
+              const tienePasos = flujos.length > 0;
               return (
                 <div key={modulo} className="rounded-xl border border-border bg-card p-4">
                   <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -179,7 +182,7 @@ export default function AyudaClient({
                       </button>
                       {abierto && (
                         <div className="mt-2 pt-2 border-t border-border space-y-3">
-                          {contenido.flujos.map((flujo) => (
+                          {flujos.map((flujo) => (
                             <div key={flujo.titulo}>
                               <div className="flex items-center justify-between gap-2 mb-1">
                                 <p className="text-xs font-medium text-foreground">{flujo.titulo}</p>
@@ -194,7 +197,7 @@ export default function AyudaClient({
                               </div>
                               <ol className="list-decimal list-inside space-y-0.5">
                                 {flujo.pasos.map((paso, i) => (
-                                  <li key={i} className="text-xs text-muted-foreground">{resolverTexto(paso)}</li>
+                                  <li key={i} className="text-xs text-muted-foreground">{paso}</li>
                                 ))}
                               </ol>
                             </div>

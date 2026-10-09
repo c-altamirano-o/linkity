@@ -72,6 +72,7 @@ export default async function AyudaPage({
       userName={modo === "staff" ? sesionValida!.staffName : null}
       userRole={modo === "staff" ? sesionValida!.roleName : null}
       labels={labels}
+      businessType={tenant.businessType}
       modulosVisibles={modulosVisibles}
       onboarding={onboarding}
       weekStartDay={tenant.weekStartDay}

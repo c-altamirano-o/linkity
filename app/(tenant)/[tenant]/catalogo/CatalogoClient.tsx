@@ -222,8 +222,8 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   const { categorias, productos, ventasDetalle } = data;
 
   // "Muéstrame cómo" (ver lib/tours.ts).
-  useTourDesdeUrl("catalogo-dar-de-alta", TOUR_CATALOGO_ALTA);
-  useTourDesdeUrl("catalogo-archivar-eliminar", TOUR_CATALOGO_ARCHIVAR);
+  useTourDesdeUrl("catalogo-dar-de-alta", TOUR_CATALOGO_ALTA, labels);
+  useTourDesdeUrl("catalogo-archivar-eliminar", TOUR_CATALOGO_ARCHIVAR, labels);
 
   // "Chip" de color por categoría (2026-09-26, a petición de Carlos: "quiero
   // esta configuración de la ficha en la que se muestra en el POS... icono

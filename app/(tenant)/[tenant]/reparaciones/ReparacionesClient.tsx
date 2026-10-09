@@ -1103,8 +1103,8 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
   // interactivo real, no un video) — ver lib/tours.ts. Lanza el tour de
   // "Recibir un equipo nuevo" cuando se llega aquí desde el botón del mismo
   // nombre en /ayuda (?tour=reparaciones-recibir-equipo).
-  useTourDesdeUrl("reparaciones-recibir-equipo", TOUR_REPARACIONES_RECIBIR);
-  useTourDesdeUrl("reparaciones-entregar-equipo", TOUR_REPARACIONES_ENTREGAR);
+  useTourDesdeUrl("reparaciones-recibir-equipo", TOUR_REPARACIONES_RECIBIR, labels);
+  useTourDesdeUrl("reparaciones-entregar-equipo", TOUR_REPARACIONES_ENTREGAR, labels);
 
   const [modalNuevaAbierto, setModalNuevaAbierto] = useState(false);
   const [nuevaBranchId, setNuevaBranchId] = useState(branches[0]?.id ?? "");

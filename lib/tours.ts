@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react";
 import { driver } from "driver.js";
 import "driver.js/dist/driver.css";
+import { vocabReparacion, type LabelDictionary } from "@/lib/labels";
+import { resolverTextoVocabulario } from "@/lib/textos-vocabulario";
 
 /**
  * "Muéstrame cómo" — tutorial interactivo real dentro del sistema (2026-10-02,
@@ -38,6 +40,34 @@ export interface TourStep {
   selector: string;
   titulo: string;
   descripcion: string;
+  // Paso que solo aplica según cómo recibe el negocio sus trabajos
+  // (Configuración → Vocabulario de tu negocio): "dosCampos" = marca y
+  // modelo por separado; "unaDescripcion" = un solo campo de descripción;
+  // "desbloqueo" = pide contraseña/patrón. Si no aplica, el paso se omite.
+  requiere?: "dosCampos" | "unaDescripcion" | "desbloqueo";
+}
+
+// Resuelve las marcas {token} con el vocabulario del negocio, omite los pasos
+// que no aplican y vuelve a numerar los títulos ("1. ", "2. ") sin huecos.
+function prepararPasos(pasos: TourStep[], labels?: LabelDictionary): TourStep[] {
+  if (!labels) return pasos;
+  const v = vocabReparacion(labels);
+  const aplica = (p: TourStep) =>
+    !(
+      (p.requiere === "dosCampos" && v.unaDescripcion) ||
+      (p.requiere === "unaDescripcion" && !v.unaDescripcion) ||
+      (p.requiere === "desbloqueo" && !v.usaDesbloqueo)
+    );
+  const numerado = pasos.some((p) => /^\d+\.\s/.test(p.titulo));
+  return pasos.filter(aplica).map((p, i) => {
+    const sinNumero = p.titulo.replace(/^\d+\.\s*/, "");
+    const titulo = resolverTextoVocabulario(sinNumero, labels);
+    return {
+      ...p,
+      titulo: numerado ? `${i + 1}. ${titulo}` : titulo,
+      descripcion: resolverTextoVocabulario(p.descripcion, labels),
+    };
+  });
 }
 
 function iniciarTour(pasos: TourStep[]) {
@@ -71,7 +101,7 @@ function iniciarTour(pasos: TourStep[]) {
  * query param (para que un refresh no vuelva a lanzar el tour) no dispara
  * una navegación/refetch de Next, solo reescribe la URL visible.
  */
-export function useTourDesdeUrl(tourId: string, pasos: TourStep[]) {
+export function useTourDesdeUrl(tourId: string, pasos: TourStep[], labels?: LabelDictionary) {
   const yaLanzado = useRef(false);
 
   useEffect(() => {
@@ -86,7 +116,7 @@ export function useTourDesdeUrl(tourId: string, pasos: TourStep[]) {
     const nuevaUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`;
     window.history.replaceState({}, "", nuevaUrl);
 
-    const t = window.setTimeout(() => iniciarTour(pasos), 200);
+    const t = window.setTimeout(() => iniciarTour(prepararPasos(pasos, labels)), 200);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tourId, pasos]);
@@ -115,7 +145,7 @@ export const TOUR_POS_VENTA: TourStep[] = [
 export const TOUR_POS_COBRAR_REPARACION: TourStep[] = [
   {
     selector: '[data-tour="pos-reparacion-aviso"]',
-    titulo: "1. Llegaste desde Reparaciones",
+    titulo: "1. Llegaste desde {reparaciones}",
     descripcion: "Al presionar \"Entregar\" en un folio listo (o en una devolución), el carrito llega aquí ya precargado con el costo cotizado y la sucursal queda fija.",
   },
   {
@@ -148,7 +178,7 @@ export const TOUR_REPARACIONES_RECIBIR: TourStep[] = [
   {
     selector: '[data-tour="reparaciones-nueva"]',
     titulo: "1. Abre el formulario",
-    descripcion: "Presiona \"Nueva\" para empezar a recibir un equipo.",
+    descripcion: "Presiona \"Nueva\" para registrar un nuevo trabajo.",
   },
   {
     selector: '[data-tour="reparaciones-cliente"]',
@@ -157,38 +187,47 @@ export const TOUR_REPARACIONES_RECIBIR: TourStep[] = [
   },
   {
     selector: '[data-tour="reparaciones-marca"]',
-    titulo: "3. Captura la marca",
-    descripcion: "El fabricante del equipo — por ejemplo Samsung, Apple, Huawei o Motorola.",
+    titulo: "3. Captura el campo «{Marca}»",
+    descripcion: "El fabricante o la marca de lo que recibes{ejMarca}.",
+    requiere: "dosCampos",
   },
   {
     selector: '[data-tour="reparaciones-modelo"]',
-    titulo: "4. Captura el modelo",
-    descripcion: "El modelo específico dentro de esa marca (ej. \"A16\", \"iPhone 8\", \"Nova 2\") — lo encuentras en la caja del equipo, en los Ajustes del equipo, o te lo dice el cliente.",
+    titulo: "4. Captura el campo «{Modelo}»",
+    descripcion: "El dato específico dentro de esa marca{ejModelo} — lo encuentras en la caja, en la etiqueta o placa, o te lo dice el cliente.",
+    requiere: "dosCampos",
+  },
+  {
+    selector: '[data-tour="reparaciones-modelo"]',
+    titulo: "3. Captura el campo «{Descripcion}»",
+    descripcion: "Describe con claridad lo que el cliente deja (tipo, marca o características) para poder identificarlo después.",
+    requiere: "unaDescripcion",
   },
   {
     selector: '[data-tour="reparaciones-falla"]',
-    titulo: "5. Describe la falla reportada",
-    descripcion: "Lo que el cliente dice que le pasa al equipo, o lo que tú notaste al revisarlo y diagnosticarlo.",
+    titulo: "5. Captura el campo «{Falla}»",
+    descripcion: "Lo que el cliente dice que necesita o que le pasa, o lo que tú notaste al revisarlo.",
   },
   {
     selector: '[data-tour="reparaciones-contrasena"]',
-    titulo: "6. Contraseña de desbloqueo (opcional)",
-    descripcion: "Solo si el equipo tiene bloqueo — es exclusivamente para que el técnico pueda hacer pruebas, nunca se muestra al cliente.",
+    titulo: "6. {Desbloqueo} (opcional)",
+    descripcion: "Solo si tiene bloqueo — es exclusivamente para que quien lo trabaje pueda hacer pruebas, nunca se muestra al cliente.",
+    requiere: "desbloqueo",
   },
   {
     selector: '[data-tour="reparaciones-piezas"]',
     titulo: "7. Agrega piezas y/o servicios cotizados",
-    descripcion: "Indica si se cotizó una pieza, un servicio (mano de obra, diagnóstico) o ambos — es lo que verá el cliente en su ticket, y el sistema no deja crear el folio sin esto.",
+    descripcion: "Indica si se cotizó una pieza, un servicio (mano de obra, revisión) o ambos — es lo que verá el cliente en su ticket, y el sistema no deja crear el folio sin esto.",
   },
   {
     selector: '[data-tour="reparaciones-prioridad"]',
     titulo: "8. Elige la prioridad",
-    descripcion: "Qué tan urgente es que el equipo quede listo — normalmente te lo indica el propio cliente.",
+    descripcion: "Qué tan urgente es que quede terminado — normalmente te lo indica el propio cliente.",
   },
   {
     selector: '[data-tour="reparaciones-fecha"]',
     titulo: "9. Fecha estimada de entrega (opcional)",
-    descripcion: "La defines tú según la carga de trabajo del taller, o la que acordaste con el cliente — aparece en su ticket.",
+    descripcion: "La defines tú según tu carga de trabajo, o la que acordaste con el cliente — aparece en su ticket.",
   },
   {
     selector: '[data-tour="reparaciones-crear"]',
@@ -213,7 +252,7 @@ export const TOUR_REPARACIONES_ENTREGAR: TourStep[] = [
   {
     selector: '[data-tour="reparaciones-abrir-folio"]',
     titulo: "1. Abre el folio",
-    descripcion: "Elige de la lista el equipo que ya está \"Listo\" (o en devolución) para entregar.",
+    descripcion: "Elige de la lista el trabajo que ya está \"Listo\" (o en devolución) para entregar.",
   },
   {
     selector: '[data-tour="reparaciones-entregar"]',
@@ -246,7 +285,7 @@ export const TOUR_CITAS_AGENDAR: TourStep[] = [
   {
     selector: '[data-tour="citas-motivo"]',
     titulo: "5. Describe el motivo",
-    descripcion: "Ej. \"Limpieza dental\".",
+    descripcion: "Ej. \"{ejCita}\".",
   },
   {
     selector: '[data-tour="citas-fecha"]',
@@ -338,7 +377,7 @@ export const TOUR_PLAN_TRATAMIENTO: TourStep[] = [
   {
     selector: '[data-tour="plan-titulo"]',
     titulo: "2. Captura el título del plan",
-    descripcion: "Ej. \"Rehabilitación oral\". Si tienes más de una sucursal, elige también Sucursal y Doctor.",
+    descripcion: "Ej. \"Rehabilitación oral\". Si tienes más de una sucursal, elige también Sucursal y {Esp}.",
   },
   {
     selector: '[data-tour="plan-fases"]',
@@ -369,7 +408,7 @@ export const TOUR_CATALOGO_ALTA: TourStep[] = [
   {
     selector: '[data-tour="catalogo-tipo"]',
     titulo: "2. Elige el Tipo",
-    descripcion: "Productos, Refacciones o Servicios — determina qué categorías puedes elegir, y si es Servicio no se captura Existencia inicial.",
+    descripcion: "Productos, {Partes} o Servicios — determina qué categorías puedes elegir, y si es Servicio no se captura Existencia inicial.",
   },
   {
     selector: '[data-tour="catalogo-nombre"]',
@@ -397,7 +436,7 @@ export const TOUR_CATALOGO_ARCHIVAR: TourStep[] = [
   {
     selector: '[data-tour="catalogo-archivar-eliminar"]',
     titulo: "Archiva o elimina el producto",
-    descripcion: "\"Archivar producto\" se puede restaurar después. \"Eliminar definitivamente\" solo aparece si nunca se ha usado en una venta, compra o reparación.",
+    descripcion: "\"Archivar producto\" se puede restaurar después. \"Eliminar definitivamente\" solo aparece si nunca se ha usado en una venta, compra o trabajo.",
   },
 ];
 
@@ -471,7 +510,7 @@ export const TOUR_PERSONAL_ALTA: TourStep[] = [
   {
     selector: '[data-tour="personal-cascada-comision"]',
     titulo: "7. Si no es Sueldo fijo, completa el cálculo",
-    descripcion: "El porcentaje o monto por unidad, sobre qué se calcula (Ventas, Reparaciones o Utilidad), y con qué frecuencia se paga.",
+    descripcion: "El porcentaje o monto por unidad, sobre qué se calcula (Ventas, {Entidades} o Utilidad), y con qué frecuencia se paga.",
   },
   {
     selector: '[data-tour="personal-metodo-pago"]',
@@ -521,13 +560,13 @@ export const TOUR_PERSONAL_ROL_PERSONALIZADO: TourStep[] = [
 export const TOUR_ADUANA_ASIGNAR: TourStep[] = [
   {
     selector: '[data-tour="aduana-tecnico"]',
-    titulo: "1. Asigna un técnico",
-    descripcion: "Elige al técnico responsable de este equipo en el selector — se guarda solo con elegirlo, sin botón aparte.",
+    titulo: "1. Asigna al responsable ({esp})",
+    descripcion: "Elige a la persona responsable de este trabajo en el selector «{Esp} asignado» — se guarda solo con elegirla, sin botón aparte.",
   },
   {
     selector: '[data-tour="aduana-costo"]',
     titulo: "2. Ajusta el costo estimado",
-    descripcion: "Captura o corrige el monto aquí si el costo cambió tras el diagnóstico — queda registrado en el Historial con fecha y hora.",
+    descripcion: "Captura o corrige el monto aquí si el costo cambió tras la revisión — queda registrado en el Historial con fecha y hora.",
   },
   {
     selector: '[data-tour="aduana-piezas"]',
@@ -537,7 +576,7 @@ export const TOUR_ADUANA_ASIGNAR: TourStep[] = [
   {
     selector: '[data-tour="aduana-estatus"]',
     titulo: "4. Avanza el estatus",
-    descripcion: "Presiona el botón con el siguiente estatus (ej. \"Listo\") cuando el equipo avance.",
+    descripcion: "Presiona el botón con el siguiente estatus (ej. \"Listo\") cuando el trabajo avance.",
   },
 ];
 
@@ -545,12 +584,12 @@ export const TOUR_TALLER_ALERTA: TourStep[] = [
   {
     selector: '[data-tour="taller-abrir-folio"]',
     titulo: "1. Abre el folio",
-    descripcion: "Elige de la lista el equipo sobre el que necesitas avisar algo a Recepción/Tienda.",
+    descripcion: "Elige de la lista el trabajo sobre el que necesitas avisar algo a {recepcion} / Tienda.",
   },
   {
     selector: '[data-tour="taller-alerta-mensaje"]',
     titulo: "2. Escribe tu mensaje",
-    descripcion: "Cuéntale a Recepción/Tienda lo que necesitas (ej. autorización para cotizar una pieza extra).",
+    descripcion: "Cuéntale a {recepcion} / Tienda lo que necesitas (ej. autorización para cotizar una pieza extra).",
   },
   {
     selector: '[data-tour="taller-alerta-para-cliente"]',
@@ -560,7 +599,7 @@ export const TOUR_TALLER_ALERTA: TourStep[] = [
   {
     selector: '[data-tour="taller-alerta-enviar"]',
     titulo: "4. Enviar alerta",
-    descripcion: "Envía el aviso a Recepción/Tienda.",
+    descripcion: "Envía el aviso a {recepcion} / Tienda.",
   },
 ];
 
@@ -756,7 +795,7 @@ export const TOUR_ADUANA_COBRAR_ENTREGAR: TourStep[] = [
   {
     selector: '[data-tour="aduana-abrir-folio"]',
     titulo: "1. Abre el folio",
-    descripcion: "Elige de la lista el equipo que ya está \"Listo\" (o en devolución, si tu negocio cobra en devolución).",
+    descripcion: "Elige de la lista el trabajo que ya está \"Listo\" (o en devolución, si tu negocio cobra en devolución).",
   },
   {
     selector: '[data-tour="aduana-cobrar-entregar"]',
@@ -779,7 +818,7 @@ export const TOUR_SUCURSALES_ALTA: TourStep[] = [
   {
     selector: '[data-tour="sucursales-opcionales"]',
     titulo: "3. Código de sucursal (opcional)",
-    descripcion: "Si manejas un taller centralizado para varias sucursales, un código corto (ej. \"CEN\") ayuda a identificar de dónde viene cada equipo en el folio de reparaciones (ej. REP-CEN-0001).",
+    descripcion: "Si manejas un punto de trabajo central para varias sucursales, un código corto (ej. \"CEN\") ayuda a identificar de dónde viene cada trabajo en el folio (ej. REP-CEN-0001).",
   },
   {
     selector: '[data-tour="sucursales-horario"]',

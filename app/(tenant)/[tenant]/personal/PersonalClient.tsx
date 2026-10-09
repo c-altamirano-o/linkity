@@ -180,8 +180,8 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
   const [guiaAbierta, setGuiaAbierta] = useState(false);
 
   // "Muéstrame cómo" (ver lib/tours.ts).
-  useTourDesdeUrl("personal-dar-de-alta", TOUR_PERSONAL_ALTA);
-  useTourDesdeUrl("personal-crear-rol-personalizado", TOUR_PERSONAL_ROL_PERSONALIZADO);
+  useTourDesdeUrl("personal-dar-de-alta", TOUR_PERSONAL_ALTA, labels);
+  useTourDesdeUrl("personal-crear-rol-personalizado", TOUR_PERSONAL_ROL_PERSONALIZADO, labels);
 
   // Permite enlazar directo al asistente con /[tenant]/personal?asistente=1
   // (2026-09-24) — pensado para engancharlo después desde otros puntos de

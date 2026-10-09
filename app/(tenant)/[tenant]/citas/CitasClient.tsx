@@ -115,8 +115,8 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
 
   // "Muéstrame cómo" (ver lib/tours.ts) — lanza el tour correspondiente
   // cuando se llega aquí desde /ayuda con ?tour=<id>.
-  useTourDesdeUrl("citas-agendar-cita", TOUR_CITAS_AGENDAR);
-  useTourDesdeUrl("citas-dar-seguimiento", TOUR_CITAS_SEGUIMIENTO);
+  useTourDesdeUrl("citas-agendar-cita", TOUR_CITAS_AGENDAR, labels);
+  useTourDesdeUrl("citas-dar-seguimiento", TOUR_CITAS_SEGUIMIENTO, labels);
 
   const diaKey = fechaAKey(diaSeleccionado);
 

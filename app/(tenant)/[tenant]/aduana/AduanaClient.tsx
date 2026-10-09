@@ -274,8 +274,8 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
   // interactivo real, no un video) — ver lib/tours.ts. Lanza el tour de
   // "Asignar técnico y avanzar un folio" cuando se llega aquí desde el botón
   // del mismo nombre en /ayuda (?tour=aduana-asignar-tecnico).
-  useTourDesdeUrl("aduana-asignar-tecnico", TOUR_ADUANA_ASIGNAR);
-  useTourDesdeUrl("aduana-cobrar-entregar", TOUR_ADUANA_COBRAR_ENTREGAR);
+  useTourDesdeUrl("aduana-asignar-tecnico", TOUR_ADUANA_ASIGNAR, labels);
+  useTourDesdeUrl("aduana-cobrar-entregar", TOUR_ADUANA_COBRAR_ENTREGAR, labels);
 
   // Selector de periodo del "Resumen de taller" (2026-10-02) — mismo patrón
   // que cambiarPeriodo en DashboardClient.tsx: navega a ?desde=&hasta=, el

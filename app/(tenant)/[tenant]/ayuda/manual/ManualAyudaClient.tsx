@@ -3,17 +3,19 @@
 import { useState } from "react";
 import Link from "next/link";
 import { label, type LabelDictionary } from "@/lib/labels";
-import { AYUDA_MODULO, AYUDA_SECCIONES, PLACEHOLDER_REPARACIONES, MODULO_ICON, MODULO_RUTA } from "@/lib/ayuda-contenido";
+import { AYUDA_MODULO, AYUDA_SECCIONES, MODULO_ICON, MODULO_RUTA } from "@/lib/ayuda-contenido";
+import { resolverTextoVocabulario, flujosVisibles } from "@/lib/textos-vocabulario";
 import type { ModuloKey } from "@/lib/roles";
 import { ChevronDown, LifeBuoy, PlayCircle } from "lucide-react";
 
 interface ManualAyudaClientProps {
   tenantSlug: string;
   labels: LabelDictionary;
+  businessType: string | null;
   modulosInactivos: Set<string>;
 }
 
-export default function ManualAyudaClient({ tenantSlug, labels, modulosInactivos }: ManualAyudaClientProps) {
+export default function ManualAyudaClient({ tenantSlug, labels, businessType, modulosInactivos }: ManualAyudaClientProps) {
   // Un solo módulo expandido a la vez por sección sería más restrictivo de
   // lo necesario — se guarda el set completo de los que están abiertos, sin
   // límite, para que explorar varios módulos a la vez no colapse el
@@ -29,8 +31,7 @@ export default function ManualAyudaClient({ tenantSlug, labels, modulosInactivos
     });
   };
 
-  const nombreReparaciones = label(labels, "module.repair.name");
-  const resolverTexto = (texto: string) => texto.replaceAll(PLACEHOLDER_REPARACIONES, nombreReparaciones);
+  const resolverTexto = (texto: string) => resolverTextoVocabulario(texto, labels);
 
   const secciones = AYUDA_SECCIONES
     .map((seccion) => ({ ...seccion, modulos: seccion.modulos.filter((m) => !modulosInactivos.has(m)) }))
@@ -59,6 +60,7 @@ export default function ManualAyudaClient({ tenantSlug, labels, modulosInactivos
               const Icon = MODULO_ICON[modulo];
               const ruta = MODULO_RUTA[modulo] ?? modulo;
               const abierto = expandidos.has(modulo);
+              const flujos = flujosVisibles(contenido.flujos, labels, businessType);
               return (
                 <div key={modulo} className="rounded-xl border border-border bg-card overflow-hidden">
                   <div className="flex items-start gap-3 p-4">
@@ -68,7 +70,7 @@ export default function ManualAyudaClient({ tenantSlug, labels, modulosInactivos
                         <Link href={`/${tenantSlug}/${ruta}`} className="text-sm font-medium text-foreground hover:underline">
                           {label(labels, contenido.labelKey)}
                         </Link>
-                        {(contenido.avanzado || contenido.flujos.length > 0) && (
+                        {(contenido.avanzado || flujos.length > 0) && (
                           <button
                             type="button"
                             onClick={() => toggleExpandido(modulo)}
@@ -86,7 +88,7 @@ export default function ManualAyudaClient({ tenantSlug, labels, modulosInactivos
                           {contenido.avanzado && (
                             <p className="text-xs text-muted-foreground">{resolverTexto(contenido.avanzado)}</p>
                           )}
-                          {contenido.flujos.map((flujo) => (
+                          {flujos.map((flujo) => (
                             <div key={flujo.titulo}>
                               <div className="flex items-center justify-between gap-2 mb-1">
                                 <p className="text-xs font-medium text-foreground">{flujo.titulo}</p>
@@ -101,7 +103,7 @@ export default function ManualAyudaClient({ tenantSlug, labels, modulosInactivos
                               </div>
                               <ol className="list-decimal list-inside space-y-0.5">
                                 {flujo.pasos.map((paso, i) => (
-                                  <li key={i} className="text-xs text-muted-foreground">{resolverTexto(paso)}</li>
+                                  <li key={i} className="text-xs text-muted-foreground">{paso}</li>
                                 ))}
                               </ol>
                             </div>

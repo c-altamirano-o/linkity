@@ -83,7 +83,7 @@ const formatFechaHora = (iso: string) =>
 export default function TallerClient({ data, labels, tenantSlug, miStaffId, verTodoTaller }: TallerClientProps) {
   const router = useRouter();
 
-  useTourDesdeUrl("taller-avisar-recepcion", TOUR_TALLER_ALERTA);
+  useTourDesdeUrl("taller-avisar-recepcion", TOUR_TALLER_ALERTA, labels);
 
   const [seleccionadaId, setSeleccionadaId] = useState<string | null>(null);
   const [soloActivas, setSoloActivas] = useState(true);
