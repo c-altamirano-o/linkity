@@ -6,6 +6,7 @@ import type { ModuloKey } from "@/lib/roles";
 import { modulosPermitidosParaRolPorNombre } from "@/lib/roles-server";
 import { calcularEstadoCiclo } from "@/lib/ciclo-suscripcion";
 import { calcularEstadoExceso } from "@/lib/exceso-plan-estado";
+import { sesionAdminDeOtroDia } from "@/lib/corte-diario-puro";
 
 /**
  * Resolutor de "quién está haciendo esta acción", compartido por todos los
@@ -179,6 +180,13 @@ export async function resolverActor(tenantSlug: string, modulo: ModuloKey | Modu
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (user) {
+    // Corte diario (2026-10-09): la sesión del administrador termina al cambiar
+    // el día (hora de México), igual que la del personal. El layout ya lo
+    // aplica al pintar páginas; esto cierra los Server Actions de una pestaña
+    // que se quedó abierta de un día para otro.
+    if (sesionAdminDeOtroDia(user.last_sign_in_at)) {
+      return { ok: false, error: "Tu sesión terminó al cambiar el día. Vuelve a iniciar sesión." };
+    }
     const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id }, select: { id: true, tenantId: true } });
     if (dbUser && dbUser.tenantId === tenant.id) {
       return { ok: true, tenant, dbUser, actor: "admin", roleName: null, branchId: null };

@@ -24,6 +24,9 @@ import AjustePlanClient from "@/components/tenant/AjustePlanClient";
 import AjustePlanPendiente from "@/components/tenant/AjustePlanPendiente";
 import BannerExceso from "@/components/tenant/BannerExceso";
 import DatosNegocioClient from "@/components/tenant/DatosNegocioClient";
+import AvisoCajaPendiente from "@/components/tenant/AvisoCajaPendiente";
+import CajaPendienteBloqueo from "@/components/tenant/CajaPendienteBloqueo";
+import { sesionAdminDeOtroDia, inicioDeHoyMXDe, formatoDiaMes } from "@/lib/corte-diario-puro";
 
 export const metadata: Metadata = {
   title: "Linkity",
@@ -320,6 +323,16 @@ export default async function TenantLayout({
     userName = dbUser.name;
     userRole = dbUser.role?.role.name ?? "";
 
+    // Corte diario (2026-10-09, a petición de Carlos): "si se olvidan cerrar
+    // sesión, el SaaS tiene que cerrarla al cambiar de fecha". El personal con
+    // PIN ya lo tenía (verificarSesionPersonalVigente); aquí se aplica al
+    // administrador con cuenta real, según el día (México) en que inició
+    // sesión. Un Server Component no puede borrar cookies, así que se pasa por
+    // una ruta que cierra la sesión y manda a la puerta del negocio.
+    if (sesionAdminDeOtroDia(user.last_sign_in_at)) {
+      redirect(`/api/sesion/cerrar?tenant=${encodeURIComponent(tenant)}`);
+    }
+
     // Negocio creado desde Hotmart (2026-10-08): el checkout no pregunta el
     // nombre ni el giro, así que el dueño debe capturarlos antes de usar el
     // sistema (app/actions/datos-negocio-actions.ts). No hay redirect: se pinta
@@ -342,6 +355,59 @@ export default async function TenantLayout({
     }
     return <AjustePlanPendiente tenantSlug={tenant} />;
   }
+
+  // Caja de un día anterior sin cerrar (2026-10-09, a petición de Carlos).
+  // Una caja OPEN abierta antes de la medianoche de hoy (México) se trata así:
+  // - Personal de PIN (cajero, tienda): SE BLOQUEA todo hasta hacer el corte de
+  //   la caja de SU sucursal. Si su rol tiene el módulo Caja, solo ve Caja con
+  //   un aviso; si no lo tiene, ve una pantalla que le pide avisar a quien sí.
+  // - Administrador (cuenta real): NO se bloquea nunca. Solo ve una alerta con
+  //   cada sucursal que no cerró caja y el día, para que lo atienda.
+  // OJO: un layout no se vuelve a ejecutar al navegar entre páginas con el
+  // menú, por eso TenantShell además recibe soloCaja (menú reducido a Caja) en
+  // el caso del personal; al cerrar la caja, CajaClient hace router.refresh()
+  // y esto se recalcula.
+  let cajasPendientes: { branchId: string; sucursal: string; abiertaPor: string; abiertaEn: Date }[] = [];
+  if (dbTenant) {
+    const vencidas = await prisma.cashSession.findMany({
+      where: {
+        tenantId: dbTenant.id,
+        status: CashSessionStatus.OPEN,
+        openedAt: { lt: inicioDeHoyMXDe(Date.now()) },
+        ...(modo === "staff" && sesionPersonal ? { branchId: sesionPersonal.branchId } : {}),
+      },
+      orderBy: { openedAt: "asc" },
+      select: { branchId: true, openedAt: true, branch: { select: { name: true } }, user: { select: { name: true } } },
+    });
+    cajasPendientes = vencidas.map((c) => ({
+      branchId: c.branchId,
+      sucursal: c.branch.name,
+      abiertaPor: c.user.name,
+      abiertaEn: c.openedAt,
+    }));
+
+    if (modo === "staff" && cajasPendientes.length > 0) {
+      const puedeCerrarCaja = modulosPermitidosParaNav?.includes("caja") ?? false;
+      if (!puedeCerrarCaja) {
+        return (
+          <div id={TENANT_THEME_ROOT_ID} style={activePreset as React.CSSProperties} className="contents">
+            <CajaPendienteBloqueo
+              tenantSlug={tenant}
+              modo="staff"
+              sucursal={cajasPendientes[0].sucursal}
+              fecha={formatoDiaMes(cajasPendientes[0].abiertaEn)}
+            />
+          </div>
+        );
+      }
+      const headerList = await headers();
+      const pathname = headerList.get("x-pathname") ?? "";
+      if (pathname.split("/").filter(Boolean)[1] !== "caja") {
+        redirect(`/${tenant}/caja`);
+      }
+    }
+  }
+  const bloqueoPorCaja = modo === "staff" && cajasPendientes.length > 0;
 
   // Guard de módulo desactivado por rubro/negocio (2026-09-17) — a
   // diferencia del guard de arriba (por ROL, solo aplica a personal de
@@ -438,7 +504,11 @@ export default async function TenantLayout({
         avisoSuscripcion={avisoSuscripcion}
         checkoutUrl={enlacesSuscripcion.checkoutUrl}
         contactoHref={enlacesSuscripcion.contactoHref}
+        soloCaja={bloqueoPorCaja}
       >
+        {cajasPendientes.length > 0 && (
+          <AvisoCajaPendiente tenantSlug={tenant} cajas={cajasPendientes} bloqueante={bloqueoPorCaja} />
+        )}
         {estadoExceso.activo && estadoExceso.diasRestantes !== null && (
           <BannerExceso tenantSlug={tenant} diasRestantes={estadoExceso.diasRestantes} esAdmin={modo === "admin"} />
         )}

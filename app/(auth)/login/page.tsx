@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { reiniciarActividadAdmin } from "@/lib/actividad-admin";
 import { getTenantAccesoBySupabaseId, isSuperAdminBySupabaseId } from "./actions";
 import { reenviarContrasenaTemporalAction } from "./reenviar-actions";
 
@@ -69,6 +70,10 @@ export default function LoginPage() {
     // segundo exacto en que esto corre, pero sí en su siguiente intento de
     // uso real, igual que con el PIN de personal.
     await supabase.auth.signOut({ scope: "others" });
+
+    // Sesión nueva = actividad nueva. Sin esto, una marca vieja del navegador
+    // cerraba la sesión recién abierta por "20 minutos de inactividad".
+    reiniciarActividadAdmin();
 
     const esSuperAdmin = await isSuperAdminBySupabaseId(data.user.id);
 

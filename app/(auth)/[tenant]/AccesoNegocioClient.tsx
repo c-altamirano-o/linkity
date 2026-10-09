@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { Building2, Delete, ArrowLeft, Lock, Mail, Eye, EyeOff, ShieldCheck, XCircle, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { reiniciarActividadAdmin } from "@/lib/actividad-admin";
 import { getTenantAccesoBySupabaseId } from "../login/actions";
 import { iniciarSesionPersonalAction } from "@/app/actions/acceso-personal-actions";
 import { consultarSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
@@ -142,6 +143,9 @@ export default function AccesoNegocioClient({
         setPendingAdmin(false);
         return;
       }
+
+      // Sesión nueva = actividad nueva (ver lib/actividad-admin.ts).
+      reiniciarActividadAdmin();
 
       if (data.user.user_metadata?.must_change_password) {
         window.location.href = "/primer-acceso";

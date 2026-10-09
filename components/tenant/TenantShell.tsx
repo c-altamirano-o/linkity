@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
+import { CLAVE_ULTIMA_ACTIVIDAD_ADMIN } from "@/lib/actividad-admin";
 import type { ModuloKey } from "@/lib/roles";
 import { label, DEFAULT_LABELS, type LabelDictionary } from "@/lib/labels";
 import { cerrarSesionPersonalAction } from "@/app/actions/acceso-personal-actions";
@@ -168,6 +169,7 @@ export default function TenantShell({
   avisoSuscripcion = null,
   checkoutUrl = null,
   contactoHref = null,
+  soloCaja = false,
 }: {
   children: React.ReactNode;
   tenant: string;
@@ -244,6 +246,10 @@ export default function TenantShell({
   avisoSuscripcion?: { etapa: "en_prueba" | "en_gracia"; diasRestantes: number } | null;
   checkoutUrl?: string | null;
   contactoHref?: string | null;
+  // 2026-10-09: hay una caja de un día anterior sin cerrar — el menú muestra
+  // solo "Caja" hasta que se haga el corte (el layout del servidor también
+  // redirige a /caja si alguien escribe otra URL a mano).
+  soloCaja?: boolean;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -507,7 +513,7 @@ export default function TenantShell({
   useEffect(() => {
     if (modo !== "admin") return;
 
-    const CLAVE_ULTIMA_ACTIVIDAD = "linkity_admin_actividad_ts";
+    const CLAVE_ULTIMA_ACTIVIDAD = CLAVE_ULTIMA_ACTIVIDAD_ADMIN;
     let ultimaActividadMemoria = Date.now();
     let sesionCerrada = false;
 
@@ -693,6 +699,7 @@ export default function TenantShell({
         .filter((item) => item.href === "ayuda" || !modulosInactivosSet.has(item.href))
         .filter((item) => item.href === "ayuda" || modo !== "staff" || (modulosPermitidos?.includes(item.href as ModuloKey) ?? false))
         .filter((item) => modo !== "admin" || !OCULTOS_PARA_ADMIN.has(item.href))
+        .filter((item) => !soloCaja || item.href === "caja")
         .map((item) => ({ ...item, label: label(labels, item.labelKey) })),
     }))
     .filter((grupo) => grupo.items.length > 0);
