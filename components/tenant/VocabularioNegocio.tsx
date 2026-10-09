@@ -15,10 +15,13 @@ export default function VocabularioNegocio({
   tenantSlug,
   businessType,
   actuales,
+  mostrarReparaciones,
 }: {
   tenantSlug: string;
   businessType: string | null;
   actuales: Record<string, string>;
+  // true si el negocio recibe objetos para reparar/atender (módulo de Reparaciones activo).
+  mostrarReparaciones: boolean;
 }) {
   const router = useRouter();
   const [valores, setValores] = useState<Record<string, string>>(actuales);
@@ -52,7 +55,15 @@ export default function VocabularioNegocio({
         </p>
 
         <div className="space-y-4 max-w-xl">
-          {VOCABULARIO_PERSONALIZABLE.map((campo) => {
+          {VOCABULARIO_PERSONALIZABLE.filter((campo) => {
+            if (campo.grupo === "reparaciones" && !mostrarReparaciones) return false;
+            const enUso = (k: string) => valores[k] ?? valorPorDefectoDeRubro(businessType, k);
+            // Los nombres de campos solo se muestran si ese campo se usa.
+            if ((campo.key === "repair.field.brand" || campo.key === "repair.field.model") && enUso("repair.field.single") === "1") return false;
+            if (campo.key === "repair.field.single.label" && enUso("repair.field.single") !== "1") return false;
+            if (campo.key === "repair.field.unlock" && enUso("repair.field.unlock.enabled") !== "1") return false;
+            return true;
+          }).map((campo) => {
             const porDefecto = valorPorDefectoDeRubro(businessType, campo.key);
             const valor = valores[campo.key] ?? porDefecto;
             const cambiado = valor !== porDefecto;
@@ -70,7 +81,17 @@ export default function VocabularioNegocio({
                     </button>
                   )}
                 </div>
-                {campo.tipo === "icono" ? (
+                {campo.tipo === "opciones" ? (
+                  <select
+                    value={valor}
+                    onChange={(e) => setValores({ ...valores, [campo.key]: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  >
+                    {(campo.opciones ?? []).map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                ) : campo.tipo === "icono" ? (
                   <select
                     value={valor}
                     onChange={(e) => setValores({ ...valores, [campo.key]: e.target.value })}

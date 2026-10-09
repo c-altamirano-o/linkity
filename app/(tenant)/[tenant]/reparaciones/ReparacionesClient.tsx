@@ -11,7 +11,7 @@ import {
 import type {
   ReparacionesData, ReparacionUI, EstadoReparacion, PrioridadReparacion, ProductoParaReparacion, TecnicoOption,
 } from "@/lib/reparaciones-data";
-import { label, type LabelDictionary } from "@/lib/labels";
+import { label, vocabReparacion, textoAccion, type LabelDictionary } from "@/lib/labels";
 import {
   crearReparacionAction, avanzarEstadoAction, marcarWhatsappEnviadoAction,
   asignarTecnicoAction, agregarPiezaReparacionAction, eliminarPiezaReparacionAction,
@@ -46,19 +46,19 @@ function agruparProductosParaSelector(productos: ProductoParaReparacion[]) {
 // TRANSICIONES_VALIDAS en reparaciones-actions.ts sigue siendo la única
 // validación real del lado del servidor.
 const SIGUIENTES_ESTADOS: Partial<Record<EstadoReparacion, { estado: NuevoEstadoReparacion; texto: string }[]>> = {
-  RECEIVED: [{ estado: "IN_REPAIR", texto: "Iniciar reparación" }],
+  RECEIVED: [{ estado: "IN_REPAIR", texto: "Iniciar {entidad}" }],
   IN_REPAIR: [
-    { estado: "WAITING_PARTS", texto: "Esperando refacción" },
+    { estado: "WAITING_PARTS", texto: "{espera}" },
     { estado: "WORKSHOP_READY", texto: "Marcar listo" },
     { estado: "WORKSHOP_RETURN", texto: "Marcar devolución" },
   ],
-  WAITING_PARTS: [{ estado: "IN_REPAIR", texto: "Reanudar reparación" }],
-  WORKSHOP_READY: [{ estado: "SHOP_READY", texto: "Enviar a tienda (listo)" }],
-  WORKSHOP_RETURN: [{ estado: "SHOP_RETURN", texto: "Enviar a tienda (devolución)" }],
-  SHOP_READY: [{ estado: "IN_REPAIR", texto: "Regresar a taller (corregir)" }],
+  WAITING_PARTS: [{ estado: "IN_REPAIR", texto: "Reanudar {entidad}" }],
+  WORKSHOP_READY: [{ estado: "SHOP_READY", texto: "Enviar a sucursal (listo)" }],
+  WORKSHOP_RETURN: [{ estado: "SHOP_RETURN", texto: "Enviar a sucursal (devolución)" }],
+  SHOP_READY: [{ estado: "IN_REPAIR", texto: "Regresar a {lugar} (corregir)" }],
   SHOP_RETURN: [
     { estado: "DELIVERED", texto: "Entregar (sin cobro)" },
-    { estado: "IN_REPAIR", texto: "Regresar a taller (corregir)" },
+    { estado: "IN_REPAIR", texto: "Regresar a {lugar} (corregir)" },
   ],
 };
 
@@ -537,6 +537,7 @@ function VistaTienda({
   const totalDevoluciones = reparaciones.filter((r) => r.estado === "SHOP_RETURN").length;
   const totalEntregados = reparaciones.filter((r) => r.estado === "DELIVERED").length;
   const activoLabel = label(labels, "entity.repair.asset");
+  const v = vocabReparacion(labels);
 
   // 2026-09-30, corrigiendo un bug real que Carlos reportó ("el
   // administrador no puede ingresar equipos a reparación... aparece en
@@ -592,7 +593,7 @@ function VistaTienda({
         </div>
         <div className="flex-1 overflow-y-auto p-2">
           {tiendaReps.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-xs">Sin equipos pendientes</div>
+            <div className="text-center py-8 text-muted-foreground text-xs">Sin pendientes</div>
           ) : tiendaReps.map((rep) => (
             <div key={rep.id} onClick={() => { setSeleccionadaId(rep.id); setMostrarDetalle(true); }}
               data-tour="reparaciones-abrir-folio"
@@ -751,10 +752,10 @@ function VistaTienda({
             <div className="flex items-start gap-3 px-4 py-3 rounded-xl border bg-amber-50 border-amber-300 mb-3">
               <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-xs font-semibold text-amber-700">Alerta del técnico sin atender</p>
+                <p className="text-xs font-semibold text-amber-700">Alerta del {v.espMin} sin atender</p>
                 <p className="text-[11.5px] mt-0.5 text-amber-600">
                   {seleccionada.historial.find((h) => h.nota?.startsWith("Alerta del técnico: "))?.nota?.slice("Alerta del técnico: ".length)
-                    ?? "Hay un pendiente con este equipo — contacta a Taller."}
+                    ?? `Hay un pendiente con este trabajo — contacta a ${label(labels, "module.reception.name")}.`}
                 </p>
                 {/* Modo Simple (2026-10-03) — único botón que de verdad apaga
                     el aviso: resolverAlertaTallerAction sigue siendo
@@ -790,7 +791,7 @@ function VistaTienda({
               {isDev ? <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" /> : <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />}
               <div>
                 <p className={`text-xs font-semibold ${isDev ? "text-amber-700" : "text-emerald-700"}`}>
-                  {isDev ? "Equipo para devolver al cliente" : "Equipo listo para entregar"}
+                  {isDev ? "Listo para devolver al cliente" : "Listo para entregar"}
                 </p>
                 <p className={`text-[11.5px] mt-0.5 ${isDev ? "text-amber-600" : "text-emerald-600"}`}>
                   {seleccionada.modelo} ·{" "}
@@ -812,10 +813,10 @@ function VistaTienda({
               existe y la vista queda exactamente como antes: solo lectura. */}
           {puedeControlarTaller && (
             <div className="bg-card border border-border rounded-xl p-4 sm:col-span-2">
-              <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">CONTROL DE TALLER</p>
+              <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-3">CONTROL DE {v.lugar.toUpperCase()}</p>
 
               <div data-tour="aduana-tecnico">
-                <p className="text-[12.5px] font-semibold text-foreground mb-1.5">Técnico asignado</p>
+                <p className="text-[12.5px] font-semibold text-foreground mb-1.5">{v.esp} asignado</p>
                 <select
                   disabled={pending || cerrada}
                   value={seleccionada.tecnicoAsignadoId ?? ""}
@@ -941,9 +942,9 @@ function VistaTienda({
                 // está), así que ofrecer también "Entregar (sin cobro)" aquí
                 // duplicaba la misma acción con otro texto/ícono. Un solo
                 // camino visible para entregar, el del encabezado.
-                const siguientes = (SIGUIENTES_ESTADOS[seleccionada.estado] ?? []).filter(
-                  (s) => s.estado !== "DELIVERED"
-                );
+                const siguientes = (SIGUIENTES_ESTADOS[seleccionada.estado] ?? [])
+                  .filter((s) => s.estado !== "DELIVERED")
+                  .map((s) => ({ ...s, texto: textoAccion(s.texto, labels) }));
                 if (siguientes.length === 0) return null;
                 return (
                   <div className="mt-4" data-tour="aduana-estatus">
@@ -971,7 +972,7 @@ function VistaTienda({
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: activoLabel, value: `${seleccionada.marca} ${seleccionada.modelo}` },
-                { label: "Falla", value: seleccionada.falla },
+                { label: v.falla, value: seleccionada.falla },
                 { label: "Sucursal", value: seleccionada.sucursalNombre },
                 { label: "Fecha prometida", value: seleccionada.fechaEstimada ? formatFecha(seleccionada.fechaEstimada) : "Sin definir" },
                 { label: "Costo final", value: seleccionada.costoFinal ? formatMXN(seleccionada.costoFinal) : isDev ? "Sin cargo" : "Por definir", color: isDev ? "text-amber-600" : "text-primary-text" },
@@ -980,7 +981,7 @@ function VistaTienda({
                 // el técnico que la trabajó; se relabela para no confundir con
                 // el técnico ASIGNADO real (assignedToStaffId, 2026-09-21).
                 { label: "Recibido por", value: seleccionada.tecnico },
-                { label: "Técnico asignado", value: seleccionada.tecnicoAsignadoNombre ?? "Sin asignar", color: seleccionada.tecnicoAsignadoNombre ? undefined : "text-amber-600" },
+                { label: `${v.esp} asignado`, value: seleccionada.tecnicoAsignadoNombre ?? "Sin asignar", color: seleccionada.tecnicoAsignadoNombre ? undefined : "text-amber-600" },
               ].map((f) => (
                 <div key={f.label} className="bg-muted rounded-lg p-2.5">
                   <p className="text-[10.5px] text-muted-foreground mb-0.5">{f.label}</p>
@@ -1087,6 +1088,7 @@ function VistaTienda({
    detalle de solo lectura, y cobrar/entregar/avisar.) ── */
 export default function ReparacionesClient({ data, labels, branches, tenantSlug, telefonoNegocio, negocioRecibo, cobrarEnDevolucion, telefonoClienteObligatorio, clienteInicialId, whatsappApiConectado, puedeControlarTaller }: ReparacionesClientProps) {
   const { reparaciones, clientes, productos, tecnicos } = data;
+  const v = vocabReparacion(labels);
   const router = useRouter();
   const negocio = nombreNegocio(tenantSlug);
   const [pendingAccion, startAccion] = useTransition();
@@ -1408,8 +1410,12 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
 
   const handleCrearReparacion = () => {
     setNuevaError(null);
-    if (!nuevaMarca.trim() || !nuevaModelo.trim()) { setNuevaError("Marca y modelo son obligatorios"); return; }
-    if (!nuevaFalla.trim()) { setNuevaError("Describe la falla reportada"); return; }
+    if (v.unaDescripcion) {
+      if (!nuevaModelo.trim()) { setNuevaError(`${v.etiquetaDescripcion} es obligatorio`); return; }
+    } else if (!nuevaMarca.trim() || !nuevaModelo.trim()) {
+      setNuevaError(`${v.marca} y ${v.modelo.toLowerCase()} son obligatorios`); return;
+    }
+    if (!nuevaFalla.trim()) { setNuevaError(`Escribe: ${v.falla.toLowerCase()}`); return; }
     if (!modoClienteNuevo && !nuevaClienteId) { setNuevaError("Selecciona un cliente o registra uno nuevo"); return; }
     if (modoClienteNuevo && !nuevaClienteNuevoNombre.trim()) { setNuevaError("Escribe el nombre del cliente"); return; }
     // Tenant.telefonoClienteObligatorio (2026-10-05, ver Configuración) — el
@@ -1442,10 +1448,10 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
         clienteNuevo: modoClienteNuevo
           ? { name: nuevaClienteNuevoNombre, phone: nuevaClienteNuevoTelefono || undefined, phoneCountryCode: nuevaClienteNuevoCodigoPais }
           : null,
-        marca: nuevaMarca,
+        marca: v.unaDescripcion ? "" : nuevaMarca,
         modelo: nuevaModelo,
         falla: nuevaFalla,
-        codigoDesbloqueo: nuevoCodigoDesbloqueo || null,
+        codigoDesbloqueo: v.usaDesbloqueo ? nuevoCodigoDesbloqueo || null : null,
         fechaEstimada: nuevaFechaEstimada || null,
         prioridad: nuevaPrioridad,
         piezas: nuevasPiezas.map((p) =>
@@ -1465,7 +1471,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
             folio: res.folio,
             cliente: clienteNombreTicket || "Cliente",
             telefono: clienteTelefonoTicket,
-            marca: nuevaMarca,
+            marca: v.unaDescripcion ? "" : nuevaMarca,
             modelo: nuevaModelo,
             falla: nuevaFalla,
             piezas: nuevasPiezas,
@@ -1585,35 +1591,45 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
               )}
 
 
-              <div className="grid grid-cols-2 gap-2">
-                <div data-tour="reparaciones-marca">
-                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MARCA</label>
-                  <input type="text" value={nuevaMarca} onChange={(e) => setNuevaMarca(e.target.value)}
-                    className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
-                </div>
+              {v.unaDescripcion ? (
                 <div data-tour="reparaciones-modelo">
-                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">MODELO</label>
+                  <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">{v.etiquetaDescripcion.toUpperCase()}</label>
                   <input type="text" value={nuevaModelo} onChange={(e) => setNuevaModelo(e.target.value)}
                     className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
                 </div>
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <div data-tour="reparaciones-marca">
+                    <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">{v.marca.toUpperCase()}</label>
+                    <input type="text" value={nuevaMarca} onChange={(e) => setNuevaMarca(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                  </div>
+                  <div data-tour="reparaciones-modelo">
+                    <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">{v.modelo.toUpperCase()}</label>
+                    <input type="text" value={nuevaModelo} onChange={(e) => setNuevaModelo(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
+                  </div>
+                </div>
+              )}
 
               <div data-tour="reparaciones-falla">
-                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">FALLA REPORTADA</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">{v.falla.toUpperCase()}</label>
                 <textarea value={nuevaFalla} onChange={(e) => setNuevaFalla(e.target.value)} rows={2}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary resize-none" />
               </div>
 
+              {v.usaDesbloqueo && (
               <div data-tour="reparaciones-contrasena">
                 {/* 2026-09-24, a petición de Carlos — el técnico la necesita
                     para trabajar el equipo (ver Repair.deviceUnlockCode,
                     schema.prisma). Opcional, nunca aparece en la página
                     pública de seguimiento del cliente. */}
-                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">CONTRASEÑA DE DESBLOQUEO (OPCIONAL)</label>
+                <label className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">{v.desbloqueo.toUpperCase()} (OPCIONAL)</label>
                 <input type="text" value={nuevoCodigoDesbloqueo} onChange={(e) => setNuevoCodigoDesbloqueo(e.target.value)}
                   placeholder="Ej. 1234 o el patrón que indicó el cliente"
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
               </div>
+              )}
 
               <div data-tour="reparaciones-piezas">
                 {/* 2026-09-24, a petición de Carlos: "una reparación no puede

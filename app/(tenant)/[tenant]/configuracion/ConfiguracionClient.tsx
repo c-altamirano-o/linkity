@@ -7,7 +7,7 @@ import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSuppor
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction, activarModoSimpleAction, desactivarModoSimpleAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
-import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
+import { BUSINESS_TYPE_OPTIONS, label, vocabReparacion, type LabelDictionary } from "@/lib/labels";
 import VocabularioNegocio from "@/components/tenant/VocabularioNegocio";
 import { createClient } from "@/lib/supabase/client";
 import type { FormatoTicket, QrDestinoTicket } from "@/lib/recibo-imprimible";
@@ -143,6 +143,8 @@ interface ConfiguracionClientProps {
   businessTypeInicial: string | null;
   // Vocabulario ya resuelto del negocio (rubro + personalizaciones) para la tarjeta "Vocabulario de tu negocio".
   vocabularioActual: Record<string, string>;
+  labels: LabelDictionary;
+  reparacionesActivo: boolean;
   modulos: ModuloPersonalizable[];
   recomendadosOff: string[];
   logoInicial: string | null;
@@ -182,6 +184,8 @@ export default function ConfiguracionClient({
   themeCustomColorsInicial,
   businessTypeInicial,
   vocabularioActual,
+  labels,
+  reparacionesActivo,
   modulos,
   recomendadosOff,
   logoInicial,
@@ -1136,7 +1140,7 @@ export default function ConfiguracionClient({
         </div>
       </div>
 
-      <VocabularioNegocio tenantSlug={tenantSlug} businessType={businessTypeInicial} actuales={vocabularioActual} />
+      <VocabularioNegocio tenantSlug={tenantSlug} businessType={businessTypeInicial} actuales={vocabularioActual} mostrarReparaciones={reparacionesActivo} />
 
       {/* ── Configura tu Taller (checklist) ────────────────────── */}
       {/* 2026-09-24, a petición de Carlos: el escudo genérico de Taller no
@@ -1152,18 +1156,21 @@ export default function ConfiguracionClient({
         const aduanaLista = checklistTaller.rolesAduana.some((r) => r.tieneStaff);
         const tallerListo = checklistTaller.rolesTaller.some((r) => r.tieneStaff);
         const todoListo = aduanaLista && tallerListo;
+        const v = vocabReparacion(labels);
+        const nombreRecepcion = label(labels, "module.reception.name");
+        const nombreTaller = label(labels, "module.workshop.name");
         return (
           <div className={`rounded-xl overflow-hidden shadow-sm mt-6 border ${todoListo ? "bg-card border-border" : "bg-amber-50 border-amber-300"}`}>
             <div className={`flex items-center gap-2 px-5 py-4 border-b ${todoListo ? "border-border bg-muted/50" : "border-amber-200 bg-amber-100/60"}`}>
               <Wrench className={`w-5 h-5 ${todoListo ? "text-primary-text" : "text-amber-700"}`} />
-              <h2 className={`text-base font-semibold ${todoListo ? "text-foreground" : "text-amber-950"}`}>Configura tu Taller</h2>
+              <h2 className={`text-base font-semibold ${todoListo ? "text-foreground" : "text-amber-950"}`}>Configura tu {v.lugar}</h2>
             </div>
 
             <div className="p-5">
               <p className={`text-sm mb-5 ${todoListo ? "text-muted-foreground" : "text-amber-900"}`}>
                 {todoListo
-                  ? "Tu taller ya tiene personal asignado en ambos puestos clave y está listo para operar."
-                  : "Antes de recibir equipos en taller, asigna al menos una persona a cada uno de estos puestos. Los roles ya están creados — solo falta darles personal desde Personal."}
+                  ? `Tu ${v.lugar} ya tiene personal asignado en ambos puestos clave y está listo para operar.`
+                  : "Antes de recibir trabajos, asigna al menos una persona a cada uno de estos puestos. Los roles ya están creados — solo falta darles personal desde Personal."}
               </p>
 
               <div className="space-y-3">
@@ -1174,11 +1181,11 @@ export default function ConfiguracionClient({
                     <Circle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   )}
                   <div>
-                    <p className={`text-sm font-medium ${todoListo ? "text-foreground" : "text-amber-950"}`}>Taller (Recepción/Aduana)</p>
+                    <p className={`text-sm font-medium ${todoListo ? "text-foreground" : "text-amber-950"}`}>{nombreRecepcion} (Recepción)</p>
                     <p className={`text-xs ${todoListo ? "text-muted-foreground" : "text-amber-900/80"}`}>
                       {checklistTaller.rolesAduana.length > 0
-                        ? `Recibe el equipo, asigna técnico y ajusta costo/piezas (${checklistTaller.rolesAduana.map((r) => r.nombre).join(", ")}).`
-                        : "Recibe el equipo, asigna técnico y ajusta costo/piezas."}
+                        ? `Recibe el trabajo, asigna ${v.espMin} y ajusta costo/piezas (${checklistTaller.rolesAduana.map((r) => r.nombre).join(", ")}).`
+                        : `Recibe el trabajo, asigna ${v.espMin} y ajusta costo/piezas.`}
                       {" "}
                       {aduanaLista ? "Ya tiene personal asignado." : "Aún no tiene personal asignado."}
                     </p>
@@ -1192,11 +1199,11 @@ export default function ConfiguracionClient({
                     <Circle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   )}
                   <div>
-                    <p className={`text-sm font-medium ${todoListo ? "text-foreground" : "text-amber-950"}`}>Técnico (Mis Reparaciones)</p>
+                    <p className={`text-sm font-medium ${todoListo ? "text-foreground" : "text-amber-950"}`}>{v.esp} ({nombreTaller})</p>
                     <p className={`text-xs ${todoListo ? "text-muted-foreground" : "text-amber-900/80"}`}>
                       {checklistTaller.rolesTaller.length > 0
-                        ? `Repara el equipo asignado y puede alertar a Taller (${checklistTaller.rolesTaller.map((r) => r.nombre).join(", ")}).`
-                        : "Repara el equipo asignado y puede alertar a Taller."}
+                        ? `Atiende el trabajo asignado y puede alertar a ${nombreRecepcion} (${checklistTaller.rolesTaller.map((r) => r.nombre).join(", ")}).`
+                        : `Atiende el trabajo asignado y puede alertar a ${nombreRecepcion}.`}
                       {" "}
                       {tallerListo ? "Ya tiene personal asignado." : "Aún no tiene personal asignado."}
                     </p>
@@ -1500,7 +1507,7 @@ export default function ConfiguracionClient({
         <div className="p-5">
           <p className="text-sm text-muted-foreground mb-2">
             Conecta la cuenta de WhatsApp Business de TU negocio (gratis, directo con Meta) para que tus
-            clientes reciban un WhatsApp automático cuando reciban su equipo y cada vez que cambie de estatus —
+            clientes reciban un WhatsApp automático cuando reciban su trabajo y cada vez que cambie de estatus —
             sin depender de nadie más marcando "avisar" a mano.
           </p>
           <p className="text-sm text-muted-foreground mb-5">
@@ -1691,7 +1698,7 @@ export default function ConfiguracionClient({
 
         <div className="p-5">
           <p className="text-sm text-muted-foreground mb-5">
-            Cuando un equipo no se pudo reparar y se marca como devolución, decide si tu negocio cobra algo al
+            Cuando un trabajo no se pudo completar y se marca como devolución, decide si tu negocio cobra algo al
             cliente (por ejemplo, por el diagnóstico o el intento de reparación) antes de entregárselo. Esta
             regla aplica a TODAS tus sucursales por igual.
           </p>
@@ -1776,7 +1783,7 @@ export default function ConfiguracionClient({
         <div className="p-5">
           <p className="text-sm text-muted-foreground mb-5">
             El teléfono del cliente se usa para enviarle notificaciones automáticas por WhatsApp sobre el
-            estatus de su equipo. Decide si al dar de alta un cliente (en Clientes o al recibir una
+            estatus de su trabajo. Decide si al dar de alta un cliente (en Clientes o al recibir una
             reparación) este campo es opcional o forzoso. Esta regla aplica a TODAS tus sucursales por igual.
           </p>
 

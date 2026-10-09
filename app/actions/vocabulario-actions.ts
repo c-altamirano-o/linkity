@@ -34,6 +34,7 @@ export async function guardarVocabularioAction(params: {
     if (valor.length > campo.max) return { ok: false, error: `"${campo.titulo}" no puede pasar de ${campo.max} caracteres.` };
     if (/[\u0000-\u001f<>]/.test(valor)) return { ok: false, error: `"${campo.titulo}" tiene caracteres no permitidos.` };
     if (campo.tipo === "icono" && valor && !iconosValidos.has(valor)) return { ok: false, error: "Ese ícono no es válido." };
+    if (campo.tipo === "opciones" && valor && !(campo.opciones ?? []).some((o) => o.value === valor)) return { ok: false, error: `Valor no válido en "${campo.titulo}".` };
     const porDefecto = valorPorDefectoDeRubro(tenant?.businessType, campo.key);
     cambios.push({ key: campo.key, valor: !valor || valor === porDefecto ? null : valor });
   }

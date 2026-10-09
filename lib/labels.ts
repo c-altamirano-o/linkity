@@ -132,6 +132,16 @@ export const DEFAULT_LABELS: LabelDictionary = {
   "example.catalog.product": "Nombre del producto",
   "example.appointment.reason": "Revisión general",
   "icon.catalog.product": "Package",
+  // Reparaciones/servicios (grupo B, 2026-10-09): lugar de trabajo y campos del
+  // formulario de recepción. "unlock.enabled" y "single" son interruptores "1"/"0".
+  "vocab.lugar": "taller",
+  "repair.field.brand": "Marca",
+  "repair.field.model": "Modelo",
+  "repair.field.fault": "Falla reportada",
+  "repair.field.unlock": "Contraseña de desbloqueo",
+  "repair.field.unlock.enabled": "0",
+  "repair.field.single": "0",
+  "repair.field.single.label": "Descripción del objeto",
 
   // Nombre de la entidad principal del módulo de citas, y estatus de
   // AppointmentStatus — igual que repair.status.*, personalizable por rubro
@@ -234,18 +244,18 @@ export const VERTICAL_LABEL_DEFAULTS: Record<string, LabelDictionary> = {
 // Vocabulario por rubro (especialista, ejemplos y ícono). Se mezcla dentro de
 // VERTICAL_LABEL_DEFAULTS, así el negocio puede seguir sobreescribiendo
 // cualquiera de estas keys desde TenantLabel.
-const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: string; icono: string; cita?: string }> = {
-  reparacion_celulares: { esp: ["Técnico", "Técnicos"], producto: "Pantalla iPhone 13", icono: "Smartphone" },
-  taller_autos: { esp: ["Mecánico", "Mecánicos"], producto: "Balatas delanteras", icono: "Car" },
-  taller_motos: { esp: ["Mecánico", "Mecánicos"], producto: "Kit de arrastre", icono: "Bike" },
+const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: string; icono: string; cita?: string; rep?: { falla?: string; desbloqueo?: boolean; unico?: boolean } }> = {
+  reparacion_celulares: { esp: ["Técnico", "Técnicos"], producto: "Pantalla iPhone 13", icono: "Smartphone", rep: { desbloqueo: true } },
+  taller_autos: { esp: ["Mecánico", "Mecánicos"], producto: "Balatas delanteras", icono: "Car", rep: { falla: "Falla o servicio solicitado" } },
+  taller_motos: { esp: ["Mecánico", "Mecánicos"], producto: "Kit de arrastre", icono: "Bike", rep: { falla: "Falla o servicio solicitado" } },
   electrodomesticos: { esp: ["Técnico", "Técnicos"], producto: "Motor de lavadora", icono: "WashingMachine" },
-  computadoras: { esp: ["Técnico", "Técnicos"], producto: "Disco SSD 480 GB", icono: "Laptop" },
-  relojeria_joyeria: { esp: ["Especialista", "Especialistas"], producto: "Pila para reloj", icono: "Watch" },
-  zapateria: { esp: ["Zapatero", "Zapateros"], producto: "Suela de goma", icono: "Footprints" },
+  computadoras: { esp: ["Técnico", "Técnicos"], producto: "Disco SSD 480 GB", icono: "Laptop", rep: { desbloqueo: true } },
+  relojeria_joyeria: { esp: ["Especialista", "Especialistas"], producto: "Pila para reloj", icono: "Watch", rep: { unico: true } },
+  zapateria: { esp: ["Zapatero", "Zapateros"], producto: "Suela de goma", icono: "Footprints", rep: { unico: true, falla: "Daño o trabajo solicitado" } },
   refrigeracion_ac: { esp: ["Técnico", "Técnicos"], producto: "Compresor de 1/4 HP", icono: "Snowflake" },
-  bicicletas: { esp: ["Mecánico", "Mecánicos"], producto: "Cámara rodada 26", icono: "Bike" },
-  cerrajeria: { esp: ["Cerrajero", "Cerrajeros"], producto: "Chapa de seguridad", icono: "Key" },
-  tapiceria: { esp: ["Tapicero", "Tapiceros"], producto: "Vinil por metro", icono: "Sofa" },
+  bicicletas: { esp: ["Mecánico", "Mecánicos"], producto: "Cámara rodada 26", icono: "Bike", rep: { falla: "Falla o servicio solicitado" } },
+  cerrajeria: { esp: ["Cerrajero", "Cerrajeros"], producto: "Chapa de seguridad", icono: "Key", rep: { unico: true, falla: "Servicio solicitado" } },
+  tapiceria: { esp: ["Tapicero", "Tapiceros"], producto: "Vinil por metro", icono: "Sofa", rep: { unico: true, falla: "Trabajo solicitado" } },
   barberia: { esp: ["Barbero", "Barberos"], producto: "Cera para peinar", icono: "Scissors", cita: "Corte de cabello" },
   consultorio_dental: { esp: ["Dentista", "Dentistas"], producto: "Cepillo dental", icono: "Stethoscope", cita: "Limpieza dental" },
   consultorio_medico: { esp: ["Médico", "Médicos"], producto: "Termómetro digital", icono: "Stethoscope", cita: "Consulta general" },
@@ -264,6 +274,9 @@ for (const [rubro, v] of Object.entries(VOCABULARIO_RUBRO)) {
     "example.catalog.product": v.producto,
     "icon.catalog.product": v.icono,
     ...(v.cita ? { "example.appointment.reason": v.cita } : {}),
+    ...(v.rep?.falla ? { "repair.field.fault": v.rep.falla } : {}),
+    ...(v.rep?.desbloqueo ? { "repair.field.unlock.enabled": "1" } : {}),
+    ...(v.rep?.unico ? { "repair.field.single": "1" } : {}),
   };
 }
 
@@ -289,6 +302,9 @@ export const ETIQUETAS_NEUTRAS: LabelDictionary = {
   "example.catalog.product": "Nombre del producto",
   "icon.catalog.product": "Package",
   "example.appointment.reason": "Revisión general",
+  "vocab.lugar": "área de trabajo",
+  "repair.field.fault": "Trabajo solicitado",
+  "repair.field.single": "1",
 };
 
 /** Textos propios del rubro; sin rubro (o desconocido) se usan los neutros. */
@@ -375,8 +391,12 @@ export type CampoVocabulario = {
   key: string;
   titulo: string;
   ayuda: string;
-  tipo: "texto" | "icono";
+  tipo: "texto" | "icono" | "opciones";
   max: number;
+  // Solo para tipo "opciones": valores permitidos y su texto.
+  opciones?: { value: string; label: string }[];
+  // "reparaciones": solo se muestra si el negocio usa recepción de trabajos.
+  grupo?: "general" | "reparaciones";
 };
 
 export const VOCABULARIO_PERSONALIZABLE: CampoVocabulario[] = [
@@ -385,10 +405,54 @@ export const VOCABULARIO_PERSONALIZABLE: CampoVocabulario[] = [
   { key: "example.catalog.product", titulo: "Ejemplo de producto en el Catálogo", ayuda: "Solo es el texto de ejemplo al crear un producto.", tipo: "texto", max: 60 },
   { key: "icon.catalog.product", titulo: "Ícono de Productos en el Catálogo", ayuda: "Elige el que más se parezca a lo que vendes.", tipo: "icono", max: 30 },
   { key: "example.appointment.reason", titulo: "Ejemplo de motivo de una cita", ayuda: "Solo es el texto de ejemplo al agendar una cita.", tipo: "texto", max: 60 },
+  { key: "entity.repair.asset", titulo: "Lo que recibes del cliente", ayuda: "Ej. Dispositivo, Vehículo, Calzado, Artículo.", tipo: "texto", max: 40, grupo: "reparaciones" },
+  { key: "vocab.lugar", titulo: "Dónde se hace el trabajo", ayuda: "Ej. taller, área de trabajo. Se escribe en minúsculas: \"del taller\".", tipo: "texto", max: 30, grupo: "reparaciones" },
+  { key: "repair.field.single", titulo: "Datos del objeto al recibirlo", ayuda: "Elige si piden marca y modelo por separado o una sola descripción.", tipo: "opciones", max: 1, grupo: "reparaciones", opciones: [{ value: "0", label: "Dos campos (marca y modelo)" }, { value: "1", label: "Un solo campo de descripción" }] },
+  { key: "repair.field.single.label", titulo: "Nombre del campo de descripción", ayuda: "Solo si usas un solo campo. Ej. Descripción del objeto.", tipo: "texto", max: 40, grupo: "reparaciones" },
+  { key: "repair.field.brand", titulo: "Nombre del campo Marca", ayuda: "Solo si usas dos campos.", tipo: "texto", max: 30, grupo: "reparaciones" },
+  { key: "repair.field.model", titulo: "Nombre del campo Modelo", ayuda: "Solo si usas dos campos.", tipo: "texto", max: 30, grupo: "reparaciones" },
+  { key: "repair.field.fault", titulo: "Nombre del campo de la falla", ayuda: "Ej. Falla reportada, Servicio solicitado, Trabajo solicitado.", tipo: "texto", max: 40, grupo: "reparaciones" },
+  { key: "repair.field.unlock.enabled", titulo: "Pedir contraseña o patrón de desbloqueo", ayuda: "Útil para celulares y computadoras.", tipo: "opciones", max: 1, grupo: "reparaciones", opciones: [{ value: "0", label: "No" }, { value: "1", label: "Sí" }] },
+  { key: "repair.field.unlock", titulo: "Nombre del campo de desbloqueo", ayuda: "Solo si lo pides.", tipo: "texto", max: 40, grupo: "reparaciones" },
 ];
 
 /** Valor por defecto de una key para un rubro, sin personalizaciones del negocio. */
 export function valorPorDefectoDeRubro(businessType: string | null | undefined, key: string): string {
   const base = { ...DEFAULT_LABELS, ...etiquetasDelRubro(businessType) };
   return base[key] ?? key;
+}
+
+/** Vocabulario de recepción de trabajos ya resuelto (con valores por omisión seguros). */
+export function vocabReparacion(labels: LabelDictionary) {
+  const g = (k: string) => labels[k] ?? DEFAULT_LABELS[k] ?? k;
+  const esp = g("vocab.especialista.singular");
+  const espPlural = g("vocab.especialista.plural");
+  return {
+    objeto: g("entity.repair.asset"),
+    esp,
+    espMin: esp.toLowerCase(),
+    espPlural,
+    espPluralMin: espPlural.toLowerCase(),
+    lugar: g("vocab.lugar"),
+    marca: g("repair.field.brand"),
+    modelo: g("repair.field.model"),
+    falla: g("repair.field.fault"),
+    desbloqueo: g("repair.field.unlock"),
+    usaDesbloqueo: g("repair.field.unlock.enabled") === "1",
+    unaDescripcion: g("repair.field.single") === "1",
+    etiquetaDescripcion: g("repair.field.single.label"),
+  };
+}
+export type VocabReparacion = ReturnType<typeof vocabReparacion>;
+
+/**
+ * Texto de un botón de cambio de estatus. Los textos base llevan marcas
+ * {lugar}, {entidad} y {espera} que se resuelven con el vocabulario del negocio.
+ */
+export function textoAccion(texto: string, labels: LabelDictionary): string {
+  const v = vocabReparacion(labels);
+  return texto
+    .replace("{lugar}", v.lugar)
+    .replace("{entidad}", label(labels, "entity.repair.singular").toLowerCase())
+    .replace("{espera}", label(labels, "repair.status.WAITING_PARTS"));
 }

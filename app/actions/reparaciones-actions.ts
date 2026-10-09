@@ -127,8 +127,10 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
   const { tenantSlug, branchId, clienteId, clienteNuevo, marca, modelo, falla, codigoDesbloqueo, fechaEstimada, prioridad, piezas } = params;
 
   if (!branchId) return { ok: false, error: "Selecciona una sucursal" };
-  if (!marca.trim() || !modelo.trim()) return { ok: false, error: "Marca y modelo son obligatorios" };
-  if (!falla.trim()) return { ok: false, error: "Describe la falla reportada" };
+  // La marca puede ir vacía: algunos rubros piden una sola descripción del
+  // objeto (se guarda en "modelo"). La pantalla ya exige lo que corresponde.
+  if (!modelo.trim()) return { ok: false, error: "Escribe el modelo o la descripción del objeto" };
+  if (!falla.trim()) return { ok: false, error: "Describe el motivo o la falla reportada" };
   if (!clienteId && !clienteNuevo?.name.trim()) return { ok: false, error: "Selecciona o registra un cliente" };
 
   let fechaEstimadaDate: Date | null = null;

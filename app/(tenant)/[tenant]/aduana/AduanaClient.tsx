@@ -15,7 +15,7 @@ import type {
 // son genéricos pese al nombre del archivo, reutilizados tal cual del
 // Dashboard en vez de duplicar la lógica de fechas/zona horaria aquí.
 import type { PeriodoDashboard, AtajosPeriodoDashboard } from "@/lib/dashboard-data";
-import { label, type LabelDictionary } from "@/lib/labels";
+import { label, vocabReparacion, textoAccion, type LabelDictionary } from "@/lib/labels";
 import {
   asignarTecnicoAction, agregarPiezaReparacionAction, eliminarPiezaReparacionAction,
   actualizarCostoEstimadoAction, avanzarEstadoAction, resolverAlertaTallerAction, type NuevoEstadoReparacion,
@@ -198,7 +198,7 @@ function clasificarPeriodo(r: ReparacionUI): GrupoDonut {
 // vuelve a validar todo, esto solo decide qué botones mostrar). SHOP_READY
 // no ofrece un botón hacia DELIVERED a propósito: ese salto exige un cobro y
 // vive exclusivamente en /reparaciones (cobrarYEntregarAction, tienda) — lo
-// que SHOP_READY sí ofrece aquí es "Regresar a taller (corregir)", ver más
+// que SHOP_READY sí ofrece aquí es "Regresar a {lugar} (corregir)", ver más
 // abajo. El botón de SHOP_RETURN -> DELIVERED sí se ofrece aquí (una
 // devolución no siempre tiene cargo), pero el servidor lo rechaza si el
 // negocio activó "cobrar en devolución" en Configuración — en ese caso el
@@ -207,15 +207,15 @@ function clasificarPeriodo(r: ReparacionUI): GrupoDonut {
 // siquiera OFRECE el botón (ver el filtro de "siguientes" más abajo) en
 // vez de mostrarlo y dejar que el servidor lo rechace.
 const SIGUIENTES_ESTADOS: Partial<Record<EstadoReparacion, { estado: NuevoEstadoReparacion; texto: string }[]>> = {
-  RECEIVED: [{ estado: "IN_REPAIR", texto: "Iniciar reparación" }],
+  RECEIVED: [{ estado: "IN_REPAIR", texto: "Iniciar {entidad}" }],
   IN_REPAIR: [
-    { estado: "WAITING_PARTS", texto: "Esperando refacción" },
+    { estado: "WAITING_PARTS", texto: "{espera}" },
     { estado: "WORKSHOP_READY", texto: "Marcar listo" },
     { estado: "WORKSHOP_RETURN", texto: "Marcar devolución" },
   ],
-  WAITING_PARTS: [{ estado: "IN_REPAIR", texto: "Reanudar reparación" }],
-  WORKSHOP_READY: [{ estado: "SHOP_READY", texto: "Enviar a tienda (listo)" }],
-  WORKSHOP_RETURN: [{ estado: "SHOP_RETURN", texto: "Enviar a tienda (devolución)" }],
+  WAITING_PARTS: [{ estado: "IN_REPAIR", texto: "Reanudar {entidad}" }],
+  WORKSHOP_READY: [{ estado: "SHOP_READY", texto: "Enviar a sucursal (listo)" }],
+  WORKSHOP_RETURN: [{ estado: "SHOP_RETURN", texto: "Enviar a sucursal (devolución)" }],
   // SHOP_READY/SHOP_RETURN también ofrecen un botón de "regresar" al taller
   // (2026-09-25, a petición de Carlos: corregir un "Enviar a tienda" hecho
   // por error de dedo — antes no había forma de deshacerlo desde la UI).
@@ -227,10 +227,10 @@ const SIGUIENTES_ESTADOS: Partial<Record<EstadoReparacion, { estado: NuevoEstado
   // refacción". IN_REPAIR ya ofrece esas tres salidas completas, ver el
   // renglón de arriba — ver el comentario largo en TRANSICIONES_VALIDAS,
   // reparaciones-actions.ts).
-  SHOP_READY: [{ estado: "IN_REPAIR", texto: "Regresar a taller (corregir)" }],
+  SHOP_READY: [{ estado: "IN_REPAIR", texto: "Regresar a {lugar} (corregir)" }],
   SHOP_RETURN: [
     { estado: "DELIVERED", texto: "Entregar (sin cobro)" },
-    { estado: "IN_REPAIR", texto: "Regresar a taller (corregir)" },
+    { estado: "IN_REPAIR", texto: "Regresar a {lugar} (corregir)" },
   ],
 };
 
@@ -468,6 +468,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
 
   const entidadPlural = label(labels, "entity.repair.plural");
   const activo = label(labels, "entity.repair.asset");
+  const v = vocabReparacion(labels);
 
   // ── Panel "Resumen de taller" (2026-10-02, a petición de Carlos: "veo
   // mucho espacio desperdiciado del lado derecho... qué reportes o métricas
@@ -563,9 +564,9 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
   // se ofrece aquí (ver el comentario largo en SIGUIENTES_ESTADOS arriba):
   // el servidor lo rechaza de cualquier forma, y ese caso pasa por "Cobrar
   // y entregar" (el atajo de abajo, o /reparaciones).
-  const siguientes = (seleccionada ? (SIGUIENTES_ESTADOS[seleccionada.estado] ?? []) : []).filter(
-    (s) => !(s.estado === "DELIVERED" && cobrarEnDevolucion)
-  );
+  const siguientes = (seleccionada ? (SIGUIENTES_ESTADOS[seleccionada.estado] ?? []) : [])
+    .filter((s) => !(s.estado === "DELIVERED" && cobrarEnDevolucion))
+    .map((s) => ({ ...s, texto: textoAccion(s.texto, labels) }));
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -575,7 +576,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
             <ClipboardList className="w-4 h-4 text-primary-text" /> {label(labels, "module.reception.name")}
           </h1>
           <p className="text-[12.5px] text-muted-foreground mt-0.5">
-            Asigna técnico, cambia el estatus y ajusta costo/piezas — todas las {entidadPlural.toLowerCase()} del taller, de cualquier sucursal.
+            Asigna {v.espMin}, cambia el estatus y ajusta costo/piezas — todas las {entidadPlural.toLowerCase()} del {v.lugar}, de cualquier sucursal.
           </p>
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
@@ -646,7 +647,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                     {PRIORIDAD_TEXTO[r.prioridad]}
                   </span>
                   <span className="text-[10.5px] text-muted-foreground">
-                    {r.tecnicoAsignadoNombre ?? "Sin técnico asignado"}
+                    {r.tecnicoAsignadoNombre ?? `Sin ${v.espMin} asignado`}
                   </span>
                 </div>
               </button>
@@ -685,10 +686,10 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                 <div className="flex items-start gap-3 px-4 py-3 rounded-xl border bg-amber-50 border-amber-300 mt-3">
                   <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <p className="text-xs font-semibold text-amber-700">Alerta del técnico sin atender</p>
+                    <p className="text-xs font-semibold text-amber-700">Alerta del {v.espMin} sin atender</p>
                     <p className="text-[11.5px] mt-0.5 text-amber-600">
                       {seleccionada.historial.find((h) => h.nota?.startsWith("Alerta del técnico: "))?.nota?.slice("Alerta del técnico: ".length)
-                        ?? "Hay un pendiente con este equipo."}
+                        ?? "Hay un pendiente con este trabajo."}
                     </p>
                     <button
                       onClick={handleResolverAlerta}
@@ -723,14 +724,14 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
               </div>
 
               <div className="mt-3">
-                <p className="text-[10.5px] text-muted-foreground mb-1">Falla reportada</p>
+                <p className="text-[10.5px] text-muted-foreground mb-1">{v.falla}</p>
                 <p className="text-[12.5px] text-foreground/90 bg-muted rounded-lg p-2.5">{seleccionada.falla}</p>
               </div>
 
               {/* Técnico asignado — exclusivo de Aduana (2026-09-22, corrección
                   de Carlos: ni tienda ni el técnico mismo pueden elegirlo). */}
               <div className="mt-4" data-tour="aduana-tecnico">
-                <p className="text-[12.5px] font-semibold text-foreground mb-1.5">Técnico asignado</p>
+                <p className="text-[12.5px] font-semibold text-foreground mb-1.5">{v.esp} asignado</p>
                 <select
                   disabled={pending || cerrada}
                   value={seleccionada.tecnicoAsignadoId ?? ""}
@@ -951,7 +952,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
         <div className="hidden xl:flex w-[320px] flex-shrink-0 border-l border-border overflow-y-auto p-4 flex-col gap-4">
           <div className="flex items-center gap-1.5">
             <Gauge className="w-3.5 h-3.5 text-primary-text" />
-            <p className="text-[12.5px] font-semibold text-foreground">Resumen de taller</p>
+            <p className="text-[12.5px] font-semibold text-foreground">Resumen de {v.lugar}</p>
           </div>
 
           {/* Selector de periodo (2026-10-02, a petición de Carlos: "que
@@ -1021,9 +1022,9 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
           <div className="space-y-1">
             <div className="grid grid-cols-2 gap-2">
               {[
-                { valor: activas.length, texto: "Activos en taller", alerta: false },
+                { valor: activas.length, texto: `Activos en ${v.lugar}`, alerta: false },
                 { valor: atrasados.length, texto: "Atrasados", alerta: atrasados.length > 0 },
-                { valor: sinTecnico.length, texto: "Sin técnico", alerta: sinTecnico.length > 0 },
+                { valor: sinTecnico.length, texto: `Sin ${v.espMin}`, alerta: sinTecnico.length > 0 },
                 { valor: alertasPendientes.length, texto: "Alertas sin atender", alerta: alertasPendientes.length > 0 },
               ].map((k) => (
                 <div key={k.texto} className={`rounded-xl p-2.5 text-center ${k.alerta ? "bg-red-50" : "bg-muted/50"}`}>
@@ -1072,7 +1073,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
                         equipo que ya se registró pero nadie le ha puesto
                         manos encima todavía). Partido en 2 líneas: una sola
                         línea no cabe legible en el centro de la dona. */}
-                    <p className="text-[8px] text-muted-foreground mt-0.5 leading-tight text-center">Equipos<br />ingresados</p>
+                    <p className="text-[8px] text-muted-foreground mt-0.5 leading-tight text-center">Trabajos<br />ingresados</p>
                   </div>
                 </div>
                 <div className="space-y-1 mt-1">
@@ -1097,9 +1098,9 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
               largo junto a rankingTecnicos); entregas/promedio = dentro
               del periodo elegido arriba. */}
           <div className="bg-card border border-border rounded-xl p-3">
-            <p className="text-[12px] font-medium text-foreground mb-2">Técnicos</p>
+            <p className="text-[12px] font-medium text-foreground mb-2">{v.espPlural}</p>
             {rankingTecnicos.length === 0 ? (
-              <p className="text-[11.5px] text-muted-foreground text-center py-4">Sin técnicos registrados.</p>
+              <p className="text-[11.5px] text-muted-foreground text-center py-4">Sin {v.espPluralMin} registrados.</p>
             ) : (
               <div className="space-y-2.5">
                 {rankingTecnicos.map((t) => (

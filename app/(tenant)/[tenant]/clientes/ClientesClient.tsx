@@ -952,7 +952,7 @@ export default function ClientesClient({
                 explicar al cliente" — texto siempre visible, sin importar si
                 el campo es opcional o forzoso en este tenant. */}
             <p className="text-[11.5px] text-muted-foreground mt-1">
-              Se usa para enviarle al cliente notificaciones automáticas por WhatsApp sobre el estatus de su equipo.
+              Se usa para enviarle al cliente notificaciones automáticas por WhatsApp sobre el estatus de su trabajo.
             </p>
           </div>
           <div>
@@ -1034,7 +1034,7 @@ export default function ClientesClient({
             <p className="text-sm font-semibold text-foreground mb-1">Aún no tienes clientes registrados</p>
             <p className="text-xs text-muted-foreground mb-5">
               Da de alta a tu primer cliente aquí, o se registrará solo la próxima vez que hagas una venta o
-              recibas un equipo a reparar.
+              recibas un trabajo.
             </p>
             <button
               onClick={abrirModalNuevo}

@@ -323,7 +323,7 @@ export default function AsistentePersonal({ tenantSlug, labels = DEFAULT_LABELS,
                         {p.modulos.has("taller") && (
                           <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
                             <input type="checkbox" checked={p.verTodoTaller} onChange={(e) => actualizarPuesto(idx, { verTodoTaller: e.target.checked })} />
-                            Ve TODAS las reparaciones asignadas del taller (no solo las propias)
+                            Ve TODO lo asignado a su equipo (no solo lo propio)
                           </label>
                         )}
                         {p.modulos.has("caja") && (

@@ -595,7 +595,7 @@ export default function SucursalesClient({ data, tenantSlug, soloUnaSucursal, mo
                 />
                 <p className="text-[11.5px] text-muted-foreground mt-1">
                   Aparece en el folio de las reparaciones de esta sucursal (ej. REP-CEN-0001), para identificar de
-                  dónde viene cada equipo si manejas un taller centralizado.
+                  dónde viene cada trabajo si manejas un taller centralizado.
                 </p>
               </div>
               <div>

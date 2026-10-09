@@ -59,6 +59,8 @@ export default async function ConfiguracionPage({
       themeCustomColorsInicial={tenant.themeCustomColors}
       businessTypeInicial={tenant.businessType}
       vocabularioActual={vocabularioActual}
+      labels={labelsResueltos}
+      reparacionesActivo={!codigosInactivos.has("reparaciones")}
       modulos={modulosPersonalizables}
       recomendadosOff={recomendadosOff}
       logoInicial={tenant.logo}

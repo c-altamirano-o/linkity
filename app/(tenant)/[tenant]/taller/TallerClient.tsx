@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Wrench, Clock, AlertCircle, ChevronLeft, Send, Users } from "lucide-react";
 import type { ReparacionesData, EstadoReparacion, PrioridadReparacion } from "@/lib/reparaciones-data";
-import { label, etiquetaEncargado, type LabelDictionary } from "@/lib/labels";
+import { label, etiquetaEncargado, vocabReparacion, type LabelDictionary } from "@/lib/labels";
 import { enviarAlertaTallerAction } from "@/app/actions/reparaciones-actions";
 import { useTourDesdeUrl, TOUR_TALLER_ALERTA } from "@/lib/tours";
 
@@ -127,6 +127,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
   const entidad = label(labels, "entity.repair.singular");
   const entidadPlural = label(labels, "entity.repair.plural");
   const activo = label(labels, "entity.repair.asset");
+  const v = vocabReparacion(labels);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -137,10 +138,10 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
           </h1>
           <p className="text-[12.5px] text-muted-foreground mt-0.5">
             {verTodoTaller
-              ? `Todas las ${entidadPlural.toLowerCase()} del taller`
+              ? `Todas las ${entidadPlural.toLowerCase()} del ${v.lugar}`
               : miStaffId
                 ? `${entidadPlural} asignadas a ti`
-                : `${entidadPlural} del taller`}
+                : `${entidadPlural} del ${v.lugar}`}
             {" "}— consulta el detalle y avisa a {label(labels, "module.reception.name")} si necesitas algo.
           </p>
         </div>
@@ -178,7 +179,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
             <div className="p-6 text-center text-[12.5px] text-muted-foreground">
               {miStaffId && !verTodoTaller
                 ? `No tienes ${entidadPlural.toLowerCase()} ${soloActivas ? "activas" : "registradas"} asignadas todavía.`
-                : `No hay ${entidadPlural.toLowerCase()} ${soloActivas ? "activas" : "registradas"} en el taller.`}
+                : `No hay ${entidadPlural.toLowerCase()} ${soloActivas ? "activas" : "registradas"} en el ${v.lugar}.`}
             </div>
           ) : (
             listaVisible.map((r) => (
@@ -278,7 +279,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
               </div>
 
               <div className="mt-3">
-                <p className="text-[10.5px] text-muted-foreground mb-1">Falla reportada</p>
+                <p className="text-[10.5px] text-muted-foreground mb-1">{v.falla}</p>
                 <p className="text-[12.5px] text-foreground/90 bg-muted rounded-lg p-2.5">{seleccionada.falla}</p>
               </div>
 
@@ -287,7 +288,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
                   equipo; nunca aparece en la página pública de seguimiento. */}
               {seleccionada.codigoDesbloqueo && (
                 <div className="mt-3">
-                  <p className="text-[10.5px] text-muted-foreground mb-1">Contraseña de desbloqueo</p>
+                  <p className="text-[10.5px] text-muted-foreground mb-1">{v.desbloqueo}</p>
                   <p className="text-[12.5px] font-medium text-foreground bg-muted rounded-lg p-2.5">{seleccionada.codigoDesbloqueo}</p>
                 </div>
               )}
