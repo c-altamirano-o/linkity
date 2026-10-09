@@ -170,6 +170,7 @@ export default function TenantShell({
   checkoutUrl = null,
   contactoHref = null,
   soloCaja = false,
+  fichaSuscripcion = null,
 }: {
   children: React.ReactNode;
   tenant: string;
@@ -246,6 +247,9 @@ export default function TenantShell({
   avisoSuscripcion?: { etapa: "en_prueba" | "en_gracia"; diasRestantes: number } | null;
   checkoutUrl?: string | null;
   contactoHref?: string | null;
+  // Ficha "Suscripción actual" del pie del menú (solo administrador de cuenta de
+  // paga; null en prueba gratis). Ya calculada en el servidor (TenantLayout).
+  fichaSuscripcion?: { plan: string; estatus: "activa" | "por_vencer" | "en_gracia"; vigencia: string | null } | null;
   // 2026-10-09: hay una caja de un día anterior sin cerrar — el menú muestra
   // solo "Caja" hasta que se haga el corte (el layout del servidor también
   // redirige a /caja si alguien escribe otra URL a mano).
@@ -895,14 +899,27 @@ export default function TenantShell({
         </nav>
 
         <div className="border-t border-sidebar-border p-1.5">
-          {!collapsed && (
-            <div className="flex items-center gap-2 px-2 py-2 mb-1">
-              <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-medium flex-shrink-0">
-                {initials}
+          {fichaSuscripcion && !collapsed && (
+            <div className="mx-1 mt-1 mb-2 rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 py-2.5">
+              <p className="text-[11.5px] font-semibold tracking-wide text-sidebar-foreground/60">Suscripción actual</p>
+              <p className="mt-0.5 text-sm font-semibold text-sidebar-foreground truncate">{fichaSuscripcion.plan}</p>
+              <div className="mt-1.5 flex items-center justify-between gap-2 text-xs">
+                <span className="text-sidebar-foreground/60">Estatus</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 font-medium ${
+                    fichaSuscripcion.estatus === "activa"
+                      ? "bg-emerald-100 text-emerald-900"
+                      : fichaSuscripcion.estatus === "por_vencer"
+                        ? "bg-amber-100 text-amber-900"
+                        : "bg-red-100 text-red-900"
+                  }`}
+                >
+                  {fichaSuscripcion.estatus === "activa" ? "Activa" : fichaSuscripcion.estatus === "por_vencer" ? "Por vencer" : "En gracia"}
+                </span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-sidebar-foreground truncate">{userName}</p>
-                <p className="text-[11.5px] text-sidebar-foreground/60">{userRole || "Administrador"}</p>
+              <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+                <span className="text-sidebar-foreground/60">Vigencia</span>
+                <span className="font-medium text-sidebar-foreground">{fichaSuscripcion.vigencia ?? "Sin vencimiento"}</span>
               </div>
             </div>
           )}

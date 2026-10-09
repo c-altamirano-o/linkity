@@ -1150,11 +1150,11 @@ export default function ConfiguracionClient({
           <div className={`rounded-xl overflow-hidden shadow-sm mt-6 border ${todoListo ? "bg-card border-border" : "bg-amber-50 border-amber-300"}`}>
             <div className={`flex items-center gap-2 px-5 py-4 border-b ${todoListo ? "border-border bg-muted/50" : "border-amber-200 bg-amber-100/60"}`}>
               <Wrench className={`w-5 h-5 ${todoListo ? "text-primary-text" : "text-amber-700"}`} />
-              <h2 className="text-base font-semibold text-foreground">Configura tu Taller</h2>
+              <h2 className={`text-base font-semibold ${todoListo ? "text-foreground" : "text-amber-950"}`}>Configura tu Taller</h2>
             </div>
 
             <div className="p-5">
-              <p className="text-sm text-muted-foreground mb-5">
+              <p className={`text-sm mb-5 ${todoListo ? "text-muted-foreground" : "text-amber-900"}`}>
                 {todoListo
                   ? "Tu taller ya tiene personal asignado en ambos puestos clave y está listo para operar."
                   : "Antes de recibir equipos en taller, asigna al menos una persona a cada uno de estos puestos. Los roles ya están creados — solo falta darles personal desde Personal."}
@@ -1168,8 +1168,8 @@ export default function ConfiguracionClient({
                     <Circle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   )}
                   <div>
-                    <p className="text-sm text-foreground font-medium">Taller (Recepción/Aduana)</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className={`text-sm font-medium ${todoListo ? "text-foreground" : "text-amber-950"}`}>Taller (Recepción/Aduana)</p>
+                    <p className={`text-xs ${todoListo ? "text-muted-foreground" : "text-amber-900/80"}`}>
                       {checklistTaller.rolesAduana.length > 0
                         ? `Recibe el equipo, asigna técnico y ajusta costo/piezas (${checklistTaller.rolesAduana.map((r) => r.nombre).join(", ")}).`
                         : "Recibe el equipo, asigna técnico y ajusta costo/piezas."}
@@ -1186,8 +1186,8 @@ export default function ConfiguracionClient({
                     <Circle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   )}
                   <div>
-                    <p className="text-sm text-foreground font-medium">Técnico (Mis Reparaciones)</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className={`text-sm font-medium ${todoListo ? "text-foreground" : "text-amber-950"}`}>Técnico (Mis Reparaciones)</p>
+                    <p className={`text-xs ${todoListo ? "text-muted-foreground" : "text-amber-900/80"}`}>
                       {checklistTaller.rolesTaller.length > 0
                         ? `Repara el equipo asignado y puede alertar a Taller (${checklistTaller.rolesTaller.map((r) => r.nombre).join(", ")}).`
                         : "Repara el equipo asignado y puede alertar a Taller."}
@@ -1201,7 +1201,7 @@ export default function ConfiguracionClient({
               {!todoListo && (
                 <Link
                   href={`/${tenantSlug}/personal`}
-                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-primary-text hover:underline"
+                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-amber-900 underline hover:text-amber-950"
                 >
                   Ir a Personal a asignar roles <ArrowRight className="w-3.5 h-3.5" />
                 </Link>

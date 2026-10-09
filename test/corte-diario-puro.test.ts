@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { diaMXDe, inicioDeHoyMXDe, sesionAdminDeOtroDia, cajaEsDeDiaAnterior, formatoDiaMes } from "../lib/corte-diario-puro";
+import { diaMXDe, inicioDeHoyMXDe, sesionAdminDeOtroDia, cajaEsDeDiaAnterior, formatoDiaMes, formatoFechaCompleta } from "../lib/corte-diario-puro";
 
 // Hora de México = UTC-6. "2026-10-09T05:59:59Z" = 8 oct 23:59:59 en México; "…06:00:00Z" = 9 oct 00:00:00.
 const MX = (iso: string) => Date.parse(iso);
@@ -38,5 +38,9 @@ assert.equal(formatoDiaMes(new Date("2026-10-09T05:59:59Z")), "08/oct"); // 23:5
 assert.equal(formatoDiaMes(new Date("2026-10-09T06:00:00Z")), "09/oct");
 assert.equal(formatoDiaMes(new Date("2026-01-01T07:00:00Z")), "01/ene");
 assert.equal(formatoDiaMes(new Date("2026-12-31T20:00:00Z")), "31/dic");
+
+// Formato dd/mmm/aaaa (día de México)
+assert.equal(formatoFechaCompleta(new Date("2026-10-09T05:59:59Z")), "08/oct/2026");
+assert.equal(formatoFechaCompleta(new Date("2027-01-01T05:59:59Z")), "31/dic/2026");
 
 console.log("corte-diario-puro: OK");

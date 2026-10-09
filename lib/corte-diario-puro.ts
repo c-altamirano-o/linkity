@@ -45,3 +45,9 @@ export function formatoDiaMes(fecha: Date): string {
   const mx = new Date(fecha.getTime() - MX_OFFSET_MS);
   return `${String(mx.getUTCDate()).padStart(2, "0")}/${MESES_CORTOS[mx.getUTCMonth()]}`;
 }
+
+/** "dd/mmm/aaaa" del día (México) de un instante, p. ej. "08/oct/2026". */
+export function formatoFechaCompleta(fecha: Date): string {
+  const mx = new Date(fecha.getTime() - MX_OFFSET_MS);
+  return `${formatoDiaMes(fecha)}/${mx.getUTCFullYear()}`;
+}

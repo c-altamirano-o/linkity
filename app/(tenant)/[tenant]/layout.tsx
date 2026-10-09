@@ -26,7 +26,7 @@ import BannerExceso from "@/components/tenant/BannerExceso";
 import DatosNegocioClient from "@/components/tenant/DatosNegocioClient";
 import AvisoCajaPendiente from "@/components/tenant/AvisoCajaPendiente";
 import CajaPendienteBloqueo from "@/components/tenant/CajaPendienteBloqueo";
-import { sesionAdminDeOtroDia, inicioDeHoyMXDe, formatoDiaMes } from "@/lib/corte-diario-puro";
+import { sesionAdminDeOtroDia, inicioDeHoyMXDe, formatoDiaMes, formatoFechaCompleta } from "@/lib/corte-diario-puro";
 
 export const metadata: Metadata = {
   title: "Linkity",
@@ -107,7 +107,7 @@ export default async function TenantLayout({
 
   const dbTenant = await prisma.tenant.findUnique({
     where: { slug: tenant },
-    select: { id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, datosPendientes: true, logo: true, subscription: { select: { status: true, endDate: true, excesoDetectadoAt: true } } },
+    select: { id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, datosPendientes: true, logo: true, esInterno: true, subscription: { select: { status: true, endDate: true, excesoDetectadoAt: true, price: true, plan: true, commercialPlan: { select: { name: true } } } } },
   });
 
   // Bloqueo por ciclo de vida de suscripción (2026-09-22, a petición de
@@ -123,6 +123,7 @@ export default async function TenantLayout({
   // components/tenant/BannerSuscripcion.tsx) — desde 2026-10-09 solo en los
   // días de gracia de una suscripción de pago vencida; durante la prueba
   // gratis no se muestra nada (ver avisoParaPanel en lib/ciclo-suscripcion.ts).
+  let fichaSuscripcion: { plan: string; estatus: "activa" | "por_vencer" | "en_gracia"; vigencia: string | null } | null = null;
   let avisoSuscripcion: { etapa: "en_prueba" | "en_gracia"; diasRestantes: number } | null = null;
   // Exceso de plan (Paso 5, 2026-10-08 — ver lib/exceso-plan.ts): si el negocio
   // tiene más sucursales/empleados activos de los que permite su plan corren 7
@@ -143,6 +144,25 @@ export default async function TenantLayout({
       );
     }
     avisoSuscripcion = avisoParaPanel(cicloSuscripcion);
+    // Ficha "Suscripción actual" (2026-10-09, a petición de Carlos): solo para
+    // el administrador de una cuenta de paga. Queda vacía (null) en la prueba
+    // gratis (TRIAL), en la prueba con tarjeta de Hotmart (ACTIVE con precio 0,
+    // aún sin primer cobro) y en el negocio interno de pruebas.
+    const sub = dbTenant.subscription;
+    const esPruebaSinCobro = !sub || sub.status === "TRIAL" || Number(sub.price) <= 0;
+    if (sub && modo === "admin" && !dbTenant.esInterno && !esPruebaSinCobro) {
+      const diasParaVencer = sub.endDate ? Math.ceil((sub.endDate.getTime() - Date.now()) / 86400000) : null;
+      fichaSuscripcion = {
+        plan: sub.commercialPlan?.name ?? sub.plan,
+        estatus:
+          cicloSuscripcion.etapa === "en_gracia"
+            ? "en_gracia"
+            : diasParaVencer !== null && diasParaVencer <= 7
+              ? "por_vencer"
+              : "activa",
+        vigencia: sub.endDate ? formatoFechaCompleta(sub.endDate) : null,
+      };
+    }
     if (dbTenant.subscription) {
       estadoExceso = await sincronizarExceso(dbTenant.id, {
         status: dbTenant.subscription.status,
@@ -502,6 +522,7 @@ export default async function TenantLayout({
         onboardingTotal={onboardingTotal}
         onboardingPasos={onboardingPasos}
         avisoSuscripcion={avisoSuscripcion}
+        fichaSuscripcion={fichaSuscripcion}
         checkoutUrl={enlacesSuscripcion.checkoutUrl}
         contactoHref={enlacesSuscripcion.contactoHref}
         soloCaja={bloqueoPorCaja}
