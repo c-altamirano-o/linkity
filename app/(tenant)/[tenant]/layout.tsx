@@ -11,7 +11,7 @@ import type { ModuloKey } from "@/lib/roles";
 import { modulosPermitidosParaRolPorNombre } from "@/lib/roles-server";
 import { getTenantLabels } from "@/lib/labels-server";
 import type { LabelDictionary } from "@/lib/labels";
-import { calcularEstadoCiclo } from "@/lib/ciclo-suscripcion";
+import { calcularEstadoCiclo, avisoParaPanel } from "@/lib/ciclo-suscripcion";
 import CuentaBloqueada from "@/components/tenant/CuentaBloqueada";
 import { obtenerEnlacesSuscripcion } from "@/lib/enlaces-suscripcion";
 import { getNotificaciones, contarNotificacionesNoLeidas } from "@/lib/notificaciones";
@@ -117,8 +117,9 @@ export default async function TenantLayout({
   // Server Actions; esto cubre la renderización de cualquier página.
   const enlacesSuscripcion = await obtenerEnlacesSuscripcion();
   // Aviso de días restantes dentro del SaaS (2026-10-06, ver
-  // components/tenant/BannerSuscripcion.tsx) — solo mientras la cuenta está
-  // en prueba gratis o en los días de gracia de una suscripción vencida.
+  // components/tenant/BannerSuscripcion.tsx) — desde 2026-10-09 solo en los
+  // días de gracia de una suscripción de pago vencida; durante la prueba
+  // gratis no se muestra nada (ver avisoParaPanel en lib/ciclo-suscripcion.ts).
   let avisoSuscripcion: { etapa: "en_prueba" | "en_gracia"; diasRestantes: number } | null = null;
   // Exceso de plan (Paso 5, 2026-10-08 — ver lib/exceso-plan.ts): si el negocio
   // tiene más sucursales/empleados activos de los que permite su plan corren 7
@@ -138,9 +139,7 @@ export default async function TenantLayout({
         />
       );
     }
-    if ((cicloSuscripcion.etapa === "en_prueba" || cicloSuscripcion.etapa === "en_gracia") && cicloSuscripcion.diasRestantes !== null) {
-      avisoSuscripcion = { etapa: cicloSuscripcion.etapa, diasRestantes: cicloSuscripcion.diasRestantes };
-    }
+    avisoSuscripcion = avisoParaPanel(cicloSuscripcion);
     if (dbTenant.subscription) {
       estadoExceso = await sincronizarExceso(dbTenant.id, {
         status: dbTenant.subscription.status,

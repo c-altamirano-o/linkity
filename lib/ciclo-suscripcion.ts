@@ -101,6 +101,23 @@ export function calcularEstadoCiclo(s: SuscripcionParaCiclo | null | undefined, 
   return { etapa: "lista_para_eliminar", diasVencida, diasRestantes: null, bloqueada: true };
 }
 
+/**
+ * Aviso de "días restantes" que se muestra dentro del panel del negocio
+ * (components/tenant/BannerSuscripcion.tsx).
+ *
+ * 2026-10-09, a petición de Carlos: durante la PRUEBA GRATIS no se muestra
+ * ningún aviso en el panel (los avisos previos al fin de la prueba siguen
+ * llegando por correo/WhatsApp desde el cron). En un plan de pago el aviso
+ * solo aparece en los días de gracia posteriores a un vencimiento. Por eso
+ * solo la etapa "en_gracia" devuelve aviso; todo lo demás, null.
+ */
+export function avisoParaPanel(estado: EstadoCiclo): { etapa: "en_gracia"; diasRestantes: number } | null {
+  if (estado.etapa === "en_gracia" && estado.diasRestantes !== null) {
+    return { etapa: "en_gracia", diasRestantes: estado.diasRestantes };
+  }
+  return null;
+}
+
 export const ETAPA_LABEL: Record<EtapaCiclo, string> = {
   sin_suscripcion: "Sin suscripción",
   activa: "Activa",
