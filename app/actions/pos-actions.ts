@@ -5,7 +5,8 @@ import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { PaymentMethod, MixedPaymentMethod, SaleStatus, CashSessionStatus, RepairStatus } from "@prisma/client";
 import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
-import { ESTADO_CLIENTE_TEXTO } from "@/lib/reparaciones-data";
+import { getLabelsDeTenant } from "@/lib/labels-server";
+import { objetoCliente, estadoClienteTexto } from "@/lib/reparaciones-textos";
 import { avisarWhatsappReparacion } from "@/lib/whatsapp-tenant";
 
 /**
@@ -119,7 +120,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     }
     if (esReparacion) {
       if (it.cantidad !== 1) {
-        return { ok: false, error: "El cobro de una reparación no admite cantidad distinta de 1" };
+        return { ok: false, error: "El cobro de un trabajo no admite cantidad distinta de 1" };
       }
       // 2026-10-05, hallazgo de auditoría ("el monto de una reparación es
       // editable sin mínimo real y nada impedía cobrarla en $0 por
@@ -134,7 +135,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
       // el monto de la reparación es $0 — este endpoint sigue validando
       // solo que el monto sea un número real y no negativo.
       if (typeof it.monto !== "number" || !Number.isFinite(it.monto) || it.monto < 0) {
-        return { ok: false, error: "Monto inválido para el cobro de la reparación" };
+        return { ok: false, error: "Monto inválido para el cobro del trabajo" };
       }
     }
   }
@@ -228,12 +229,12 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
         })
       : [];
     if (repairsRaw.length !== new Set(repairIds).size) {
-      return { ok: false, error: "Una o más reparaciones no se encontraron" };
+      return { ok: false, error: "Uno o más trabajos no se encontraron" };
     }
     let cobraEnDevolucion: boolean | null = null;
     for (const r of repairsRaw) {
       if (r.branchId !== branchId) {
-        return { ok: false, error: `La reparación ${r.folio} no pertenece a la sucursal seleccionada` };
+        return { ok: false, error: `El trabajo ${r.folio} no pertenece a la sucursal seleccionada` };
       }
       if (r.status === RepairStatus.SHOP_READY) continue;
       if (r.status === RepairStatus.SHOP_RETURN) {
@@ -243,7 +244,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
         }
         if (cobraEnDevolucion) continue;
       }
-      return { ok: false, error: `La reparación ${r.folio} no está lista para cobro` };
+      return { ok: false, error: `El trabajo ${r.folio} no está listo para cobro` };
     }
 
     let subtotalBruto = 0;
@@ -485,6 +486,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
     }
     const folio = `${prefijo}${siguienteNum}`;
 
+    const labelsT = await getLabelsDeTenant(tenant.id);
     await db.$transaction(async (tx: any) => {
       const sale = await tx.sale.create({
         data: {
@@ -535,7 +537,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
             notes: `Cobro registrado vía POS (venta ${folio}): ${l.price.toLocaleString("es-MX", {
               style: "currency",
               currency: "MXN",
-            })} (${metodoPago}) — equipo entregado al cliente`,
+            })} (${metodoPago}) — entregado al cliente`,
             visibleCliente: true,
           },
         });
@@ -586,7 +588,7 @@ export async function crearVentaAction(params: CrearVentaParams): Promise<CrearV
         customerId: l.customerId,
         folio: l.folio,
         publicToken: l.publicToken,
-        estadoTexto: ESTADO_CLIENTE_TEXTO.DELIVERED,
+        estadoTexto: estadoClienteTexto("DELIVERED", objetoCliente(labelsT)),
       });
     }
 

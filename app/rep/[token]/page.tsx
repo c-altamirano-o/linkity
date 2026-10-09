@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { MessageCircle, Wrench } from "lucide-react";
-import { getReparacionPublica, PASOS_PROGRESO_TEXTO } from "@/lib/reparaciones-data";
+import { getReparacionPublica } from "@/lib/reparaciones-data";
 import { construirMensajeReparacion, hrefWhatsappManual } from "@/lib/whatsapp-mensaje";
 import { urlSeguimientoReparacion } from "@/lib/whatsapp-tenant";
 
@@ -69,7 +69,7 @@ export default async function ReparacionPublicaPage({
           <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">{rep.negocio}</p>
           <h1 className="text-lg font-semibold text-foreground">Hola, {rep.clientePrimerNombre}</h1>
           <p className="text-xs text-muted-foreground">
-            Folio {rep.folio} · {rep.marca} {rep.modelo}
+            Folio {rep.folio} · {[rep.marca, rep.modelo].filter(Boolean).join(" ")}
           </p>
         </div>
 
@@ -96,16 +96,16 @@ export default async function ReparacionPublicaPage({
             // siguiente completo — eso se reserva para cuando ese paso en
             // verdad se complete.
             (() => {
-              const segmentos = PASOS_PROGRESO_TEXTO.length - 1;
+              const segmentos = rep.pasosTexto.length - 1;
               const porcentajeSegmento = 80 / segmentos;
               const relleno = rep.paso >= segmentos ? 80 : rep.paso * porcentajeSegmento + porcentajeSegmento / 2;
               return (
-                <div className="grid gap-y-1.5" style={{ gridTemplateColumns: `repeat(${PASOS_PROGRESO_TEXTO.length}, 1fr)` }}>
+                <div className="grid gap-y-1.5" style={{ gridTemplateColumns: `repeat(${rep.pasosTexto.length}, 1fr)` }}>
                   <div className="col-span-full relative h-5">
                     <div className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-muted" style={{ left: "10%", right: "10%" }} />
                     <div className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-primary" style={{ left: "10%", width: `${relleno}%` }} />
-                    <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${PASOS_PROGRESO_TEXTO.length}, 1fr)` }}>
-                      {PASOS_PROGRESO_TEXTO.map((texto, i) => (
+                    <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${rep.pasosTexto.length}, 1fr)` }}>
+                      {rep.pasosTexto.map((texto, i) => (
                         <div key={texto} className="flex items-center justify-center">
                           <div
                             className={
@@ -118,7 +118,7 @@ export default async function ReparacionPublicaPage({
                       ))}
                     </div>
                   </div>
-                  {PASOS_PROGRESO_TEXTO.map((texto, i) => (
+                  {rep.pasosTexto.map((texto, i) => (
                     <span
                       key={texto}
                       className={`text-[10px] text-center leading-tight ${i <= rep.paso ? "text-foreground font-bold" : "text-muted-foreground"}`}
@@ -136,7 +136,7 @@ export default async function ReparacionPublicaPage({
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
             <MessageCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-semibold text-amber-800">Mensaje del taller</p>
+              <p className="text-xs font-semibold text-amber-800">Mensaje de {rep.negocio}</p>
               <p className="text-xs text-amber-900 mt-0.5">{rep.mensajeTaller.texto}</p>
               <p className="text-[10px] text-amber-700/70 mt-1">{formatoFecha(rep.mensajeTaller.fecha)}</p>
             </div>

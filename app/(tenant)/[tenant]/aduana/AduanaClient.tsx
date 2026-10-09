@@ -437,7 +437,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
       () => avanzarEstadoAction({ tenantSlug, repairId: repair.id, nuevoEstado: "DELIVERED" }),
       async (res) => {
         const recibo: ReciboData = {
-          tipoDocumento: "Reparación — Devolución",
+          tipoDocumento: `${label(labels, "entity.repair.singular")} — Devolución`,
           folio: repair.folio,
           cliente: repair.cliente,
           telefono: repair.telefono,
@@ -448,9 +448,9 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
           iva: 0,
           total: 0,
           metodoPago: "Sin cargo",
-          notaPie: "No fue posible reparar el equipo — se entrega sin costo.",
+          notaPie: "No fue posible completar el trabajo — se entrega sin costo.",
           qrUrl: `${window.location.origin}/rep/${repair.publicToken}`,
-          qrEtiqueta: "Sigue tu reparación",
+          qrEtiqueta: `Sigue tu ${label(labels, "entity.repair.singular").toLowerCase()}`,
         };
         await abrirReciboImprimible(recibo, negocioRecibo);
       }
@@ -510,7 +510,7 @@ export default function AduanaClient({ data, labels, tenantSlug, puedeCobrar, ne
   const totalRecibidosPeriodo = recibidosPeriodo.length;
   const GRUPO_DONUT_LABEL: Record<GrupoDonut, string> = {
     recibido: "Pendientes de asignación",
-    reparacion: "En reparación",
+    reparacion: label(labels, "repair.status.IN_REPAIR"),
     listo: "Listo",
     devolucion: "Devoluciones",
   };

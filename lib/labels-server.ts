@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getTenantPrisma } from "@/lib/prisma";
+import { getTenantPrisma, prisma } from "@/lib/prisma";
 import { DEFAULT_LABELS, etiquetasDelRubro, type LabelDictionary } from "@/lib/labels";
 
 /**
@@ -41,6 +41,15 @@ export async function getTenantLabels(
   }
 
   return merged;
+}
+
+/**
+ * Igual que getTenantLabels, pero resuelve el rubro (businessType) del tenant
+ * por su cuenta — para Server Actions que solo conocen el tenantId.
+ */
+export async function getLabelsDeTenant(tenantId: string): Promise<LabelDictionary> {
+  const t = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { businessType: true } });
+  return getTenantLabels(tenantId, t?.businessType);
 }
 
 /**

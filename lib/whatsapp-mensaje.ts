@@ -67,7 +67,7 @@ export function primerNombre(nombreCompleto: string): string {
  * Arma el mensaje que ve el cliente final — mismo texto tanto para los
  * avisos automáticos del modo API (creación/cambio de estatus) como para el
  * envío manual ("Avisar" en Reparaciones, en cualquiera de los dos modos).
- * `estadoTexto` es siempre ESTADO_CLIENTE_TEXTO[...] (lib/reparaciones-data.ts)
+ * `estadoTexto` es siempre estadoClienteTexto(...) (lib/reparaciones-textos.ts)
  * — MISMO texto que ya ve el cliente en la página pública, para que el
  * WhatsApp y la página jamás se contradigan.
  */

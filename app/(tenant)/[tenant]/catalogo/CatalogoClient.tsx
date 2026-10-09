@@ -209,7 +209,14 @@ function matchesPeriodo(fechaISO: string, periodo: string, fechaInicio: string, 
 
 export default function CatalogoClient({ data, labels, branches, tenantSlug, businessType, puedeVerMontos = true }: CatalogoClientProps) {
   const iconoProducto = ICONOS_PRODUCTO[label(labels, "icon.catalog.product")] ?? Package;
-  const configDeTipo = (tipo: TipoCatalogo) => (tipo === "PRODUCT" ? { ...tipoConfig.PRODUCT, icon: iconoProducto } : tipoConfig[tipo]);
+  // El tipo PART se llama distinto según el rubro (Refacción, Insumo, Material...).
+  const parteSing = label(labels, "catalog.part.singular");
+  const partePlural = label(labels, "catalog.part.plural");
+  const nombreTipo = (tipo: TipoCatalogo) => (tipo === "PART" ? partePlural : TIPO_LABELS[tipo]);
+  const configDeTipo = (tipo: TipoCatalogo) => ({
+    ...(tipo === "PRODUCT" ? { ...tipoConfig.PRODUCT, icon: iconoProducto } : tipoConfig[tipo]),
+    label: nombreTipo(tipo),
+  });
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { categorias, productos, ventasDetalle } = data;
@@ -325,14 +332,15 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
   const TIPO_ARCHIVO_A_ENUM: Record<string, TipoProductoInput> = {
     producto: "PRODUCT", productos: "PRODUCT", product: "PRODUCT",
     refaccion: "PART", "refacción": "PART", refacciones: "PART", part: "PART",
+    [parteSing.toLowerCase()]: "PART", [partePlural.toLowerCase()]: "PART",
     servicio: "SERVICE", servicios: "SERVICE", service: "SERVICE",
   };
 
   function descargarPlantilla() {
     const encabezado = "Nombre,Tipo,Precio,Costo,SKU,Categoria";
-    const ejemplo = "Ejemplo: Cambio de pantalla,Servicio,800,,,Servicios";
+    const ejemplo = "Ejemplo: Servicio básico,Servicio,800,,,Servicios";
     const csv = [
-      "# Tipo debe ser: Producto, Refaccion o Servicio",
+      `# Tipo debe ser: Producto, ${parteSing} o Servicio`,
       "# Costo, SKU y Categoria son opcionales — puedes dejarlos en blanco",
       encabezado,
       ejemplo,
@@ -968,7 +976,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                 <Plus className="w-8 h-8 text-muted-foreground/40 mb-2" />
                 <p className="text-sm font-medium text-foreground mb-1">Aún no hay nada en tu catálogo</p>
-                <p className="text-xs text-muted-foreground max-w-xs mb-3">Agrega tus primeros productos, refacciones o servicios para empezar a venderlos.</p>
+                <p className="text-xs text-muted-foreground max-w-xs mb-3">Agrega tus primeros productos, {partePlural.toLowerCase()} o servicios para empezar a venderlos.</p>
                 <div className="flex flex-col sm:flex-row items-center gap-2">
                   <button onClick={abrirNuevo} className="btn-primary flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg">
                     <Plus className="w-3.5 h-3.5" /> Agregar producto
@@ -1204,7 +1212,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
                 >
                   {TIPOS_ORDEN.map((t) => (
-                    <option key={t} value={t}>{TIPO_LABELS[t]}</option>
+                    <option key={t} value={t}>{nombreTipo(t)}</option>
                   ))}
                 </select>
               </div>
@@ -1551,7 +1559,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
             </div>
             <div className="p-4 flex flex-col gap-3">
               <p className="text-xs text-muted-foreground">
-                Sube un archivo CSV o Excel con tus productos, refacciones o servicios. Si vienes de otro sistema, primero descarga la plantilla para ver el formato esperado.
+                Sube un archivo CSV o Excel con tus productos, {partePlural.toLowerCase()} o servicios. Si vienes de otro sistema, primero descarga la plantilla para ver el formato esperado.
               </p>
 
               <button

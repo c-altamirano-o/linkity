@@ -12,7 +12,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, LineChart, Line,
 } from "recharts";
 import type { RepairStatus, Priority } from "@prisma/client";
-import { label, type LabelDictionary } from "@/lib/labels";
+import { label, vocabReparacion, type LabelDictionary } from "@/lib/labels";
 import type {
   DashboardData, RepairRow, CategoriaVenta, VentaPorHora, AtajosPeriodoDashboard,
 } from "@/lib/dashboard-data";
@@ -115,14 +115,14 @@ const CustomTooltipHora = ({ active, payload }: { active?: boolean; payload?: { 
   return null;
 };
 
-const CustomTooltip = ({ active, payload, label: lbl }: any) => {
+const CustomTooltip = ({ active, payload, label: lbl, nombreReparaciones }: any) => {
   if (active && payload?.length) {
     return (
       <div className="bg-card border border-border rounded-lg p-2 shadow-sm">
         <p className="text-xs font-medium text-muted-foreground mb-1">{lbl}</p>
         {payload.map((p: any) => (
           <p key={p.name} className="text-xs" style={{ color: p.color }}>
-            {p.name === "ventas" ? "Ventas" : p.name === "reparaciones" ? "Reparaciones" : "Total"}: {formatMXN(p.value)}
+            {p.name === "ventas" ? "Ventas" : p.name === "reparaciones" ? nombreReparaciones ?? "Reparaciones" : "Total"}: {formatMXN(p.value)}
           </p>
         ))}
       </div>
@@ -206,6 +206,8 @@ export default function DashboardClient({
 }) {
   const router = useRouter();
   const t = (key: string) => label(labels, key);
+  const v = vocabReparacion(labels);
+  const estadoTxt = (st: string) => label(labels, `repair.status.${st}`);
   const enVistaGlobal = sucursalActualId === null;
 
   useTourDesdeUrl("dashboard-cambiar-periodo", TOUR_DASHBOARD_PERIODO);
@@ -381,7 +383,7 @@ export default function DashboardClient({
     return (
       <>
         <div className="grid grid-cols-[80px_1fr_90px_75px] px-4 py-2 bg-muted/50 border-b border-border sticky top-0">
-          {["Folio", "Cliente · Equipo", "Estado", "Técnico"].map((h) => (
+          {["Folio", `Cliente · ${v.objeto}`, "Estado", v.esp].map((h) => (
             <p key={h} className="text-[11.5px] font-medium text-muted-foreground">{h}</p>
           ))}
         </div>
@@ -396,7 +398,7 @@ export default function DashboardClient({
               <p className="text-[11.5px] text-muted-foreground">{r.equipo}</p>
             </div>
             <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full w-fit ${estadoConfig[r.status].classes}`}>
-              {estadoConfig[r.status].label}
+              {estadoTxt(r.status)}
             </span>
             <p className="text-[11.5px] text-muted-foreground truncate">{r.tecnico}</p>
           </div>
@@ -409,12 +411,12 @@ export default function DashboardClient({
   // "Costo" cuando montosVisibles es false (en vez del candado que ya no
   // se usa, ver el comentario del prop montosVisibles).
   function TablaListos({ rows }: { rows: RepairRow[] }) {
-    if (rows.length === 0) return <EmptyState text="No hay equipos listos para entregar por ahora." />;
+    if (rows.length === 0) return <EmptyState text={`No hay ${t("entity.repair.plural").toLowerCase()} pendientes de entrega por ahora.`} />;
     const cols = montosVisibles ? "grid-cols-[80px_1fr_90px_70px]" : "grid-cols-[80px_1fr_70px]";
     return (
       <>
         <div className={`grid ${cols} px-4 py-2 bg-muted/50 border-b border-border sticky top-0`}>
-          {(montosVisibles ? ["Folio", "Cliente · Equipo", "Costo", "Espera"] : ["Folio", "Cliente · Equipo", "Espera"]).map((h) => (
+          {(montosVisibles ? ["Folio", `Cliente · ${v.objeto}`, "Costo", "Espera"] : ["Folio", `Cliente · ${v.objeto}`, "Espera"]).map((h) => (
             <p key={h} className="text-[11.5px] font-medium text-muted-foreground">{h}</p>
           ))}
         </div>
@@ -440,11 +442,11 @@ export default function DashboardClient({
   }
 
   function TablaDevoluciones({ rows }: { rows: RepairRow[] }) {
-    if (rows.length === 0) return <EmptyState text="No hay equipos en devolución." />;
+    if (rows.length === 0) return <EmptyState text={`No hay ${t("entity.repair.plural").toLowerCase()} en devolución.`} />;
     return (
       <>
         <div className="grid grid-cols-[80px_1fr_1fr] px-4 py-2 bg-muted/50 border-b border-border sticky top-0">
-          {["Folio", "Cliente · Equipo", "Razón · Espera"].map((h) => (
+          {["Folio", `Cliente · ${v.objeto}`, "Razón · Espera"].map((h) => (
             <p key={h} className="text-[11.5px] font-medium text-muted-foreground">{h}</p>
           ))}
         </div>
@@ -504,29 +506,29 @@ export default function DashboardClient({
         content: <TablaVentas />,
       },
       reparaciones: {
-        titulo: `${t("entity.repair.plural")} activas`, iconBg: "bg-amber-50", iconColor: "text-amber-600", icon: Wrench,
+        titulo: `${t("entity.repair.plural")} en curso`, iconBg: "bg-amber-50", iconColor: "text-amber-600", icon: Wrench,
         stats: [
-          { label: "Total activas", value: String(data.reparacionesActivas.length), color: "text-amber-600" },
+          { label: "Total en curso", value: String(data.reparacionesActivas.length), color: "text-amber-600" },
           { label: "Prioridad alta", value: String(data.reparacionesActivas.filter((r) => r.prioridad === "HIGH" || r.prioridad === "URGENT").length), color: "text-red-600" },
-          { label: "Listos p/ entregar", value: String(data.equiposListos.length), color: "text-emerald-600" },
+          { label: "Pendientes de entrega", value: String(data.equiposListos.length), color: "text-emerald-600" },
         ],
-        content: <TablaReparaciones rows={data.reparacionesActivas} emptyText={`No hay ${t("entity.repair.plural").toLowerCase()} activas por ahora.`} />,
+        content: <TablaReparaciones rows={data.reparacionesActivas} emptyText={`No hay ${t("entity.repair.plural").toLowerCase()} en curso por ahora.`} />,
       },
       listos: {
-        titulo: "Equipos listos para entregar", iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: CheckCircle,
+        titulo: `${t("entity.repair.plural")} pendientes de entrega`, iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: CheckCircle,
         stats: [
-          { label: "Equipos listos", value: String(data.equiposListos.length), color: "text-emerald-600" },
+          { label: "Pendientes de entrega", value: String(data.equiposListos.length), color: "text-emerald-600" },
           ...(montosVisibles ? [{ label: "Total a cobrar", value: formatMXN(data.equiposListos.reduce((s, e) => s + (e.costo ?? 0), 0)), color: "text-primary-text" }] : []),
           { label: "Con espera > 1 día", value: String(data.equiposListos.filter((e) => e.espera.includes("día")).length), color: "text-amber-600" },
         ],
         content: <TablaListos rows={data.equiposListos} />,
       },
       devoluciones: {
-        titulo: "Equipos en devolución", iconBg: "bg-red-50", iconColor: "text-red-500", icon: RotateCcw,
+        titulo: `${t("entity.repair.plural")} en devolución`, iconBg: "bg-red-50", iconColor: "text-red-500", icon: RotateCcw,
         stats: [
-          { label: "Equipos a devolver", value: String(data.equiposDevolucion.length), color: "text-red-600" },
+          { label: "Por devolver", value: String(data.equiposDevolucion.length), color: "text-red-600" },
           { label: "Requieren contacto", value: String(data.equiposDevolucion.length), color: "text-foreground" },
-          { label: "Total activas", value: String(data.reparacionesActivas.length), color: "text-amber-600" },
+          { label: "Total en curso", value: String(data.reparacionesActivas.length), color: "text-amber-600" },
         ],
         content: <TablaDevoluciones rows={data.equiposDevolucion} />,
       },
@@ -633,9 +635,9 @@ export default function DashboardClient({
   // ningún acceso al quitar las 3 fichas.
   const reparacionesResumen = data.reparacionesActiva
     ? [
-        { key: "activas", nombre: `${t("entity.repair.plural")} activas (ahora)`, valor: data.reparacionesActivasCount, color: "#2563EB", modal: "reparaciones" as ModalType },
-        { key: "listos", nombre: `${t("entity.repair.asset")}s listos · ${etiquetaPeriodo}`, valor: data.equiposListosCount, color: "#059669", modal: "listos" as ModalType },
-        { key: "devolucion", nombre: `${t("entity.repair.asset")}s devolución · ${etiquetaPeriodo}`, valor: data.equiposDevolucionCount, color: "#EF4444", modal: "devoluciones" as ModalType },
+        { key: "activas", nombre: `${t("entity.repair.plural")} en curso (ahora)`, valor: data.reparacionesActivasCount, color: "#2563EB", modal: "reparaciones" as ModalType },
+        { key: "listos", nombre: `Pendientes de entrega · ${etiquetaPeriodo}`, valor: data.equiposListosCount, color: "#059669", modal: "listos" as ModalType },
+        { key: "devolucion", nombre: `En devolución · ${etiquetaPeriodo}`, valor: data.equiposDevolucionCount, color: "#EF4444", modal: "devoluciones" as ModalType },
       ].filter((r) => r.valor > 0)
     : [];
   const totalReparacionesResumen = reparacionesResumen.reduce((s, r) => s + r.valor, 0);
@@ -909,7 +911,7 @@ export default function DashboardClient({
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                 <XAxis dataKey="dia" tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} width={36} />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={<CustomTooltip nombreReparaciones={t("entity.repair.plural")} />} />
                 <Area type="monotone" dataKey="ventas" stroke="var(--primary-text)" strokeWidth={2} fill="url(#cV)" />
                 {data.reparacionesActiva && (
                   <>
@@ -1025,12 +1027,12 @@ export default function DashboardClient({
         {data.reparacionesActiva && (
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <p className="text-sm font-medium text-foreground">{t("entity.repair.plural")} activas</p>
+              <p className="text-sm font-medium text-foreground">{t("entity.repair.plural")} en curso</p>
               <button onClick={() => setModalAbierto("reparaciones")} className="btn-ghost -mx-1.5 px-1.5 py-0.5 rounded-md text-xs">Ver todas</button>
             </div>
             <div className="divide-y divide-border/60">
               {data.reparacionesActivas.length === 0 ? (
-                <EmptyState text={`No hay ${t("entity.repair.plural").toLowerCase()} activas por ahora.`} />
+                <EmptyState text={`No hay ${t("entity.repair.plural").toLowerCase()} en curso por ahora.`} />
               ) : (
                 data.reparacionesActivas.slice(0, 4).map((r) => (
                   <div key={r.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40">
@@ -1040,7 +1042,7 @@ export default function DashboardClient({
                       <p className="text-[11.5px] text-muted-foreground truncate">{r.cliente}</p>
                     </div>
                     <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${estadoConfig[r.status].classes}`}>
-                      {estadoConfig[r.status].label}
+                      {estadoTxt(r.status)}
                     </span>
                   </div>
                 ))
@@ -1166,10 +1168,10 @@ export default function DashboardClient({
                       ...(montosVisibles ? [{ label: "Ventas del período", value: formatMXN(suc.ventasDia), color: "text-primary-text", sub: suc.vsPeriodoAnterior != null ? `${suc.vsPeriodoAnterior >= 0 ? "↑" : "↓"} ${Math.abs(suc.vsPeriodoAnterior)}% ${etiquetaComparativo}` : `Sin datos · ${etiquetaComparativo}` }] : []),
                       ...(data.reparacionesActiva
                         ? [
-                            { label: "Equipos recibidos", value: String(suc.equiposRecibidos), color: "text-foreground", sub: etiquetaPeriodoCap },
-                            { label: "Listos entrega", value: String(suc.listosEntrega), color: suc.listosEntrega > 0 ? "text-emerald-600" : "text-muted-foreground", sub: "En tienda" },
+                            { label: `${t("entity.repair.plural")} ingresados`, value: String(suc.equiposRecibidos), color: "text-foreground", sub: etiquetaPeriodoCap },
+                            { label: "Pendientes de entrega", value: String(suc.listosEntrega), color: suc.listosEntrega > 0 ? "text-emerald-600" : "text-muted-foreground", sub: "En tienda" },
                             { label: "Devoluciones", value: String(suc.devoluciones), color: suc.devoluciones > 0 ? "text-amber-600" : "text-muted-foreground", sub: "Pendientes" },
-                            { label: "Rep. activas", value: String(suc.repActivas), color: "text-foreground", sub: "En proceso" },
+                            { label: "En curso", value: String(suc.repActivas), color: "text-foreground", sub: "En proceso" },
                           ]
                         : []),
                       ...(montosVisibles ? [{ label: "Ticket promedio", value: formatMXN(suc.ticketsVenta > 0 ? Math.round(suc.ventasDia / suc.ticketsVenta) : 0), color: "text-primary-text", sub: "Por venta" }] : []),

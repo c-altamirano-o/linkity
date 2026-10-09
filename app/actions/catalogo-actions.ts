@@ -408,7 +408,7 @@ export async function importarProductosAction(
         continue;
       }
       if (!["PRODUCT", "PART", "SERVICE"].includes(fila.type)) {
-        omitidos.push({ fila: fila.fila, motivo: "Tipo inválido (usa Producto, Refacción o Servicio)" });
+        omitidos.push({ fila: fila.fila, motivo: "Tipo inválido (usa Producto, el tipo de material de tu negocio o Servicio)" });
         continue;
       }
       if (!Number.isFinite(fila.price) || fila.price <= 0) {

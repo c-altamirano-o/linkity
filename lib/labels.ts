@@ -132,6 +132,9 @@ export const DEFAULT_LABELS: LabelDictionary = {
   "example.catalog.product": "Nombre del producto",
   "example.appointment.reason": "Revisión general",
   "icon.catalog.product": "Package",
+  // Nombre del tipo de catálogo que en reparación se llama "Refacción" (tipo PART).
+  "catalog.part.singular": "Refacción",
+  "catalog.part.plural": "Refacciones",
   // Reparaciones/servicios (grupo B, 2026-10-09): lugar de trabajo y campos del
   // formulario de recepción. "unlock.enabled" y "single" son interruptores "1"/"0".
   "vocab.lugar": "taller",
@@ -244,7 +247,7 @@ export const VERTICAL_LABEL_DEFAULTS: Record<string, LabelDictionary> = {
 // Vocabulario por rubro (especialista, ejemplos y ícono). Se mezcla dentro de
 // VERTICAL_LABEL_DEFAULTS, así el negocio puede seguir sobreescribiendo
 // cualquiera de estas keys desde TenantLabel.
-const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: string; icono: string; cita?: string; rep?: { falla?: string; desbloqueo?: boolean; unico?: boolean } }> = {
+const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: string; icono: string; cita?: string; parte?: [string, string]; rep?: { falla?: string; desbloqueo?: boolean; unico?: boolean } }> = {
   reparacion_celulares: { esp: ["Técnico", "Técnicos"], producto: "Pantalla iPhone 13", icono: "Smartphone", rep: { desbloqueo: true } },
   taller_autos: { esp: ["Mecánico", "Mecánicos"], producto: "Balatas delanteras", icono: "Car", rep: { falla: "Falla o servicio solicitado" } },
   taller_motos: { esp: ["Mecánico", "Mecánicos"], producto: "Kit de arrastre", icono: "Bike", rep: { falla: "Falla o servicio solicitado" } },
@@ -256,15 +259,15 @@ const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: strin
   bicicletas: { esp: ["Mecánico", "Mecánicos"], producto: "Cámara rodada 26", icono: "Bike", rep: { falla: "Falla o servicio solicitado" } },
   cerrajeria: { esp: ["Cerrajero", "Cerrajeros"], producto: "Chapa de seguridad", icono: "Key", rep: { unico: true, falla: "Servicio solicitado" } },
   tapiceria: { esp: ["Tapicero", "Tapiceros"], producto: "Vinil por metro", icono: "Sofa", rep: { unico: true, falla: "Trabajo solicitado" } },
-  barberia: { esp: ["Barbero", "Barberos"], producto: "Cera para peinar", icono: "Scissors", cita: "Corte de cabello" },
-  consultorio_dental: { esp: ["Dentista", "Dentistas"], producto: "Cepillo dental", icono: "Stethoscope", cita: "Limpieza dental" },
-  consultorio_medico: { esp: ["Médico", "Médicos"], producto: "Termómetro digital", icono: "Stethoscope", cita: "Consulta general" },
-  veterinaria: { esp: ["Veterinario", "Veterinarios"], producto: "Alimento para perro 20 kg", icono: "PawPrint", cita: "Vacuna" },
-  estetica: { esp: ["Esteticista", "Esteticistas"], producto: "Shampoo profesional", icono: "Sparkles", cita: "Limpieza facial" },
-  spa: { esp: ["Terapeuta", "Terapeutas"], producto: "Aceite para masaje", icono: "Flower2", cita: "Masaje relajante" },
-  gimnasio: { esp: ["Entrenador", "Entrenadores"], producto: "Proteína 2 lb", icono: "Dumbbell", cita: "Clase de prueba" },
-  tatuajes: { esp: ["Tatuador", "Tatuadores"], producto: "Tinta negra", icono: "PenTool", cita: "Sesión de tatuaje" },
-  comercio_retail: { esp: ["Vendedor", "Vendedores"], producto: "Playera talla M", icono: "ShoppingBag" },
+  barberia: { esp: ["Barbero", "Barberos"], producto: "Cera para peinar", icono: "Scissors", cita: "Corte de cabello", parte: ["Insumo", "Insumos"] },
+  consultorio_dental: { esp: ["Dentista", "Dentistas"], producto: "Cepillo dental", icono: "Stethoscope", cita: "Limpieza dental", parte: ["Insumo", "Insumos"] },
+  consultorio_medico: { esp: ["Médico", "Médicos"], producto: "Termómetro digital", icono: "Stethoscope", cita: "Consulta general", parte: ["Insumo", "Insumos"] },
+  veterinaria: { esp: ["Veterinario", "Veterinarios"], producto: "Alimento para perro 20 kg", icono: "PawPrint", cita: "Vacuna", parte: ["Insumo", "Insumos"] },
+  estetica: { esp: ["Esteticista", "Esteticistas"], producto: "Shampoo profesional", icono: "Sparkles", cita: "Limpieza facial", parte: ["Insumo", "Insumos"] },
+  spa: { esp: ["Terapeuta", "Terapeutas"], producto: "Aceite para masaje", icono: "Flower2", cita: "Masaje relajante", parte: ["Insumo", "Insumos"] },
+  gimnasio: { esp: ["Entrenador", "Entrenadores"], producto: "Proteína 2 lb", icono: "Dumbbell", cita: "Clase de prueba", parte: ["Insumo", "Insumos"] },
+  tatuajes: { esp: ["Tatuador", "Tatuadores"], producto: "Tinta negra", icono: "PenTool", cita: "Sesión de tatuaje", parte: ["Insumo", "Insumos"] },
+  comercio_retail: { esp: ["Vendedor", "Vendedores"], producto: "Playera talla M", icono: "ShoppingBag", parte: ["Material", "Materiales"] },
 };
 for (const [rubro, v] of Object.entries(VOCABULARIO_RUBRO)) {
   VERTICAL_LABEL_DEFAULTS[rubro] = {
@@ -274,6 +277,7 @@ for (const [rubro, v] of Object.entries(VOCABULARIO_RUBRO)) {
     "example.catalog.product": v.producto,
     "icon.catalog.product": v.icono,
     ...(v.cita ? { "example.appointment.reason": v.cita } : {}),
+    ...(v.parte ? { "catalog.part.singular": v.parte[0], "catalog.part.plural": v.parte[1] } : {}),
     ...(v.rep?.falla ? { "repair.field.fault": v.rep.falla } : {}),
     ...(v.rep?.desbloqueo ? { "repair.field.unlock.enabled": "1" } : {}),
     ...(v.rep?.unico ? { "repair.field.single": "1" } : {}),
@@ -301,6 +305,8 @@ export const ETIQUETAS_NEUTRAS: LabelDictionary = {
   "vocab.especialista.plural": "Especialistas",
   "example.catalog.product": "Nombre del producto",
   "icon.catalog.product": "Package",
+  "catalog.part.singular": "Material",
+  "catalog.part.plural": "Materiales",
   "example.appointment.reason": "Revisión general",
   "vocab.lugar": "área de trabajo",
   "repair.field.fault": "Trabajo solicitado",
@@ -404,6 +410,8 @@ export const VOCABULARIO_PERSONALIZABLE: CampoVocabulario[] = [
   { key: "vocab.especialista.plural", titulo: "Quien presta el servicio o repara (plural)", ayuda: "Ej. Técnicos, Barberos, Mecánicos. Se usa en \"Encargado de …\".", tipo: "texto", max: 30 },
   { key: "example.catalog.product", titulo: "Ejemplo de producto en el Catálogo", ayuda: "Solo es el texto de ejemplo al crear un producto.", tipo: "texto", max: 60 },
   { key: "icon.catalog.product", titulo: "Ícono de Productos en el Catálogo", ayuda: "Elige el que más se parezca a lo que vendes.", tipo: "icono", max: 30 },
+  { key: "catalog.part.singular", titulo: "Nombre del tipo de catálogo \"Refacción\" (singular)", ayuda: "Ej. Refacción, Insumo, Material. Es el segundo tipo de producto del Catálogo.", tipo: "texto", max: 30 },
+  { key: "catalog.part.plural", titulo: "Nombre del tipo de catálogo \"Refacción\" (plural)", ayuda: "Ej. Refacciones, Insumos, Materiales. Se ve en las pestañas del Catálogo y en Inventario.", tipo: "texto", max: 30 },
   { key: "example.appointment.reason", titulo: "Ejemplo de motivo de una cita", ayuda: "Solo es el texto de ejemplo al agendar una cita.", tipo: "texto", max: 60 },
   { key: "entity.repair.asset", titulo: "Lo que recibes del cliente", ayuda: "Ej. Dispositivo, Vehículo, Calzado, Artículo.", tipo: "texto", max: 40, grupo: "reparaciones" },
   { key: "vocab.lugar", titulo: "Dónde se hace el trabajo", ayuda: "Ej. taller, área de trabajo. Se escribe en minúsculas: \"del taller\".", tipo: "texto", max: 30, grupo: "reparaciones" },

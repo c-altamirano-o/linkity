@@ -60,6 +60,8 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
 
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState<(typeof filtrosTabs)[number]>("Todos");
+  const parteSing = label(labels, "catalog.part.singular");
+  const partePlural = label(labels, "catalog.part.plural");
   const [sucursal, setSucursal] = useState(TODAS_SUCURSALES_ID);
   const [categoriaFiltro, setCategoriaFiltro] = useState(TODAS_CATEGORIAS);
 
@@ -145,8 +147,8 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
         : `Producto,SKU,Categoria,Tipo,Stock actual,Stock minimo,Precio venta`,
       ...productosFiltrados.map((p) =>
         puedeVerMontos
-          ? `"${p.name}",${p.sku ?? ""},"${p.categoryName}",${p.type === "PRODUCT" ? "Producto" : "Refaccion"},${p.stock},${p.minStock},${p.price},${p.cost},${(p.cost * p.stock).toFixed(2)}`
-          : `"${p.name}",${p.sku ?? ""},"${p.categoryName}",${p.type === "PRODUCT" ? "Producto" : "Refaccion"},${p.stock},${p.minStock},${p.price}`
+          ? `"${p.name}",${p.sku ?? ""},"${p.categoryName}",${p.type === "PRODUCT" ? "Producto" : parteSing},${p.stock},${p.minStock},${p.price},${p.cost},${(p.cost * p.stock).toFixed(2)}`
+          : `"${p.name}",${p.sku ?? ""},"${p.categoryName}",${p.type === "PRODUCT" ? "Producto" : parteSing},${p.stock},${p.minStock},${p.price}`
       ),
     ];
     const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -202,8 +204,8 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
 
     for (const p of productosFiltrados) {
       const valores = puedeVerMontos
-        ? [p.name, p.sku ?? "", p.categoryName, p.type === "PRODUCT" ? "Producto" : "Refacción", p.stock, p.minStock, p.price, p.cost, Number((p.cost * p.stock).toFixed(2))]
-        : [p.name, p.sku ?? "", p.categoryName, p.type === "PRODUCT" ? "Producto" : "Refacción", p.stock, p.minStock, p.price];
+        ? [p.name, p.sku ?? "", p.categoryName, p.type === "PRODUCT" ? "Producto" : parteSing, p.stock, p.minStock, p.price, p.cost, Number((p.cost * p.stock).toFixed(2))]
+        : [p.name, p.sku ?? "", p.categoryName, p.type === "PRODUCT" ? "Producto" : parteSing, p.stock, p.minStock, p.price];
       const row = ws.addRow(valores);
       row.eachCell((c, colNumber) => {
         c.border = bdr;
@@ -417,7 +419,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
             className={`px-3 py-1 rounded-full text-[11.5px] font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
               filtro === tab ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
             }`}>
-            {tab}
+            {tab === "Refacciones" ? partePlural : tab}
           </button>
         ))}
       </div>
@@ -427,7 +429,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
           <Plus className="w-8 h-8 text-muted-foreground/40 mb-2" />
           <p className="text-sm font-medium text-foreground mb-1">Aún no hay productos en tu inventario</p>
-          <p className="text-xs text-muted-foreground max-w-xs">Los productos y refacciones que agregues en el Catálogo aparecerán aquí con su stock.</p>
+          <p className="text-xs text-muted-foreground max-w-xs">Los productos y {partePlural.toLowerCase()} que agregues en el Catálogo aparecerán aquí con su stock.</p>
         </div>
       ) : (
         <div className="flex-1 overflow-auto">

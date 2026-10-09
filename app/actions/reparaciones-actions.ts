@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache";
 import { RepairStatus, Priority, ProductType } from "@prisma/client";
 import { resolverActor, puedeOperarSucursal } from "@/lib/actor";
 import { PAIS_TELEFONO_DEFAULT } from "@/lib/paises";
-import { ESTADO_CLIENTE_TEXTO, type EstadoReparacion } from "@/lib/reparaciones-data";
+import { getLabelsDeTenant } from "@/lib/labels-server";
+import { nombreRolVisible, vocabReparacion } from "@/lib/labels";
+import { objetoCliente, estadoClienteTexto, notaPorEstado, notaIngreso, notaCorreccionRegresoALugar } from "@/lib/reparaciones-textos";
 import { avisarWhatsappReparacion, enviarWhatsappReparacionManual } from "@/lib/whatsapp-tenant";
 import { crearNotificacionAlertaTaller } from "@/lib/notificaciones";
 
@@ -281,6 +283,7 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
     }
     const folio = `${prefijo}${String(siguienteNum).padStart(4, "0")}`;
 
+    const labelsT = await getLabelsDeTenant(tenant.id);
     const repair = await db.$transaction(async (tx: any) => {
       const nuevo = await tx.repair.create({
         data: {
@@ -303,7 +306,7 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
       // cliente en la página pública de seguimiento (ver el comentario
       // largo en RepairHistory.visibleCliente, schema.prisma).
       await tx.repairHistory.create({
-        data: { repairId: nuevo.id, status: RepairStatus.RECEIVED, notes: "Equipo recibido en taller", visibleCliente: true },
+        data: { repairId: nuevo.id, status: RepairStatus.RECEIVED, notes: notaIngreso(labelsT), visibleCliente: true },
       });
 
       await tx.repairItem.createMany({
@@ -323,7 +326,7 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
     // misma). Mejor esfuerzo — avisarWhatsappReparacion nunca lanza, así que
     // esto jamás puede tumbar la creación de la reparación, que ya se guardó
     // arriba. Mismo texto que ya ve el cliente en la página pública
-    // (ESTADO_CLIENTE_TEXTO.RECEIVED), para que WhatsApp y la página jamás
+    // (estadoClienteTexto), para que WhatsApp y la página jamás
     // se contradigan.
     await avisarWhatsappReparacion({
       db,
@@ -331,7 +334,7 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
       customerId: finalCustomerId,
       folio: repair.folio,
       publicToken: repair.publicToken,
-      estadoTexto: ESTADO_CLIENTE_TEXTO.RECEIVED,
+      estadoTexto: estadoClienteTexto("RECEIVED", objetoCliente(labelsT)),
     });
 
     revalidatePath(`/${tenantSlug}/reparaciones`);
@@ -356,7 +359,7 @@ export async function crearReparacionAction(params: CrearReparacionParams): Prom
       return { ok: false, error: "No tienes acceso a este recurso" };
     }
     console.error("Error al crear reparación:", err);
-    return { ok: false, error: "No se pudo crear la reparación" };
+    return { ok: false, error: "No se pudo crear el registro" };
   }
 }
 
@@ -391,9 +394,11 @@ export async function asignarTecnicoAction(params: {
       where: { id: repairId },
       select: { id: true, status: true, publicToken: true, folio: true, customerId: true },
     });
-    if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    if (!repair) return { ok: false, error: "Trabajo no encontrado" };
+    const labelsT = await getLabelsDeTenant(tenant.id);
+    const vT = vocabReparacion(labelsT);
     if (repair.status === RepairStatus.DELIVERED || repair.status === RepairStatus.CANCELLED) {
-      return { ok: false, error: "No se puede reasignar técnico de una reparación ya cerrada" };
+      return { ok: false, error: `No se puede reasignar ${vT.espMin} de un trabajo ya cerrado` };
     }
 
     let staffIdValidado: string | null = null;
@@ -410,10 +415,10 @@ export async function asignarTecnicoAction(params: {
       });
       const tieneTaller = tecnico?.role?.permissions.some((p) => p.permission.module === "taller") ?? false;
       if (!tecnico || !tecnico.isActive || !tieneTaller) {
-        return { ok: false, error: "El técnico seleccionado no es válido" };
+        return { ok: false, error: `El ${vT.espMin} seleccionado no es válido` };
       }
       staffIdValidado = tecnico.id;
-      nombrePuesto = tecnico.role?.name ?? "Técnico";
+      nombrePuesto = nombreRolVisible(tecnico.role?.name ?? vT.esp, labelsT);
     }
 
     // 2026-10-05, a petición de Carlos: "al asignar técnico debería disparar
@@ -455,12 +460,12 @@ export async function asignarTecnicoAction(params: {
 
       // Checkpoint del cambio de estatus real, por separado del de arriba
       // (mismo texto que usa avanzarEstadoAction para este mismo salto,
-      // NOTA_POR_ESTADO.IN_REPAIR) — así el historial conserva ambos hechos
+      // notaPorEstado(labelsT).IN_REPAIR) — así el historial conserva ambos hechos
       // distinguibles, igual que cuando el técnico ya estaba asignado desde
       // antes y el estatus se avanzó aparte con "Iniciar reparación".
       if (avanzaAEnReparacion) {
         await tx.repairHistory.create({
-          data: { repairId, status: RepairStatus.IN_REPAIR, notes: NOTA_POR_ESTADO.IN_REPAIR, visibleCliente: true },
+          data: { repairId, status: RepairStatus.IN_REPAIR, notes: notaPorEstado(labelsT).IN_REPAIR, visibleCliente: true },
         });
       }
     });
@@ -475,7 +480,7 @@ export async function asignarTecnicoAction(params: {
         customerId: repair.customerId,
         folio: repair.folio,
         publicToken: repair.publicToken,
-        estadoTexto: ESTADO_CLIENTE_TEXTO.IN_REPAIR,
+        estadoTexto: estadoClienteTexto("IN_REPAIR", objetoCliente(labelsT)),
       });
     }
 
@@ -490,7 +495,7 @@ export async function asignarTecnicoAction(params: {
       return { ok: false, error: "No tienes acceso a este recurso" };
     }
     console.error("Error al asignar técnico:", err);
-    return { ok: false, error: "No se pudo asignar el técnico" };
+    return { ok: false, error: "No se pudo completar la asignación" };
   }
 }
 
@@ -534,9 +539,9 @@ export async function agregarPiezaReparacionAction(
 
   try {
     const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true } });
-    if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    if (!repair) return { ok: false, error: "Trabajo no encontrado" };
     if (repair.status === RepairStatus.DELIVERED || repair.status === RepairStatus.CANCELLED) {
-      return { ok: false, error: "No se pueden modificar piezas de una reparación ya cerrada" };
+      return { ok: false, error: "No se pueden modificar piezas de un trabajo ya cerrado" };
     }
     // A propósito SIN puedeOperarSucursal aquí (2026-09-22) — "aduana" es el
     // taller CENTRAL: recibe equipos de varias sucursales/tiendas, así que
@@ -608,7 +613,7 @@ export async function eliminarPiezaReparacionAction(params: {
       return { ok: false, error: "Pieza no encontrada" };
     }
     if (item.repair.status === RepairStatus.DELIVERED || item.repair.status === RepairStatus.CANCELLED) {
-      return { ok: false, error: "No se pueden modificar piezas de una reparación ya cerrada" };
+      return { ok: false, error: "No se pueden modificar piezas de un trabajo ya cerrado" };
     }
     // A propósito SIN puedeOperarSucursal — ver el comentario en
     // agregarPiezaReparacionAction (taller centralizado, varias sucursales).
@@ -654,7 +659,7 @@ export async function actualizarCostoEstimadoAction(params: {
 
   try {
     const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true } });
-    if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    if (!repair) return { ok: false, error: "Trabajo no encontrado" };
     // A propósito SIN puedeOperarSucursal — ver el comentario en
     // agregarPiezaReparacionAction (taller centralizado, varias sucursales).
 
@@ -729,24 +734,6 @@ const TRANSICIONES_VALIDAS: Record<string, NuevoEstadoReparacion[]> = {
   SHOP_RETURN: ["DELIVERED", "IN_REPAIR"],
 };
 
-const NOTA_POR_ESTADO: Record<NuevoEstadoReparacion, string> = {
-  IN_REPAIR: "Reparación iniciada",
-  WAITING_PARTS: "En espera de refacción",
-  WORKSHOP_READY: "Reparación completada — listo en taller",
-  WORKSHOP_RETURN: "No se pudo reparar — marcado para devolución",
-  SHOP_READY: "Equipo trasladado a tienda — listo para entrega",
-  SHOP_RETURN: "Equipo trasladado a tienda — devolución al cliente",
-  DELIVERED: "Equipo entregado al cliente",
-};
-
-// Nota específica para la corrección SHOP_READY/SHOP_RETURN -> IN_REPAIR
-// de arriba — si se usara NOTA_POR_ESTADO tal cual, el historial diría
-// "Reparación iniciada" de nuevo, como si el técnico apenas la estuviera
-// empezando, en vez de dejar claro que fue una corrección de un envío a
-// tienda hecho por error.
-const NOTA_CORRECCION_REGRESO_A_TALLER =
-  "Regresado a taller — corrección de \"Enviar a tienda\" (posible error de captura)";
-
 // sucursal/atendioPor — 2026-09-29, a petición de Carlos (rediseño del
 // ticket: "el nombre de quien atendió y la sucursal donde se compró").
 // Opcionales porque la mayoría de las llamadas a avanzarEstadoAction no
@@ -779,7 +766,7 @@ export async function avanzarEstadoAction(params: {
 
   try {
     const repair = await db.repair.findUnique({ where: { id: repairId }, select: { id: true, status: true, publicToken: true, folio: true, customerId: true, branchId: true } });
-    if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    if (!repair) return { ok: false, error: "Trabajo no encontrado" };
     // A propósito SIN puedeOperarSucursal — ver el comentario en
     // agregarPiezaReparacionAction (taller centralizado, varias sucursales).
 
@@ -815,6 +802,7 @@ export async function avanzarEstadoAction(params: {
       (repair.status === RepairStatus.SHOP_READY || repair.status === RepairStatus.SHOP_RETURN) &&
       nuevoEstado === "IN_REPAIR";
 
+    const labelsT = await getLabelsDeTenant(tenant.id);
     await db.$transaction(async (tx: any) => {
       await tx.repair.update({
         where: { id: repairId },
@@ -827,7 +815,7 @@ export async function avanzarEstadoAction(params: {
         data: {
           repairId,
           status: estadoEnum,
-          notes: esCorreccionRegresoATaller ? NOTA_CORRECCION_REGRESO_A_TALLER : NOTA_POR_ESTADO[nuevoEstado],
+          notes: esCorreccionRegresoATaller ? notaCorreccionRegresoALugar(labelsT) : notaPorEstado(labelsT)[nuevoEstado],
           // visibleCliente:true — todo cambio de estatus real es un checkpoint
           // que ve el cliente en la página pública (ver
           // RepairHistory.visibleCliente, schema.prisma) — excepto la
@@ -850,7 +838,7 @@ export async function avanzarEstadoAction(params: {
         customerId: repair.customerId,
         folio: repair.folio,
         publicToken: repair.publicToken,
-        estadoTexto: ESTADO_CLIENTE_TEXTO[nuevoEstado],
+        estadoTexto: estadoClienteTexto(nuevoEstado, objetoCliente(labelsT)),
       });
     }
 
@@ -910,7 +898,7 @@ export async function marcarWhatsappEnviadoAction(params: {
       where: { id: repairId },
       select: { id: true, branchId: true, status: true, folio: true, publicToken: true, customerId: true },
     });
-    if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    if (!repair) return { ok: false, error: "Trabajo no encontrado" };
     // 2026-09-21, a petición de Carlos: un empleado de PIN solo puede
     // modificar reparaciones de SU sucursal.
     if (!puedeOperarSucursal(resuelto, repair.branchId)) {
@@ -930,7 +918,7 @@ export async function marcarWhatsappEnviadoAction(params: {
       customerId: repair.customerId,
       folio: repair.folio,
       publicToken: repair.publicToken,
-      estadoTexto: ESTADO_CLIENTE_TEXTO[repair.status as EstadoReparacion] ?? "Actualización de tu equipo",
+      estadoTexto: estadoClienteTexto(repair.status, objetoCliente(await getLabelsDeTenant(tenant.id))),
     });
     if (!res.enviado) {
       // 2026-10-05, hallazgo de auditoría: cuando Meta rechaza el envío
@@ -1011,7 +999,7 @@ export async function enviarAlertaTallerAction(params: {
         folio: true, branchId: true, branch: { select: { name: true } },
       },
     });
-    if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    if (!repair) return { ok: false, error: "Trabajo no encontrado" };
     // Un técnico solo puede alertar sobre SU propio folio asignado — mismo
     // criterio de aislamiento que el filtro por miStaffId en TallerClient,
     // pero validado aquí en el servidor (nunca solo confiar en la UI).
@@ -1021,7 +1009,7 @@ export async function enviarAlertaTallerAction(params: {
       // resuelve el Staff real de esta sesión antes de comparar.
       const staffPropio = await db.staff.findUnique({ where: { userId: resuelto.dbUser.id }, select: { id: true } });
       if (!staffPropio || repair.assignedToStaffId !== staffPropio.id) {
-        return { ok: false, error: "Esta reparación no está asignada a ti" };
+        return { ok: false, error: "Este trabajo no está asignado a ti" };
       }
     }
 
@@ -1100,7 +1088,7 @@ export async function resolverAlertaTallerAction(params: {
       where: { id: repairId },
       select: { id: true, status: true, alertaTallerPendiente: true },
     });
-    if (!repair) return { ok: false, error: "Reparación no encontrada" };
+    if (!repair) return { ok: false, error: "Trabajo no encontrado" };
     if (!repair.alertaTallerPendiente) return { ok: true };
 
     // Nombre de quien la atiende, para que el historial deje registro de

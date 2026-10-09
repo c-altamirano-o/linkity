@@ -2,6 +2,8 @@ import "server-only";
 
 import { prisma, getTenantPrisma } from "@/lib/prisma";
 import { whatsappModoActivo, primerNombre } from "@/lib/whatsapp-mensaje";
+import { getLabelsDeTenant, getTenantLabels } from "@/lib/labels-server";
+import { objetoCliente, estadoClienteTexto, checkpointClienteTexto, pasosProgresoTexto, PREFIJO_ASIGNADO } from "@/lib/reparaciones-textos";
 
 /**
  * Capa de datos reales del módulo Reparaciones (M9). Sigue la misma
@@ -89,9 +91,9 @@ export interface ReparacionUI {
   publicToken: string;
   // 2026-10-02, modo MANUAL de WhatsApp (ver ReparacionesClient.tsx,
   // handleWhatsapp) — MISMO texto que ya ve el cliente en su página pública
-  // (ESTADO_CLIENTE_TEXTO, más abajo en este archivo) para que el botón
+  // (estadoClienteTexto, lib/reparaciones-textos.ts) para que el botón
   // "Avisar" en modo manual arme el mensaje con construirMensajeReparacion
-  // sin tener que importar ESTADO_CLIENTE_TEXTO desde un Client Component
+  // sin tener que importar los textos del servidor desde un Client Component
   // (este archivo tiene "server-only" arriba, nunca es importable en tiempo
   // de ejecución desde ahí).
   estadoTexto: string;
@@ -153,6 +155,7 @@ function iniciales(nombre: string): string {
 export async function getReparacionesData(tenantId: string, branchIdFiltro?: string): Promise<ReparacionesData> {
   // Repair y Customer tienen tenantId propio → getTenantPrisma lo inyecta solo.
   const db = getTenantPrisma(tenantId);
+  const objetoParaCliente = objetoCliente(await getLabelsDeTenant(tenantId));
 
   // branchIdFiltro (2026-09-21, a petición de Carlos): mismo criterio que
   // getCitasData — un empleado de PIN solo ve las reparaciones de SU
@@ -228,7 +231,7 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
     sucursalCodigo: r.branch.code,
     whatsappSent: r.whatsappSent,
     publicToken: r.publicToken,
-    estadoTexto: ESTADO_CLIENTE_TEXTO[r.status as EstadoReparacion] ?? "En proceso",
+    estadoTexto: estadoClienteTexto(r.status, objetoParaCliente),
     alertaTallerPendiente: r.alertaTallerPendiente,
     historial: r.history.map((h) => ({
       estado: h.status as EstadoReparacion,
@@ -307,40 +310,6 @@ export async function getReparacionesData(tenantId: string, branchIdFiltro?: str
 // trasladado a tienda), que es justo lo que este criterio ya evitaba para
 // esos dos. IN_REPAIR ahora también dispara al asignar técnico, no solo al
 // avanzar estatus a mano — ver asignarTecnicoAction, reparaciones-actions.ts.
-export const ESTADO_CLIENTE_TEXTO: Record<EstadoReparacion, string> = {
-  RECEIVED: "Recibimos tu equipo y ya quedó registrado en nuestro sistema",
-  DIAGNOSING: "Estamos revisando tu equipo",
-  IN_REPAIR: "Un técnico ya está trabajando en tu equipo",
-  WAITING_PARTS: "Tu equipo está en espera de una refacción; nos pondremos en contacto contigo para coordinar los siguientes pasos",
-  READY: "Tu equipo está listo",
-  WORKSHOP_READY: "Estamos terminando con tu equipo, pronto tendrás noticias nuestras",
-  WORKSHOP_RETURN: "Estamos terminando con tu equipo, pronto tendrás noticias nuestras",
-  SHOP_READY: "Tu equipo está listo, ya puedes pasar a recogerlo",
-  SHOP_RETURN: "Tu equipo está disponible para que lo recojas (no fue posible repararlo)",
-  DELIVERED: "Equipo entregado, gracias por tu confianza",
-  CANCELLED: "Reparación cancelada",
-};
-
-// Mismo criterio que ESTADO_CLIENTE_TEXTO pero en tiempo de "checkpoint"
-// (qué acabamos de hacer) en vez de estatus actual — usado solo por la
-// lista "Avance" de la página pública (ver textoClienteParaCheckpoint más
-// abajo). Deliberadamente un diccionario aparte: por ejemplo IN_REPAIR se
-// lee "Tu equipo está en reparación" como estatus, pero "Comenzamos la
-// reparación" como evento del historial.
-const ESTADO_CLIENTE_CHECKPOINT_TEXTO: Record<EstadoReparacion, string> = {
-  RECEIVED: "Recibimos tu equipo",
-  DIAGNOSING: "Comenzamos a revisar tu equipo",
-  IN_REPAIR: "Comenzamos la reparación",
-  WAITING_PARTS: "Esperamos una refacción para tu equipo",
-  READY: "Tu equipo está listo",
-  WORKSHOP_READY: "Terminamos la reparación de tu equipo",
-  WORKSHOP_RETURN: "No fue posible reparar tu equipo",
-  SHOP_READY: "Tu equipo está listo para que lo recojas",
-  SHOP_RETURN: "Tu equipo está listo para que lo recojas (sin reparar)",
-  DELIVERED: "Equipo entregado",
-  CANCELLED: "Reparación cancelada",
-};
-
 // El único checkpoint visible al cliente que NO corresponde a un cambio de
 // estatus real es "Asignado a <puesto>" (agregarPiezaReparacionAction /
 // crearReparacionAction en reparaciones-actions.ts crean ese registro con el
@@ -352,9 +321,9 @@ const ESTADO_CLIENTE_CHECKPOINT_TEXTO: Record<EstadoReparacion, string> = {
 // nunca ve referencias a "taller", "tienda", folios de venta o método de
 // pago, sin importar qué tan detallada sea la nota que use el negocio
 // internamente.
-function textoClienteParaCheckpoint(status: EstadoReparacion, notes: string | null): string {
-  if (notes?.startsWith("Asignado a ")) return "Comenzamos a revisar tu equipo";
-  return ESTADO_CLIENTE_CHECKPOINT_TEXTO[status] ?? "Actualización de tu equipo";
+function textoClienteParaCheckpoint(status: EstadoReparacion, notes: string | null, objeto: string): string {
+  if (notes?.startsWith(PREFIJO_ASIGNADO)) return checkpointClienteTexto("DIAGNOSING", objeto);
+  return checkpointClienteTexto(status, objeto);
 }
 
 // Paso (0-4) de la barra de progreso simple — colapsa los estatus "gemelos"
@@ -377,7 +346,6 @@ export const PASO_PROGRESO: Record<EstadoReparacion, number> = {
 // — evitar que "listo"/"en tienda" a secas se lean como "ya puedes venir
 // por él" o revelen el traslado interno taller->tienda) — Carlos pidió
 // estas etiquetas exactas como versión definitiva.
-export const PASOS_PROGRESO_TEXTO = ["Recibido", "En Reparación", "Proceso Terminado", "Disponible para Recoger", "Entregado"];
 
 export interface CheckpointPublico {
   texto: string;
@@ -398,6 +366,7 @@ export interface ReparacionPublicaUI {
   estado: EstadoReparacion;
   estadoTexto: string;
   paso: number;
+  pasosTexto: string[];
   costoEstimado: number | null;
   costoFinal: number | null;
   fechaEstimada: string | null;
@@ -434,7 +403,7 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
       // real jamás se incluye en el objeto que regresa (ReparacionPublicaUI
       // ni siquiera tiene un campo para él), mismo criterio que
       // lib/whatsapp-tenant.ts.
-      tenant: { select: { name: true, whatsappPhoneNumberId: true, whatsappAccessToken: true, whatsappNumeroManual: true } },
+      tenant: { select: { id: true, businessType: true, name: true, whatsappPhoneNumberId: true, whatsappAccessToken: true, whatsappNumeroManual: true } },
       history: {
         where: { visibleCliente: true },
         orderBy: { createdAt: "asc" },
@@ -445,6 +414,8 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
   if (!repair) return null;
 
   const nombreCliente = primerNombre(repair.customer.name);
+  const labels = await getTenantLabels(repair.tenant.id, repair.tenant.businessType);
+  const objeto = objetoCliente(labels);
 
   // El mensaje del taller (alerta marcada "para el cliente") se muestra
   // aparte, destacado — no como un checkpoint más de la línea de tiempo.
@@ -455,7 +426,7 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
   const checkpoints: CheckpointPublico[] = repair.history
     .filter((h) => !h.notes?.startsWith(PREFIJO_ALERTA_CLIENTE))
     .map((h) => ({
-      texto: textoClienteParaCheckpoint(h.status as EstadoReparacion, h.notes),
+      texto: textoClienteParaCheckpoint(h.status as EstadoReparacion, h.notes, objeto),
       fecha: h.createdAt.toISOString(),
     }));
 
@@ -471,7 +442,8 @@ export async function getReparacionPublica(publicToken: string): Promise<Reparac
     marca: repair.deviceBrand,
     modelo: repair.deviceModel,
     estado: repair.status as EstadoReparacion,
-    estadoTexto: ESTADO_CLIENTE_TEXTO[repair.status as EstadoReparacion] ?? "En proceso",
+    estadoTexto: estadoClienteTexto(repair.status, objeto),
+    pasosTexto: pasosProgresoTexto(labels),
     paso: PASO_PROGRESO[repair.status as EstadoReparacion] ?? 0,
     costoEstimado: repair.estimatedCost != null ? Number(repair.estimatedCost) : null,
     costoFinal: repair.finalCost != null ? Number(repair.finalCost) : null,

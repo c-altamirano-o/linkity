@@ -1,4 +1,5 @@
 import { getTenantPrisma } from "@/lib/prisma";
+import { getLabelsDeTenant } from "@/lib/labels-server";
 import type { Branch, Priority, RepairStatus } from "@prisma/client";
 import { rangoSemanaLaboral } from "@/lib/periodo-laboral";
 
@@ -558,6 +559,7 @@ export async function getDashboardData(
   // primer nivel. Inventory y SaleItem NO tienen tenantId propio (se
   // llega a su tenant vía branch/sale), así que ahí el filtro anidado
   // sigue siendo manual — la extensión no toca condiciones anidadas.
+  const etiquetaEntidadRep = (await getLabelsDeTenant(tenantId))["entity.repair.singular"] ?? "Servicio";
   const db = getTenantPrisma(tenantId);
 
   const now = new Date();
@@ -725,7 +727,7 @@ export async function getDashboardData(
     id: v.id,
     folio: v.folio,
     hora: formatHoraMx(v.createdAt),
-    articulos: v.items.map((it) => it.product?.name ?? (it.repair ? `Reparación ${it.repair.folio}` : "Producto")).join(", ") || "Sin artículos",
+    articulos: v.items.map((it) => it.product?.name ?? (it.repair ? `${etiquetaEntidadRep} ${it.repair.folio}` : "Producto")).join(", ") || "Sin artículos",
     count: v.items.reduce((s, it) => s + it.quantity, 0),
     metodo: METODO_LABEL[v.paymentMethod] ?? "Efectivo",
     total: Number(v.total),

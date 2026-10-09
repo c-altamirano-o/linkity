@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCatalogoArranque } from "@/lib/catalogo-arranque";
 import { obtenerEstadoPasosBienvenida } from "@/lib/onboarding";
+import { getTenantLabels } from "@/lib/labels-server";
 import BienvenidaClient from "./BienvenidaClient";
 
 export default async function BienvenidaPage({
@@ -25,10 +26,13 @@ export default async function BienvenidaPage({
   // (Paso 1 comparando contra un default de tema que ya no era el real).
   const estado = await obtenerEstadoPasosBienvenida(tenant.id, tenant.themePreset);
 
+  const labels = await getTenantLabels(tenant.id, tenant.businessType);
+
   return (
     <BienvenidaClient
       tenantSlug={tenantSlug}
       businessName={tenant.name}
+      partePlural={labels["catalog.part.plural"] ?? "Refacciones"}
       personalizado={estado.personalizado}
       tieneCatalogo={estado.tieneCatalogo}
       tieneArranque={getCatalogoArranque(tenant.businessType).length > 0}

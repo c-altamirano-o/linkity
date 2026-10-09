@@ -221,13 +221,15 @@ interface TicketData {
 // de la app (ver whatsappHref en ClientesClient.tsx) — no hay envío
 // automático desde el servidor, ninguna integración de este proyecto lo
 // tiene todavía.
-function textoTicketWhatsapp(t: TicketData, negocio: string): string {
+function textoTicketWhatsapp(t: TicketData, negocio: string, labels: LabelDictionary): string {
+  const v = vocabReparacion(labels);
+  const entidad = label(labels, "entity.repair.singular").toLowerCase();
   const lineas = [
     `*${negocio}*`,
-    `Recibo de reparación · ${t.folio}`,
+    `Recibo de ${entidad} · ${t.folio}`,
     "",
-    `Equipo: ${t.marca} ${t.modelo}`,
-    `Falla reportada: ${t.falla}`,
+    `${v.objeto}: ${[t.marca, t.modelo].filter(Boolean).join(" ")}`,
+    `${v.falla}: ${t.falla}`,
   ];
   if (t.piezas.length > 0) {
     lineas.push("", "Piezas y servicios:");
@@ -236,7 +238,7 @@ function textoTicketWhatsapp(t: TicketData, negocio: string): string {
   lineas.push("", `Costo estimado: ${t.costoEstimado != null ? formatMXN(t.costoEstimado) : "Por definir"}`);
   if (t.fechaEstimada) lineas.push(`Fecha estimada de entrega: ${formatFecha(t.fechaEstimada)}`);
   if (t.telefonoSoporte) lineas.push("", `Dudas o soporte: ${t.telefonoSoporte}`);
-  lineas.push("", "Este costo es un estimado y puede ajustarse tras el diagnóstico completo del equipo.");
+  lineas.push("", "Este costo es un estimado y puede ajustarse tras la revisión completa.");
   return lineas.join("\n");
 }
 
@@ -279,7 +281,9 @@ function textoTicketWhatsapp(t: TicketData, negocio: string): string {
  * habría significado un montón de ramas condicionales por encima de
  * cualquier ahorro real de código.
  */
-async function abrirTicketImprimible(t: TicketData, negocio: DatosNegocioRecibo, formato: FormatoTicket | null | undefined) {
+async function abrirTicketImprimible(t: TicketData, negocio: DatosNegocioRecibo, formato: FormatoTicket | null | undefined, labels: LabelDictionary) {
+  const v = vocabReparacion(labels);
+  const entidad = label(labels, "entity.repair.singular").toLowerCase();
   if (typeof window === "undefined") return;
   const subtotalPiezas = t.piezas.reduce((s, p) => s + p.price * p.quantity, 0);
   // Renglones sin <table> — mismo criterio que abrirReciboImprimible (ver
@@ -363,15 +367,15 @@ async function abrirTicketImprimible(t: TicketData, negocio: DatosNegocioRecibo,
         }
       </div>
       <div class="barra"></div>
-      <p class="muted">Recibo de reparación · ${t.folio}</p>
+      <p class="muted">Recibo de ${entidad} · ${t.folio}</p>
       <p class="muted">${new Date().toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</p>
       ${t.telefonoSoporte ? `<p class="muted">Soporte: ${t.telefonoSoporte}</p>` : ""}
       ${badges ? `<div class="badges">${badges}</div>` : ""}
       <hr />
       <div class="detalle">
         <p><strong>Cliente:</strong> ${t.cliente}${t.telefono ? ` · ${t.telefono}` : ""}</p>
-        <p><strong>Equipo:</strong> ${t.marca} ${t.modelo}</p>
-        <p><strong>Falla reportada:</strong> ${t.falla}</p>
+        <p><strong>${v.objeto}:</strong> ${[t.marca, t.modelo].filter(Boolean).join(" ")}</p>
+        <p><strong>${v.falla}:</strong> ${t.falla}</p>
       </div>
       ${
         t.piezas.length > 0
@@ -385,10 +389,10 @@ async function abrirTicketImprimible(t: TicketData, negocio: DatosNegocioRecibo,
         <p class="total">${t.costoEstimado != null ? formatMXN(t.costoEstimado) : "Por definir"}</p>
       </div>
       ${t.fechaEstimada ? `<p class="muted">Fecha estimada de entrega: ${formatFecha(t.fechaEstimada)}</p>` : ""}
-      <p class="aviso">Este costo es un estimado y puede ajustarse tras el diagnóstico completo del equipo. Cualquier cambio se te notificará antes de proceder con la reparación.</p>
+      <p class="aviso">Este costo es un estimado y puede ajustarse tras la revisión completa. Cualquier cambio se te notificará antes de proceder con el trabajo.</p>
       ${
         qrSvg
-          ? `<div class="qr">${qrSvg}<p class="muted">Escanea para consultar el estatus de tu reparación</p></div>`
+          ? `<div class="qr">${qrSvg}<p class="muted">Escanea para consultar el estatus de tu ${entidad}</p></div>`
           : ""
       }
       <div class="firma">Firma de conformidad</div>
@@ -692,7 +696,8 @@ function VistaTienda({
                       atendioPor: seleccionada.tecnico,
                     },
                     negocioRecibo,
-                    formatoTicket
+                    formatoTicket,
+                    labels
                   )
                 }
                 title="Reimprimir ticket de recepción"
@@ -795,7 +800,7 @@ function VistaTienda({
                 </p>
                 <p className={`text-[11.5px] mt-0.5 ${isDev ? "text-amber-600" : "text-emerald-600"}`}>
                   {seleccionada.modelo} ·{" "}
-                  {isDev ? "No fue posible realizar la reparación" : `Reparación completada${seleccionada.costoFinal || seleccionada.costoEstimado ? ` · Costo: ${formatMXN(seleccionada.costoFinal ?? seleccionada.costoEstimado ?? 0)}` : ""}`}
+                  {isDev ? "No fue posible completar el trabajo" : `Trabajo completado${seleccionada.costoFinal || seleccionada.costoEstimado ? ` · Costo: ${formatMXN(seleccionada.costoFinal ?? seleccionada.costoEstimado ?? 0)}` : ""}`}
                 </p>
               </div>
             </div>
@@ -1313,7 +1318,7 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
         return;
       }
       const recibo: ReciboData = {
-        tipoDocumento: "Reparación — Devolución",
+        tipoDocumento: `${label(labels, "entity.repair.singular")} — Devolución`,
         folio: repair.folio,
         cliente: repair.cliente,
         telefono: repair.telefono,
@@ -1324,9 +1329,9 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
         iva: 0,
         total: 0,
         metodoPago: "Sin cargo",
-        notaPie: "No fue posible reparar el equipo — se entrega sin costo.",
+        notaPie: "No fue posible completar el trabajo — se entrega sin costo.",
         qrUrl: `${window.location.origin}/rep/${repair.publicToken}`,
-        qrEtiqueta: "Sigue tu reparación",
+        qrEtiqueta: `Sigue tu ${label(labels, "entity.repair.singular").toLowerCase()}`,
       };
       await abrirReciboImprimible(recibo, negocioRecibo);
       router.refresh();
@@ -1483,7 +1488,8 @@ export default function ReparacionesClient({ data, labels, branches, tenantSlug,
             atendioPor: res.atendioPor,
           },
           negocioRecibo,
-          negocioRecibo.formato
+          negocioRecibo.formato,
+          labels
         );
         setModalNuevaAbierto(false);
         resetModalNueva();

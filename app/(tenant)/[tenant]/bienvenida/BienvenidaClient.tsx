@@ -39,6 +39,7 @@ import { cargarCatalogoArranqueAction } from "@/app/actions/catalogo-actions";
 interface BienvenidaClientProps {
   tenantSlug: string;
   businessName: string;
+  partePlural: string;
   personalizado: boolean;
   tieneCatalogo: boolean;
   tieneArranque: boolean;
@@ -50,6 +51,7 @@ interface BienvenidaClientProps {
 export default function BienvenidaClient({
   tenantSlug,
   businessName,
+  partePlural,
   personalizado,
   tieneCatalogo,
   tieneArranque,
@@ -137,7 +139,7 @@ export default function BienvenidaClient({
           numero={2}
           icon={BookOpen}
           titulo="Arma tu catálogo"
-          descripcion="Agrega tus productos, refacciones o servicios"
+          descripcion={`Agrega tus productos, ${partePlural.toLowerCase()} o servicios`}
           done={tieneCatalogo}
           omitido={omitidos.has("catalogo")}
           onOmitir={() => omitir("catalogo")}
