@@ -8,6 +8,9 @@ import {
   Wrench, TrendingUp, Building2, Calendar, Menu, X,
   Sparkles, Upload, Download, Loader2, CheckCircle2, AlertTriangle, Wand2,
   Archive, ImagePlus,
+  Package, Car, Bike, Laptop, Watch, Scissors, Stethoscope, PawPrint, Dumbbell,
+  Key, Sofa, ShoppingBag, Snowflake, Footprints, Flower2, PenTool, WashingMachine,
+  type LucideIcon,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import type { CatalogoData, TipoCatalogo, ProductoCatalogo } from "@/lib/catalogo-data";
@@ -112,6 +115,13 @@ const tipoConfig: Record<TipoCatalogo, { label: string; icon: typeof Smartphone;
   SERVICE: { label: TIPO_LABELS.SERVICE, icon: Wrench,     color: "text-secondary-foreground", bg: "bg-secondary" },
 };
 
+// Ícono del tipo "Producto" según el rubro (key "icon.catalog.product" en
+// lib/labels.ts); si el nombre no está aquí se usa una caja genérica.
+const ICONOS_PRODUCTO: Record<string, LucideIcon> = {
+  Package, Smartphone, Car, Bike, Laptop, Watch, Scissors, Stethoscope, PawPrint, Sparkles, Dumbbell,
+  Key, Sofa, ShoppingBag, Snowflake, Footprints, Flower2, PenTool, WashingMachine,
+};
+
 const TIPOS_ORDEN: TipoCatalogo[] = ["PRODUCT", "PART", "SERVICE"];
 
 const SIN_CATEGORIA_ID = "__sin_categoria__";
@@ -198,6 +208,8 @@ function matchesPeriodo(fechaISO: string, periodo: string, fechaInicio: string, 
 }
 
 export default function CatalogoClient({ data, labels, branches, tenantSlug, businessType, puedeVerMontos = true }: CatalogoClientProps) {
+  const iconoProducto = ICONOS_PRODUCTO[label(labels, "icon.catalog.product")] ?? Package;
+  const configDeTipo = (tipo: TipoCatalogo) => (tipo === "PRODUCT" ? { ...tipoConfig.PRODUCT, icon: iconoProducto } : tipoConfig[tipo]);
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { categorias, productos, ventasDetalle } = data;
@@ -742,7 +754,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         {TIPOS_ORDEN.map((tipo) => {
-          const cfg = tipoConfig[tipo];
+          const cfg = configDeTipo(tipo);
           const Icono = cfg.icon;
           const cats = categoriasPorTipo[tipo];
           return (
@@ -808,7 +820,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
           </button>
 
           {TIPOS_ORDEN.map((tipo) => {
-            const cfg = tipoConfig[tipo];
+            const cfg = configDeTipo(tipo);
             const Icono = cfg.icon;
             return (
               <button key={tipo}
@@ -1202,7 +1214,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary"
-                  placeholder="Ej. Pantalla iPhone 13"
+                  placeholder={`Ej. ${label(labels, "example.catalog.product")}`}
                 />
               </div>
               <div data-tour="catalogo-opcionales">

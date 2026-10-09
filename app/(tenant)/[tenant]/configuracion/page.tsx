@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { MODULE_CATALOG } from "@/lib/modules-catalog";
 import { modulosRecomendadosOff } from "@/lib/modulos-rubro";
 import { getEstadoTallerChecklist } from "@/lib/roles-server";
+import { getTenantLabels } from "@/lib/labels-server";
+import { VOCABULARIO_PERSONALIZABLE } from "@/lib/labels";
 import ConfiguracionClient from "./ConfiguracionClient";
 
 export default async function ConfiguracionPage({
@@ -45,6 +47,8 @@ export default async function ConfiguracionPage({
 
   const recomendadosOff = modulosRecomendadosOff(tenant.businessType);
   const checklistTaller = await getEstadoTallerChecklist(tenant.id, tenant.businessType);
+  const labelsResueltos = await getTenantLabels(tenant.id, tenant.businessType);
+  const vocabularioActual = Object.fromEntries(VOCABULARIO_PERSONALIZABLE.map((c) => [c.key, labelsResueltos[c.key] ?? ""]));
 
   return (
     <ConfiguracionClient
@@ -54,6 +58,7 @@ export default async function ConfiguracionPage({
       themeIntensityFondoInicial={tenant.themeIntensityFondo}
       themeCustomColorsInicial={tenant.themeCustomColors}
       businessTypeInicial={tenant.businessType}
+      vocabularioActual={vocabularioActual}
       modulos={modulosPersonalizables}
       recomendadosOff={recomendadosOff}
       logoInicial={tenant.logo}

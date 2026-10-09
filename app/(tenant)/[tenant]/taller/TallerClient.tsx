@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Wrench, Clock, AlertCircle, ChevronLeft, Send, Users } from "lucide-react";
 import type { ReparacionesData, EstadoReparacion, PrioridadReparacion } from "@/lib/reparaciones-data";
-import { label, type LabelDictionary } from "@/lib/labels";
+import { label, etiquetaEncargado, type LabelDictionary } from "@/lib/labels";
 import { enviarAlertaTallerAction } from "@/app/actions/reparaciones-actions";
 import { useTourDesdeUrl, TOUR_TALLER_ALERTA } from "@/lib/tours";
 
@@ -161,7 +161,7 @@ export default function TallerClient({ data, labels, tenantSlug, miStaffId, verT
 
       {verTodoTaller && (
         <div className="mx-4 mb-2 flex items-center gap-2 bg-primary/5 text-primary-text text-[12px] px-3 py-1.5 rounded-lg">
-          <Users className="w-3.5 h-3.5 flex-shrink-0" /> Vista de Jefe de técnicos — ves todas las reparaciones del taller, sin poder editarlas.
+          <Users className="w-3.5 h-3.5 flex-shrink-0" /> Vista de {etiquetaEncargado(labels)} — ves todas las {label(labels, "entity.repair.plural").toLowerCase()}, sin poder editarlas.
         </div>
       )}
 

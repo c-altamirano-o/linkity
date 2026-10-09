@@ -122,6 +122,16 @@ export const DEFAULT_LABELS: LabelDictionary = {
   "entity.repair.singular": "Reparación",
   "entity.repair.plural": "Reparaciones",
   "entity.repair.asset": "Dispositivo",
+  // Vocabulario por rubro (2026-10-09, a petición de Carlos): el "especialista"
+  // es quien presta el servicio o hace la reparación (técnico, barbero,
+  // dentista…); la recepción/mostrador es otro puesto y no cambia. Los
+  // ejemplos y el ícono del Catálogo y el motivo de una cita también cambian
+  // por rubro. Ver VOCABULARIO_RUBRO más abajo.
+  "vocab.especialista.singular": "Técnico",
+  "vocab.especialista.plural": "Técnicos",
+  "example.catalog.product": "Nombre del producto",
+  "example.appointment.reason": "Revisión general",
+  "icon.catalog.product": "Package",
 
   // Nombre de la entidad principal del módulo de citas, y estatus de
   // AppointmentStatus — igual que repair.status.*, personalizable por rubro
@@ -221,6 +231,71 @@ export const VERTICAL_LABEL_DEFAULTS: Record<string, LabelDictionary> = {
   comercio_retail: {},
 };
 
+// Vocabulario por rubro (especialista, ejemplos y ícono). Se mezcla dentro de
+// VERTICAL_LABEL_DEFAULTS, así el negocio puede seguir sobreescribiendo
+// cualquiera de estas keys desde TenantLabel.
+const VOCABULARIO_RUBRO: Record<string, { esp: [string, string]; producto: string; icono: string; cita?: string }> = {
+  reparacion_celulares: { esp: ["Técnico", "Técnicos"], producto: "Pantalla iPhone 13", icono: "Smartphone" },
+  taller_autos: { esp: ["Mecánico", "Mecánicos"], producto: "Balatas delanteras", icono: "Car" },
+  taller_motos: { esp: ["Mecánico", "Mecánicos"], producto: "Kit de arrastre", icono: "Bike" },
+  electrodomesticos: { esp: ["Técnico", "Técnicos"], producto: "Motor de lavadora", icono: "WashingMachine" },
+  computadoras: { esp: ["Técnico", "Técnicos"], producto: "Disco SSD 480 GB", icono: "Laptop" },
+  relojeria_joyeria: { esp: ["Especialista", "Especialistas"], producto: "Pila para reloj", icono: "Watch" },
+  zapateria: { esp: ["Zapatero", "Zapateros"], producto: "Suela de goma", icono: "Footprints" },
+  refrigeracion_ac: { esp: ["Técnico", "Técnicos"], producto: "Compresor de 1/4 HP", icono: "Snowflake" },
+  bicicletas: { esp: ["Mecánico", "Mecánicos"], producto: "Cámara rodada 26", icono: "Bike" },
+  cerrajeria: { esp: ["Cerrajero", "Cerrajeros"], producto: "Chapa de seguridad", icono: "Key" },
+  tapiceria: { esp: ["Tapicero", "Tapiceros"], producto: "Vinil por metro", icono: "Sofa" },
+  barberia: { esp: ["Barbero", "Barberos"], producto: "Cera para peinar", icono: "Scissors", cita: "Corte de cabello" },
+  consultorio_dental: { esp: ["Dentista", "Dentistas"], producto: "Cepillo dental", icono: "Stethoscope", cita: "Limpieza dental" },
+  consultorio_medico: { esp: ["Médico", "Médicos"], producto: "Termómetro digital", icono: "Stethoscope", cita: "Consulta general" },
+  veterinaria: { esp: ["Veterinario", "Veterinarios"], producto: "Alimento para perro 20 kg", icono: "PawPrint", cita: "Vacuna" },
+  estetica: { esp: ["Esteticista", "Esteticistas"], producto: "Shampoo profesional", icono: "Sparkles", cita: "Limpieza facial" },
+  spa: { esp: ["Terapeuta", "Terapeutas"], producto: "Aceite para masaje", icono: "Flower2", cita: "Masaje relajante" },
+  gimnasio: { esp: ["Entrenador", "Entrenadores"], producto: "Proteína 2 lb", icono: "Dumbbell", cita: "Clase de prueba" },
+  tatuajes: { esp: ["Tatuador", "Tatuadores"], producto: "Tinta negra", icono: "PenTool", cita: "Sesión de tatuaje" },
+  comercio_retail: { esp: ["Vendedor", "Vendedores"], producto: "Playera talla M", icono: "ShoppingBag" },
+};
+for (const [rubro, v] of Object.entries(VOCABULARIO_RUBRO)) {
+  VERTICAL_LABEL_DEFAULTS[rubro] = {
+    ...VERTICAL_LABEL_DEFAULTS[rubro],
+    "vocab.especialista.singular": v.esp[0],
+    "vocab.especialista.plural": v.esp[1],
+    "example.catalog.product": v.producto,
+    "icon.catalog.product": v.icono,
+    ...(v.cita ? { "example.appointment.reason": v.cita } : {}),
+  };
+}
+
+// Textos NEUTROS para el negocio que no encaja en ningún rubro ("Otro / Sin
+// especificar", businessType null) — 2026-10-09, a petición de Carlos. El
+// default genérico del sistema habla de reparaciones; sin rubro conviene no
+// asumir ningún giro. El negocio puede ajustar lo que quiera en Configuración →
+// "Vocabulario de tu negocio".
+export const ETIQUETAS_NEUTRAS: LabelDictionary = {
+  "module.repair.name": "Servicios",
+  "module.workshop.name": "Mis Servicios",
+  "module.reception.name": "Control de Servicios",
+  "entity.repair.singular": "Servicio",
+  "entity.repair.plural": "Servicios",
+  "entity.repair.asset": "Artículo",
+  "repair.status.DIAGNOSING": "En revisión",
+  "repair.status.WAITING_PARTS": "En espera de material",
+  "repair.status.IN_REPAIR": "En proceso",
+  "repair.status.WORKSHOP_READY": "Listo en el área de trabajo",
+  "repair.status.WORKSHOP_RETURN": "Regresó al área de trabajo",
+  "vocab.especialista.singular": "Especialista",
+  "vocab.especialista.plural": "Especialistas",
+  "example.catalog.product": "Nombre del producto",
+  "icon.catalog.product": "Package",
+  "example.appointment.reason": "Revisión general",
+};
+
+/** Textos propios del rubro; sin rubro (o desconocido) se usan los neutros. */
+export function etiquetasDelRubro(businessType: string | null | undefined): LabelDictionary {
+  return (businessType && VERTICAL_LABEL_DEFAULTS[businessType]) || ETIQUETAS_NEUTRAS;
+}
+
 // Opciones de rubro que se muestran en el selector de Configuración.
 // Cada value debe existir como key en VERTICAL_LABEL_DEFAULTS de arriba
 // (aunque sea con un objeto vacío) para que quede documentado que el
@@ -251,4 +326,69 @@ export const BUSINESS_TYPE_OPTIONS: { value: string; label: string }[] = [
 /** Resuelve una sola key contra un diccionario ya cargado. Seguro para cliente. */
 export function label(dict: LabelDictionary, key: string): string {
   return dict[key] ?? key;
+}
+
+/**
+ * Nombre que se MUESTRA de un rol. El rol base "Técnico" sigue llamándose así
+ * por dentro (el código y los permisos lo buscan por ese nombre), pero cada
+ * rubro lo ve con su propio vocabulario: Mecánico, Barbero, Dentista…
+ */
+export function nombreRolVisible(nombre: string | null | undefined, labels: LabelDictionary): string {
+  if (!nombre) return "";
+  return nombre === "Técnico" ? label(labels, "vocab.especialista.singular") : nombre;
+}
+
+/** "Encargado de mecánicos", "Encargado de barberos"… según el rubro. */
+export function etiquetaEncargado(labels: LabelDictionary): string {
+  return `Encargado de ${label(labels, "vocab.especialista.plural").toLowerCase()}`;
+}
+
+// ── Vocabulario que cada negocio puede personalizar ("Otro / Especificar") ──
+// 2026-10-09, a petición de Carlos: el vocabulario por rubro nunca debe limitar
+// — cada negocio puede escribir su propio término. Se guarda como override en
+// TenantLabel (ver setTenantLabel en lib/labels-server.ts) y gana sobre el
+// default del rubro. Agregar aquí una key nueva la hace aparecer sola en
+// Configuración → "Vocabulario de tu negocio".
+export const ICONOS_CATALOGO: { value: string; label: string }[] = [
+  { value: "Package", label: "Caja (genérico)" },
+  { value: "Smartphone", label: "Celular" },
+  { value: "Car", label: "Auto" },
+  { value: "Bike", label: "Bicicleta o moto" },
+  { value: "WashingMachine", label: "Electrodoméstico" },
+  { value: "Laptop", label: "Computadora" },
+  { value: "Watch", label: "Reloj" },
+  { value: "Footprints", label: "Calzado" },
+  { value: "Snowflake", label: "Refrigeración" },
+  { value: "Key", label: "Llave o cerradura" },
+  { value: "Sofa", label: "Mueble" },
+  { value: "Scissors", label: "Tijeras" },
+  { value: "Stethoscope", label: "Salud" },
+  { value: "PawPrint", label: "Mascota" },
+  { value: "Sparkles", label: "Belleza" },
+  { value: "Flower2", label: "Spa" },
+  { value: "Dumbbell", label: "Gimnasio" },
+  { value: "PenTool", label: "Tatuaje o diseño" },
+  { value: "ShoppingBag", label: "Tienda" },
+];
+
+export type CampoVocabulario = {
+  key: string;
+  titulo: string;
+  ayuda: string;
+  tipo: "texto" | "icono";
+  max: number;
+};
+
+export const VOCABULARIO_PERSONALIZABLE: CampoVocabulario[] = [
+  { key: "vocab.especialista.singular", titulo: "Quien presta el servicio o repara (singular)", ayuda: "Ej. Técnico, Barbero, Mecánico. Es el nombre que verán el personal y el menú.", tipo: "texto", max: 30 },
+  { key: "vocab.especialista.plural", titulo: "Quien presta el servicio o repara (plural)", ayuda: "Ej. Técnicos, Barberos, Mecánicos. Se usa en \"Encargado de …\".", tipo: "texto", max: 30 },
+  { key: "example.catalog.product", titulo: "Ejemplo de producto en el Catálogo", ayuda: "Solo es el texto de ejemplo al crear un producto.", tipo: "texto", max: 60 },
+  { key: "icon.catalog.product", titulo: "Ícono de Productos en el Catálogo", ayuda: "Elige el que más se parezca a lo que vendes.", tipo: "icono", max: 30 },
+  { key: "example.appointment.reason", titulo: "Ejemplo de motivo de una cita", ayuda: "Solo es el texto de ejemplo al agendar una cita.", tipo: "texto", max: 60 },
+];
+
+/** Valor por defecto de una key para un rubro, sin personalizaciones del negocio. */
+export function valorPorDefectoDeRubro(businessType: string | null | undefined, key: string): string {
+  const base = { ...DEFAULT_LABELS, ...etiquetasDelRubro(businessType) };
+  return base[key] ?? key;
 }

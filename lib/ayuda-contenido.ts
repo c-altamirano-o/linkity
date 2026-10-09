@@ -408,7 +408,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
         tourId: "personal-crear-rol-personalizado",
         pasos: [
           "Presiona \"Roles y permisos\" y luego \"Crear rol personalizado\".",
-          "Dale un nombre (ej. \"Barbero\") y marca las casillas de los módulos que podrá usar.",
+          "Dale un nombre (ej. \"Encargado\") y marca las casillas de los módulos que podrá usar.",
           "Presiona \"Crear rol\".",
         ],
       },

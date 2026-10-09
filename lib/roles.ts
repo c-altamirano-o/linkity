@@ -30,6 +30,7 @@
 // de este cambio (ver el comentario largo en roles-server.ts).
 
 import { MODULE_CATALOG } from "@/lib/modules-catalog";
+import { label, type LabelDictionary } from "@/lib/labels";
 
 export const ROL_ADMINISTRADOR = "Administrador";
 
@@ -94,7 +95,7 @@ export type RolBase = (typeof ROLES_BASE)[number];
 
 export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
   Gerente: "Acceso a todo el negocio excepto Personal, Facturación y Configuración.",
-  Cajero: "Punto de Venta, Caja, Clientes y cobro/entrega de Reparaciones.",
+  Cajero: "Punto de Venta, Caja, Clientes, Citas y cobro/entrega de los trabajos recibidos.",
   // "expediente-clinico" (2026-09-18) se agregó a Técnico —piensa "doctor/
   // dentista con PIN"— y NO a Cajero: son datos clínicos del paciente
   // (NOM-004), no le corresponden a quien solo cobra. 2026-09-21: "reparaciones"
@@ -108,7 +109,7 @@ export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
   // "reparaciones" en un negocio de una sola sucursal sin taller separado;
   // el catálogo POR RUBRO en lib/roles-rubro.ts es quien sí ofrece un
   // puesto de Recepción/Aduana dedicado para los rubros de taller).
-  Técnico: "Taller (solo ve sus reparaciones asignadas y puede alertar), Citas, Clientes y Expediente Clínico.",
+  Técnico: "Ve solo el trabajo que se le asignó y puede avisar a su encargado, además de Citas, Clientes y Expediente Clínico (si tu negocio lo usa).",
 };
 
 // Nombre para mostrar de un módulo en un selector de permisos (RolesManager.tsx,
@@ -135,8 +136,8 @@ export const ROLES_DESCRIPCION_BASE: Record<RolBase, string> = {
 // paréntesis (ver el fallback abajo).
 const EXPLICACION_MODULO: Partial<Record<ModuloKey, string>> = {
   pos: "cobrar ventas de productos y servicios",
-  reparaciones: "recibir equipos con folio y cobrar/entregar cuando estén listos",
-  citas: "agendar y ver la agenda de clientes/pacientes",
+  reparaciones: "recibir trabajos con folio y cobrar/entregar cuando estén listos",
+  citas: "agendar y ver la agenda de clientes",
   "expediente-clinico": "historial y notas clínicas del paciente",
   clientes: "ficha y datos de contacto de cada cliente",
   catalogo: "ver productos, servicios y precios",
@@ -148,9 +149,16 @@ const EXPLICACION_MODULO: Partial<Record<ModuloKey, string>> = {
   soporte: "contactar al equipo de soporte",
 };
 
-export function nombreModulo(m: ModuloKey): string {
-  if (m === "taller") return "Mis Reparaciones (el técnico, solo ve lo asignado, sin editar)";
-  if (m === "aduana") return "Taller (Recepción/Aduana — asigna técnico, estatus y costo)";
+export function nombreModulo(m: ModuloKey, labels?: LabelDictionary): string {
+  const esp = labels ? label(labels, "vocab.especialista.singular").toLowerCase() : "especialista";
+  if (m === "taller") {
+    const nombre = labels ? label(labels, "module.workshop.name") : "Mis Reparaciones";
+    return `${nombre} (puesto de ${esp}: solo ve lo asignado, sin editar)`;
+  }
+  if (m === "aduana") {
+    const nombre = labels ? label(labels, "module.reception.name") : "Taller";
+    return `${nombre} (Recepción — asigna ${esp}, estatus y costo)`;
+  }
   const nombre = MODULE_CATALOG[m]?.name ?? m;
   const explicacion = EXPLICACION_MODULO[m];
   return explicacion ? `${nombre} (${explicacion})` : nombre;

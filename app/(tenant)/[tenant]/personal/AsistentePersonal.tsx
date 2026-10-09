@@ -5,6 +5,7 @@ import {
   X, Sparkles, ArrowRight, ArrowLeft, Check, AlertTriangle, Users, Plus, ChevronDown, ChevronUp, RotateCcw,
 } from "lucide-react";
 import { MODULOS, MODULOS_BASE_EXCLUIDOS, nombreModulo, type ModuloKey, type RolTenantUI } from "@/lib/roles";
+import { DEFAULT_LABELS, type LabelDictionary } from "@/lib/labels";
 import {
   catalogoBaseParaRubro, plantillaOperadorUnico, detectarAdvertencias, type AdvertenciaAsistente,
 } from "@/lib/asistente-roles";
@@ -54,6 +55,7 @@ interface PuestoEditable {
 
 interface AsistentePersonalProps {
   tenantSlug: string;
+  labels?: LabelDictionary;
   rolesIniciales: RolTenantUI[];
   businessType: string | null;
   modulosInactivos?: string[];
@@ -75,7 +77,7 @@ function puestoDesdeRol(r: RolTenantUI): PuestoEditable {
   };
 }
 
-export default function AsistentePersonal({ tenantSlug, rolesIniciales, businessType, modulosInactivos = [], onCerrar, onCambio }: AsistentePersonalProps) {
+export default function AsistentePersonal({ tenantSlug, labels = DEFAULT_LABELS, rolesIniciales, businessType, modulosInactivos = [], onCerrar, onCambio }: AsistentePersonalProps) {
   const modulosInactivosSet = new Set(modulosInactivos);
   const MODULOS_ASIGNABLES: ModuloKey[] = MODULOS.filter(
     (m) => !MODULOS_BASE_EXCLUIDOS.includes(m) && !modulosInactivosSet.has(m)
@@ -286,7 +288,7 @@ export default function AsistentePersonal({ tenantSlug, rolesIniciales, business
                         {difiereDelSugerido && (
                           <div className="mt-1.5 bg-primary/5 border border-primary/20 rounded-lg px-2 py-1.5 text-[11.5px] text-foreground flex items-start justify-between gap-2">
                             <span>
-                              Difiere del sugerido:{faltantes.length > 0 && <> le falta {faltantes.map(nombreModulo).join(", ")}.</>}{sobrantes.length > 0 && <> tiene de más {sobrantes.map(nombreModulo).join(", ")}.</>}
+                              Difiere del sugerido:{faltantes.length > 0 && <> le falta {faltantes.map((m) => nombreModulo(m, labels)).join(", ")}.</>}{sobrantes.length > 0 && <> tiene de más {sobrantes.map((m) => nombreModulo(m, labels)).join(", ")}.</>}
                             </span>
                             <button onClick={() => restaurarSugerido(idx)} className="flex items-center gap-1 text-primary-text hover:underline whitespace-nowrap flex-shrink-0">
                               <RotateCcw className="w-3 h-3" /> Restaurar
@@ -305,7 +307,7 @@ export default function AsistentePersonal({ tenantSlug, rolesIniciales, business
                     </div>
 
                     {!p.expandido && (
-                      <p className="text-[11.5px] text-muted-foreground mt-1.5">{Array.from(p.modulos).map(nombreModulo).join(", ") || "Sin módulos asignados"}</p>
+                      <p className="text-[11.5px] text-muted-foreground mt-1.5">{Array.from(p.modulos).map((m) => nombreModulo(m, labels)).join(", ") || "Sin módulos asignados"}</p>
                     )}
 
                     {p.expandido && (
@@ -314,7 +316,7 @@ export default function AsistentePersonal({ tenantSlug, rolesIniciales, business
                           {MODULOS_ASIGNABLES.map((m) => (
                             <label key={m} className="flex items-center gap-1.5 text-xs text-foreground">
                               <input type="checkbox" checked={p.modulos.has(m)} onChange={() => toggleModulo(idx, m)} />
-                              {nombreModulo(m)}
+                              {nombreModulo(m, labels)}
                             </label>
                           ))}
                         </div>
@@ -381,7 +383,7 @@ export default function AsistentePersonal({ tenantSlug, rolesIniciales, business
                       {p.nombre}
                       <span className="text-[10.5px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-normal">{p.roleId ? "se actualiza" : "puesto nuevo"}</span>
                     </p>
-                    <p className="text-[11.5px] text-muted-foreground mt-0.5">{Array.from(p.modulos).map(nombreModulo).join(", ") || "Sin módulos asignados"}</p>
+                    <p className="text-[11.5px] text-muted-foreground mt-0.5">{Array.from(p.modulos).map((m) => nombreModulo(m, labels)).join(", ") || "Sin módulos asignados"}</p>
                   </div>
                   <Users className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                 </div>

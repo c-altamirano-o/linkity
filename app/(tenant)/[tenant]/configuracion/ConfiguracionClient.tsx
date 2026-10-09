@@ -8,6 +8,7 @@ import { alternarModuloPropioAction, aplicarRecomendadoRubroAction, activarModoS
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
 import { BUSINESS_TYPE_OPTIONS } from "@/lib/labels";
+import VocabularioNegocio from "@/components/tenant/VocabularioNegocio";
 import { createClient } from "@/lib/supabase/client";
 import type { FormatoTicket, QrDestinoTicket } from "@/lib/recibo-imprimible";
 import {
@@ -140,6 +141,8 @@ interface ConfiguracionClientProps {
   // parseColoresPersonalizados antes de usarse, nunca se confía en su forma.
   themeCustomColorsInicial?: unknown;
   businessTypeInicial: string | null;
+  // Vocabulario ya resuelto del negocio (rubro + personalizaciones) para la tarjeta "Vocabulario de tu negocio".
+  vocabularioActual: Record<string, string>;
   modulos: ModuloPersonalizable[];
   recomendadosOff: string[];
   logoInicial: string | null;
@@ -178,6 +181,7 @@ export default function ConfiguracionClient({
   themeIntensityFondoInicial,
   themeCustomColorsInicial,
   businessTypeInicial,
+  vocabularioActual,
   modulos,
   recomendadosOff,
   logoInicial,
@@ -1106,7 +1110,7 @@ export default function ConfiguracionClient({
               onChange={(e) => setRubroSeleccionado(e.target.value)}
               className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             >
-              <option value={SIN_RUBRO}>Sin especificar / Genérico</option>
+              <option value={SIN_RUBRO}>Otro / Sin especificar (textos neutros)</option>
               {BUSINESS_TYPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
@@ -1131,6 +1135,8 @@ export default function ConfiguracionClient({
           </div>
         </div>
       </div>
+
+      <VocabularioNegocio tenantSlug={tenantSlug} businessType={businessTypeInicial} actuales={vocabularioActual} />
 
       {/* ── Configura tu Taller (checklist) ────────────────────── */}
       {/* 2026-09-24, a petición de Carlos: el escudo genérico de Taller no

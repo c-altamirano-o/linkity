@@ -337,7 +337,7 @@ export default function CitasClient({ data, labels, branches, tenantSlug }: Cita
               value={form.motivo}
               onChange={(e) => setForm({ ...form, motivo: e.target.value })}
               className="mt-1 w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              placeholder="Ej. Limpieza dental"
+              placeholder={`Ej. ${label(labels, "example.appointment.reason")}`}
             />
           </div>
 

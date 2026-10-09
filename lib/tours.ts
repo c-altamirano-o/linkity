@@ -504,7 +504,7 @@ export const TOUR_PERSONAL_ROL_PERSONALIZADO: TourStep[] = [
   {
     selector: '[data-tour="roles-nombre"]',
     titulo: "3. Dale un nombre",
-    descripcion: "Ej. \"Barbero\" — hay sugerencias según tu rubro, si aplican.",
+    descripcion: "Ej. \"Encargado\" — hay sugerencias según tu rubro, si aplican.",
   },
   {
     selector: '[data-tour="roles-modulos"]',

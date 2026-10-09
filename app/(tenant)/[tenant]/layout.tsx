@@ -10,7 +10,7 @@ import { verificarSesionPersonalVigente } from "@/lib/asistencia";
 import type { ModuloKey } from "@/lib/roles";
 import { modulosPermitidosParaRolPorNombre } from "@/lib/roles-server";
 import { getTenantLabels } from "@/lib/labels-server";
-import type { LabelDictionary } from "@/lib/labels";
+import { nombreRolVisible, type LabelDictionary } from "@/lib/labels";
 import { calcularEstadoCiclo, avisoParaPanel } from "@/lib/ciclo-suscripcion";
 import CuentaBloqueada from "@/components/tenant/CuentaBloqueada";
 import { obtenerEnlacesSuscripcion } from "@/lib/enlaces-suscripcion";
@@ -508,7 +508,7 @@ export default async function TenantLayout({
         tenant={tenant}
         tenantId={dbTenant?.id ?? null}
         userName={userName}
-        userRole={userRole}
+        userRole={nombreRolVisible(userRole, labels)}
         modo={modo}
         modulosPermitidos={modulosPermitidosParaNav}
         labels={labels}

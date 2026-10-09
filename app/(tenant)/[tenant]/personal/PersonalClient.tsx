@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import type { PersonalData, EmpleadoUI, EsquemaPago, BaseComision, Frecuencia, EstadoPago, MetodoPago } from "@/lib/personal-data";
 import type { IncidenciasAsistencia } from "@/lib/incidencias-asistencia";
-import { label, type LabelDictionary } from "@/lib/labels";
+import { label, nombreRolVisible, type LabelDictionary } from "@/lib/labels";
 import type { RolTenantUI } from "@/lib/roles";
 import { PAISES_TELEFONO, PAIS_TELEFONO_DEFAULT, paisPorCodigo, validarTelefono } from "@/lib/paises";
 import {
@@ -751,7 +751,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-foreground truncate">{e.name}</p>
-                    <p className="text-[11.5px] text-muted-foreground truncate">{e.position || e.roleName || "Sin puesto"} · {e.branchName}</p>
+                    <p className="text-[11.5px] text-muted-foreground truncate">{e.position || nombreRolVisible(e.roleName, labels) || "Sin puesto"} · {e.branchName}</p>
                   </div>
                   {!e.isActive && <span className="text-[10.5px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground flex-shrink-0">Inactivo</span>}
                 </div>
@@ -899,7 +899,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   <div className="mt-2 flex items-center gap-1.5 text-[12.5px]">
                     <Shield className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                     <span className="text-foreground">
-                      Rol: {seleccionado.roleName ?? "Sin rol asignado"}
+                      Rol: {nombreRolVisible(seleccionado.roleName, labels) || "Sin rol asignado"}
                     </span>
                     <span className="text-muted-foreground">
                       · {seleccionado.tienePin ? "con PIN configurado" : "sin PIN todavía"}
@@ -1060,7 +1060,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                 <select value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary">
                   <option value="">Selecciona un rol...</option>
-                  {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  {roles.map((r) => <option key={r.id} value={r.id}>{nombreRolVisible(r.name, labels)}</option>)}
                 </select>
                 {form.roleId && (
                   <p className="text-[11.5px] text-muted-foreground mt-1">{roles.find((r) => r.id === form.roleId)?.description}</p>
@@ -1092,14 +1092,14 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                   }`}>
                     {form.paymentScheme === "FIJO" && "Se le paga lo mismo sin importar cuánto venda o repare."}
                     {form.paymentScheme === "COMISION" && (
-                      <>Es un <strong>PORCENTAJE</strong> del precio de cada venta/reparación — ej. un corte de $250 al 50% = tu empleado recibe $125. Este es el caso típico de un barbero.</>
+                      <>Es un <strong>PORCENTAJE</strong> del precio de cada venta/reparación — ej. una venta o servicio de $250 al 50% = tu empleado recibe $125.</>
                     )}
                     {form.paymentScheme === "MIXTO" && "Un sueldo fijo más un porcentaje de comisión adicional (igual que Comisión, pero sumado a un sueldo base)."}
                     {form.paymentScheme === "DESTAJO" && (
                       <>
-                        <strong>NO es un porcentaje</strong> — es un monto fijo en pesos por cada unidad, sin importar su precio de venta. Ej. si pagas $50 de destajo por corte, tu empleado recibe $50 tanto si el corte se vendió en $200 como en $300.
+                        <strong>NO es un porcentaje</strong> — es un monto fijo en pesos por cada unidad, sin importar su precio de venta. Ej. si pagas $50 de destajo por unidad, tu empleado recibe $50 tanto si se vendió en $200 como en $300.
                         <br />
-                        Si en cambio quieres que reciba un % del precio (como el ejemplo del corte a $250 al 50%), usa <strong>&quot;Comisión&quot;</strong>, no Destajo.
+                        Si en cambio quieres que reciba un % del precio (como el ejemplo de $250 al 50%), usa <strong>&quot;Comisión&quot;</strong>, no Destajo.
                       </>
                     )}
                   </div>
@@ -1208,7 +1208,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
                     onChange={(e) => setForm({ ...form, teamCommissionBase: e.target.checked ? "VENTAS" : "", teamCommissionRate: e.target.checked ? form.teamCommissionRate : "0" })} />
                   ¿LIDERA UN EQUIPO? (COMISIÓN EXTRA)
                 </label>
-                <p className="text-[11.5px] text-muted-foreground mt-1">Ej. Jefe de Barberos: cobra su comisión individual de arriba más esta comisión extra, calculada sobre la producción de toda su sucursal.</p>
+                <p className="text-[11.5px] text-muted-foreground mt-1">Ej. un jefe de área o encargado: cobra su comisión individual de arriba más esta comisión extra, calculada sobre lo que produce todo su equipo en la sucursal.</p>
                 {form.teamCommissionBase !== "" && (
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <div>
@@ -1497,6 +1497,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
       {modalRoles && (
         <RolesManager
           tenantSlug={tenantSlug}
+          labels={labels}
           rolesIniciales={roles}
           sugerenciasRoles={puestosSugeridos}
           modulosInactivos={modulosInactivos}
@@ -1508,6 +1509,7 @@ export default function PersonalClient({ data, labels, branches, tenantSlug, rol
       {modalAsistente && (
         <AsistentePersonal
           tenantSlug={tenantSlug}
+          labels={labels}
           rolesIniciales={roles}
           businessType={businessType}
           modulosInactivos={modulosInactivos}

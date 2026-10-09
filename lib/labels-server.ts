@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getTenantPrisma } from "@/lib/prisma";
-import { DEFAULT_LABELS, VERTICAL_LABEL_DEFAULTS, type LabelDictionary } from "@/lib/labels";
+import { DEFAULT_LABELS, etiquetasDelRubro, type LabelDictionary } from "@/lib/labels";
 
 /**
  * Parte de la capa de labels que sí toca base de datos. Solo se importa
@@ -28,8 +28,8 @@ export async function getTenantLabels(
     select: { key: true, value: true },
   });
 
-  const verticalDefaults =
-    (businessType && VERTICAL_LABEL_DEFAULTS[businessType]) || {};
+  // Sin rubro (o rubro desconocido) = textos neutros, no los de reparación.
+  const verticalDefaults = etiquetasDelRubro(businessType);
 
   const merged: LabelDictionary = {
     ...DEFAULT_LABELS,

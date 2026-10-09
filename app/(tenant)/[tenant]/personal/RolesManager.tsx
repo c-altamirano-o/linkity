@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { X, Plus, Trash2, Pencil, Check, Shield, AlertTriangle } from "lucide-react";
 import { MODULOS, MODULOS_BASE_EXCLUIDOS, nombreModulo, type ModuloKey, type RolTenantUI } from "@/lib/roles";
+import { DEFAULT_LABELS, label, nombreRolVisible, etiquetaEncargado, type LabelDictionary } from "@/lib/labels";
 import {
   listarRolesTenantAction, crearRolAction, actualizarRolAction, eliminarRolAction,
 } from "@/app/actions/roles-tenant-actions";
@@ -36,6 +37,8 @@ import { detectarAdvertencias, type AdvertenciaAsistente } from "@/lib/asistente
 
 interface RolesManagerProps {
   tenantSlug: string;
+  // Textos del rubro del negocio (vocabulario del especialista, etc.).
+  labels?: LabelDictionary;
   rolesIniciales: RolTenantUI[];
   // Puestos sugeridos para el rubro de este negocio (lib/puestos-rubro.ts,
   // mismo catálogo que alimenta el <datalist> de "Puesto" en el formulario
@@ -54,7 +57,7 @@ interface RolesManagerProps {
   onCambio: () => void;
 }
 
-export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRoles = [], modulosInactivos = [], onCerrar, onCambio }: RolesManagerProps) {
+export default function RolesManager({ tenantSlug, labels = DEFAULT_LABELS, rolesIniciales, sugerenciasRoles = [], modulosInactivos = [], onCerrar, onCambio }: RolesManagerProps) {
   const modulosInactivosSet = new Set(modulosInactivos);
   const MODULOS_ASIGNABLES: ModuloKey[] = MODULOS.filter(
     (m) => !MODULOS_BASE_EXCLUIDOS.includes(m) && !modulosInactivosSet.has(m)
@@ -220,14 +223,14 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                     {MODULOS_ASIGNABLES.map((m) => (
                       <label key={m} className="flex items-center gap-1.5 text-xs text-foreground">
                         <input type="checkbox" checked={modulosEdit.has(m)} onChange={() => toggleModulo(modulosEdit, setModulosEdit, m)} />
-                        {nombreModulo(m)}
+                        {nombreModulo(m, labels)}
                       </label>
                     ))}
                   </div>
                   {modulosEdit.has("taller") && (
                     <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
                       <input type="checkbox" checked={verTodoTallerEdit} onChange={(e) => setVerTodoTallerEdit(e.target.checked)} />
-                      Jefe de técnicos: ve TODAS las reparaciones asignadas del taller (no solo las propias)
+                      {etiquetaEncargado(labels)}: ve TODAS las {label(labels, "entity.repair.plural").toLowerCase()} asignadas (no solo las propias)
                     </label>
                   )}
                   {modulosEdit.has("caja") && (
@@ -260,10 +263,10 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-foreground">
-                      {rol.name} {rol.isSystem && <span className="text-[10.5px] text-muted-foreground font-normal">(base)</span>}
+                      {nombreRolVisible(rol.name, labels)} {rol.isSystem && <span className="text-[10.5px] text-muted-foreground font-normal">(base)</span>}
                     </p>
                     <p className="text-[11.5px] text-muted-foreground mt-0.5">
-                      {rol.modulosPermitidos.map(nombreModulo).join(", ")}
+                      {rol.modulosPermitidos.map((m) => nombreModulo(m, labels)).join(", ")}
                     </p>
                     <p className="text-[11.5px] text-muted-foreground">{rol.cantidadEmpleados} empleado(s) con este rol</p>
                   </div>
@@ -285,7 +288,7 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
           {creando ? (
             <div className="border border-dashed border-border rounded-lg p-3 space-y-2">
               <input type="text" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)}
-                placeholder="Nombre del rol (ej. Barbero)"
+                placeholder="Nombre del rol (ej. Encargado)"
                 data-tour="roles-nombre"
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:border-primary" />
               {sugerenciasRoles.filter((s) => !roles.some((r) => r.name === s)).length > 0 && (
@@ -303,14 +306,14 @@ export default function RolesManager({ tenantSlug, rolesIniciales, sugerenciasRo
                 {MODULOS_ASIGNABLES.map((m) => (
                   <label key={m} className="flex items-center gap-1.5 text-xs text-foreground">
                     <input type="checkbox" checked={modulosNuevo.has(m)} onChange={() => toggleModulo(modulosNuevo, setModulosNuevo, m)} />
-                    {nombreModulo(m)}
+                    {nombreModulo(m, labels)}
                   </label>
                 ))}
               </div>
               {modulosNuevo.has("taller") && (
                 <label className="flex items-center gap-1.5 text-xs text-foreground border-t border-border pt-2">
                   <input type="checkbox" checked={verTodoTallerNuevo} onChange={(e) => setVerTodoTallerNuevo(e.target.checked)} />
-                  Jefe de técnicos: ve TODAS las reparaciones asignadas del taller (no solo las propias)
+                  {etiquetaEncargado(labels)}: ve TODAS las {label(labels, "entity.repair.plural").toLowerCase()} asignadas (no solo las propias)
                 </label>
               )}
               {modulosNuevo.has("caja") && (
