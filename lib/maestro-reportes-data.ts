@@ -72,6 +72,7 @@ function equivalenteMensual(price: number, cycle: BillingCycle): number {
 
 export async function getMaestroReportesData(): Promise<MaestroReportesData> {
   const tenants = await prisma.tenant.findMany({
+    where: { esInterno: false },
     select: {
       createdAt: true,
       subscription: { select: { plan: true, status: true, price: true, billingCycle: true } },

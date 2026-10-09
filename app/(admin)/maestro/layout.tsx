@@ -113,7 +113,7 @@ export default async function MaestroLayout({
   // "Negocios" = total de tenants; "Suscripciones" = cuántos requieren
   // atención de cobro ahora mismo (ya vencidos + por vencer en ≤7 días).
   const [totalNegocios, suscripciones, ticketsAbiertos, hotmartPendientes] = await Promise.all([
-    prisma.tenant.count(),
+    prisma.tenant.count({ where: { esInterno: false } }),
     getSuscripcionesData(),
     getTicketsAbiertosCount(),
     getHotmartPendientesCount(),

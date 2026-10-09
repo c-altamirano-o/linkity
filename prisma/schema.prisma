@@ -30,6 +30,11 @@ model Tenant {
   // businessType a propósito: "Sin especificar" (null) es un giro válido que el
   // dueño puede elegir en Configuración y no debe volver a pedirle los datos.
   datosPendientes  Boolean         @default(false)
+  // 2026-10-09: negocio INTERNO de Carlos para probar cambios en producción. No
+  // cuenta en las métricas de Panel Maestro (dashboard, reportes, suscripciones,
+  // contador del menú), pero sí aparece en la lista de Negocios para poder
+  // administrarlo. Se marca a mano (SQL); ningún flujo de alta lo pone en true.
+  esInterno        Boolean         @default(false)
   discounts        Discount[]
   // 2026-09-26, a petición de Carlos ("¿existe un apartado para
   // personalizar el ticket?"): mensaje libre que reemplaza el pie fijo

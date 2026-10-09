@@ -88,6 +88,7 @@ export async function getSuscripcionesData(): Promise<SuscripcionesData> {
   const now = new Date();
 
   const tenants = await prisma.tenant.findMany({
+    where: { esInterno: false },
     orderBy: { createdAt: "desc" },
     include: { subscription: true },
   });

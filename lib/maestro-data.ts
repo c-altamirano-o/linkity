@@ -77,6 +77,7 @@ export async function getMaestroData(): Promise<MaestroData> {
 
   const [tenantsRaw, totalModulosCatalogo, recientesRaw] = await Promise.all([
     prisma.tenant.findMany({
+      where: { esInterno: false },
       orderBy: { createdAt: "desc" },
       include: {
         subscription: true,
@@ -85,6 +86,7 @@ export async function getMaestroData(): Promise<MaestroData> {
     }),
     prisma.module.count(),
     prisma.tenant.findMany({
+      where: { esInterno: false },
       orderBy: { createdAt: "desc" },
       take: 5,
       select: { id: true, name: true, city: true, createdAt: true },
