@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search, SlidersHorizontal, FileDown, ChevronDown, Plus, AlertTriangle, XCircle, Building2 } from "lucide-react";
+import { Search, SlidersHorizontal, FileDown, ChevronDown, Plus, AlertTriangle, XCircle, Building2, ListChecks, X } from "lucide-react";
 import type { ProductoInventario } from "@/lib/inventario-data";
-import { ajustarStock, type AjusteTipo } from "@/lib/inventario-actions";
+import { ajustarStock, ajustarStockLote, type AjusteTipo } from "@/lib/inventario-actions";
+import { calcularCambiosStock, limpiarEntradaStock } from "@/lib/captura-stock";
 import { label, type LabelDictionary } from "@/lib/labels";
 import { confirmarSalirSinGuardar, useAdvertirCierrePestaña } from "@/lib/confirmar-cierre";
 import { ProductoIcono } from "@/lib/catalogo-iconos";
@@ -62,7 +63,11 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   const [filtro, setFiltro] = useState<(typeof filtrosTabs)[number]>("Todos");
   const parteSing = label(labels, "catalog.part.singular");
   const partePlural = label(labels, "catalog.part.plural");
-  const [sucursal, setSucursal] = useState(TODAS_SUCURSALES_ID);
+  // 2026-10-10, a petición de Carlos: la captura de stock es la vista normal
+  // de Inventario, y el stock es por sucursal — por eso se abre ya en la
+  // primera sucursal (con una sola, igual que siempre). "Todas las
+  // sucursales" sigue en el selector, pero ahí el stock es de solo lectura.
+  const [sucursal, setSucursal] = useState(branches[0]?.id ?? TODAS_SUCURSALES_ID);
   const [categoriaFiltro, setCategoriaFiltro] = useState(TODAS_CATEGORIAS);
 
   const [modalAjuste, setModalAjuste] = useState<VistaProducto | null>(null);
@@ -79,6 +84,19 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   // por eso vive aparte de ajusteError y el modal se queda abierto hasta que
   // el empleado lo confirma.
   const [ajusteAviso, setAjusteAviso] = useState<string | null>(null);
+
+  // ── Captura rápida de stock (2026-10-10, a petición de Carlos: "una lista
+  // en columnas solo con la parte de stock editable... solo ir dando Enter
+  // hasta terminar y al final darle guardar"; y después: "déjala activada
+  // por default y agrega un botón para detalles al final de cada fila").
+  // El número tecleado es el stock NUEVO TOTAL de la sucursal elegida
+  // (lib/captura-stock.ts). Lo individual (entrada, salida, ajuste) vive en
+  // el botón "Detalles" de cada fila.
+  // productId → texto tecleado. Solo cuenta lo que difiere del stock actual.
+  const [ediciones, setEdiciones] = useState<Record<string, string>>({});
+  const [notaCaptura, setNotaCaptura] = useState<{ tipo: "ok" | "aviso" | "error"; texto: string } | null>(null);
+  const inputsCapturaRef = useRef<(HTMLInputElement | null)[]>([]);
+  const guardarCapturaBtnRef = useRef<HTMLButtonElement>(null);
 
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [mostrarExportMenu, setMostrarExportMenu] = useState(false);
@@ -124,6 +142,16 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   });
 
   const filtrosActivos = categoriaFiltro !== TODAS_CATEGORIAS ? 1 : 0;
+
+  const puedeCapturar = sucursal !== TODAS_SUCURSALES_ID;
+
+  // Cambios pendientes de la captura rápida: se calculan sobre TODOS los
+  // productos de la sucursal (no solo los filtrados), porque el empleado
+  // puede teclear, cambiar de categoría y seguir tecleando.
+  const cambiosCaptura = useMemo(
+    () => calcularCambiosStock(vista.map((p) => ({ id: p.id, stock: p.stock })), ediciones),
+    [vista, ediciones]
+  );
 
   const nombreArchivo = (ext: string) =>
     `Inventario_${sucursalNombreArchivo()}_${new Date().toISOString().slice(0, 10)}.${ext}`;
@@ -229,12 +257,6 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   const stockBajo = vista.filter((p) => getStockStatus(p.stock, p.minStock) === "low").length;
   const agotados = vista.filter((p) => p.stock === 0).length;
 
-  // 2026-10-05: encabezados reales de la tabla — se reutiliza su longitud
-  // para el colSpan de la fila "sin resultados" (ver la tabla más abajo),
-  // en vez de un 7 fijo que no coincidía cuando este rol no tiene
-  // Role.verMontosCaja (6 columnas de verdad, sin "Costo").
-  const columnasTabla = ["Producto", "Categoría", "Stock actual", "Stock mínimo", "Precio venta", ...(puedeVerMontos ? ["Costo"] : []), "Acción"];
-
   const sucursalNombre = sucursal === TODAS_SUCURSALES_ID
     ? "Todas las sucursales"
     : branches.find((b) => b.id === sucursal)?.name ?? "Sucursal";
@@ -258,6 +280,9 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
   // lib/confirmar-cierre.ts) — complementa a cancelarModal() de arriba, que
   // solo cubre cerrar el modal sin salir de la pestaña.
   useAdvertirCierrePestaña(modalAjuste !== null);
+  // Lo mismo para la captura rápida: con cambios sin guardar, cerrar o
+  // recargar la pestaña pide confirmación.
+  useAdvertirCierrePestaña(cambiosCaptura.length > 0);
 
   const abrirModal = (p: VistaProducto) => {
     setModalAjuste(p);
@@ -307,6 +332,82 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
     });
   };
 
+  // Lo tecleado es de UNA sucursal: al cambiar de sucursal con cambios sin
+  // guardar se pide confirmación para no mezclar capturas.
+  const cambiarSucursal = (nueva: string) => {
+    if (nueva === sucursal) return;
+    if (cambiosCaptura.length > 0 && !confirmarSalirSinGuardar()) return;
+    setEdiciones({});
+    setNotaCaptura(null);
+    setSucursal(nueva);
+  };
+
+  const descartarCambios = () => {
+    if (cambiosCaptura.length > 0 && !confirmarSalirSinGuardar()) return;
+    setEdiciones({});
+    setNotaCaptura(null);
+  };
+
+  const guardarCaptura = () => {
+    if (!puedeCapturar || cambiosCaptura.length === 0) return;
+    setNotaCaptura(null);
+    startTransition(async () => {
+      let res: Awaited<ReturnType<typeof ajustarStockLote>>;
+      try {
+        res = await ajustarStockLote({ tenantSlug, branchId: sucursal, cambios: cambiosCaptura });
+      } catch {
+        setNotaCaptura({ tipo: "error", texto: "No se pudo conectar con el servidor — inténtalo de nuevo. Lo que tecleaste sigue aquí." });
+        return;
+      }
+      if (!res.ok) {
+        setNotaCaptura({ tipo: "error", texto: res.error });
+        return;
+      }
+      // Lo aplicado deja de estar pendiente; lo que falló se queda tecleado.
+      const fallidosIds = new Set(res.fallidos.map((f) => f.productId));
+      setEdiciones((prev) => {
+        const resto: Record<string, string> = {};
+        for (const [id, v] of Object.entries(prev)) if (fallidosIds.has(id)) resto[id] = v;
+        return resto;
+      });
+      router.refresh();
+      if (res.fallidos.length > 0) {
+        const nombres = res.fallidos
+          .slice(0, 3)
+          .map((f) => `${productos.find((p) => p.id === f.productId)?.name ?? "Producto"} (${f.error})`)
+          .join(", ");
+        const mas = res.fallidos.length > 3 ? ` y ${res.fallidos.length - 3} más` : "";
+        setNotaCaptura({
+          tipo: "error",
+          texto: `Se guardaron ${res.aplicados}, pero ${res.fallidos.length} no: ${nombres}${mas}. Siguen en pantalla para que los corrijas.`,
+        });
+        return;
+      }
+      setNotaCaptura({
+        tipo: "ok",
+        texto: `Stock actualizado en ${res.aplicados} producto${res.aplicados === 1 ? "" : "s"} de ${sucursalNombre}.`,
+      });
+    });
+  };
+
+  // Enter/↓ baja a la siguiente fila y Shift+Enter/↑ sube. Tras la última
+  // fila, Enter lleva el foco a "Guardar" (otro Enter lo pulsa): no se
+  // guarda en lote por accidente al teclear el último número.
+  const teclaCaptura = (e: React.KeyboardEvent<HTMLInputElement>, i: number, total: number) => {
+    if (e.nativeEvent.isComposing) return;
+    const atras = (e.key === "Enter" && e.shiftKey) || e.key === "ArrowUp";
+    const adelante = (e.key === "Enter" && !e.shiftKey) || e.key === "ArrowDown";
+    if (!atras && !adelante) return;
+    e.preventDefault();
+    if (atras) {
+      inputsCapturaRef.current[i - 1]?.focus();
+    } else if (i + 1 < total) {
+      inputsCapturaRef.current[i + 1]?.focus();
+    } else if (e.key === "Enter") {
+      guardarCapturaBtnRef.current?.focus();
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
 
@@ -316,7 +417,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
 
         <div className="flex items-center gap-2 order-last sm:order-none w-full sm:w-auto">
           <Building2 className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-          <select value={sucursal} onChange={(e) => setSucursal(e.target.value)}
+          <select value={sucursal} onChange={(e) => cambiarSucursal(e.target.value)}
             className="flex-1 sm:flex-none px-2 py-2 border border-border rounded-lg text-xs bg-muted focus:outline-none focus:border-primary">
             <option value={TODAS_SUCURSALES_ID}>Todas las sucursales</option>
             {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -424,6 +525,60 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
         ))}
       </div>
 
+      {/* ── Captura rápida: aviso del modo + resultado del guardado ── */}
+      {productos.length > 0 && (
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap px-3 sm:px-5 py-2.5 bg-primary/5 border-b border-primary/20">
+          <ListChecks className="w-4 h-4 text-primary-text flex-shrink-0" />
+          {puedeCapturar ? (
+            <p className="text-xs text-foreground flex-1 min-w-[200px]">
+              <span className="font-semibold">Captura rápida — {sucursalNombre}.</span>{" "}
+              <span className="text-muted-foreground">
+                Escribe el <strong>stock nuevo total</strong> y pulsa Enter para bajar a la siguiente fila. Lo que dejes
+                igual no se modifica. Para entradas, salidas o ajustes de un solo producto, usa <strong>Detalles</strong>.
+              </span>
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground flex-1 min-w-[200px]">
+              <span className="font-semibold text-foreground">Estás viendo el total de todas las sucursales.</span>{" "}
+              El stock se captura por sucursal: elige una en el selector de arriba para editarlo.
+            </p>
+          )}
+          {puedeCapturar && (
+            <>
+              <span className="text-xs font-medium text-foreground">
+                {cambiosCaptura.length === 0 ? "Sin cambios" : `${cambiosCaptura.length} cambio${cambiosCaptura.length === 1 ? "" : "s"}`}
+              </span>
+              {cambiosCaptura.length > 0 && (
+                <button onClick={descartarCambios} disabled={isPending} className="btn-secondary px-3 py-1.5 rounded-lg text-xs">
+                  Descartar
+                </button>
+              )}
+              <button ref={guardarCapturaBtnRef} onClick={guardarCaptura} disabled={isPending || cambiosCaptura.length === 0}
+                className="btn-primary px-3 py-1.5 rounded-lg text-xs">
+                {isPending ? "Guardando…" : `Guardar${cambiosCaptura.length > 0 ? ` (${cambiosCaptura.length})` : ""}`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {notaCaptura && (
+        <div
+          className={`flex items-start gap-2 px-3 sm:px-5 py-2 text-xs border-b ${
+            notaCaptura.tipo === "ok"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+              : notaCaptura.tipo === "aviso"
+              ? "bg-amber-50 text-amber-800 border-amber-200"
+              : "bg-red-50 text-red-700 border-red-200"
+          }`}
+          role={notaCaptura.tipo === "error" ? "alert" : "status"}
+        >
+          <p className="flex-1">{notaCaptura.texto}</p>
+          <button onClick={() => setNotaCaptura(null)} aria-label="Cerrar aviso" className="flex-shrink-0 opacity-70 hover:opacity-100">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* ── Tabla con scroll horizontal en móvil ─────────────── */}
       {productos.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
@@ -433,75 +588,102 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
         </div>
       ) : (
         <div className="flex-1 overflow-auto">
-          <table className="w-full min-w-[680px]">
+          <table className="w-full min-w-[420px]">
             <thead className="sticky top-0 bg-card border-b border-border z-10">
               <tr>
-                {/* 2026-09-24: "Costo" es la misma columna de margen que se
-                    omite en los exportables — no se muestra a quien no
-                    tiene Role.verMontosCaja. columnasTabla se reutiliza para
-                    el colSpan de la fila "sin resultados" de abajo (2026-10-05
-                    — antes era un 7 fijo que se desalineaba cuando este rol
-                    no tiene Role.verMontosCaja, 6 columnas de verdad). */}
-                {columnasTabla.map((h) => (
-                  <th key={h} className="text-left text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5 whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
+                <th className="text-left text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5">Producto</th>
+                <th className="hidden md:table-cell text-left text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5">Categoría</th>
+                <th className="hidden lg:table-cell text-left text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5 whitespace-nowrap">Stock mínimo</th>
+                <th className="hidden lg:table-cell text-left text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5 whitespace-nowrap">Precio venta</th>
+                {puedeVerMontos && (
+                  <th className="hidden xl:table-cell text-left text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5">Costo</th>
+                )}
+                <th className="text-right text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5 w-44 whitespace-nowrap">
+                  {puedeCapturar ? "Stock nuevo total" : "Stock (total)"}
+                </th>
+                <th className="text-right text-[11.5px] font-medium text-muted-foreground px-3 sm:px-4 py-2.5 w-24">Acción</th>
               </tr>
             </thead>
             <tbody>
-              {productosFiltrados.map((p) => {
+              {productosFiltrados.map((p, i) => {
                 const status = getStockStatus(p.stock, p.minStock);
-                const rowBg = status === "out" ? "bg-red-50/50" : status === "low" ? "bg-amber-50/50" : "";
-                const pct = p.minStock > 0 ? Math.min((p.stock / (p.minStock * 3)) * 100, 100) : p.stock > 0 ? 100 : 0;
+                const valor = ediciones[p.id] ?? String(p.stock);
+                const cambiado = cambiosCaptura.some((c) => c.productId === p.id);
+                const fondo = cambiado ? "bg-primary/5" : status === "out" ? "bg-red-50/50" : status === "low" ? "bg-amber-50/50" : "";
                 return (
-                  <tr key={p.id} className={`border-b border-border hover:bg-muted transition-colors ${rowBg}`}>
-                    <td className="px-3 sm:px-4 py-2.5">
+                  <tr key={p.id} className={`border-b border-border ${fondo}`}>
+                    <td className="px-3 sm:px-4 py-1.5">
                       <div className="flex items-center gap-2">
                         <div className="relative w-7 h-7 bg-muted rounded-lg flex items-center justify-center text-sm flex-shrink-0">
                           <ProductoIcono value={p.emoji} imageUrl={p.image} className="w-4 h-4 text-primary-text" imageClassName="absolute inset-0 w-full h-full object-cover rounded-lg" />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-medium text-foreground truncate max-w-[140px]">{p.name}</p>
-                          <p className="text-[10.5px] text-muted-foreground">{p.sku ?? "Sin SKU"}</p>
+                          <p className="text-xs font-medium text-foreground truncate max-w-[180px] sm:max-w-[260px]">{p.name}</p>
+                          <p className="text-[10.5px] text-muted-foreground">
+                            {p.sku ?? "Sin SKU"}
+                            {status !== "ok" && (
+                              <span className={`ml-1.5 font-medium ${status === "out" ? "text-red-600" : "text-amber-600"}`}>
+                                · {status === "out" ? "Agotado" : "Stock bajo"}
+                              </span>
+                            )}
+                          </p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 sm:px-4 py-2.5">
+                    <td className="hidden md:table-cell px-3 sm:px-4 py-1.5">
                       <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                         {p.categoryName}
                       </span>
                     </td>
-                    <td className="px-3 sm:px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-14 h-1.5 bg-muted rounded-full overflow-hidden flex-shrink-0">
-                          <div className={`h-full rounded-full transition-all ${
-                            status === "out" ? "bg-red-500" : status === "low" ? "bg-amber-500" : "bg-emerald-500"
-                          }`} style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className={`text-xs font-medium ${
-                          status === "out" ? "text-red-600" : status === "low" ? "text-amber-600" : "text-foreground"
-                        }`}>
-                          {p.stock}
-                        </span>
+                    <td className="hidden lg:table-cell px-3 sm:px-4 py-1.5 text-xs text-muted-foreground">{p.minStock}</td>
+                    <td className="hidden lg:table-cell px-3 sm:px-4 py-1.5 text-xs font-medium text-foreground">{formatMXN(p.price)}</td>
+                    {puedeVerMontos && (
+                      <td className="hidden xl:table-cell px-3 sm:px-4 py-1.5 text-xs text-muted-foreground">{formatMXN(p.cost)}</td>
+                    )}
+                    <td className="px-3 sm:px-4 py-1.5">
+                      <div className="flex items-center justify-end gap-2">
+                        {puedeCapturar ? (
+                          <>
+                            {cambiado && <span className="text-[10.5px] text-muted-foreground whitespace-nowrap">antes {p.stock}</span>}
+                            <input
+                              ref={(el) => { inputsCapturaRef.current[i] = el; }}
+                              type="text"
+                              inputMode="numeric"
+                              autoComplete="off"
+                              aria-label={`Stock nuevo de ${p.name}`}
+                              value={valor}
+                              disabled={isPending}
+                              onFocus={(e) => e.currentTarget.select()}
+                              onChange={(e) => {
+                                const limpio = limpiarEntradaStock(e.target.value);
+                                setEdiciones((prev) => ({ ...prev, [p.id]: limpio }));
+                              }}
+                              onBlur={() => {
+                                // Campo vacío = sin cambio: vuelve a mostrar el stock actual.
+                                setEdiciones((prev) => {
+                                  if (prev[p.id] !== "") return prev;
+                                  const { [p.id]: _omitido, ...resto } = prev;
+                                  return resto;
+                                });
+                              }}
+                              onKeyDown={(e) => teclaCaptura(e, i, productosFiltrados.length)}
+                              className="w-24 px-2.5 py-1.5 border border-border rounded-lg text-sm text-right bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:opacity-60"
+                            />
+                          </>
+                        ) : (
+                          <span className={`text-sm font-medium px-2.5 ${
+                            status === "out" ? "text-red-600" : status === "low" ? "text-amber-600" : "text-foreground"
+                          }`}>
+                            {p.stock}
+                          </span>
+                        )}
                       </div>
                     </td>
-                    <td className="px-3 sm:px-4 py-2.5 text-xs text-muted-foreground">{p.minStock}</td>
-                    <td className="px-3 sm:px-4 py-2.5 text-xs font-medium text-foreground">{formatMXN(p.price)}</td>
-                    {puedeVerMontos && (
-                      <td className="px-3 sm:px-4 py-2.5 text-xs text-muted-foreground">{formatMXN(p.cost)}</td>
-                    )}
-                    <td className="px-3 sm:px-4 py-2.5">
+                    <td className="px-3 sm:px-4 py-1.5 text-right">
                       <button onClick={() => abrirModal(p)}
                         data-tour="inventario-ajustar"
-                        className={`text-[11.5px] px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
-                          status === "out"
-                            ? "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
-                            : status === "low"
-                            ? "bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100"
-                            : "bg-card border-border text-muted-foreground hover:bg-muted"
-                        }`}>
-                        {status !== "ok" ? "Surtir" : "Ajustar"}
+                        className="text-[11.5px] px-2.5 py-1 rounded-lg border border-border bg-card text-muted-foreground hover:bg-muted transition-colors whitespace-nowrap">
+                        Detalles
                       </button>
                     </td>
                   </tr>
@@ -509,7 +691,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
               })}
               {productosFiltrados.length === 0 && (
                 <tr>
-                  <td colSpan={columnasTabla.length} className="text-center text-xs text-muted-foreground py-6">Sin resultados para este filtro.</td>
+                  <td colSpan={7} className="text-center text-xs text-muted-foreground py-6">Sin resultados para este filtro.</td>
                 </tr>
               )}
             </tbody>
@@ -524,7 +706,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
           onClick={cancelarModal}
         >
           <div className="bg-card rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-80 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-sm font-semibold text-foreground mb-1">Ajuste de stock</h2>
+            <h2 className="text-sm font-semibold text-foreground mb-1">Detalles del stock</h2>
             <p className="text-xs text-muted-foreground mb-4 truncate">{modalAjuste.name}</p>
 
             {branches.length > 1 && (
@@ -592,7 +774,7 @@ export default function InventarioClient({ productos, labels, branches, tenantSl
                     Cancelar
                   </button>
                   <button onClick={guardarAjuste} disabled={isPending}
-                    data-tour="inventario-guardar"
+                    data-tour="inventario-guardar" data-enter-primario
                     className="btn-primary flex-1 py-2 rounded-lg text-xs">
                     {isPending ? "Guardando…" : "Guardar"}
                   </button>

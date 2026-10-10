@@ -334,10 +334,19 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     avanzado: "El aviso de \"stock bajo\" compara el stock actual de cada producto contra su columna \"Stock mínimo\", por sucursal.",
     flujos: [
       {
-        titulo: "Ajustar el stock de un producto",
+        titulo: "Capturar el stock de muchos productos a la vez (Captura rápida)",
         tourId: "inventario-ajustar-stock",
         pasos: [
-          "Presiona \"Ajustar\" (o \"Surtir\" si aparece en bajo/agotado) junto al producto.",
+          "Si tienes más de una sucursal, elige la sucursal en el selector de arriba (el stock es por sucursal; en \"Todas las sucursales\" solo se ve el total).",
+          "En la lista, escribe en cada fila el \"Stock nuevo total\": el número que de verdad hay. Presiona Enter para bajar a la siguiente fila (Shift + Enter sube). Lo que dejes igual no se modifica.",
+          "Puedes usar el buscador o los filtros para capturar por partes; lo que ya tecleaste no se pierde.",
+          "Al terminar, presiona Enter en la última fila para llegar a \"Guardar\" y presiónalo: se guardan todos los cambios de una vez.",
+        ],
+      },
+      {
+        titulo: "Registrar una entrada, salida o ajuste de un solo producto (Detalles)",
+        pasos: [
+          "Presiona \"Detalles\" al final de la fila del producto.",
           "Si tienes más de una sucursal, elígela.",
           "Elige el tipo de movimiento: \"Entrada\" (llegó mercancía fuera de una compra, ej. una devolución), \"Salida\" (se dio de baja, ej. dañado o extraviado) o \"Ajuste\" (corrige el stock a un número exacto tras un conteo físico).",
           "Captura la Cantidad (o el \"Nuevo stock total\" si elegiste Ajuste).",
@@ -575,6 +584,12 @@ export interface PreguntaFrecuente {
 }
 
 export const PREGUNTAS_FRECUENTES: PreguntaFrecuente[] = [
+  {
+    modulo: "inventario",
+    pregunta: "¿Cómo capturo el stock de muchos productos sin hacerlo uno por uno?",
+    respuesta:
+      "En Inventario elige tu sucursal y escribe en cada fila el stock nuevo total (el número que de verdad hay); avanza con Enter y al final presiona \"Guardar\". El número que escribes reemplaza al stock anterior; no se suma. Las filas que no tocas se quedan igual. Si necesitas registrar una entrada, una salida o un ajuste de un solo producto, usa el botón \"Detalles\" de su fila.",
+  },
   {
     modulo: "pos",
     pregunta: "¿Qué es Caja rápida y para quién sirve?",

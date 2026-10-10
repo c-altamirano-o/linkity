@@ -1,6 +1,7 @@
 /**
  * Marca de "última actividad" del administrador, guardada en localStorage.
- * La lee TenantShell para cerrar la sesión tras 20 minutos de inactividad.
+ * La lee TenantShell para cerrar la sesión tras el tiempo de inactividad configurado
+ * en TenantShell (DURACION_INACTIVIDAD_ADMIN_MS, hoy 40 minutos).
  *
  * Esa marca es del NAVEGADOR, no de la sesión: si quedó guardada de un inicio
  * de sesión anterior (otro negocio, otro día), al entrar de nuevo se leía como

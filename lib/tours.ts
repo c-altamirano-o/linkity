@@ -748,8 +748,8 @@ export const TOUR_CAJA_CERRAR: TourStep[] = [
 export const TOUR_INVENTARIO_AJUSTAR: TourStep[] = [
   {
     selector: '[data-tour="inventario-ajustar"]',
-    titulo: "1. Ajustar o surtir",
-    descripcion: "Presiona \"Ajustar\" (o \"Surtir\" si el producto está en bajo/agotado) junto al producto que quieres mover.",
+    titulo: "1. Detalles del producto",
+    descripcion: "Para capturar muchos productos, escribe el stock nuevo directo en la lista. Para registrar una entrada, una salida o un ajuste de un solo producto, presiona \"Detalles\" al final de su fila.",
   },
   {
     selector: '[data-tour="inventario-sucursal"]',

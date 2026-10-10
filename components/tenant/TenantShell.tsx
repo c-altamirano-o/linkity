@@ -144,9 +144,11 @@ const NAV_STRUCTURE: { section: string; items: { labelKey: string; href: ModuloK
   }
 ];
 
-// 20 min elegidos por Carlos — ver el comentario largo junto al useEffect
-// que la usa, más abajo.
-const DURACION_INACTIVIDAD_ADMIN_MS = 20 * 60 * 1000;
+// Minutos de inactividad del administrador antes del cierre automático. Eran
+// 20 (elegidos por Carlos, 2026-09-23); 2026-10-10 los cambió a 40, a
+// petición suya. Ver el comentario largo junto al useEffect que la usa, más
+// abajo.
+const DURACION_INACTIVIDAD_ADMIN_MS = 40 * 60 * 1000;
 
 export default function TenantShell({
   children,
@@ -477,7 +479,7 @@ export default function TenantShell({
   // administrador, ya que permite guardar contraseña. Debemos proteger a
   // nuestro cliente de empleados deshonestos" — eligió específicamente
   // "cierre por inactividad, con margen de 20 min" entre las opciones que se
-  // le presentaron. El personal con PIN (modo "staff") NO se ve afectado a
+  // le presentaron (2026-10-10 lo subió a 40 min — ver DURACION_INACTIVIDAD_ADMIN_MS). El personal con PIN (modo "staff") NO se ve afectado a
   // propósito: su sesión ya expira sola a las 12h (DURACION_SESION_MS,
   // lib/staff-auth.ts) y un PIN de 6 dígitos nunca queda "recordado" por el
   // navegador de la misma forma que una contraseña real — el riesgo que esto
@@ -487,7 +489,7 @@ export default function TenantShell({
   // seguridad, no debe tener huecos ni bugs" — encontró una sesión de
   // administrador seguir abierta el lunes, habiéndola dejado el sábado): la
   // primera versión dependía de que un setTimeout de React sonara EXACTO
-  // tras 20 minutos sin interrupción. Eso falla en la práctica: el
+  // tras 20 minutos (entonces) sin interrupción. Eso falla en la práctica: el
   // navegador/sistema operativo puede suspender o "descargar" una pestaña en
   // segundo plano (o la laptop dormirse) sin que eso cuente como cerrarla;
   // cuando pasa, el useEffect se desmonta y el temporizador se cancela —
@@ -504,12 +506,12 @@ export default function TenantShell({
   // el dueño sigue trabajando activamente en otra). Esa marca se compara
   // contra el reloj actual al montar, cada vez que la pestaña recupera
   // visibilidad/foco, y además cada 30s mientras sigue visible — si ya
-  // pasaron 20 minutos o más DE VERDAD, se cierra la sesión de inmediato,
+  // pasó el tiempo límite o más DE VERDAD, se cierra la sesión de inmediato,
   // sin importar si algún temporizador "sobrevivió" o no. Esto es justo lo
   // que detecta el caso de Carlos: una pestaña que estuvo dormida/descargada
   // todo el fin de semana, al volver a activarse, lee que la última
   // actividad real fue hace días y cierra la sesión en el acto, en vez de
-  // regalarle otros 20 minutos de gracia solo por haberse vuelto a montar.
+  // regalarle otro período completo de gracia solo por haberse vuelto a montar.
   // Si localStorage no está disponible (algunos navegadores lo bloquean en
   // modo privado), se degrada a un respaldo en memoria — nunca peor que el
   // comportamiento original, nunca deja de haber ALGÚN cierre por
@@ -555,7 +557,7 @@ export default function TenantShell({
       // queda esperando en la puerta del negocio sin sesión activa, que es
       // el objetivo; si el dueño vuelve, entiende de inmediato por qué ya
       // no está su sesión en vez de verlo como un error random.
-      window.alert("Tu sesión se cerró automáticamente por 20 minutos de inactividad.");
+      window.alert(`Tu sesión se cerró automáticamente por ${DURACION_INACTIVIDAD_ADMIN_MS / 60000} minutos de inactividad.`);
       window.location.href = `/${tenant}`;
     };
 
@@ -576,7 +578,7 @@ export default function TenantShell({
       const ahora = Date.now();
       // Throttle a 5s: mousemove/scroll pueden dispararse decenas de veces
       // por segundo — escribir en localStorage en cada uno sería puro
-      // desperdicio frente a una ventana de 20 minutos, donde 5s de margen
+      // desperdicio frente a una ventana de decenas de minutos, donde 5s de margen
       // no se nota.
       if (ahora - ultimoRegistro < 5000) return;
       ultimoRegistro = ahora;
@@ -586,7 +588,7 @@ export default function TenantShell({
     // Si no hay ninguna marca guardada todavía (primera vez que se monta
     // esta pestaña/sesión), se establece "ahora" como punto de partida — a
     // propósito NUNCA se pisa una marca YA EXISTENTE solo por montarse de
-    // nuevo (eso sería regalar 20 minutos gratis cada vez que la pestaña se
+    // nuevo (eso sería regalar el período completo gratis cada vez que la pestaña se
     // recarga, sin que haya actividad real de por medio).
     try {
       if (window.localStorage.getItem(CLAVE_ULTIMA_ACTIVIDAD) == null) {
