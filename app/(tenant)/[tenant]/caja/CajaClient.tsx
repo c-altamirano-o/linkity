@@ -791,7 +791,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
         <div
           className={`
           ${tabMovil === "caja" ? "flex" : "hidden"} md:flex
-          w-full md:w-64 flex-col bg-card border-r border-border flex-shrink-0
+          w-full md:w-64 flex-col bg-card border-r border-border flex-shrink-0 overflow-y-auto
         `}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -879,7 +879,14 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto px-4 py-2">
+              {/* 2026-10-10, a petición de Carlos: los botones "Registrar
+                  movimiento" y "Cerrar caja" quedaban hasta el fondo de la
+                  pantalla (el resumen ocupaba todo el alto con flex-1) y había
+                  que hacer scroll para llegar a ellos. Ahora el resumen mide
+                  solo lo que ocupa y los botones van justo debajo del total
+                  esperado; si el panel no cabe en una pantalla pequeña, todo
+                  el panel hace scroll en conjunto. */}
+              <div className="px-4 py-2">
                 <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest mb-2">RESUMEN DE LA SESIÓN</p>
                 {puedeVerMontos ? (
                   <div className="space-y-1">
@@ -934,7 +941,7 @@ export default function CajaClient({ data, branches, branchActual, tenantSlug, t
                 )}
               </div>
 
-              <div className="p-3 space-y-2">
+              <div className="px-3 pb-3 pt-2 space-y-2">
                 <button
                   onClick={() => {
                     cerrarModales();
