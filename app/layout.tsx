@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { EnterAccion } from "@/components/EnterAccion";
 
 // Tipografía de toda la interfaz (2026-09-24, a petición de Carlos: "usemos
 // SF Pro Display o alguna similar para todo el saas"). SF Pro es propiedad
@@ -63,7 +64,10 @@ export default function RootLayout({
       lang="es"
       className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <EnterAccion />
+        {children}
+      </body>
     </html>
   );
 }

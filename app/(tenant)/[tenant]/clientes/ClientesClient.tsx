@@ -1012,6 +1012,7 @@ export default function ClientesClient({
             Cancelar
           </button>
           <button
+            data-enter-primario
             onClick={handleGuardar}
             disabled={guardando}
             data-tour="clientes-guardar"
@@ -1353,7 +1354,7 @@ export default function ClientesClient({
               ) : (
                 <div className="space-y-5">
                   {/* Antecedentes */}
-                  <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
+                  <div className="bg-card border border-border rounded-xl p-3 sm:p-4" data-enter-zona>
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-[11.5px] font-semibold text-muted-foreground tracking-widest">ANTECEDENTES</p>
                       {antecedentesGuardado && <span className="text-[11.5px] text-emerald-600">Guardado</span>}
@@ -1432,6 +1433,7 @@ export default function ClientesClient({
                     </div>
                     <div className="flex justify-end mt-3">
                       <button
+                        data-enter-primario
                         onClick={handleGuardarAntecedentes}
                         disabled={antecedentesGuardando}
                         className="btn-primary px-4 py-1.5 text-xs rounded-lg"
@@ -1524,7 +1526,7 @@ export default function ClientesClient({
                               </div>
                             ))}
                           </div>
-                          <div className="flex flex-col sm:flex-row gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2" data-enter-zona>
                             <input
                               type="text"
                               value={dienteNotas}
@@ -1534,6 +1536,7 @@ export default function ClientesClient({
                             />
                             <div className="flex gap-2">
                               <button
+                                data-enter-primario
                                 onClick={handleGuardarDiente}
                                 disabled={dienteGuardando}
                                 data-tour="odontograma-guardar"
@@ -1830,6 +1833,7 @@ export default function ClientesClient({
                 Cancelar
               </button>
               <button
+                data-enter-primario
                 onClick={handleGuardarNota}
                 disabled={notaGuardando}
                 data-tour="nota-guardar"
@@ -1955,6 +1959,7 @@ export default function ClientesClient({
                 Cancelar
               </button>
               <button
+                data-enter-primario
                 onClick={handleGuardarPlan}
                 disabled={planGuardando}
                 data-tour="plan-guardar"

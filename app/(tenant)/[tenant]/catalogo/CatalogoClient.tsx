@@ -1529,6 +1529,7 @@ export default function CatalogoClient({ data, labels, branches, tenantSlug, bus
                 Cancelar
               </button>
               <button
+                data-enter-primario
                 onClick={guardarProducto}
                 disabled={isPending || !form.name.trim() || !form.price}
                 data-tour="catalogo-guardar"
