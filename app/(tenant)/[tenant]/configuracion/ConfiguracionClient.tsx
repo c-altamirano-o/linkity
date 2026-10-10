@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateTelefonoClienteObligatorio, updateCajaRapida, updateDatosTicket, guardarWhatsappBusinessAction, desconectarWhatsappBusinessAction, probarWhatsappBusinessAction, actualizarWhatsappNumeroManualAction } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction, activarModoSimpleAction, desactivarModoSimpleAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
@@ -18,6 +18,7 @@ import {
   type ColoresPersonalizados,
 } from "@/lib/theme-presets";
 import ActivarNotificacionesPush from "@/components/tenant/ActivarNotificacionesPush";
+import { GRUPOS_CONFIG, grupoInicialConfig, type GrupoConfig } from "@/lib/configuracion-grupos";
 import {
   Palette, Check, Loader2, Briefcase, Lock, Eye, EyeOff, ArrowLeft, CheckCircle2,
   LayoutGrid, Sparkles, Image as ImageIcon, CalendarClock, Phone, Undo2,
@@ -32,6 +33,8 @@ import {
   TOUR_CONFIG_TICKET,
   TOUR_CONFIG_MODULOS,
 } from "@/lib/tours";
+
+const ICONO_GRUPO = { general: Briefcase, ventas: Receipt, comunicacion: MessageCircle, modulos: LayoutGrid, cuenta: Lock } as const;
 
 const TIPOS_LOGO_PERMITIDOS = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const TAMANO_MAXIMO_LOGO = 2 * 1024 * 1024; // 2 MB — mismo límite que valida logo-actions.ts en el servidor
@@ -214,6 +217,22 @@ export default function ConfiguracionClient({
   checklistTaller,
 }: ConfiguracionClientProps) {
   const router = useRouter();
+
+  // Submenú activo. Se calcula en el primer render (no en un efecto) para
+  // que, si llega un ?tour= o ?dispositivos=1, el grupo correcto ya esté
+  // visible cuando el tour busque sus elementos.
+  const searchParams = useSearchParams();
+  const [grupo, setGrupo] = useState<GrupoConfig>(() => grupoInicialConfig(searchParams));
+  const contenedorRef = useRef<HTMLDivElement>(null);
+  const cambiarGrupo = (nuevo: GrupoConfig) => {
+    setGrupo(nuevo);
+    // history.replaceState (no router.replace): recuerda el grupo en la
+    // dirección sin pedirle al servidor que vuelva a cargar la página.
+    const params = new URLSearchParams(window.location.search);
+    params.set("seccion", nuevo);
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    contenedorRef.current?.scrollTo({ top: 0 });
+  };
 
   useTourDesdeUrl("config-cambiar-rubro", TOUR_CONFIG_RUBRO);
   useTourDesdeUrl("config-subir-logo", TOUR_CONFIG_LOGO);
@@ -878,7 +897,7 @@ export default function ConfiguracionClient({
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto w-full h-full overflow-y-auto">
+    <div ref={contenedorRef} className="p-4 sm:p-6 max-w-6xl mx-auto w-full h-full overflow-y-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-foreground">Configuración del Sistema</h1>
@@ -891,285 +910,6 @@ export default function ConfiguracionClient({
           <ArrowLeft className="w-3.5 h-3.5" /> Volver al dashboard
         </Link>
       </div>
-
-      {/* ── Apariencia y Tema ─────────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mb-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Palette className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Apariencia y Tema</h2>
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">Selecciona la paleta de colores principal para tu interfaz, estilo Windows Phone.</p>
-
-          {/* Tema "Linkity" (2026-10-02) — ver el comentario junto a
-              THEMES_LINKITY arriba. Va primero y con su propia etiqueta
-              para distinguirlo de ser "uno más" de la galería Windows
-              Phone de abajo. */}
-          <div className="mb-6 pb-5 border-b border-border">
-            <p className="text-sm text-muted-foreground mb-4">
-              <span className="font-medium text-foreground">Linkity</span> — el tema oficial de la plataforma, con los colores de tu logo:
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-              {THEMES_LINKITY.map((theme) => (
-                <button
-                  key={theme.id}
-                  onClick={() => seleccionarTema(theme.id)}
-                  className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                    temaSeleccionado === theme.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
-                  }`}
-                >
-                  <div
-                    className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
-                    style={{ backgroundColor: theme.swatch }}
-                  >
-                    {temaSeleccionado === theme.id && <Check className="w-5 h-5 text-white drop-shadow" />}
-                  </div>
-                  <span className="text-xs font-medium text-foreground">{theme.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-            {THEMES.map((theme) => (
-              <button
-                key={theme.id}
-                onClick={() => seleccionarTema(theme.id)}
-                className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                  temaSeleccionado === theme.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
-                }`}
-              >
-                <div
-                  className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
-                  style={{ backgroundColor: theme.swatch }}
-                >
-                  {temaSeleccionado === theme.id && <Check className="w-5 h-5 text-white drop-shadow" />}
-                </div>
-                <span className="text-xs font-medium text-foreground">{theme.name}</span>
-              </button>
-            ))}
-
-            {/* "Personalizado" (2026-09-24, a petición de Carlos: "hay que
-                agregar un tema totalmente customizable. Elegir el color de
-                fondo y los colores secundarios") — 11ª tarjeta, swatch en
-                degradado (en vez de un solo color) para distinguirla a
-                simple vista de los 10 temas fijos. */}
-            <button
-              onClick={() => seleccionarTema(TEMA_PERSONALIZADO_ID)}
-              className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                temaSeleccionado === TEMA_PERSONALIZADO_ID ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
-              }`}
-            >
-              <div
-                className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
-                style={{ background: "conic-gradient(from 0deg, #D80073, #F09609, #32CD32, #00A4A4, #001AC0, #D80073)" }}
-              >
-                {temaSeleccionado === TEMA_PERSONALIZADO_ID && <Check className="w-5 h-5 text-white drop-shadow" />}
-              </div>
-              <span className="text-xs font-medium text-foreground">Personalizado</span>
-            </button>
-          </div>
-
-          {/* Temas estilo Material Design (2026-09-28, a petición de Carlos:
-              los temas Windows Phone de arriba "se me hacen un poco toscos"
-              — ver el comentario largo junto a MATERIAL_THEMES en
-              lib/theme-presets.ts). Galería aparte, mismo tipo de tarjeta,
-              para que se note que es un estilo distinto de los de arriba. */}
-          <div className="mt-6 pt-5 border-t border-border">
-            <p className="text-sm text-muted-foreground mb-4">O, si prefieres un estilo Material Design:</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-              {THEMES_MATERIAL.map((theme) => (
-                <button
-                  key={theme.id}
-                  onClick={() => seleccionarTema(theme.id)}
-                  className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                    temaSeleccionado === theme.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
-                  }`}
-                >
-                  <div
-                    className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
-                    style={{ backgroundColor: theme.swatch }}
-                  >
-                    {temaSeleccionado === theme.id && <Check className="w-5 h-5 text-white drop-shadow" />}
-                  </div>
-                  <span className="text-xs font-medium text-foreground">{theme.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Selector de colores del tema "Personalizado" — solo se muestra
-              cuando ese es el tema elegido. 7 selectores: fondo, ícono/
-              texto y las 5 fichas (respuesta explícita de Carlos: control
-              total sobre los 7, sin calcular nada automático). */}
-          {temaSeleccionado === TEMA_PERSONALIZADO_ID && (
-            <div className="mt-5 border-t border-border pt-5">
-              <p className="text-xs font-medium text-muted-foreground mb-3">Colores del tema personalizado</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-muted-foreground">Fondo / color primario</span>
-                  <input
-                    type="color"
-                    value={coloresPersonalizados.backgroundColor}
-                    onChange={(e) => cambiarColorPersonalizado({ backgroundColor: e.target.value })}
-                    className="w-full h-9 rounded-lg border border-border cursor-pointer bg-card"
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-muted-foreground">Ícono / texto de fichas</span>
-                  <input
-                    type="color"
-                    value={coloresPersonalizados.defaultIconColor}
-                    onChange={(e) => cambiarColorPersonalizado({ defaultIconColor: e.target.value })}
-                    className="w-full h-9 rounded-lg border border-border cursor-pointer bg-card"
-                  />
-                </label>
-                {coloresPersonalizados.tileColors.map((hex, i) => (
-                  <label key={i} className="flex flex-col gap-1">
-                    <span className="text-[11px] text-muted-foreground">{ETIQUETAS_FICHAS[i]}</span>
-                    <input
-                      type="color"
-                      value={hex}
-                      onChange={(e) => cambiarFichaPersonalizada(i, e.target.value)}
-                      className="w-full h-9 rounded-lg border border-border cursor-pointer bg-card"
-                    />
-                  </label>
-                ))}
-              </div>
-              <label className="flex items-center gap-2 mt-4 text-xs text-foreground">
-                <input
-                  type="checkbox"
-                  checked={coloresPersonalizados.baseStyle === "Light"}
-                  onChange={(e) => cambiarColorPersonalizado({ baseStyle: e.target.checked ? "Light" : "Dark" })}
-                />
-                Interfaz clara (para fondos claros — igual que &quot;Windows 8 Start&quot;)
-              </label>
-            </div>
-          )}
-
-          {/* Intensidad (2026-09-23, a petición de Carlos: "hazlas
-              personalizables para subir o bajar la intensidad de los
-              colores") — escala solo la saturación de la paleta elegida
-              arriba, ver escalarSaturacion en lib/theme-presets.ts. 100 =
-              la paleta tal cual, sin tocar. */}
-          <div className="mt-6 border-t border-border pt-5">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-muted-foreground">Intensidad del color</label>
-              <span className="text-xs font-semibold text-foreground tabular-nums">{intensidadSeleccionada}%</span>
-            </div>
-            <input
-              type="range"
-              min={INTENSIDAD_MIN}
-              max={INTENSIDAD_MAX}
-              step={5}
-              value={intensidadSeleccionada}
-              onChange={(e) => cambiarIntensidad(Number(e.target.value))}
-              className="w-full accent-primary"
-            />
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-[11px] text-muted-foreground">Apagado</span>
-              <span className="text-[11px] text-muted-foreground">Original</span>
-              <span className="text-[11px] text-muted-foreground">Vivo</span>
-            </div>
-          </div>
-
-          {/* Intensidad del fondo (2026-09-24, a petición de Carlos: "estoy
-              complacido con el modulador de intensidad para las fichas,
-              pero también falta uno para el fondo o color primario") —
-              segundo modulador, INDEPENDIENTE del de arriba: este solo
-              escala backgroundColor (ventana/color primario), nunca las
-              fichas. Pasos de 10% (a diferencia del de arriba, de 5%), tal
-              como Carlos pidió explícitamente ("aplicar variaciones de
-              10% progresivos"). */}
-          <div className="mt-6 border-t border-border pt-5">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-muted-foreground">Intensidad del fondo</label>
-              <span className="text-xs font-semibold text-foreground tabular-nums">{intensidadFondoSeleccionada}%</span>
-            </div>
-            <input
-              type="range"
-              min={INTENSIDAD_MIN}
-              max={INTENSIDAD_MAX}
-              step={10}
-              value={intensidadFondoSeleccionada}
-              onChange={(e) => cambiarIntensidadFondo(Number(e.target.value))}
-              className="w-full accent-primary"
-            />
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-[11px] text-muted-foreground">Apagado</span>
-              <span className="text-[11px] text-muted-foreground">Original</span>
-              <span className="text-[11px] text-muted-foreground">Vivo</span>
-            </div>
-          </div>
-
-          <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
-            <button
-              onClick={guardarTema}
-              disabled={temaPending}
-              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
-            >
-              {temaPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {temaPending ? "Aplicando..." : "Guardar cambios"}
-            </button>
-            {temaMensaje && (
-              <span className={`text-sm font-medium animate-in fade-in ${temaMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
-                {temaMensaje.texto}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Giro del negocio ──────────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Briefcase className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Giro del negocio</h2>
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">
-            Elige el giro de tu negocio para que el sistema use la terminología correcta en todos los módulos
-            — por ejemplo, &quot;Reparaciones&quot; se convierte en &quot;Órdenes de Servicio&quot; para un taller
-            automotriz. Si más adelante quieres un nombre distinto para tu negocio en particular, puedes
-            personalizarlo aparte.
-          </p>
-
-          <div className="max-w-sm" data-tour="config-rubro-select">
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Rubro</label>
-            <select
-              value={rubroSeleccionado}
-              onChange={(e) => setRubroSeleccionado(e.target.value)}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            >
-              <option value={SIN_RUBRO}>Otro / Sin especificar (textos neutros)</option>
-              {BUSINESS_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
-            <button
-              onClick={guardarRubro}
-              disabled={rubroPending}
-              data-tour="config-rubro-guardar"
-              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
-            >
-              {rubroPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {rubroPending ? "Aplicando..." : "Guardar cambios"}
-            </button>
-            {rubroMensaje && (
-              <span className={`text-sm font-medium animate-in fade-in ${rubroMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
-                {rubroMensaje.texto}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <VocabularioNegocio tenantSlug={tenantSlug} businessType={businessTypeInicial} actuales={vocabularioActual} mostrarReparaciones={reparacionesActivo} mostrarClinico={clinicoActivo} />
 
       {/* ── Configura tu Taller (checklist) ────────────────────── */}
       {/* 2026-09-24, a petición de Carlos: el escudo genérico de Taller no
@@ -1253,996 +993,1326 @@ export default function ConfiguracionClient({
         );
       })()}
 
-      {/* ── Semana laboral ─────────────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <CalendarClock className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Semana laboral</h2>
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">
-            Elige en qué día empieza tu semana de trabajo. Este es el día que usa el sistema para calcular
-            &quot;ventas de esta semana&quot; en el Dashboard, las horas trabajadas de tu personal, y el filtro
-            &quot;Semana&quot; de Asistencia — para que coincida con tu corte real de nómina, no con un calendario
-            genérico.
-          </p>
-
-          <div className="max-w-sm">
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tu semana laboral empieza el</label>
-            <select
-              value={weekStartDaySeleccionado}
-              onChange={(e) => setWeekStartDaySeleccionado(Number(e.target.value))}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            >
-              {DIAS_SEMANA_COMPLETOS.map((nombre, i) => (
-                <option key={nombre} value={i}>{nombre}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
-            <button
-              onClick={guardarWeekStartDay}
-              disabled={weekStartDayPending}
-              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
-            >
-              {weekStartDayPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {weekStartDayPending ? "Aplicando..." : "Guardar cambios"}
-            </button>
-            {weekStartDayMensaje && (
-              <span className={`text-sm font-medium animate-in fade-in ${weekStartDayMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
-                {weekStartDayMensaje.texto}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Teléfono de soporte ────────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Phone className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Teléfono de soporte</h2>
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">
-            Aparece en los tickets de reparación y venta (impresos y digitales) para que tus clientes
-            sepan a qué número comunicarse.
-          </p>
-
-          <div className="max-w-sm">
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Teléfono</label>
-            <input
-              type="tel"
-              value={supportPhone}
-              onChange={(e) => setSupportPhone(e.target.value)}
-              placeholder="Ej. 55 1234 5678"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            />
-          </div>
-
-          <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
-            <button
-              onClick={guardarSupportPhone}
-              disabled={supportPhonePending}
-              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
-            >
-              {supportPhonePending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {supportPhonePending ? "Aplicando..." : "Guardar cambios"}
-            </button>
-            {supportPhoneMensaje && (
-              <span className={`text-sm font-medium animate-in fade-in ${supportPhoneMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
-                {supportPhoneMensaje.texto}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Personalizar ticket ─────────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Receipt className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Personalizar ticket</h2>
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">
-            Estos datos aparecen en el encabezado y pie de los tickets impresos (ventas y reparaciones).
-            El nombre, logo y teléfono ya se toman de las secciones de arriba — aquí solo agregas dirección,
-            RFC, un mensaje de despedida propio y un texto libre al fondo del ticket.
-          </p>
-
-          <div className="max-w-sm space-y-4" data-tour="config-ticket-datos">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Dirección</label>
-              <input
-                type="text"
-                value={direccionTicket}
-                onChange={(e) => setDireccionTicket(e.target.value)}
-                placeholder="Ej. Av. Reforma 123, CDMX"
-                maxLength={150}
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">RFC</label>
-              <input
-                type="text"
-                value={rfcTicket}
-                onChange={(e) => setRfcTicket(e.target.value.toUpperCase())}
-                placeholder="Ej. XAXX010101000"
-                maxLength={13}
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary uppercase"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Mensaje de pie</label>
-              <textarea
-                value={mensajePieTicket}
-                onChange={(e) => setMensajePieTicket(e.target.value)}
-                placeholder="Ej. ¡Gracias por tu preferencia! Garantía de 30 días presentando este ticket."
-                maxLength={200}
-                rows={3}
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-              />
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Extra <span className="font-normal">(sin límite de caracteres — direcciones, promociones, un saludo, lo que quieras)</span>
-            </label>
-            <textarea
-              value={extraTicket}
-              onChange={(e) => setExtraTicket(e.target.value)}
-              placeholder="Ej. También nos encuentras en Insurgentes 456 · Síguenos en @tunegocio · 10% de descuento en tu próxima visita presentando este ticket"
-              rows={5}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
-            />
-          </div>
-
-          <div className="mt-6">
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Formato de impresión</label>
-            <p className="text-xs text-muted-foreground mb-2.5">
-              Elige el tipo de impresora o salida que usas para que el ticket se ajuste al ancho de papel correcto.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-xl">
-              {FORMATOS_TICKET.map((f) => (
-                <button
-                  key={f.valor}
-                  type="button"
-                  onClick={() => setFormatoTicket(f.valor)}
-                  className={`text-left p-3 rounded-lg border text-xs transition-all ${
-                    formatoTicket === f.valor
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                      : "border-border bg-muted hover:border-foreground/30"
-                  }`}
-                >
-                  <p className="font-medium text-foreground">{f.nombre}</p>
-                  <p className="text-muted-foreground mt-0.5">{f.descripcion}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* QR del ticket de VENTA (2026-10-01, a petición de Carlos: "sería
-              opcional para ventas... que el cliente decidiera si mostrar o
-              no un QR y que eligiera qué se mostraría en él") — a propósito
-              SOLO afecta la venta normal de artículo/servicio; el QR del
-              cobro de una reparación (aunque se cobre desde este mismo POS)
-              se queda fijo apuntando a su página de seguimiento, nunca pasa
-              por aquí (ver el comentario largo en POSClient.tsx). */}
-          <div className="mt-6 border-t border-border pt-5">
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={mostrarQRTicket}
-                onChange={(e) => setMostrarQRTicket(e.target.checked)}
-              />
-              Mostrar código QR en el ticket de venta
-            </label>
-            <p className="text-xs text-muted-foreground mt-1 ml-6">
-              Solo aplica a la venta de un artículo o servicio. El QR del cobro de una reparación siempre va a su página de seguimiento, sin importar lo que elijas aquí.
-            </p>
-
-            {mostrarQRTicket && (
-              <div className="mt-4 ml-6 max-w-xl">
-                <label className="block text-xs font-medium text-muted-foreground mb-2">Qué mostrar en el QR</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {DESTINOS_QR_TICKET.map((d) => (
-                    <button
-                      key={d.valor}
-                      type="button"
-                      onClick={() => setQrDestinoTicket(d.valor)}
-                      className={`text-left p-3 rounded-lg border text-xs transition-all ${
-                        qrDestinoTicket === d.valor
-                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                          : "border-border bg-muted hover:border-foreground/30"
-                      }`}
-                    >
-                      <p className="font-medium text-foreground">{d.nombre}</p>
-                      <p className="text-muted-foreground mt-0.5">{d.descripcion}</p>
-                    </button>
-                  ))}
-                </div>
-
-                {DESTINOS_QR_TICKET.find((d) => d.valor === qrDestinoTicket)?.necesitaUrl && (
-                  <div className="mt-3">
-                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">Link</label>
-                    <input
-                      type="text"
-                      value={qrUrlTicket}
-                      onChange={(e) => setQrUrlTicket(e.target.value)}
-                      placeholder={DESTINOS_QR_TICKET.find((d) => d.valor === qrDestinoTicket)?.placeholderUrl}
-                      maxLength={500}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    />
-                  </div>
-                )}
-
-                {qrDestinoTicket === "PERSONALIZADO" && (
-                  <div className="mt-3">
-                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                      Etiqueta bajo el QR <span className="font-normal">(ej. &quot;Síguenos&quot;, &quot;Más información&quot;)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={qrEtiquetaTicket}
-                      onChange={(e) => setQrEtiquetaTicket(e.target.value)}
-                      placeholder="Más información"
-                      maxLength={60}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-6 flex items-center gap-4 border-t border-border pt-5">
-            <button
-              onClick={guardarDatosTicket}
-              disabled={datosTicketPending}
-              data-tour="config-ticket-guardar"
-              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
-            >
-              {datosTicketPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {datosTicketPending ? "Aplicando..." : "Guardar cambios"}
-            </button>
-            {datosTicketMensaje && (
-              <span className={`text-sm font-medium animate-in fade-in ${datosTicketMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
-                {datosTicketMensaje.texto}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── WhatsApp Business ───────────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <MessageCircle className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">WhatsApp Business</h2>
-          {whatsappTieneToken && (
-            <span className="ml-auto text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">Conectado</span>
-          )}
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-2">
-            Conecta la cuenta de WhatsApp Business de TU negocio (gratis, directo con Meta) para que tus
-            clientes reciban un WhatsApp automático cuando reciban su trabajo y cada vez que cambie de estatus —
-            sin depender de nadie más marcando "avisar" a mano.
-          </p>
-          <p className="text-sm text-muted-foreground mb-5">
-            Necesitas dos cosas de tu propia cuenta de Meta for Developers (developers.facebook.com): el{" "}
-            <strong>Phone Number ID</strong> y un <strong>Access Token</strong> permanente, y además tener
-            aprobada una plantilla de mensaje llamada exactamente <code className="text-xs bg-muted px-1 py-0.5 rounded">actualizacion_reparacion_linkity</code>{" "}
-            (categoría Utilidad, idioma Español MX, cuerpo con un solo parámetro <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{1}}"}</code>).
-            Pídeme la guía paso a paso si no la tienes todavía.
-          </p>
-
-          <div className="max-w-sm space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Phone Number ID</label>
-              <input
-                type="text"
-                value={whatsappPhoneNumberId}
-                onChange={(e) => setWhatsappPhoneNumberId(e.target.value)}
-                placeholder="Ej. 123456789012345"
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Access Token{" "}
-                {whatsappTieneToken && <span className="font-normal text-muted-foreground">(ya hay uno guardado — déjalo vacío para no cambiarlo)</span>}
-              </label>
-              <div className="relative">
-                <input
-                  type={whatsappMostrarToken ? "text" : "password"}
-                  value={whatsappAccessTokenInput}
-                  onChange={(e) => setWhatsappAccessTokenInput(e.target.value)}
-                  placeholder={whatsappTieneToken ? "•••••••••••••••••••••" : "Pega aquí tu Access Token"}
-                  className="w-full px-3 py-2.5 pr-10 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
-                <button
-                  type="button"
-                  onClick={() => setWhatsappMostrarToken((v) => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  tabIndex={-1}
-                >
-                  {whatsappMostrarToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                App Secret <span className="font-normal text-muted-foreground">(opcional, recomendado)</span>{" "}
-                {whatsappTieneAppSecret && <span className="font-normal text-muted-foreground">(ya hay uno guardado — déjalo vacío para no cambiarlo)</span>}
-              </label>
-              <input
-                type="password"
-                autoComplete="off"
-                value={whatsappAppSecretInput}
-                onChange={(e) => setWhatsappAppSecretInput(e.target.value)}
-                placeholder={whatsappTieneAppSecret ? "•••••••••••••••••••••" : "Meta → Configuración → Básica"}
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-              <p className="text-xs text-muted-foreground mt-1.5">
-                Sirve para comprobar que los avisos de entrega de tus mensajes de verdad vienen de Meta.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-8 flex items-center gap-3 flex-wrap border-t border-border pt-5">
-            <button
-              onClick={guardarWhatsapp}
-              disabled={whatsappPending}
-              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
-            >
-              {whatsappPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {whatsappPending ? "Aplicando..." : "Guardar cambios"}
-            </button>
-            {whatsappTieneToken && (
+      {/* ── Submenús de Configuración (2026-10-10, a petición de Carlos:
+          19 secciones en una columna obligaban a un scroll enorme y el
+          dueño perdía de vista lo que quería cambiar). Todos los grupos
+          siguen montados y solo se ocultan con CSS, así lo escrito en un
+          formulario sin guardar no se pierde al cambiar de grupo ni se
+          rompen los tours (que buscan elementos con data-tour). El grupo
+          activo vive en la dirección (?seccion=) — ver
+          lib/configuracion-grupos.ts. ───────────────────────────── */}
+      <div className="md:flex md:items-start md:gap-6">
+        <nav
+          aria-label="Secciones de configuración"
+          className="md:w-56 md:flex-shrink-0 md:sticky md:top-0 mb-4 md:mb-0 -mx-4 px-4 sm:mx-0 sm:px-0 flex md:flex-col gap-1.5 overflow-x-auto md:overflow-visible pb-1 md:pb-0"
+        >
+          {GRUPOS_CONFIG.map((g) => {
+            const activo = grupo === g.id;
+            const Icono = ICONO_GRUPO[g.id];
+            return (
               <button
-                onClick={desconectarWhatsapp}
-                disabled={whatsappPending}
-                className="btn-secondary px-4 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
-              >
-                <Unlink className="w-3.5 h-3.5" /> Desconectar
-              </button>
-            )}
-            {whatsappMensaje && (
-              <span className={`text-sm font-medium animate-in fade-in ${whatsappMensaje.tipo === "ok" ? "text-emerald-600" : "text-amber-600"}`}>
-                {whatsappMensaje.texto}
-              </span>
-            )}
-            {whatsappError && <span className="text-sm font-medium text-destructive animate-in fade-in">{whatsappError}</span>}
-          </div>
-
-          {whatsappTieneToken && (
-            <div className="mt-5 border-t border-border pt-5 max-w-sm">
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Enviar mensaje de prueba</label>
-              <p className="text-xs text-muted-foreground mb-2">Escribe un número con código de país (ej. 5215512345678) para verificar que todo quedó bien conectado.</p>
-              <div className="flex gap-2">
-                <input
-                  type="tel"
-                  value={whatsappTelefonoPrueba}
-                  onChange={(e) => setWhatsappTelefonoPrueba(e.target.value)}
-                  placeholder="5215512345678"
-                  className="flex-1 px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
-                <button
-                  onClick={enviarPruebaWhatsapp}
-                  disabled={whatsappPruebaPending || !whatsappTelefonoPrueba.trim()}
-                  className="px-4 py-2.5 bg-[#25D366] hover:bg-[#22c35e] disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all flex items-center gap-2 flex-shrink-0"
-                >
-                  {whatsappPruebaPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  Enviar prueba
-                </button>
-              </div>
-              {whatsappPruebaResultado && (
-                <p className={`text-xs mt-2 ${whatsappPruebaResultado.ok ? "text-emerald-600" : "text-destructive"}`}>
-                  {whatsappPruebaResultado.texto}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── WhatsApp manual (sin API) ────────────────────────────
-          2026-10-02, a petición de Carlos: no todos los negocios quieren o
-          pueden pasar por la verificación de negocio de Meta que exige el
-          modo de arriba — esta es la alternativa de cero trámite: un
-          enlace "wa.me/..." que abre WhatsApp con el mensaje ya escrito,
-          para que alguien del negocio lo mande a mano. Si arriba ya está
-          conectado el modo API, ese manda siempre (ver whatsappModoActivo
-          en lib/whatsapp-mensaje.ts) — se lo advertimos aquí mismo para que
-          no piense que necesita las dos cosas. */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <MessageCircle className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">WhatsApp manual (sin API)</h2>
-          {whatsappNumeroManual.trim() && !whatsappTieneToken && (
-            <span className="ml-auto text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">Activo</span>
-          )}
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-2">
-            Para cuando no quieres (o no puedes todavía) pasar por la verificación de negocio de Meta: captura
-            aquí el número de WhatsApp al que quieres que tus clientes escriban. No hay ningún envío automático
-            — el botón "Avisar" de Reparaciones y la página pública de seguimiento abrirán WhatsApp con el
-            mensaje ya escrito, y alguien de tu negocio lo manda a mano, como cualquier chat normal.
-          </p>
-          {whatsappTieneToken && (
-            <p className="text-xs text-amber-600 mb-4">
-              Ya tienes conectado el WhatsApp Business de arriba (modo automático) — mientras esté conectado, ese
-              es el que se usa siempre, y este número manual no se mostrará. Solo sirve como respaldo si algún
-              día desconectas el de arriba.
-            </p>
-          )}
-
-          <div className="max-w-sm">
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Número de WhatsApp</label>
-            <input
-              type="tel"
-              value={whatsappNumeroManual}
-              onChange={(e) => setWhatsappNumeroManual(e.target.value)}
-              placeholder="Ej. 55 1234 5678"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            />
-          </div>
-
-          <div className="mt-5 flex items-center gap-3 flex-wrap border-t border-border pt-5">
-            <button
-              onClick={guardarWhatsappManual}
-              disabled={whatsappManualPending}
-              className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
-            >
-              {whatsappManualPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {whatsappManualPending ? "Aplicando..." : "Guardar cambios"}
-            </button>
-            {whatsappManualMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{whatsappManualMensaje}</span>}
-            {whatsappManualError && <span className="text-sm font-medium text-destructive animate-in fade-in">{whatsappManualError}</span>}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Cobro en devoluciones ──────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Undo2 className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Cobro en devoluciones</h2>
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">
-            Cuando un trabajo no se pudo completar y se marca como devolución, decide si tu negocio cobra algo al
-            cliente (por ejemplo, por el diagnóstico o el intento de reparación) antes de entregárselo. Esta
-            regla aplica a TODAS tus sucursales por igual.
-          </p>
-
-          <label className="flex items-start gap-3 max-w-md cursor-pointer">
-            <input
-              type="checkbox"
-              checked={cobrarEnDevolucion}
-              disabled={cobrarEnDevolucionPending}
-              onChange={(e) => alternarCobrarEnDevolucion(e.target.checked)}
-              className="mt-0.5 w-4 h-4 accent-primary disabled:opacity-50"
-            />
-            <span className="text-sm text-foreground">
-              Cobrar al entregar una devolución
-              <span className="block text-xs text-muted-foreground mt-0.5">
-                {cobrarEnDevolucion
-                  ? "Activado — entregar una devolución exige pasar por \"Cobrar y entregar\" en tienda."
-                  : "Desactivado — una devolución se entrega directo, sin cargo."}
-              </span>
-            </span>
-          </label>
-
-          {cobrarEnDevolucionMensaje && (
-            <p className={`text-sm font-medium mt-4 animate-in fade-in ${cobrarEnDevolucionMensaje.startsWith("Error") || cobrarEnDevolucionMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
-              {cobrarEnDevolucionMensaje}
-            </p>
-          )}
-
-          {/* Monto fijo a cobrar (2026-09-26) — solo aplica/se muestra
-              habilitado cuando la casilla de arriba está activa. Este monto
-              es el que se sugiere (editable) en el carrito de POS al usar
-              "Entregar" sobre una devolución. */}
-          {cobrarEnDevolucion && (
-            <div className="mt-5 pt-5 border-t border-border max-w-md">
-              <label className="block text-sm text-foreground mb-1.5">
-                Monto a cobrar por devolución
-                <span className="block text-xs text-muted-foreground mt-0.5">
-                  Se sugiere este monto al entregar una devolución en POS — el cajero lo puede ajustar ahí mismo si un caso particular lo requiere.
-                </span>
-              </label>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={montoDevolucion}
-                    disabled={montoDevolucionPending}
-                    onChange={(e) => setMontoDevolucion(e.target.value)}
-                    className="w-full pl-6 pr-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground disabled:opacity-50"
-                  />
-                </div>
-                <button
-                  onClick={guardarMontoDevolucion}
-                  disabled={montoDevolucionPending}
-                  className="btn-primary px-4 py-2 rounded-lg text-sm transition-colors">
-                  Guardar
-                </button>
-              </div>
-              {montoDevolucionMensaje && (
-                <p className={`text-sm font-medium mt-2 animate-in fade-in ${montoDevolucionMensaje.startsWith("Error") || montoDevolucionMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
-                  {montoDevolucionMensaje}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Teléfono del cliente ─────────────────────────────────
-          2026-10-05, a petición de Carlos, probando el alta de clientes
-          desde "Nueva reparación": "en el campo 'Telefono' hay que
-          habilitar en Configuraciones una casilla de verificación si el
-          campo será Opcional o Forzoso". */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Phone className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Teléfono del cliente</h2>
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">
-            El teléfono del cliente se usa para enviarle notificaciones automáticas por WhatsApp sobre el
-            estatus de su trabajo. Decide si al dar de alta un cliente (en Clientes o al recibir una
-            reparación) este campo es opcional o forzoso. Esta regla aplica a TODAS tus sucursales por igual.
-          </p>
-
-          <label className="flex items-start gap-3 max-w-md cursor-pointer">
-            <input
-              type="checkbox"
-              checked={telefonoClienteObligatorio}
-              disabled={telefonoClienteObligatorioPending}
-              onChange={(e) => alternarTelefonoClienteObligatorio(e.target.checked)}
-              className="mt-0.5 w-4 h-4 accent-primary disabled:opacity-50"
-            />
-            <span className="text-sm text-foreground">
-              Teléfono obligatorio al dar de alta un cliente
-              <span className="block text-xs text-muted-foreground mt-0.5">
-                {telefonoClienteObligatorio
-                  ? "Activado — no se puede guardar un cliente nuevo sin teléfono."
-                  : "Desactivado — un cliente se puede guardar sin teléfono (no recibirá notificaciones de WhatsApp)."}
-              </span>
-            </span>
-          </label>
-
-          {telefonoClienteObligatorioMensaje && (
-            <p className={`text-sm font-medium mt-4 animate-in fade-in ${telefonoClienteObligatorioMensaje.startsWith("Error") || telefonoClienteObligatorioMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
-              {telefonoClienteObligatorioMensaje}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ── Caja rápida ───────────────────────────────────────────
-          2026-10-09, a petición de Carlos: "tiendas que tengan flujo de
-          cliente continuo tipo supermercado ... que el dueño del tenant
-          decida". Casilla con guardado inmediato, mismo patrón que
-          "Teléfono del cliente". */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6" data-tour="config-caja-rapida">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Zap className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Caja rápida</h2>
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-3">
-            Para negocios con clientes en fila continua (tienda, abarrotes, supermercado). Con Caja rápida
-            activada, el punto de venta mantiene el cursor siempre en el buscador: escaneas o escribes cada
-            artículo y presionas Enter; con el buscador vacío, Enter cobra e imprime el ticket.
-          </p>
-          <p className="text-sm text-muted-foreground mb-5">
-            Después de cada venta el método de pago vuelve a Efectivo y el carrito queda listo para el
-            siguiente cliente, sin usar el mouse. Esta opción aplica a TODAS tus sucursales por igual.
-          </p>
-
-          <label className="flex items-start gap-3 max-w-md cursor-pointer">
-            <input
-              type="checkbox"
-              checked={cajaRapida}
-              disabled={cajaRapidaPending}
-              onChange={(e) => alternarCajaRapida(e.target.checked)}
-              className="mt-0.5 w-4 h-4 accent-primary disabled:opacity-50"
-            />
-            <span className="text-sm text-foreground">
-              Activar Caja rápida en el punto de venta
-              <span className="block text-xs text-muted-foreground mt-0.5">
-                {cajaRapida
-                  ? "Activada — Enter con el buscador vacío cobra la venta."
-                  : "Desactivada — después de agregar un artículo, el cursor pasa al botón Cobrar."}
-              </span>
-            </span>
-          </label>
-
-          {cajaRapidaMensaje && (
-            <p className={`text-sm font-medium mt-4 animate-in fade-in ${cajaRapidaMensaje.startsWith("Error") || cajaRapidaMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
-              {cajaRapidaMensaje}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ── Módulos de tu negocio ──────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <LayoutGrid className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Módulos de tu negocio</h2>
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">
-            Elige qué módulos aparecen en tu menú. Apagar uno no borra ninguna información que ya
-            hayas capturado — solo deja de mostrarse hasta que lo vuelvas a activar.
-          </p>
-
-          {/* Modo Simple (2026-10-03, a petición de Carlos: "a un
-              autoempleado lo estamos saturando de opciones que
-              probablemente no usará... debemos crear una interface que
-              también piense en él. En el único que trabaja en su empresa,
-              o el dueño que solo tiene un empleado en la tienda y un
-              técnico" — y, confirmado explícitamente, "el modo simple lo
-              puede activar o desactivar el dueño"). Un solo switch que
-              apaga de un golpe los módulos que casi nunca le sirven a 1-2
-              personas (Compras, Personal, Asistencia, Sucursales — ver
-              MODULOS_OCULTOS_MODO_SIMPLE, lib/modules-catalog.ts);
-              Reparaciones/Caja/Catálogo/Inventario/Reportes/Facturación se
-              quedan, porque siguen siendo el pan de cada día de un taller
-              chico. No borra nada — es un atajo sobre el mismo switch por
-              módulo de abajo, así que el dueño puede re-prender cualquiera
-              de los 4 a mano sin desactivar Modo Simple por completo. */}
-          <div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3.5">
-            <Zap className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-xs font-medium text-foreground">Modo Simple</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Pensado para quien trabaja solo o con 1-2 personas: oculta Compras, Personal,
-                Asistencia y Sucursales de tu menú, para que solo veas lo esencial. Puedes
-                desactivarlo cuando quieras sin perder ninguna información.
-              </p>
-              <button
-                onClick={alternarModoSimple}
-                disabled={aplicandoModoSimple}
-                className={`mt-2 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex items-center gap-1.5 ${
-                  modoSimpleActivo ? "text-foreground font-medium" : "btn-ghost"
+                key={g.id}
+                type="button"
+                onClick={() => cambiarGrupo(g.id)}
+                aria-current={activo ? "page" : undefined}
+                className={`flex items-center gap-2.5 text-left rounded-lg px-3 py-2 md:py-2.5 border transition-colors flex-shrink-0 ${
+                  activo
+                    ? "bg-primary/10 border-primary/30 text-primary-text"
+                    : "bg-card border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
-                {aplicandoModoSimple && <Loader2 className="w-3 h-3 animate-spin" />}
-                {!aplicandoModoSimple && (
-                  <span
-                    className={`relative w-8 h-4.5 rounded-full transition-colors flex-shrink-0 inline-block ${
-                      modoSimpleActivo ? "bg-amber-500" : "bg-muted-foreground/30"
-                    }`}
-                    style={{ width: "2rem", height: "1.125rem" }}
-                  >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${
-                        modoSimpleActivo ? "translate-x-3.5" : "translate-x-0"
-                      }`}
-                    />
-                  </span>
-                )}
-                {modoSimpleActivo ? "Modo Simple activado" : "Activar Modo Simple"}
+                <Icono className="w-4 h-4 flex-shrink-0" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium whitespace-nowrap md:whitespace-normal">{g.etiqueta}</span>
+                  <span className="hidden md:block text-[11px] leading-tight opacity-80">{g.descripcion}</span>
+                </span>
               </button>
-            </div>
+            );
+          })}
+        </nav>
+
+        <div className="flex-1 min-w-0">
+          <div className={grupo === "general" ? "[&>*:first-child]:mt-0" : "hidden"} data-grupo-config="general">
+        {/* ── Giro del negocio ──────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <Briefcase className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Giro del negocio</h2>
           </div>
 
-          {recomendadosOff.length > 0 && (
-            <div className="mb-5 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3.5">
-              <Sparkles className="w-4 h-4 text-primary-text flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-xs text-foreground">
-                  Para el rubro que elegiste, recomendamos apagar:{" "}
-                  {recomendadosOff.map((code) => modulosState.find((m) => m.code === code)?.name ?? code).join(", ")}.
-                </p>
-                <button
-                  onClick={aplicarRecomendado}
-                  disabled={aplicandoRecomendado}
-                  data-tour="config-modulos-recomendado"
-                  className="btn-ghost mt-2 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex items-center gap-1.5"
-                >
-                  {aplicandoRecomendado && <Loader2 className="w-3 h-3 animate-spin" />}
-                  Aplicar recomendado para tu rubro
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="divide-y divide-border" data-tour="config-modulos-lista">
-            {modulosState.map((m) => (
-              <div key={m.code} className="flex items-center justify-between py-2.5">
-                <span className="text-sm text-foreground">{m.name}</span>
-                <button
-                  type="button"
-                  disabled={moduloEnCurso === m.code}
-                  onClick={() => alternarModulo(m.code, !m.activo)}
-                  className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${
-                    m.activo ? "bg-primary" : "bg-muted-foreground/30"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                      m.activo ? "translate-x-4" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          {modulosMensaje && (
-            <p
-              className={`mt-4 text-sm font-medium animate-in fade-in ${
-                modulosMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"
-              }`}
-            >
-              {modulosMensaje.texto}
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-5">
+              Elige el giro de tu negocio para que el sistema use la terminología correcta en todos los módulos
+              — por ejemplo, &quot;Reparaciones&quot; se convierte en &quot;Órdenes de Servicio&quot; para un taller
+              automotriz. Si más adelante quieres un nombre distinto para tu negocio en particular, puedes
+              personalizarlo aparte.
             </p>
-          )}
-        </div>
-      </div>
 
-      {/* ── Descuentos y promociones ───────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Percent className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Descuentos y promociones</h2>
-        </div>
-        <div className="p-5 flex items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            Crea descuentos por porcentaje o monto fijo — para toda la venta, un producto o una
-            categoría — y se aplicarán automáticamente en el Punto de Venta.
-          </p>
-          <Link
-            href={`/${tenantSlug}/configuracion/descuentos`}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground flex-shrink-0"
-          >
-            Administrar <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-      </div>
-
-      {/* ── Logo de tu negocio ─────────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <ImageIcon className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Logo de tu negocio</h2>
-        </div>
-
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">
-            Sube el logo de tu negocio para que se muestre en tu sistema, junto al de Linkity Soluciones.
-            Recomendado: imagen horizontal, PNG/JPG/WEBP/SVG, máximo 2 MB.
-          </p>
-
-          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-            <div className="w-40 h-16 rounded-lg border border-dashed border-border bg-muted/40 flex items-center justify-center overflow-hidden flex-shrink-0">
-              {logoPreview || logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- logo subido por el negocio, dominio/tamaño no se conocen de antemano
-                <img
-                  src={logoPreview ?? logoUrl ?? ""}
-                  alt="Logo del negocio"
-                  className="max-w-full max-h-full object-contain"
-                />
-              ) : (
-                <span className="text-xs text-muted-foreground px-2 text-center">Sin logo todavía</span>
-              )}
+            <div className="max-w-sm" data-tour="config-rubro-select">
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Rubro</label>
+              <select
+                value={rubroSeleccionado}
+                onChange={(e) => setRubroSeleccionado(e.target.value)}
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              >
+                <option value={SIN_RUBRO}>Otro / Sin especificar (textos neutros)</option>
+                {BUSINESS_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </div>
 
-            <div className="flex-1 min-w-0">
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                onChange={seleccionarLogo}
-                data-tour="config-logo-archivo"
-                className="block w-full text-xs text-muted-foreground file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-primary/10 file:text-primary-text hover:file:bg-primary/20 file:cursor-pointer cursor-pointer"
-              />
-
-              <div className="mt-4 flex items-center gap-3 flex-wrap">
-                <button
-                  onClick={subirLogo}
-                  disabled={!logoFile || logoPending}
-                  data-tour="config-logo-subir"
-                  className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
-                >
-                  {logoPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {logoPending ? "Guardando..." : "Subir logo"}
-                </button>
-                {logoUrl && !logoFile && (
-                  <button
-                    onClick={quitarLogo}
-                    disabled={logoPending}
-                    className="btn-secondary px-4 py-2.5 text-sm rounded-lg transition-all"
-                  >
-                    Quitar logo
-                  </button>
-                )}
-              </div>
-
-              {logoMensaje && (
-                <p
-                  className={`mt-3 text-sm font-medium animate-in fade-in ${
-                    logoMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"
-                  }`}
-                >
-                  {logoMensaje.texto}
-                </p>
+            <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
+              <button
+                onClick={guardarRubro}
+                disabled={rubroPending}
+                data-tour="config-rubro-guardar"
+                className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
+              >
+                {rubroPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                {rubroPending ? "Aplicando..." : "Guardar cambios"}
+              </button>
+              {rubroMensaje && (
+                <span className={`text-sm font-medium animate-in fade-in ${rubroMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                  {rubroMensaje.texto}
+                </span>
               )}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* ── Notificaciones y dispositivos ──────────────────────── */}
-      {/* 2026-09-23, a petición de Carlos ("que ningún empleado pueda
-          entrar desde otro lugar y fingir que está en la tienda"): cada
-          dispositivo (PC/tablet/navegador) se autoriza una sola vez por
-          sucursal — ver el comentario largo en lib/dispositivos-confianza.ts
-          y en SolicitudDispositivo (schema.prisma). Esta tarjeta junta las
-          dos formas de aprobar un dispositivo nuevo: la notificación con
-          push (arriba) y este listado de respaldo (abajo). */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Bell className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Notificaciones y dispositivos</h2>
+        <VocabularioNegocio tenantSlug={tenantSlug} businessType={businessTypeInicial} actuales={vocabularioActual} mostrarReparaciones={reparacionesActivo} mostrarClinico={clinicoActivo} />
+
+        {/* ── Logo de tu negocio ─────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <ImageIcon className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Logo de tu negocio</h2>
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-5">
+              Sube el logo de tu negocio para que se muestre en tu sistema, junto al de Linkity Soluciones.
+              Recomendado: imagen horizontal, PNG/JPG/WEBP/SVG, máximo 2 MB.
+            </p>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+              <div className="w-40 h-16 rounded-lg border border-dashed border-border bg-muted/40 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {logoPreview || logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- logo subido por el negocio, dominio/tamaño no se conocen de antemano
+                  <img
+                    src={logoPreview ?? logoUrl ?? ""}
+                    alt="Logo del negocio"
+                    className="max-w-full max-h-full object-contain"
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground px-2 text-center">Sin logo todavía</span>
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={seleccionarLogo}
+                  data-tour="config-logo-archivo"
+                  className="block w-full text-xs text-muted-foreground file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-primary/10 file:text-primary-text hover:file:bg-primary/20 file:cursor-pointer cursor-pointer"
+                />
+
+                <div className="mt-4 flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={subirLogo}
+                    disabled={!logoFile || logoPending}
+                    data-tour="config-logo-subir"
+                    className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
+                  >
+                    {logoPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {logoPending ? "Guardando..." : "Subir logo"}
+                  </button>
+                  {logoUrl && !logoFile && (
+                    <button
+                      onClick={quitarLogo}
+                      disabled={logoPending}
+                      className="btn-secondary px-4 py-2.5 text-sm rounded-lg transition-all"
+                    >
+                      Quitar logo
+                    </button>
+                  )}
+                </div>
+
+                {logoMensaje && (
+                  <p
+                    className={`mt-3 text-sm font-medium animate-in fade-in ${
+                      logoMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"
+                    }`}
+                  >
+                    {logoMensaje.texto}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="p-5">
-          <ActivarNotificacionesPush tenantSlug={tenantSlug} />
+        {/* ── Apariencia y Tema ─────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mb-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <Palette className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Apariencia y Tema</h2>
+          </div>
 
-          <div className="mt-6 border-t border-border pt-5">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <h3 className="text-sm font-semibold text-foreground">Dispositivos pendientes de autorizar</h3>
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-5">Selecciona la paleta de colores principal para tu interfaz, estilo Windows Phone.</p>
+
+            {/* Tema "Linkity" (2026-10-02) — ver el comentario junto a
+                THEMES_LINKITY arriba. Va primero y con su propia etiqueta
+                para distinguirlo de ser "uno más" de la galería Windows
+                Phone de abajo. */}
+            <div className="mb-6 pb-5 border-b border-border">
+              <p className="text-sm text-muted-foreground mb-4">
+                <span className="font-medium text-foreground">Linkity</span> — el tema oficial de la plataforma, con los colores de tu logo:
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                {THEMES_LINKITY.map((theme) => (
+                  <button
+                    key={theme.id}
+                    onClick={() => seleccionarTema(theme.id)}
+                    className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                      temaSeleccionado === theme.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
+                    }`}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
+                      style={{ backgroundColor: theme.swatch }}
+                    >
+                      {temaSeleccionado === theme.id && <Check className="w-5 h-5 text-white drop-shadow" />}
+                    </div>
+                    <span className="text-xs font-medium text-foreground">{theme.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+              {THEMES.map((theme) => (
+                <button
+                  key={theme.id}
+                  onClick={() => seleccionarTema(theme.id)}
+                  className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                    temaSeleccionado === theme.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
+                  }`}
+                >
+                  <div
+                    className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
+                    style={{ backgroundColor: theme.swatch }}
+                  >
+                    {temaSeleccionado === theme.id && <Check className="w-5 h-5 text-white drop-shadow" />}
+                  </div>
+                  <span className="text-xs font-medium text-foreground">{theme.name}</span>
+                </button>
+              ))}
+
+              {/* "Personalizado" (2026-09-24, a petición de Carlos: "hay que
+                  agregar un tema totalmente customizable. Elegir el color de
+                  fondo y los colores secundarios") — 11ª tarjeta, swatch en
+                  degradado (en vez de un solo color) para distinguirla a
+                  simple vista de los 10 temas fijos. */}
               <button
-                onClick={cargarSolicitudes}
-                disabled={solicitudesCargando}
-                className="btn-ghost flex items-center gap-1.5 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs"
+                onClick={() => seleccionarTema(TEMA_PERSONALIZADO_ID)}
+                className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                  temaSeleccionado === TEMA_PERSONALIZADO_ID ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
+                }`}
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${solicitudesCargando ? "animate-spin" : ""}`} /> Actualizar
+                <div
+                  className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
+                  style={{ background: "conic-gradient(from 0deg, #D80073, #F09609, #32CD32, #00A4A4, #001AC0, #D80073)" }}
+                >
+                  {temaSeleccionado === TEMA_PERSONALIZADO_ID && <Check className="w-5 h-5 text-white drop-shadow" />}
+                </div>
+                <span className="text-xs font-medium text-foreground">Personalizado</span>
               </button>
             </div>
 
-            {solicitudesCargando && solicitudes.length === 0 ? (
-              <p className="text-xs text-muted-foreground flex items-center gap-2 py-2">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando solicitudes…
-              </p>
-            ) : solicitudes.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-2">No hay dispositivos esperando autorización por ahora.</p>
-            ) : (
-              <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
-                {solicitudes.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between gap-3 px-3.5 py-3 flex-wrap">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <Smartphone className="w-4 h-4 text-primary-text flex-shrink-0 mt-0.5" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-foreground">Sucursal: {s.branchName}</p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5 truncate max-w-[220px]">
-                          {s.userAgent ?? "Dispositivo sin identificar"}
-                        </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5">
-                          {new Date(s.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}
-                        </p>
-                      </div>
+            {/* Temas estilo Material Design (2026-09-28, a petición de Carlos:
+                los temas Windows Phone de arriba "se me hacen un poco toscos"
+                — ver el comentario largo junto a MATERIAL_THEMES en
+                lib/theme-presets.ts). Galería aparte, mismo tipo de tarjeta,
+                para que se note que es un estilo distinto de los de arriba. */}
+            <div className="mt-6 pt-5 border-t border-border">
+              <p className="text-sm text-muted-foreground mb-4">O, si prefieres un estilo Material Design:</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                {THEMES_MATERIAL.map((theme) => (
+                  <button
+                    key={theme.id}
+                    onClick={() => seleccionarTema(theme.id)}
+                    className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                      temaSeleccionado === theme.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted"
+                    }`}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-full shadow-inner flex items-center justify-center"
+                      style={{ backgroundColor: theme.swatch }}
+                    >
+                      {temaSeleccionado === theme.id && <Check className="w-5 h-5 text-white drop-shadow" />}
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => resolverSolicitud(s.id, true)}
-                        disabled={solicitudEnCurso === s.id}
-                        className="btn-primary flex items-center gap-1 text-[11.5px] px-2.5 py-1.5 rounded-lg transition-colors"
-                      >
-                        <Check className="w-3 h-3" /> Aprobar
-                      </button>
-                      <button
-                        onClick={() => resolverSolicitud(s.id, false)}
-                        disabled={solicitudEnCurso === s.id}
-                        className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground hover:text-red-600 transition-colors px-2.5 py-1.5 disabled:opacity-50"
-                      >
-                        <X className="w-3 h-3" /> Rechazar
-                      </button>
-                    </div>
-                  </div>
+                    <span className="text-xs font-medium text-foreground">{theme.name}</span>
+                  </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Selector de colores del tema "Personalizado" — solo se muestra
+                cuando ese es el tema elegido. 7 selectores: fondo, ícono/
+                texto y las 5 fichas (respuesta explícita de Carlos: control
+                total sobre los 7, sin calcular nada automático). */}
+            {temaSeleccionado === TEMA_PERSONALIZADO_ID && (
+              <div className="mt-5 border-t border-border pt-5">
+                <p className="text-xs font-medium text-muted-foreground mb-3">Colores del tema personalizado</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[11px] text-muted-foreground">Fondo / color primario</span>
+                    <input
+                      type="color"
+                      value={coloresPersonalizados.backgroundColor}
+                      onChange={(e) => cambiarColorPersonalizado({ backgroundColor: e.target.value })}
+                      className="w-full h-9 rounded-lg border border-border cursor-pointer bg-card"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[11px] text-muted-foreground">Ícono / texto de fichas</span>
+                    <input
+                      type="color"
+                      value={coloresPersonalizados.defaultIconColor}
+                      onChange={(e) => cambiarColorPersonalizado({ defaultIconColor: e.target.value })}
+                      className="w-full h-9 rounded-lg border border-border cursor-pointer bg-card"
+                    />
+                  </label>
+                  {coloresPersonalizados.tileColors.map((hex, i) => (
+                    <label key={i} className="flex flex-col gap-1">
+                      <span className="text-[11px] text-muted-foreground">{ETIQUETAS_FICHAS[i]}</span>
+                      <input
+                        type="color"
+                        value={hex}
+                        onChange={(e) => cambiarFichaPersonalizada(i, e.target.value)}
+                        className="w-full h-9 rounded-lg border border-border cursor-pointer bg-card"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 mt-4 text-xs text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={coloresPersonalizados.baseStyle === "Light"}
+                    onChange={(e) => cambiarColorPersonalizado({ baseStyle: e.target.checked ? "Light" : "Dark" })}
+                  />
+                  Interfaz clara (para fondos claros — igual que &quot;Windows 8 Start&quot;)
+                </label>
+              </div>
+            )}
+
+            {/* Intensidad (2026-09-23, a petición de Carlos: "hazlas
+                personalizables para subir o bajar la intensidad de los
+                colores") — escala solo la saturación de la paleta elegida
+                arriba, ver escalarSaturacion en lib/theme-presets.ts. 100 =
+                la paleta tal cual, sin tocar. */}
+            <div className="mt-6 border-t border-border pt-5">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-muted-foreground">Intensidad del color</label>
+                <span className="text-xs font-semibold text-foreground tabular-nums">{intensidadSeleccionada}%</span>
+              </div>
+              <input
+                type="range"
+                min={INTENSIDAD_MIN}
+                max={INTENSIDAD_MAX}
+                step={5}
+                value={intensidadSeleccionada}
+                onChange={(e) => cambiarIntensidad(Number(e.target.value))}
+                className="w-full accent-primary"
+              />
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[11px] text-muted-foreground">Apagado</span>
+                <span className="text-[11px] text-muted-foreground">Original</span>
+                <span className="text-[11px] text-muted-foreground">Vivo</span>
+              </div>
+            </div>
+
+            {/* Intensidad del fondo (2026-09-24, a petición de Carlos: "estoy
+                complacido con el modulador de intensidad para las fichas,
+                pero también falta uno para el fondo o color primario") —
+                segundo modulador, INDEPENDIENTE del de arriba: este solo
+                escala backgroundColor (ventana/color primario), nunca las
+                fichas. Pasos de 10% (a diferencia del de arriba, de 5%), tal
+                como Carlos pidió explícitamente ("aplicar variaciones de
+                10% progresivos"). */}
+            <div className="mt-6 border-t border-border pt-5">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-muted-foreground">Intensidad del fondo</label>
+                <span className="text-xs font-semibold text-foreground tabular-nums">{intensidadFondoSeleccionada}%</span>
+              </div>
+              <input
+                type="range"
+                min={INTENSIDAD_MIN}
+                max={INTENSIDAD_MAX}
+                step={10}
+                value={intensidadFondoSeleccionada}
+                onChange={(e) => cambiarIntensidadFondo(Number(e.target.value))}
+                className="w-full accent-primary"
+              />
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[11px] text-muted-foreground">Apagado</span>
+                <span className="text-[11px] text-muted-foreground">Original</span>
+                <span className="text-[11px] text-muted-foreground">Vivo</span>
+              </div>
+            </div>
+
+            <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
+              <button
+                onClick={guardarTema}
+                disabled={temaPending}
+                className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {temaPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                {temaPending ? "Aplicando..." : "Guardar cambios"}
+              </button>
+              {temaMensaje && (
+                <span className={`text-sm font-medium animate-in fade-in ${temaMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                  {temaMensaje.texto}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Semana laboral ─────────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <CalendarClock className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Semana laboral</h2>
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-5">
+              Elige en qué día empieza tu semana de trabajo. Este es el día que usa el sistema para calcular
+              &quot;ventas de esta semana&quot; en el Dashboard, las horas trabajadas de tu personal, y el filtro
+              &quot;Semana&quot; de Asistencia — para que coincida con tu corte real de nómina, no con un calendario
+              genérico.
+            </p>
+
+            <div className="max-w-sm">
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tu semana laboral empieza el</label>
+              <select
+                value={weekStartDaySeleccionado}
+                onChange={(e) => setWeekStartDaySeleccionado(Number(e.target.value))}
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              >
+                {DIAS_SEMANA_COMPLETOS.map((nombre, i) => (
+                  <option key={nombre} value={i}>{nombre}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
+              <button
+                onClick={guardarWeekStartDay}
+                disabled={weekStartDayPending}
+                className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
+              >
+                {weekStartDayPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                {weekStartDayPending ? "Aplicando..." : "Guardar cambios"}
+              </button>
+              {weekStartDayMensaje && (
+                <span className={`text-sm font-medium animate-in fade-in ${weekStartDayMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                  {weekStartDayMensaje.texto}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Teléfono de soporte ────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <Phone className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Teléfono de soporte</h2>
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-5">
+              Aparece en los tickets de reparación y venta (impresos y digitales) para que tus clientes
+              sepan a qué número comunicarse.
+            </p>
+
+            <div className="max-w-sm">
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Teléfono</label>
+              <input
+                type="tel"
+                value={supportPhone}
+                onChange={(e) => setSupportPhone(e.target.value)}
+                placeholder="Ej. 55 1234 5678"
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+
+            <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
+              <button
+                onClick={guardarSupportPhone}
+                disabled={supportPhonePending}
+                className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
+              >
+                {supportPhonePending && <Loader2 className="w-4 h-4 animate-spin" />}
+                {supportPhonePending ? "Aplicando..." : "Guardar cambios"}
+              </button>
+              {supportPhoneMensaje && (
+                <span className={`text-sm font-medium animate-in fade-in ${supportPhoneMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                  {supportPhoneMensaje.texto}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+          </div>
+
+          <div className={grupo === "ventas" ? "[&>*:first-child]:mt-0" : "hidden"} data-grupo-config="ventas">
+        {/* ── Caja rápida ───────────────────────────────────────────
+            2026-10-09, a petición de Carlos: "tiendas que tengan flujo de
+            cliente continuo tipo supermercado ... que el dueño del tenant
+            decida". Casilla con guardado inmediato, mismo patrón que
+            "Teléfono del cliente". */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6" data-tour="config-caja-rapida">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <Zap className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Caja rápida</h2>
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-3">
+              Para negocios con clientes en fila continua (tienda, abarrotes, supermercado). Con Caja rápida
+              activada, el punto de venta mantiene el cursor siempre en el buscador: escaneas o escribes cada
+              artículo y presionas Enter; con el buscador vacío, Enter cobra e imprime el ticket.
+            </p>
+            <p className="text-sm text-muted-foreground mb-5">
+              Después de cada venta el método de pago vuelve a Efectivo y el carrito queda listo para el
+              siguiente cliente, sin usar el mouse. Esta opción aplica a TODAS tus sucursales por igual.
+            </p>
+
+            <label className="flex items-start gap-3 max-w-md cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cajaRapida}
+                disabled={cajaRapidaPending}
+                onChange={(e) => alternarCajaRapida(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-primary disabled:opacity-50"
+              />
+              <span className="text-sm text-foreground">
+                Activar Caja rápida en el punto de venta
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  {cajaRapida
+                    ? "Activada — Enter con el buscador vacío cobra la venta."
+                    : "Desactivada — después de agregar un artículo, el cursor pasa al botón Cobrar."}
+                </span>
+              </span>
+            </label>
+
+            {cajaRapidaMensaje && (
+              <p className={`text-sm font-medium mt-4 animate-in fade-in ${cajaRapidaMensaje.startsWith("Error") || cajaRapidaMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
+                {cajaRapidaMensaje}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ── Personalizar ticket ─────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <Receipt className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Personalizar ticket</h2>
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-5">
+              Estos datos aparecen en el encabezado y pie de los tickets impresos (ventas y reparaciones).
+              El nombre, logo y teléfono ya se toman de las secciones de arriba — aquí solo agregas dirección,
+              RFC, un mensaje de despedida propio y un texto libre al fondo del ticket.
+            </p>
+
+            <div className="max-w-sm space-y-4" data-tour="config-ticket-datos">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Dirección</label>
+                <input
+                  type="text"
+                  value={direccionTicket}
+                  onChange={(e) => setDireccionTicket(e.target.value)}
+                  placeholder="Ej. Av. Reforma 123, CDMX"
+                  maxLength={150}
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">RFC</label>
+                <input
+                  type="text"
+                  value={rfcTicket}
+                  onChange={(e) => setRfcTicket(e.target.value.toUpperCase())}
+                  placeholder="Ej. XAXX010101000"
+                  maxLength={13}
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Mensaje de pie</label>
+                <textarea
+                  value={mensajePieTicket}
+                  onChange={(e) => setMensajePieTicket(e.target.value)}
+                  placeholder="Ej. ¡Gracias por tu preferencia! Garantía de 30 días presentando este ticket."
+                  maxLength={200}
+                  rows={3}
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                Extra <span className="font-normal">(sin límite de caracteres — direcciones, promociones, un saludo, lo que quieras)</span>
+              </label>
+              <textarea
+                value={extraTicket}
+                onChange={(e) => setExtraTicket(e.target.value)}
+                placeholder="Ej. También nos encuentras en Insurgentes 456 · Síguenos en @tunegocio · 10% de descuento en tu próxima visita presentando este ticket"
+                rows={5}
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
+              />
+            </div>
+
+            <div className="mt-6">
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Formato de impresión</label>
+              <p className="text-xs text-muted-foreground mb-2.5">
+                Elige el tipo de impresora o salida que usas para que el ticket se ajuste al ancho de papel correcto.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-xl">
+                {FORMATOS_TICKET.map((f) => (
+                  <button
+                    key={f.valor}
+                    type="button"
+                    onClick={() => setFormatoTicket(f.valor)}
+                    className={`text-left p-3 rounded-lg border text-xs transition-all ${
+                      formatoTicket === f.valor
+                        ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                        : "border-border bg-muted hover:border-foreground/30"
+                    }`}
+                  >
+                    <p className="font-medium text-foreground">{f.nombre}</p>
+                    <p className="text-muted-foreground mt-0.5">{f.descripcion}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* QR del ticket de VENTA (2026-10-01, a petición de Carlos: "sería
+                opcional para ventas... que el cliente decidiera si mostrar o
+                no un QR y que eligiera qué se mostraría en él") — a propósito
+                SOLO afecta la venta normal de artículo/servicio; el QR del
+                cobro de una reparación (aunque se cobre desde este mismo POS)
+                se queda fijo apuntando a su página de seguimiento, nunca pasa
+                por aquí (ver el comentario largo en POSClient.tsx). */}
+            <div className="mt-6 border-t border-border pt-5">
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={mostrarQRTicket}
+                  onChange={(e) => setMostrarQRTicket(e.target.checked)}
+                />
+                Mostrar código QR en el ticket de venta
+              </label>
+              <p className="text-xs text-muted-foreground mt-1 ml-6">
+                Solo aplica a la venta de un artículo o servicio. El QR del cobro de una reparación siempre va a su página de seguimiento, sin importar lo que elijas aquí.
+              </p>
+
+              {mostrarQRTicket && (
+                <div className="mt-4 ml-6 max-w-xl">
+                  <label className="block text-xs font-medium text-muted-foreground mb-2">Qué mostrar en el QR</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {DESTINOS_QR_TICKET.map((d) => (
+                      <button
+                        key={d.valor}
+                        type="button"
+                        onClick={() => setQrDestinoTicket(d.valor)}
+                        className={`text-left p-3 rounded-lg border text-xs transition-all ${
+                          qrDestinoTicket === d.valor
+                            ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                            : "border-border bg-muted hover:border-foreground/30"
+                        }`}
+                      >
+                        <p className="font-medium text-foreground">{d.nombre}</p>
+                        <p className="text-muted-foreground mt-0.5">{d.descripcion}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {DESTINOS_QR_TICKET.find((d) => d.valor === qrDestinoTicket)?.necesitaUrl && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Link</label>
+                      <input
+                        type="text"
+                        value={qrUrlTicket}
+                        onChange={(e) => setQrUrlTicket(e.target.value)}
+                        placeholder={DESTINOS_QR_TICKET.find((d) => d.valor === qrDestinoTicket)?.placeholderUrl}
+                        maxLength={500}
+                        className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      />
+                    </div>
+                  )}
+
+                  {qrDestinoTicket === "PERSONALIZADO" && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                        Etiqueta bajo el QR <span className="font-normal">(ej. &quot;Síguenos&quot;, &quot;Más información&quot;)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={qrEtiquetaTicket}
+                        onChange={(e) => setQrEtiquetaTicket(e.target.value)}
+                        placeholder="Más información"
+                        maxLength={60}
+                        className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex items-center gap-4 border-t border-border pt-5">
+              <button
+                onClick={guardarDatosTicket}
+                disabled={datosTicketPending}
+                data-tour="config-ticket-guardar"
+                className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
+              >
+                {datosTicketPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                {datosTicketPending ? "Aplicando..." : "Guardar cambios"}
+              </button>
+              {datosTicketMensaje && (
+                <span className={`text-sm font-medium animate-in fade-in ${datosTicketMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                  {datosTicketMensaje.texto}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Cobro en devoluciones ──────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <Undo2 className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Cobro en devoluciones</h2>
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-5">
+              Cuando un trabajo no se pudo completar y se marca como devolución, decide si tu negocio cobra algo al
+              cliente (por ejemplo, por el diagnóstico o el intento de reparación) antes de entregárselo. Esta
+              regla aplica a TODAS tus sucursales por igual.
+            </p>
+
+            <label className="flex items-start gap-3 max-w-md cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cobrarEnDevolucion}
+                disabled={cobrarEnDevolucionPending}
+                onChange={(e) => alternarCobrarEnDevolucion(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-primary disabled:opacity-50"
+              />
+              <span className="text-sm text-foreground">
+                Cobrar al entregar una devolución
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  {cobrarEnDevolucion
+                    ? "Activado — entregar una devolución exige pasar por \"Cobrar y entregar\" en tienda."
+                    : "Desactivado — una devolución se entrega directo, sin cargo."}
+                </span>
+              </span>
+            </label>
+
+            {cobrarEnDevolucionMensaje && (
+              <p className={`text-sm font-medium mt-4 animate-in fade-in ${cobrarEnDevolucionMensaje.startsWith("Error") || cobrarEnDevolucionMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
+                {cobrarEnDevolucionMensaje}
+              </p>
+            )}
+
+            {/* Monto fijo a cobrar (2026-09-26) — solo aplica/se muestra
+                habilitado cuando la casilla de arriba está activa. Este monto
+                es el que se sugiere (editable) en el carrito de POS al usar
+                "Entregar" sobre una devolución. */}
+            {cobrarEnDevolucion && (
+              <div className="mt-5 pt-5 border-t border-border max-w-md">
+                <label className="block text-sm text-foreground mb-1.5">
+                  Monto a cobrar por devolución
+                  <span className="block text-xs text-muted-foreground mt-0.5">
+                    Se sugiere este monto al entregar una devolución en POS — el cajero lo puede ajustar ahí mismo si un caso particular lo requiere.
+                  </span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={montoDevolucion}
+                      disabled={montoDevolucionPending}
+                      onChange={(e) => setMontoDevolucion(e.target.value)}
+                      className="w-full pl-6 pr-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground disabled:opacity-50"
+                    />
+                  </div>
+                  <button
+                    onClick={guardarMontoDevolucion}
+                    disabled={montoDevolucionPending}
+                    className="btn-primary px-4 py-2 rounded-lg text-sm transition-colors">
+                    Guardar
+                  </button>
+                </div>
+                {montoDevolucionMensaje && (
+                  <p className={`text-sm font-medium mt-2 animate-in fade-in ${montoDevolucionMensaje.startsWith("Error") || montoDevolucionMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
+                    {montoDevolucionMensaje}
+                  </p>
+                )}
               </div>
             )}
           </div>
         </div>
-      </div>
 
-      {/* ── Seguridad: cambiar contraseña ─────────────────────── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
-          <Lock className="w-5 h-5 text-primary-text" />
-          <h2 className="text-base font-semibold text-foreground">Seguridad</h2>
+        {/* ── Teléfono del cliente ─────────────────────────────────
+            2026-10-05, a petición de Carlos, probando el alta de clientes
+            desde "Nueva reparación": "en el campo 'Telefono' hay que
+            habilitar en Configuraciones una casilla de verificación si el
+            campo será Opcional o Forzoso". */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <Phone className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Teléfono del cliente</h2>
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-5">
+              El teléfono del cliente se usa para enviarle notificaciones automáticas por WhatsApp sobre el
+              estatus de su trabajo. Decide si al dar de alta un cliente (en Clientes o al recibir una
+              reparación) este campo es opcional o forzoso. Esta regla aplica a TODAS tus sucursales por igual.
+            </p>
+
+            <label className="flex items-start gap-3 max-w-md cursor-pointer">
+              <input
+                type="checkbox"
+                checked={telefonoClienteObligatorio}
+                disabled={telefonoClienteObligatorioPending}
+                onChange={(e) => alternarTelefonoClienteObligatorio(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-primary disabled:opacity-50"
+              />
+              <span className="text-sm text-foreground">
+                Teléfono obligatorio al dar de alta un cliente
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  {telefonoClienteObligatorio
+                    ? "Activado — no se puede guardar un cliente nuevo sin teléfono."
+                    : "Desactivado — un cliente se puede guardar sin teléfono (no recibirá notificaciones de WhatsApp)."}
+                </span>
+              </span>
+            </label>
+
+            {telefonoClienteObligatorioMensaje && (
+              <p className={`text-sm font-medium mt-4 animate-in fade-in ${telefonoClienteObligatorioMensaje.startsWith("Error") || telefonoClienteObligatorioMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
+                {telefonoClienteObligatorioMensaje}
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="p-5">
-          <p className="text-sm text-muted-foreground mb-5">
-            Cambia tu contraseña de acceso — hazlo sobre todo si todavía usas la contraseña temporal
-            con la que se creó tu cuenta.
-          </p>
+        {/* ── Descuentos y promociones ───────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <Percent className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Descuentos y promociones</h2>
+          </div>
+          <div className="p-5 flex items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground">
+              Crea descuentos por porcentaje o monto fijo — para toda la venta, un producto o una
+              categoría — y se aplicarán automáticamente en el Punto de Venta.
+            </p>
+            <Link
+              href={`/${tenantSlug}/configuracion/descuentos`}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground flex-shrink-0"
+            >
+              Administrar <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+          </div>
 
-          <form onSubmit={guardarContrasena} className="max-w-sm space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Nueva contraseña</label>
-              <div className="relative">
+          <div className={grupo === "comunicacion" ? "[&>*:first-child]:mt-0" : "hidden"} data-grupo-config="comunicacion">
+        {/* ── WhatsApp Business ───────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <MessageCircle className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">WhatsApp Business</h2>
+            {whatsappTieneToken && (
+              <span className="ml-auto text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">Conectado</span>
+            )}
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-2">
+              Conecta la cuenta de WhatsApp Business de TU negocio (gratis, directo con Meta) para que tus
+              clientes reciban un WhatsApp automático cuando reciban su trabajo y cada vez que cambie de estatus —
+              sin depender de nadie más marcando "avisar" a mano.
+            </p>
+            <p className="text-sm text-muted-foreground mb-5">
+              Necesitas dos cosas de tu propia cuenta de Meta for Developers (developers.facebook.com): el{" "}
+              <strong>Phone Number ID</strong> y un <strong>Access Token</strong> permanente, y además tener
+              aprobada una plantilla de mensaje llamada exactamente <code className="text-xs bg-muted px-1 py-0.5 rounded">actualizacion_reparacion_linkity</code>{" "}
+              (categoría Utilidad, idioma Español MX, cuerpo con un solo parámetro <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{1}}"}</code>).
+              Pídeme la guía paso a paso si no la tienes todavía.
+            </p>
+
+            <div className="max-w-sm space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Phone Number ID</label>
+                <input
+                  type="text"
+                  value={whatsappPhoneNumberId}
+                  onChange={(e) => setWhatsappPhoneNumberId(e.target.value)}
+                  placeholder="Ej. 123456789012345"
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                  Access Token{" "}
+                  {whatsappTieneToken && <span className="font-normal text-muted-foreground">(ya hay uno guardado — déjalo vacío para no cambiarlo)</span>}
+                </label>
+                <div className="relative">
+                  <input
+                    type={whatsappMostrarToken ? "text" : "password"}
+                    value={whatsappAccessTokenInput}
+                    onChange={(e) => setWhatsappAccessTokenInput(e.target.value)}
+                    placeholder={whatsappTieneToken ? "•••••••••••••••••••••" : "Pega aquí tu Access Token"}
+                    className="w-full px-3 py-2.5 pr-10 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setWhatsappMostrarToken((v) => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
+                  >
+                    {whatsappMostrarToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                  App Secret <span className="font-normal text-muted-foreground">(opcional, recomendado)</span>{" "}
+                  {whatsappTieneAppSecret && <span className="font-normal text-muted-foreground">(ya hay uno guardado — déjalo vacío para no cambiarlo)</span>}
+                </label>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={whatsappAppSecretInput}
+                  onChange={(e) => setWhatsappAppSecretInput(e.target.value)}
+                  placeholder={whatsappTieneAppSecret ? "•••••••••••••••••••••" : "Meta → Configuración → Básica"}
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Sirve para comprobar que los avisos de entrega de tus mensajes de verdad vienen de Meta.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-8 flex items-center gap-3 flex-wrap border-t border-border pt-5">
+              <button
+                onClick={guardarWhatsapp}
+                disabled={whatsappPending}
+                className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
+              >
+                {whatsappPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                {whatsappPending ? "Aplicando..." : "Guardar cambios"}
+              </button>
+              {whatsappTieneToken && (
+                <button
+                  onClick={desconectarWhatsapp}
+                  disabled={whatsappPending}
+                  className="btn-secondary px-4 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
+                >
+                  <Unlink className="w-3.5 h-3.5" /> Desconectar
+                </button>
+              )}
+              {whatsappMensaje && (
+                <span className={`text-sm font-medium animate-in fade-in ${whatsappMensaje.tipo === "ok" ? "text-emerald-600" : "text-amber-600"}`}>
+                  {whatsappMensaje.texto}
+                </span>
+              )}
+              {whatsappError && <span className="text-sm font-medium text-destructive animate-in fade-in">{whatsappError}</span>}
+            </div>
+
+            {whatsappTieneToken && (
+              <div className="mt-5 border-t border-border pt-5 max-w-sm">
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Enviar mensaje de prueba</label>
+                <p className="text-xs text-muted-foreground mb-2">Escribe un número con código de país (ej. 5215512345678) para verificar que todo quedó bien conectado.</p>
+                <div className="flex gap-2">
+                  <input
+                    type="tel"
+                    value={whatsappTelefonoPrueba}
+                    onChange={(e) => setWhatsappTelefonoPrueba(e.target.value)}
+                    placeholder="5215512345678"
+                    className="flex-1 px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                  <button
+                    onClick={enviarPruebaWhatsapp}
+                    disabled={whatsappPruebaPending || !whatsappTelefonoPrueba.trim()}
+                    className="px-4 py-2.5 bg-[#25D366] hover:bg-[#22c35e] disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all flex items-center gap-2 flex-shrink-0"
+                  >
+                    {whatsappPruebaPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    Enviar prueba
+                  </button>
+                </div>
+                {whatsappPruebaResultado && (
+                  <p className={`text-xs mt-2 ${whatsappPruebaResultado.ok ? "text-emerald-600" : "text-destructive"}`}>
+                    {whatsappPruebaResultado.texto}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── WhatsApp manual (sin API) ────────────────────────────
+            2026-10-02, a petición de Carlos: no todos los negocios quieren o
+            pueden pasar por la verificación de negocio de Meta que exige el
+            modo de arriba — esta es la alternativa de cero trámite: un
+            enlace "wa.me/..." que abre WhatsApp con el mensaje ya escrito,
+            para que alguien del negocio lo mande a mano. Si arriba ya está
+            conectado el modo API, ese manda siempre (ver whatsappModoActivo
+            en lib/whatsapp-mensaje.ts) — se lo advertimos aquí mismo para que
+            no piense que necesita las dos cosas. */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <MessageCircle className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">WhatsApp manual (sin API)</h2>
+            {whatsappNumeroManual.trim() && !whatsappTieneToken && (
+              <span className="ml-auto text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">Activo</span>
+            )}
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-2">
+              Para cuando no quieres (o no puedes todavía) pasar por la verificación de negocio de Meta: captura
+              aquí el número de WhatsApp al que quieres que tus clientes escriban. No hay ningún envío automático
+              — el botón "Avisar" de Reparaciones y la página pública de seguimiento abrirán WhatsApp con el
+              mensaje ya escrito, y alguien de tu negocio lo manda a mano, como cualquier chat normal.
+            </p>
+            {whatsappTieneToken && (
+              <p className="text-xs text-amber-600 mb-4">
+                Ya tienes conectado el WhatsApp Business de arriba (modo automático) — mientras esté conectado, ese
+                es el que se usa siempre, y este número manual no se mostrará. Solo sirve como respaldo si algún
+                día desconectas el de arriba.
+              </p>
+            )}
+
+            <div className="max-w-sm">
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Número de WhatsApp</label>
+              <input
+                type="tel"
+                value={whatsappNumeroManual}
+                onChange={(e) => setWhatsappNumeroManual(e.target.value)}
+                placeholder="Ej. 55 1234 5678"
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+
+            <div className="mt-5 flex items-center gap-3 flex-wrap border-t border-border pt-5">
+              <button
+                onClick={guardarWhatsappManual}
+                disabled={whatsappManualPending}
+                className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
+              >
+                {whatsappManualPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                {whatsappManualPending ? "Aplicando..." : "Guardar cambios"}
+              </button>
+              {whatsappManualMensaje && <span className="text-sm font-medium text-emerald-600 animate-in fade-in">{whatsappManualMensaje}</span>}
+              {whatsappManualError && <span className="text-sm font-medium text-destructive animate-in fade-in">{whatsappManualError}</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Notificaciones y dispositivos ──────────────────────── */}
+        {/* 2026-09-23, a petición de Carlos ("que ningún empleado pueda
+            entrar desde otro lugar y fingir que está en la tienda"): cada
+            dispositivo (PC/tablet/navegador) se autoriza una sola vez por
+            sucursal — ver el comentario largo en lib/dispositivos-confianza.ts
+            y en SolicitudDispositivo (schema.prisma). Esta tarjeta junta las
+            dos formas de aprobar un dispositivo nuevo: la notificación con
+            push (arriba) y este listado de respaldo (abajo). */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <Bell className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Notificaciones y dispositivos</h2>
+          </div>
+
+          <div className="p-5">
+            <ActivarNotificacionesPush tenantSlug={tenantSlug} />
+
+            <div className="mt-6 border-t border-border pt-5">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h3 className="text-sm font-semibold text-foreground">Dispositivos pendientes de autorizar</h3>
+                <button
+                  onClick={cargarSolicitudes}
+                  disabled={solicitudesCargando}
+                  className="btn-ghost flex items-center gap-1.5 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${solicitudesCargando ? "animate-spin" : ""}`} /> Actualizar
+                </button>
+              </div>
+
+              {solicitudesCargando && solicitudes.length === 0 ? (
+                <p className="text-xs text-muted-foreground flex items-center gap-2 py-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando solicitudes…
+                </p>
+              ) : solicitudes.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">No hay dispositivos esperando autorización por ahora.</p>
+              ) : (
+                <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
+                  {solicitudes.map((s) => (
+                    <div key={s.id} className="flex items-center justify-between gap-3 px-3.5 py-3 flex-wrap">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <Smartphone className="w-4 h-4 text-primary-text flex-shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-foreground">Sucursal: {s.branchName}</p>
+                          <p className="text-[10.5px] text-muted-foreground mt-0.5 truncate max-w-[220px]">
+                            {s.userAgent ?? "Dispositivo sin identificar"}
+                          </p>
+                          <p className="text-[10.5px] text-muted-foreground mt-0.5">
+                            {new Date(s.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => resolverSolicitud(s.id, true)}
+                          disabled={solicitudEnCurso === s.id}
+                          className="btn-primary flex items-center gap-1 text-[11.5px] px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          <Check className="w-3 h-3" /> Aprobar
+                        </button>
+                        <button
+                          onClick={() => resolverSolicitud(s.id, false)}
+                          disabled={solicitudEnCurso === s.id}
+                          className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground hover:text-red-600 transition-colors px-2.5 py-1.5 disabled:opacity-50"
+                        >
+                          <X className="w-3 h-3" /> Rechazar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+          </div>
+
+          <div className={grupo === "modulos" ? "[&>*:first-child]:mt-0" : "hidden"} data-grupo-config="modulos">
+        {/* ── Módulos de tu negocio ──────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <LayoutGrid className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Módulos de tu negocio</h2>
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-5">
+              Elige qué módulos aparecen en tu menú. Apagar uno no borra ninguna información que ya
+              hayas capturado — solo deja de mostrarse hasta que lo vuelvas a activar.
+            </p>
+
+            {/* Modo Simple (2026-10-03, a petición de Carlos: "a un
+                autoempleado lo estamos saturando de opciones que
+                probablemente no usará... debemos crear una interface que
+                también piense en él. En el único que trabaja en su empresa,
+                o el dueño que solo tiene un empleado en la tienda y un
+                técnico" — y, confirmado explícitamente, "el modo simple lo
+                puede activar o desactivar el dueño"). Un solo switch que
+                apaga de un golpe los módulos que casi nunca le sirven a 1-2
+                personas (Compras, Personal, Asistencia, Sucursales — ver
+                MODULOS_OCULTOS_MODO_SIMPLE, lib/modules-catalog.ts);
+                Reparaciones/Caja/Catálogo/Inventario/Reportes/Facturación se
+                quedan, porque siguen siendo el pan de cada día de un taller
+                chico. No borra nada — es un atajo sobre el mismo switch por
+                módulo de abajo, así que el dueño puede re-prender cualquiera
+                de los 4 a mano sin desactivar Modo Simple por completo. */}
+            <div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3.5">
+              <Zap className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-xs font-medium text-foreground">Modo Simple</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Pensado para quien trabaja solo o con 1-2 personas: oculta Compras, Personal,
+                  Asistencia y Sucursales de tu menú, para que solo veas lo esencial. Puedes
+                  desactivarlo cuando quieras sin perder ninguna información.
+                </p>
+                <button
+                  onClick={alternarModoSimple}
+                  disabled={aplicandoModoSimple}
+                  className={`mt-2 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex items-center gap-1.5 ${
+                    modoSimpleActivo ? "text-foreground font-medium" : "btn-ghost"
+                  }`}
+                >
+                  {aplicandoModoSimple && <Loader2 className="w-3 h-3 animate-spin" />}
+                  {!aplicandoModoSimple && (
+                    <span
+                      className={`relative w-8 h-4.5 rounded-full transition-colors flex-shrink-0 inline-block ${
+                        modoSimpleActivo ? "bg-amber-500" : "bg-muted-foreground/30"
+                      }`}
+                      style={{ width: "2rem", height: "1.125rem" }}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${
+                          modoSimpleActivo ? "translate-x-3.5" : "translate-x-0"
+                        }`}
+                      />
+                    </span>
+                  )}
+                  {modoSimpleActivo ? "Modo Simple activado" : "Activar Modo Simple"}
+                </button>
+              </div>
+            </div>
+
+            {recomendadosOff.length > 0 && (
+              <div className="mb-5 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3.5">
+                <Sparkles className="w-4 h-4 text-primary-text flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-xs text-foreground">
+                    Para el rubro que elegiste, recomendamos apagar:{" "}
+                    {recomendadosOff.map((code) => modulosState.find((m) => m.code === code)?.name ?? code).join(", ")}.
+                  </p>
+                  <button
+                    onClick={aplicarRecomendado}
+                    disabled={aplicandoRecomendado}
+                    data-tour="config-modulos-recomendado"
+                    className="btn-ghost mt-2 -mx-1.5 px-1.5 py-0.5 rounded-md text-xs flex items-center gap-1.5"
+                  >
+                    {aplicandoRecomendado && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Aplicar recomendado para tu rubro
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="divide-y divide-border" data-tour="config-modulos-lista">
+              {modulosState.map((m) => (
+                <div key={m.code} className="flex items-center justify-between py-2.5">
+                  <span className="text-sm text-foreground">{m.name}</span>
+                  <button
+                    type="button"
+                    disabled={moduloEnCurso === m.code}
+                    onClick={() => alternarModulo(m.code, !m.activo)}
+                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${
+                      m.activo ? "bg-primary" : "bg-muted-foreground/30"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        m.activo ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {modulosMensaje && (
+              <p
+                className={`mt-4 text-sm font-medium animate-in fade-in ${
+                  modulosMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"
+                }`}
+              >
+                {modulosMensaje.texto}
+              </p>
+            )}
+          </div>
+        </div>
+          </div>
+
+          <div className={grupo === "cuenta" ? "[&>*:first-child]:mt-0" : "hidden"} data-grupo-config="cuenta">
+        {/* ── Seguridad: cambiar contraseña ─────────────────────── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+            <Lock className="w-5 h-5 text-primary-text" />
+            <h2 className="text-base font-semibold text-foreground">Seguridad</h2>
+          </div>
+
+          <div className="p-5">
+            <p className="text-sm text-muted-foreground mb-5">
+              Cambia tu contraseña de acceso — hazlo sobre todo si todavía usas la contraseña temporal
+              con la que se creó tu cuenta.
+            </p>
+
+            <form onSubmit={guardarContrasena} className="max-w-sm space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Nueva contraseña</label>
+                <div className="relative">
+                  <input
+                    type={verContrasena ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={nuevaContrasena}
+                    onChange={(e) => setNuevaContrasena(e.target.value)}
+                    placeholder="Mínimo 8 caracteres"
+                    className="w-full px-3 py-2.5 pr-10 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setVerContrasena((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {verContrasena ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Confirmar nueva contraseña</label>
                 <input
                   type={verContrasena ? "text" : "password"}
                   autoComplete="new-password"
-                  value={nuevaContrasena}
-                  onChange={(e) => setNuevaContrasena(e.target.value)}
-                  placeholder="Mínimo 8 caracteres"
-                  className="w-full px-3 py-2.5 pr-10 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  value={confirmarContrasena}
+                  onChange={(e) => setConfirmarContrasena(e.target.value)}
+                  placeholder="Repite la contraseña"
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
-                <button
-                  type="button"
-                  onClick={() => setVerContrasena((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {verContrasena ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Confirmar nueva contraseña</label>
-              <input
-                type={verContrasena ? "text" : "password"}
-                autoComplete="new-password"
-                value={confirmarContrasena}
-                onChange={(e) => setConfirmarContrasena(e.target.value)}
-                placeholder="Repite la contraseña"
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-            </div>
-
-            <div className="flex items-center gap-4 border-t border-border pt-5">
-              <button
-                type="submit"
-                disabled={contrasenaPending}
-                className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
-              >
-                {contrasenaPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                {contrasenaPending ? "Guardando..." : "Actualizar contraseña"}
-              </button>
-              {contrasenaMensaje && (
-                <span
-                  className={`text-sm font-medium animate-in fade-in ${
-                    contrasenaMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"
-                  }`}
+              <div className="flex items-center gap-4 border-t border-border pt-5">
+                <button
+                  type="submit"
+                  disabled={contrasenaPending}
+                  className="btn-primary px-5 py-2.5 text-sm rounded-lg transition-all flex items-center gap-2"
                 >
-                  {contrasenaMensaje.texto}
-                </span>
-              )}
-            </div>
-          </form>
+                  {contrasenaPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {contrasenaPending ? "Guardando..." : "Actualizar contraseña"}
+                </button>
+                {contrasenaMensaje && (
+                  <span
+                    className={`text-sm font-medium animate-in fade-in ${
+                      contrasenaMensaje.tipo === "ok" ? "text-emerald-600" : "text-red-600"
+                    }`}
+                  >
+                    {contrasenaMensaje.texto}
+                  </span>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+          </div>
         </div>
       </div>
 
