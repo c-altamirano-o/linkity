@@ -269,6 +269,17 @@ model Tenant {
   // donde se da de alta un Customer con un teléfono capturado a mano.
   telefonoClienteObligatorio Boolean @default(false)
 
+  // Caja rápida (2026-10-09, a petición de Carlos: "para tiendas con flujo de
+  // cliente continuo tipo supermercado ... que el dueño del tenant decida") —
+  // cuando está activa, el POS mantiene el foco SIEMPRE en el buscador y un
+  // Enter con el buscador vacío (y artículos en el carrito) cobra e imprime
+  // el ticket; tras cada venta el método de pago vuelve a efectivo y el
+  // carrito se limpia al instante para atender al siguiente cliente sin
+  // tocar el mouse. Apagada (default) el POS se comporta como siempre: tras
+  // agregar un artículo el foco salta a "Cobrar". Una sola regla para todo
+  // el negocio (mismo criterio que telefonoClienteObligatorio).
+  cajaRapida Boolean @default(false)
+
   // Qué categorías se muestran en la gráfica de pastel de "Ventas por
   // categoría" del Dashboard y de qué color — antes (2026-09-22, a
   // petición de Carlos, pendiente registrado) era solo estado del

@@ -329,6 +329,29 @@ export async function updateTelefonoClienteObligatorio(tenantSlug: string, valor
   }
 }
 
+// Caja rápida (Tenant.cajaRapida, 2026-10-09, a petición de Carlos: "para
+// tiendas con flujo de cliente continuo tipo supermercado ... que el dueño del
+// tenant decida"). Una sola regla para TODO el negocio (mismo criterio que
+// updateTelefonoClienteObligatorio): solo el administrador dueño de la cuenta
+// puede cambiarla. Lo que cambia en el POS está en POSClient.tsx.
+export async function updateCajaRapida(tenantSlug: string, valor: boolean) {
+  const resuelto = await resolverActor(tenantSlug, "configuracion");
+  if (!resuelto.ok) return { success: false, error: resuelto.error };
+
+  try {
+    await prisma.tenant.update({
+      where: { id: resuelto.tenant.id },
+      data: { cajaRapida: valor },
+    });
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al actualizar Caja rápida:", error);
+    return { success: false, error: "No se pudo actualizar esta configuración" };
+  }
+}
+
 // Monto fijo a cobrar por una devolución (Tenant.montoDevolucion, 2026-09-26,
 // junto con la unificación del botón "Entregar" de Aduana/Reparaciones —
 // ver el comentario largo en Tenant.montoDevolucion, schema.prisma). Solo

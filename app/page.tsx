@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-  ArrowRight, ShoppingCart, Wrench, GitBranch, FileText, BarChart3, ShieldCheck,
+  ArrowRight, ShoppingCart, Wrench, GitBranch, FileText, BarChart3, ShieldCheck, Zap, SlidersHorizontal,
   Smartphone, Car, Bike, Scissors, Stethoscope, PawPrint, Store, Check,
 } from "lucide-react";
 import { obtenerEnlacesLanding } from "@/lib/enlaces-planes";
@@ -10,11 +10,17 @@ import { obtenerEnlacesLanding } from "@/lib/enlaces-planes";
 // así un código de oferta nuevo en Panel Maestro aparece solo en pocos minutos.
 export const revalidate = 300;
 
-const FEATURES = [
+const FEATURES: { icon: typeof Zap; title: string; desc: string; configurable?: boolean }[] = [
   {
     icon: ShoppingCart,
     title: "Punto de venta ultra rápido",
     desc: "Vende productos y servicios, cobra con pagos mixtos y descuenta inventario automáticamente en cada sucursal.",
+  },
+  {
+    icon: Zap,
+    title: "Caja rápida para filas continuas",
+    desc: "Escanea o busca cada artículo con Enter y, con el buscador vacío, Enter cobra e imprime el ticket — sin tocar el mouse. Tú decides si la activas desde Configuración.",
+    configurable: true,
   },
   {
     icon: Wrench,
@@ -35,6 +41,12 @@ const FEATURES = [
     icon: BarChart3,
     title: "Dashboard en tiempo real",
     desc: "Ventas, reparaciones y caja del día sin tener que armar un reporte a mano.",
+  },
+  {
+    icon: SlidersHorizontal,
+    title: "Activa solo lo que necesitas",
+    desc: "Marca con una casilla los módulos que usa tu negocio y oculta el resto para que el sistema se vea simple. Puedes cambiarlo cuando quieras.",
+    configurable: true,
   },
   {
     icon: ShieldCheck,
@@ -206,7 +218,14 @@ export default async function LandingPage() {
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-5">
                   <f.icon className="w-6 h-6 text-primary" />
                 </div>
-                <h3 className="font-bold text-lg mb-2">{f.title}</h3>
+                <h3 className="font-bold text-lg mb-2 flex flex-wrap items-center gap-2">
+                  {f.title}
+                  {f.configurable && (
+                    <span className="inline-block bg-primary/10 text-primary font-semibold px-2.5 py-0.5 rounded-full text-[11px] border border-primary/20">
+                      Configurable
+                    </span>
+                  )}
+                </h3>
                 <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{f.desc}</p>
               </div>
             ))}

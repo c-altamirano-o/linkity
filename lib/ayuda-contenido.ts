@@ -106,7 +106,7 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
   pos: {
     labelKey: "module.pos.name",
     esencial: "Aquí registras una venta: agrega productos o servicios, elige el método de pago y cobra.",
-    avanzado: "Necesitas una sesión de Caja abierta en tu sucursal para poder cobrar — si no la has abierto, el botón \"Cobrar\" se bloquea con el aviso \"La caja de esta sucursal está cerrada\" y un enlace para abrirla.",
+    avanzado: "Necesitas una sesión de Caja abierta en tu sucursal para poder cobrar — si no la has abierto, el botón \"Cobrar\" se bloquea con el aviso \"La caja de esta sucursal está cerrada\" y un enlace para abrirla. Si atiendes clientes en fila continua (tienda, abarrotes, supermercado), el administrador puede activar \"Caja rápida\" en Configuración: el cursor se queda siempre en el buscador y Enter con el campo vacío cobra e imprime el ticket.",
     flujos: [
       {
         titulo: "Registrar una venta",
@@ -126,6 +126,17 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
         pasos: [
           "Llega aquí desde Reparaciones con el botón \"Entregar\" — el carrito ya viene precargado con el costo cotizado.",
           "Confirma el método de pago y presiona \"Cobrar\", igual que en una venta normal.",
+        ],
+      },
+      {
+        titulo: "Vender con Caja rápida (clientes en fila continua)",
+        pasos: [
+          "Antes, el administrador debe activarla: Configuración → \"Caja rápida\" → casilla \"Activar Caja rápida en el punto de venta\".",
+          "Con la opción activa, el cursor ya está en el buscador al abrir el punto de venta y vuelve ahí solo después de cada artículo y de cada venta.",
+          "Escanea el código de barras de cada artículo, o escribe su nombre o SKU, y presiona Enter. Escanear el mismo artículo otra vez suma una pieza.",
+          "Cuando termines de agregar artículos, presiona Enter con el buscador vacío: cobra la venta e imprime el ticket (el buscador indica \"Enter con el campo vacío = Cobrar\" y el total).",
+          "Si el cliente paga con tarjeta o transferencia, elige ese método antes del Enter final. Si paga con efectivo y necesitas dar cambio, escribe el \"Monto recibido\" y presiona Enter ahí.",
+          "Ya puedes escanear al siguiente cliente de inmediato: el carrito queda limpio y el método de pago vuelve a Efectivo en cada venta.",
         ],
       },
     ],
@@ -522,6 +533,14 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
           "O presiona \"Aplicar recomendado para tu rubro\" para que el sistema apague en bloque lo que no suele usarse en tu giro.",
         ],
       },
+      {
+        titulo: "Activar Caja rápida (punto de venta de flujo continuo)",
+        pasos: [
+          "Ve a la sección \"Caja rápida\".",
+          "Marca la casilla \"Activar Caja rápida en el punto de venta\" — se aplica de inmediato, sin botón de guardar aparte, y vale para todas tus sucursales.",
+          "Para apagarla, desmarca la misma casilla: el punto de venta vuelve a funcionar como siempre.",
+        ],
+      },
     ],
   },
   asistencia: {
@@ -540,6 +559,59 @@ export const AYUDA_MODULO: Record<ModuloKey, ContenidoModuloAyuda> = {
     ],
   },
 };
+
+/**
+ * Preguntas frecuentes (2026-10-09, a petición de Carlos: "incluirlo en el
+ * manual, FAQs y Ayuda dentro de Linkity"). Primera versión: hoy solo cubre
+ * Caja rápida; el arreglo está pensado para crecer — cada pregunta lleva el
+ * módulo al que pertenece (`modulo`) para que /ayuda y /ayuda/manual la
+ * muestren solo si ese módulo está disponible para quien la lee. Los textos de
+ * botones y casillas son LITERALES de las pantallas reales.
+ */
+export interface PreguntaFrecuente {
+  modulo: ModuloKey;
+  pregunta: string;
+  respuesta: string;
+}
+
+export const PREGUNTAS_FRECUENTES: PreguntaFrecuente[] = [
+  {
+    modulo: "pos",
+    pregunta: "¿Qué es Caja rápida y para quién sirve?",
+    respuesta:
+      "Es una opción del punto de venta pensada para negocios con clientes en fila continua (tienda, abarrotes, supermercado). Con ella activa, el cursor vive siempre en el buscador: agregas cada artículo con Enter y, con el buscador vacío, Enter cobra e imprime el ticket, sin usar el mouse. Si atiendes pocos clientes a la vez o prefieres confirmar con un clic, no necesitas activarla.",
+  },
+  {
+    modulo: "configuracion",
+    pregunta: "¿Cómo activo o apago Caja rápida?",
+    respuesta:
+      "Solo el administrador: en Configuración, sección \"Caja rápida\", marca o desmarca \"Activar Caja rápida en el punto de venta\". El cambio es inmediato y aplica a todas tus sucursales; no borra ni modifica ninguna venta.",
+  },
+  {
+    modulo: "pos",
+    pregunta: "Con Caja rápida, ¿cómo cobro paso a paso?",
+    respuesta:
+      "Escanea o escribe cada artículo y presiona Enter. Cuando termines, presiona Enter con el buscador vacío: se cobra con el método de pago elegido y se imprime el ticket. Para una venta de un solo artículo son dos Enter: uno para agregarlo y otro para cobrar.",
+  },
+  {
+    modulo: "pos",
+    pregunta: "¿Qué pasa si presiono Enter de más y no quería cobrar?",
+    respuesta:
+      "Enter con el buscador vacío solo cobra si ya hay artículos en el carrito y se puede cobrar. Para que un Enter extra del lector de código de barras no cobre por accidente, el punto de venta ignora el Enter que llega justo después de agregar un artículo. Si no se puede cobrar (por ejemplo, la caja está cerrada), no cobra y te explica el motivo.",
+  },
+  {
+    modulo: "pos",
+    pregunta: "El cliente paga con tarjeta, transferencia o con un billete grande. ¿Cómo lo hago?",
+    respuesta:
+      "Elige el método de pago antes del Enter final. Si es efectivo y necesitas calcular el cambio, escribe la cantidad en \"Monto recibido\" y presiona Enter en ese campo. Después de cada venta el método de pago vuelve a Efectivo, para que un cobro con tarjeta nunca se herede al cliente siguiente.",
+  },
+  {
+    modulo: "pos",
+    pregunta: "¿Puedo escanear al siguiente cliente mientras se registra o imprime la venta anterior?",
+    respuesta:
+      "Sí. Con Caja rápida el carrito se limpia al instante al cobrar. Si por alguna razón el cobro no se pudo registrar (por ejemplo, se cayó la conexión), la venta se restaura en el carrito junto con lo que ya hayas escaneado del cliente siguiente, y verás el aviso del error. La venta anterior siempre aparece arriba del total como \"Venta registrada\", con su cambio.",
+  },
+];
 
 // Mismo set de íconos que NAV_STRUCTURE (TenantShell.tsx) — "expediente-clinico"
 // y "configuracion" no tienen entrada ahí (ver el comentario junto a

@@ -155,6 +155,7 @@ export default async function POSPage({
       clienteInicialId={clienteId ?? null}
       mostrarAccesoReparaciones={mostrarAccesoReparaciones}
       discounts={activeDiscounts}
+      cajaRapida={tenant.cajaRapida}
       {...qrVenta}
     />
   );

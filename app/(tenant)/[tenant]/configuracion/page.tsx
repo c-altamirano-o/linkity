@@ -18,7 +18,7 @@ export default async function ConfiguracionPage({
     where: { slug: tenantSlug },
     select: {
       id: true, themePreset: true, themeIntensity: true, themeIntensityFondo: true, themeCustomColors: true, businessType: true, logo: true, weekStartDay: true, phone: true,
-      cobrarEnDevolucion: true, montoDevolucion: true, telefonoClienteObligatorio: true, address: true, rfc: true, reciboMensajePie: true, reciboExtra: true, reciboFormato: true,
+      cobrarEnDevolucion: true, montoDevolucion: true, telefonoClienteObligatorio: true, cajaRapida: true, address: true, rfc: true, reciboMensajePie: true, reciboExtra: true, reciboFormato: true,
       reciboMostrarQR: true, reciboQrDestino: true, reciboQrUrl: true, reciboQrEtiqueta: true,
       // whatsappAccessToken SÍ se selecciona aquí (Server Component, nunca
       // sale de este proceso) pero se convierte a boolean antes de pasarlo
@@ -70,6 +70,7 @@ export default async function ConfiguracionPage({
       cobrarEnDevolucionInicial={tenant.cobrarEnDevolucion}
       montoDevolucionInicial={Number(tenant.montoDevolucion)}
       telefonoClienteObligatorioInicial={tenant.telefonoClienteObligatorio}
+      cajaRapidaInicial={tenant.cajaRapida}
       direccionTicketInicial={tenant.address}
       rfcTicketInicial={tenant.rfc}
       mensajePieTicketInicial={tenant.reciboMensajePie}

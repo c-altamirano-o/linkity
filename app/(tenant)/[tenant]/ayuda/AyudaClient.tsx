@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { label, type LabelDictionary } from "@/lib/labels";
-import { AYUDA_MODULO, MODULO_ICON, MODULO_RUTA } from "@/lib/ayuda-contenido";
+import { AYUDA_MODULO, MODULO_ICON, MODULO_RUTA, PREGUNTAS_FRECUENTES } from "@/lib/ayuda-contenido";
+import PreguntasFrecuentes from "@/components/tenant/PreguntasFrecuentes";
 import { resolverTextoVocabulario, flujosVisibles } from "@/lib/textos-vocabulario";
 import type { ModuloKey } from "@/lib/roles";
 import type { EstadoPasosBienvenida } from "@/lib/onboarding";
@@ -212,6 +213,11 @@ export default function AyudaClient({
           </div>
         )}
       </section>
+
+      <PreguntasFrecuentes
+        preguntas={PREGUNTAS_FRECUENTES.filter((p) => modulosVisibles.includes(p.modulo))}
+        resolverTexto={resolverTexto}
+      />
 
       <section className="flex flex-wrap items-center gap-4 text-sm pt-2 border-t border-border">
         <Link href={`/${tenantSlug}/ayuda/manual`} className="inline-flex items-center gap-1.5 text-primary-text hover:underline">

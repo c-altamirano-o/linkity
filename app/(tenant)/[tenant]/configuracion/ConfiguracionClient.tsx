@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateTelefonoClienteObligatorio, updateDatosTicket, guardarWhatsappBusinessAction, desconectarWhatsappBusinessAction, probarWhatsappBusinessAction, actualizarWhatsappNumeroManualAction } from "@/app/actions/tenant";
+import { updateThemePreset, updateBusinessType, updateWeekStartDay, updateSupportPhone, updateCobrarEnDevolucion, updateMontoDevolucion, updateTelefonoClienteObligatorio, updateCajaRapida, updateDatosTicket, guardarWhatsappBusinessAction, desconectarWhatsappBusinessAction, probarWhatsappBusinessAction, actualizarWhatsappNumeroManualAction } from "@/app/actions/tenant";
 import { alternarModuloPropioAction, aplicarRecomendadoRubroAction, activarModoSimpleAction, desactivarModoSimpleAction } from "@/app/actions/modulos-tenant-actions";
 import { subirLogoAction, eliminarLogoAction } from "@/app/actions/logo-actions";
 import { listarSolicitudesPendientesAction, resolverSolicitudDispositivoAction } from "@/app/actions/dispositivos-actions";
@@ -154,6 +154,7 @@ interface ConfiguracionClientProps {
   cobrarEnDevolucionInicial: boolean;
   montoDevolucionInicial: number;
   telefonoClienteObligatorioInicial: boolean;
+  cajaRapidaInicial: boolean;
   direccionTicketInicial: string | null;
   rfcTicketInicial: string | null;
   mensajePieTicketInicial: string | null;
@@ -196,6 +197,7 @@ export default function ConfiguracionClient({
   cobrarEnDevolucionInicial,
   montoDevolucionInicial,
   telefonoClienteObligatorioInicial,
+  cajaRapidaInicial,
   direccionTicketInicial,
   rfcTicketInicial,
   mensajePieTicketInicial,
@@ -602,6 +604,31 @@ export default function ConfiguracionClient({
       router.refresh();
       setTelefonoClienteObligatorioMensaje("Configuración actualizada correctamente.");
       setTimeout(() => setTelefonoClienteObligatorioMensaje(""), 3000);
+    });
+  };
+
+  // ── Caja rápida ────────────────────────────────────────────
+  // 2026-10-09, a petición de Carlos: para tiendas con flujo de cliente
+  // continuo (tipo supermercado) el dueño decide si el POS trabaja en modo
+  // Caja rápida. Guarda Tenant.cajaRapida; lo que cambia en el POS vive en
+  // POSClient.tsx.
+  const [cajaRapida, setCajaRapida] = useState(cajaRapidaInicial);
+  const [cajaRapidaPending, startCajaRapidaTransition] = useTransition();
+  const [cajaRapidaMensaje, setCajaRapidaMensaje] = useState("");
+
+  const alternarCajaRapida = (valor: boolean) => {
+    setCajaRapida(valor); // optimista
+    setCajaRapidaMensaje("");
+    startCajaRapidaTransition(async () => {
+      const result = await updateCajaRapida(tenantSlug, valor);
+      if (!result.success) {
+        setCajaRapida(!valor); // revierte si el servidor lo rechazó
+        setCajaRapidaMensaje(result.error ?? "Error al actualizar.");
+        return;
+      }
+      router.refresh();
+      setCajaRapidaMensaje("Configuración actualizada correctamente.");
+      setTimeout(() => setCajaRapidaMensaje(""), 3000);
     });
   };
 
@@ -1810,6 +1837,54 @@ export default function ConfiguracionClient({
           {telefonoClienteObligatorioMensaje && (
             <p className={`text-sm font-medium mt-4 animate-in fade-in ${telefonoClienteObligatorioMensaje.startsWith("Error") || telefonoClienteObligatorioMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
               {telefonoClienteObligatorioMensaje}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* ── Caja rápida ───────────────────────────────────────────
+          2026-10-09, a petición de Carlos: "tiendas que tengan flujo de
+          cliente continuo tipo supermercado ... que el dueño del tenant
+          decida". Casilla con guardado inmediato, mismo patrón que
+          "Teléfono del cliente". */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm mt-6" data-tour="config-caja-rapida">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border bg-muted/50">
+          <Zap className="w-5 h-5 text-primary-text" />
+          <h2 className="text-base font-semibold text-foreground">Caja rápida</h2>
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-muted-foreground mb-3">
+            Para negocios con clientes en fila continua (tienda, abarrotes, supermercado). Con Caja rápida
+            activada, el punto de venta mantiene el cursor siempre en el buscador: escaneas o escribes cada
+            artículo y presionas Enter; con el buscador vacío, Enter cobra e imprime el ticket.
+          </p>
+          <p className="text-sm text-muted-foreground mb-5">
+            Después de cada venta el método de pago vuelve a Efectivo y el carrito queda listo para el
+            siguiente cliente, sin usar el mouse. Esta opción aplica a TODAS tus sucursales por igual.
+          </p>
+
+          <label className="flex items-start gap-3 max-w-md cursor-pointer">
+            <input
+              type="checkbox"
+              checked={cajaRapida}
+              disabled={cajaRapidaPending}
+              onChange={(e) => alternarCajaRapida(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-primary disabled:opacity-50"
+            />
+            <span className="text-sm text-foreground">
+              Activar Caja rápida en el punto de venta
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                {cajaRapida
+                  ? "Activada — Enter con el buscador vacío cobra la venta."
+                  : "Desactivada — después de agregar un artículo, el cursor pasa al botón Cobrar."}
+              </span>
+            </span>
+          </label>
+
+          {cajaRapidaMensaje && (
+            <p className={`text-sm font-medium mt-4 animate-in fade-in ${cajaRapidaMensaje.startsWith("Error") || cajaRapidaMensaje.includes("No se pudo") ? "text-red-600" : "text-emerald-600"}`}>
+              {cajaRapidaMensaje}
             </p>
           )}
         </div>

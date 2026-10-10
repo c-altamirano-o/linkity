@@ -18,6 +18,7 @@ import { ProductoIcono } from "@/lib/catalogo-iconos";
 import { CANTIDAD_CHIPS_CATEGORIA } from "@/lib/theme-presets";
 import { abrirReciboImprimible, type DatosNegocioRecibo, type ReciboData, type QrDestinoTicket } from "@/lib/recibo-imprimible";
 import EscanearModal from "./EscanearModal";
+import { decidirEnterBuscador, buscarCodigoExacto, unirCarritos } from "@/lib/caja-rapida";
 import { useTourDesdeUrl, TOUR_POS_VENTA, TOUR_POS_COBRAR_REPARACION } from "@/lib/tours";
 
 interface BranchOption {
@@ -65,6 +66,12 @@ interface POSClientProps {
   qrDestinoVenta: QrDestinoTicket;
   qrUrlVenta: string | null;
   qrEtiquetaVenta: string | null;
+  // Caja rápida (2026-10-09, a petición de Carlos: "tiendas con flujo de
+  // cliente continuo tipo supermercado ... que el dueño del tenant decida") —
+  // viene de Tenant.cajaRapida (Configuración → Caja rápida). Activa: el foco
+  // vive SIEMPRE en el buscador y Enter con el buscador vacío cobra. Apagada
+  // (default): el POS se comporta como siempre.
+  cajaRapida?: boolean;
 }
 type CartItem = {
   productId: string;
@@ -101,7 +108,7 @@ const RECIENTES_ID = "__recientes__";
 const formatMXN = (n: number) =>
   n.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 });
 
-export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, negocio, repairParaCobro, clienteInicialId, mostrarAccesoReparaciones = true, discounts, mostrarQRVenta, qrDestinoVenta, qrUrlVenta, qrEtiquetaVenta }: POSClientProps) {
+export default function POSClient({ data, labels, branches, branchInicial, tenantSlug, negocio, repairParaCobro, clienteInicialId, mostrarAccesoReparaciones = true, discounts, mostrarQRVenta, qrDestinoVenta, qrUrlVenta, qrEtiquetaVenta, cajaRapida = false }: POSClientProps) {
   const { categorias, productos, clientes, cajaAbiertaPorSucursal, recientementeUsados } = data;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -341,6 +348,16 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
   // buscador como de costumbre; esto no se lo bloquea, solo deja de ser el
   // destino automático del foco.
   const cobrarBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Caja rápida (2026-10-09) — ver POSClientProps.cajaRapida. El buscador
+  // necesita ref para que el foco pueda volver a él tras cada artículo y tras
+  // cada venta; ultimoAgregadoRef evita que el Enter extra que algunos lectores
+  // de código de barras mandan pegado al código cobre la venta sin querer.
+  const busquedaRef = useRef<HTMLInputElement>(null);
+  const ultimoAgregadoRef = useRef(0);
+  const enfocarBusqueda = () => {
+    setTimeout(() => busquedaRef.current?.focus(), 0);
+  };
 
   const stockDe = (p: ProductoPOS) =>
     p.isService ? Infinity : (branchId ? p.stockPorSucursal[branchId] ?? 0 : 0);
@@ -598,7 +615,10 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       return false;
     }
     setAvisoStock(null);
-    setUltimaVenta(null);
+    // En Caja rápida el banner "Venta registrada · Cambio" se queda hasta la
+    // siguiente venta: el cajero ya escaneó al cliente siguiente pero aún
+    // necesita ver cuánto cambio dar al anterior.
+    if (!cajaRapida) setUltimaVenta(null);
     setErrorVenta(null);
 
     const precioActivo = (isWholesaler && p.wholesalePrice != null && p.wholesalePrice > 0) ? p.wholesalePrice : p.price;
@@ -743,6 +763,33 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
     mixto: "Mixto",
   };
 
+  // ── Caja rápida: el foco vive en el buscador ───────────────
+  // Al abrir el POS (con caja abierta) el cursor ya está listo para escanear.
+  useEffect(() => {
+    if (cajaRapida && cajaAbierta) enfocarBusqueda();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cajaRapida, cajaAbierta]);
+
+  // Un lector de código de barras "teclea" como un teclado: si el foco quedó en
+  // un botón (por ejemplo tras tocar "+" en el carrito), los dígitos se perderían
+  // y su Enter activaría ese botón. En Caja rápida, cualquier carácter imprimible
+  // que llegue con el foco FUERA de un campo de texto lo manda primero al
+  // buscador (el navegador lo escribe ahí mismo, en el mismo golpe de tecla).
+  useEffect(() => {
+    if (!cajaRapida) return;
+    const alPresionar = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key.length !== 1 || e.key === " ") return;
+      if (mostrarEscaner || abrirCajaAbierto || clientePickerAbierto) return;
+      const el = document.activeElement;
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return;
+      if (el instanceof HTMLElement && el.isContentEditable) return;
+      busquedaRef.current?.focus();
+    };
+    document.addEventListener("keydown", alPresionar);
+    return () => document.removeEventListener("keydown", alPresionar);
+  }, [cajaRapida, mostrarEscaner, abrirCajaAbierto, clientePickerAbierto]);
+
   const handleCobrar = () => {
     if (!puedeCobar || !branchId) return;
     setErrorVenta(null);
@@ -808,8 +855,33 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
       qrEtiquetaTicket = undefined;
     }
 
+    // Caja rápida (2026-10-09): el carrito se limpia AL INSTANTE, no cuando
+    // termina el guardado y la impresión — así el cajero ya puede escanear al
+    // siguiente cliente mientras se registra esta venta. Todo lo que la venta
+    // necesita ya quedó copiado arriba (renglones, cliente, método, monto) y
+    // crearVentaAction recibe lo capturado en este render, no el estado nuevo.
+    // Si el cobro falla se restaura más abajo (sin perder lo que ya se haya
+    // escaneado del cliente siguiente). El método de pago vuelve a Efectivo
+    // para que la siguiente venta nunca herede "Tarjeta" por descuido.
+    const carritoPrevio = carrito;
+    const clientePrevioId = clienteId;
+    const montoRecibidoPrevio = montoRecibido;
+    const mixtoPrevio = { efectivo: mixtoEfectivo, tarjeta: mixtoTarjeta, transferencia: mixtoTransferencia };
+    if (cajaRapida) {
+      limpiarCarrito();
+      setClienteId(null);
+      setClienteQuery("");
+      setMetodoPago("efectivo");
+      setCarritoAbierto(false);
+      enfocarBusqueda();
+    }
+
     startTransition(async () => {
-      const res = await crearVentaAction({
+      // try/catch: una caída de red no debe dejar la venta "en el aire" (en Caja
+      // rápida el carrito ya se limpió, así que hay que poder restaurarlo).
+      let res: Awaited<ReturnType<typeof crearVentaAction>>;
+      try {
+      res = await crearVentaAction({
         tenantSlug,
         branchId,
         customerId: clienteId,
@@ -822,6 +894,9 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         montoRecibido: metodoPago === "efectivo" && montoIngresadoAlCobrar ? montoNum : undefined,
         mixto: metodoPago === "mixto" ? { efectivo: mEfec, tarjeta: mTarj, transferencia: mTrans } : undefined,
       });
+      } catch {
+        res = { ok: false, error: "No se pudo registrar la venta. Revisa tu conexión e intenta de nuevo." } as Awaited<ReturnType<typeof crearVentaAction>>;
+      }
 
       if (res.ok) {
         setUltimaVenta({ folio: res.folio, total: res.total, cambio: res.cambio });
@@ -853,16 +928,35 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
         setUltimoRecibo(recibo);
         await abrirReciboImprimible(recibo, negocio);
 
-        limpiarCarrito();
-        setClienteId(null);
-        setClienteQuery("");
-        setCarritoAbierto(false);
+        if (cajaRapida) {
+          // El carrito ya se limpió al cobrar (y puede traer ya al cliente
+          // siguiente): aquí solo se devuelve el foco al buscador, que el
+          // diálogo de impresión pudo haberse llevado.
+          window.focus();
+          busquedaRef.current?.focus();
+        } else {
+          limpiarCarrito();
+          setClienteId(null);
+          setClienteQuery("");
+          setCarritoAbierto(false);
+        }
         if (carritoTeniaReparacion) {
           router.replace(`/${tenantSlug}/pos`);
         } else {
           router.refresh();
         }
       } else {
+        if (cajaRapida) {
+          // Restaura la venta que no se pudo cobrar, SUMÁNDOLE lo que el cajero
+          // ya haya escaneado del cliente siguiente (nada se pierde).
+          setCarrito((actual) => unirCarritos(carritoPrevio, actual));
+          setClienteId((actual) => actual ?? clientePrevioId);
+          setMetodoPago(metodoPagoAlCobrar);
+          setMontoRecibido(montoRecibidoPrevio);
+          setMixtoEfectivo(mixtoPrevio.efectivo);
+          setMixtoTarjeta(mixtoPrevio.tarjeta);
+          setMixtoTransferencia(mixtoPrevio.transferencia);
+        }
         setErrorVenta(res.error);
       }
     });
@@ -960,7 +1054,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 abierto; al crear, selecciona al cliente recién creado y
                 cierra el picker entero, igual que elegir uno ya existente. */}
             {nuevoClienteAbierto ? (
-              <div className="p-3 space-y-2">
+              <div className="p-3 space-y-2" data-enter-zona>
                 <p className="text-xs font-medium text-foreground">Nuevo cliente</p>
                 <input
                   autoFocus
@@ -980,6 +1074,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 {errorNuevoCliente && <p className="text-[11px] text-red-600">{errorNuevoCliente}</p>}
                 <div className="flex items-center gap-2 pt-1">
                   <button
+                    data-enter-primario
                     onClick={handleCrearCliente}
                     disabled={creandoCliente}
                     className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-60"
@@ -1389,7 +1484,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
             )}
 
             {branchId && !cajaAbierta && abrirCajaAbierto && (
-              <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+              <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2" data-enter-zona>
                 <p className="text-xs font-medium text-foreground">Abrir caja</p>
                 <input
                   autoFocus
@@ -1411,6 +1506,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 {errorAbrirCaja && <p className="text-[11px] text-red-600">{errorAbrirCaja}</p>}
                 <div className="flex items-center gap-2">
                   <button
+                    data-enter-primario
                     onClick={handleAbrirCaja}
                     disabled={abriendoCaja}
                     className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-60"
@@ -1486,6 +1582,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
           <div className="relative flex-1 min-w-[160px]">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
             <input
+              ref={busquedaRef}
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
@@ -1500,15 +1597,49 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault();
-                const primero = productosFiltrados[0];
-                if (!primero) return;
+                // Caja rápida (2026-10-09): Enter con el buscador VACÍO cobra.
+                // Se ignora un instante tras agregar un artículo (algunos
+                // lectores mandan un Enter extra pegado al código).
+                const decision = decidirEnterBuscador({
+                  cajaRapida,
+                  busqueda,
+                  hayArticulos: carrito.length > 0,
+                  msDesdeUltimoAgregado: Date.now() - ultimoAgregadoRef.current,
+                  cobrando: isPending,
+                  puedeCobrar: puedeCobar,
+                  razonNoPuedeCobrar,
+                });
+                if (decision.tipo === "cobrar") { handleCobrar(); return; }
+                if (decision.tipo === "aviso") { setAvisoStock(decision.mensaje); return; }
+                if (decision.tipo === "ignorar") return;
+                // En Caja rápida un código de barras o SKU EXACTO gana sobre la
+                // lista filtrada, aunque haya una categoría seleccionada.
+                const consulta = busqueda.trim();
+                const exacto = cajaRapida ? buscarCodigoExacto(productos, consulta) : undefined;
+                const primero = exacto ?? productosFiltrados[0];
+                if (!primero) {
+                  if (cajaRapida && consulta !== "") {
+                    setAvisoStock(`No se encontró ningún producto con "${consulta}".`);
+                    busquedaRef.current?.select();
+                  }
+                  return;
+                }
                 // 2026-10-05: si no se agregó nada (sin stock, o ya se
                 // agregó todo el disponible — ver agregarAlCarrito), el
                 // aviso correspondiente ya quedó visible; no tiene caso
                 // borrar lo que el cajero escribió ni saltar el foco a
                 // Cobrar como si la venta hubiera avanzado.
-                if (!agregarAlCarrito(primero)) return;
+                if (!agregarAlCarrito(primero)) {
+                  if (cajaRapida) busquedaRef.current?.select();
+                  return;
+                }
                 setBusqueda("");
+                if (cajaRapida) {
+                  // El foco se QUEDA en el buscador: siguiente artículo, o
+                  // Enter con el campo vacío para cobrar.
+                  ultimoAgregadoRef.current = Date.now();
+                  return;
+                }
                 // setTimeout(0), no llamada directa: el botón "Cobrar" puede
                 // estar deshabilitado (carrito todavía vacío) en el momento
                 // exacto de este clic/Enter — un <button disabled> no puede
@@ -1519,7 +1650,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
                 // intentar el foco.
                 setTimeout(() => cobrarBtnRef.current?.focus(), 0);
               }}
-              placeholder="Buscar producto o servicio"
+              placeholder={cajaRapida && carrito.length > 0 ? `Enter con el campo vacío = Cobrar ${formatMXN(total)}` : "Buscar producto o servicio"}
               className="w-full pl-11 pr-4 py-3 rounded-full text-base bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
             />
           </div>
@@ -1636,7 +1767,7 @@ export default function POSClient({ data, labels, branches, branchInicial, tenan
               // (rounded-l-xl más abajo), sin necesitar clip del padre.
               const fichaBg = chip ? `var(--chip-${chip})` : "var(--primary)";
               return (
-                <button key={producto.id} data-tour={idxProducto === 0 ? "pos-producto" : undefined} onClick={() => { agregarAlCarrito(producto); setTimeout(() => cobrarBtnRef.current?.focus(), 0); }} disabled={agotado}
+                <button key={producto.id} data-tour={idxProducto === 0 ? "pos-producto" : undefined} onClick={() => { agregarAlCarrito(producto); setTimeout(() => (cajaRapida ? busquedaRef.current : cobrarBtnRef.current)?.focus(), 0); }} disabled={agotado}
                   className={`relative flex items-stretch rounded-xl bg-card border transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-[0.98] hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)] ${
                     cantidadEnCarrito > 0 ? "border-primary ring-2 ring-primary/25" : "border-border hover:border-primary/40"
                   }`}>

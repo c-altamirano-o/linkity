@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { label, type LabelDictionary } from "@/lib/labels";
-import { AYUDA_MODULO, AYUDA_SECCIONES, MODULO_ICON, MODULO_RUTA } from "@/lib/ayuda-contenido";
+import { AYUDA_MODULO, AYUDA_SECCIONES, MODULO_ICON, MODULO_RUTA, PREGUNTAS_FRECUENTES } from "@/lib/ayuda-contenido";
+import PreguntasFrecuentes from "@/components/tenant/PreguntasFrecuentes";
 import { resolverTextoVocabulario, flujosVisibles } from "@/lib/textos-vocabulario";
 import type { ModuloKey } from "@/lib/roles";
 import { ChevronDown, LifeBuoy, PlayCircle } from "lucide-react";
@@ -118,6 +119,11 @@ export default function ManualAyudaClient({ tenantSlug, labels, businessType, mo
           </div>
         </section>
       ))}
+
+      <PreguntasFrecuentes
+        preguntas={PREGUNTAS_FRECUENTES.filter((p) => !modulosInactivos.has(p.modulo))}
+        resolverTexto={resolverTexto}
+      />
 
       <section className="pt-2 border-t border-border">
         <Link href={`/${tenantSlug}/soporte`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:underline">
